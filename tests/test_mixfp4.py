@@ -462,6 +462,44 @@ def test_mae_is_l1_and_differs_from_mse():
         print(f"ok  {tb}: mae == l1, and mean|err| mae={e_mae:.4e} <= mse={e_mse:.4e}")
 
 
+def test_corr_metric_sees_coherent_error():
+    """
+        The whole reason "corr<r>" exists: MSE cannot tell an error that accumulates in the dot
+        product from one that cancels. Two blocks with identical squared error, one all-positive and
+        one alternating, must score identically under mse and differently under corr.
+    """
+    from quantize.quantizer import _selection_loss
+    x  = torch.zeros(2, 1, 16)
+    dq = torch.empty(2, 1, 16)
+    dq[0] = 0.1                                     # coherent: every element pulled the same way
+    dq[1] = 0.1 * torch.tensor([1.0, -1.0]).repeat(8)   # cancelling
+
+    mse = _selection_loss(x, dq, "mse")
+    assert torch.allclose(mse[0], mse[1]), "mse should be blind to the sign pattern"
+
+    c = _selection_loss(x, dq, "corr0.2")
+    assert c[0].item() > c[1].item() * 5, (c[0].item(), c[1].item())
+    # r=0 must reproduce mse exactly
+    assert torch.allclose(_selection_loss(x, dq, "corr0"), mse)
+    print(f"ok  corr0.2 separates coherent {c[0].item():.4f} from cancelling {c[1].item():.4f}; "
+          "mse cannot")
+
+
+def test_corr_changes_decisions_and_rejects_bad_r():
+    x = _outlier_tensor()
+    for tb in ["1x16", "8x64"]:
+        a = quant_mix_4_6(x, groupsize=16, type_block=tb, metric="mse",     clip="bothx")
+        b = quant_mix_4_6(x, groupsize=16, type_block=tb, metric="corr0.2", clip="bothx")
+        assert not torch.equal(a, b), f"corr0.2 reproduced mse exactly at {tb}"
+    for bad in ("corr1", "corr1.5"):
+        try:
+            quant_mix_4_6(torch.randn(64, 128), groupsize=16, type_block="16x16", metric=bad)
+        except AssertionError:
+            continue
+        raise AssertionError(f'quant_mix_4_6 should reject "{bad}" (r must be < 1)')
+    print("ok  corr changes decisions, and r outside [0, 1) is rejected")
+
+
 ########################### clipping ###########################
 
 def test_clip_presets_reduce_mse():
@@ -702,6 +740,7 @@ def test_dtype_name_parsing():
         "mix_4_6_m2":             ("mse",    "margin",    2.0,  False, "base"),
         "mix_4_6_mae":            ("mae",    "argmin",    0.0,  False, "base"),
         "mix_4_6_l0.5":           ("l0.5",   "argmin",    0.0,  False, "base"),
+        "mix_4_6_corr0.2_clipe0_h2": ("corr0.2", "harm",   2.0,  False, "e0"),
         "mix_4_6_clipbothx":      ("mse",    "argmin",    0.0,  False, "bothx"),
         "mix_4_6_mae_clipwide_rm2": ("mae",  "relmargin", 2.0,  False, "wide"),
         "mix_4_6_tol0.25":        ("mse",    "tol",       0.25, False, "base"),

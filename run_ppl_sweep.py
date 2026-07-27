@@ -87,6 +87,43 @@ SWEEP_W4A4  += _mix_rows(quantize_activations=True)
 SWEEPS = {"w4a16": SWEEP_W4A16, "w4a4": SWEEP_W4A4}
 
 
+# Formats that ignore --w_type_block entirely, so their label carries no type block.
+TYPELESS = {"fp16", "mxfp4", "nvfp4", "nvfp4_4over6", "nvif4",
+            "nvfp4_razer_e3m3", "nvfp4_razer_e4m3"}
+
+# The RaZeR weight/activation pair, so "razer" can be named as one config.
+RAZER_PAIR = {"razer": ("nvfp4_razer_e3m3", "nvfp4_razer_e4m3")}
+
+
+def parse_configs(spec: str, quantize_activations: bool):
+    """
+        Build the sweep from a command-line spec instead of the hardcoded lists, so that exploring
+        new selection rules does not need a code edit (and a stale copy on every other GPU).
+
+            "<dtype>[@<type_block>]" , comma separated
+
+        Examples:
+            fp16,nvfp4_4over6,mix_4_6_clipc3_m2@8x64,mix_4_6_mae_rm2@32x128
+
+        The label is "<dtype>_<type_block>", or just "<dtype>" for formats without a type block, so
+        it matches the labels the hardcoded sweeps already wrote.
+    """
+    rows = []
+    for item in [s.strip() for s in spec.split(",") if s.strip()]:
+        dtype, _, tb = item.partition("@")
+        tb = tb or "1x16"
+        w_dtype, a_dtype = RAZER_PAIR.get(dtype, (dtype, dtype))
+        label = dtype if (dtype in TYPELESS or dtype in RAZER_PAIR) else f"{dtype}_{tb}"
+
+        if dtype == "fp16":
+            rows.append((label, "fp16", "1x16", "fp16", "1x16"))
+        elif quantize_activations:
+            rows.append((label, w_dtype, tb, a_dtype, A_BLOCK_FOR.get(tb, tb)))
+        else:
+            rows.append((label, w_dtype, tb, "fp16", "1x16"))
+    return rows
+
+
 def build_calibration(tokenizer, seq_len, num_batches, seed=0):
     """
         Calibration sequences for the activation-importance estimate.
@@ -164,7 +201,11 @@ def main():
     parser.add_argument("--model_name", type=str, required=True)
     parser.add_argument("--datasets", type=lambda s: s.split(","), default=["wikitext"])
     parser.add_argument("--seq_len", type=int, default=2048)
-    parser.add_argument("--sweep", type=str, default="w4a16", choices=list(SWEEPS.keys()))
+    parser.add_argument("--sweep", type=str, default="w4a16", choices=list(SWEEPS.keys()),
+                        help="Hardcoded sweep; also selects W4A16 vs W4A4 for --configs.")
+    parser.add_argument("--configs", type=str, default=None,
+                        help='Explicit config list, e.g. "nvfp4_4over6,mix_4_6_clipc3_m2@8x64". '
+                             "Overrides the hardcoded --sweep list.")
     parser.add_argument("--groupsize", type=int, default=16)
     parser.add_argument("--output", type=str, required=True)
     parser.add_argument("--shard_id", type=int, default=0)
@@ -177,7 +218,10 @@ def main():
     args = parser.parse_args()
 
     set_seed(0)
-    configs = SWEEPS[args.sweep]
+    if args.configs:
+        configs = parse_configs(args.configs, quantize_activations=(args.sweep == "w4a4"))
+    else:
+        configs = SWEEPS[args.sweep]
     configs = [c for i, c in enumerate(configs) if i % args.num_shards == args.shard_id]
     print(f"[shard {args.shard_id}/{args.num_shards}] {len(configs)} configs: "
           f"{[c[0] for c in configs]}", flush=True)

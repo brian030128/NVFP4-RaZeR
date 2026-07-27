@@ -813,9 +813,15 @@ SELECT_METRICS = ("mse", "sqnr", "cossim", "mae")
 
 def _parse_metric(metric: str):
     """
-        Split a metric name into (family, p). "l<p>" is the generalized power loss sum|dW|^p, of
-        which "mae" is the p=1 case and "mse" the p=2 case.
+        Split a metric name into (family, param).
+
+        "l<p>"    -> ("lp", p)     the generalized power loss sum|dW|^p; "mae" is p=1, "mse" is p=2.
+        "corr<r>" -> ("corr", r)   the equicorrelated-input output error, see `_selection_loss`.
     """
+    if metric.startswith("corr"):
+        tail = metric[len("corr"):]
+        if tail and tail.replace(".", "", 1).isdigit():
+            return "corr", float(tail)
     tail = metric[1:]
     if metric.startswith("l") and tail and tail.replace(".", "", 1).isdigit():
         return "lp", float(tail)
@@ -835,6 +841,24 @@ def _selection_loss(x, x_dq, metric: str, weight=None, eps: float=1e-30):
                      worst element of a block, which is exactly the element a clipping candidate
                      gives up on purpose; L1 scores the bulk instead.
           "l<p>"   - summed |error|^p for any p > 0. p < 1 discounts the tail harder still.
+          "corr<r>"- the layer-output error under the assumption that the input channels are
+                     EQUICORRELATED with correlation r. For y_i = sum_j x_j W_ij the output error is
+                     sum_j x_j dW_ij, so
+
+                         E[(sum_j x_j dW_j)^2] = sum_jk E[x_j x_k] dW_j dW_k,
+
+                     and with E[x_j x_k] = sigma^2 (delta_jk + r (1 - delta_jk)) this is
+
+                         sigma^2 [ sum_j dW_j^2 + r ( (sum_j dW_j)^2 - sum_j dW_j^2 ) ].
+
+                     r=0 is exactly MSE. r>0 additionally punishes error that is COHERENT across the
+                     block, which plain MSE cannot see at all: 16 errors of +d cost the same as 16
+                     errors of alternating sign under MSE, but the first accumulates in the dot
+                     product and the second cancels. Clipping produces exactly the coherent kind
+                     (every clipped element is pulled the same way), so this is the term that decides
+                     whether a clip candidate is really cheaper. It needs no calibration data -- r is
+                     one global constant standing in for how much of the activation is a shared
+                     direction, which post-LayerNorm inputs certainly have.
           "sqnr"   - negated signal-to-quantization-noise ratio in dB,
                      -10*log10(||x||^2 / ||x - x_q||^2).
                      NOTE: for choosing between candidates WITHIN one scale block this is exactly
@@ -857,6 +881,14 @@ def _selection_loss(x, x_dq, metric: str, weight=None, eps: float=1e-30):
         if weight is not None:
             err = err * weight
         return err.sum(dim=-1, keepdim=True)
+
+    if family == "corr":
+        assert 0.0 <= p < 1.0, f'"corr<r>" needs 0 <= r < 1, got {p}.'
+        # importance enters as diag(s) S diag(s), i.e. it scales the error vector itself
+        d      = (x_dq - x) if weight is None else (x_dq - x) * weight.sqrt()
+        sum_sq = d.pow(2).sum(dim=-1, keepdim=True)
+        sq_sum = d.sum(dim=-1, keepdim=True).pow(2)
+        return sum_sq + p * (sq_sum - sum_sq)
 
     sq = (x_dq - x).pow(2)
     if weight is not None:
@@ -1029,8 +1061,9 @@ def quant_mix_4_6(
     groupsize     = 16 if groupsize is None else groupsize
     assert groupsize == 16, \
         f'MixFP4 inherits the NVFP4 scale-block size, which must be 16, but got {groupsize}.'
-    assert _parse_metric(metric)[0] == "lp" or metric in SELECT_METRICS, \
-        f'Unsupported selection metric "{metric}". Expected one of {SELECT_METRICS} or "l<p>".'
+    assert _parse_metric(metric)[0] in ("lp", "corr") or metric in SELECT_METRICS, \
+        f'Unsupported selection metric "{metric}". Expected one of {SELECT_METRICS}, ' \
+        f'"l<p>" or "corr<r>".'
     assert elect in ELECT_RULES, \
         f'Unsupported election rule "{elect}". Expected one of {ELECT_RULES}.'
     assert clip in CLIP_PRESETS, \
@@ -1255,7 +1288,7 @@ def parse_mix_4_6_dtype(name: str):
     for part in [p for p in name[len("mix_4_6"):].split("_") if p]:
         if part in ("sqnr", "cossim", "mae"):
             metric = part
-        elif _parse_metric(part)[0] == "lp":
+        elif _parse_metric(part)[0] in ("lp", "corr"):
             metric = part
         elif part.startswith("clip") and part[len("clip"):] in CLIP_PRESETS:
             clip = part[len("clip"):]
