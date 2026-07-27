@@ -921,6 +921,11 @@ CLIP_PRESETS = {
     # 3-bit mantissa, so ~6% steps are near the finest that survives the scale rounding.
     "dense5":  {"e2m1": (1.0, 1.125, 1.25, 1.375, 1.5),    "e0m3": (1.0,)},
     "dense9":  {"e2m1": tuple(1.0 + 0.0625 * i for i in range(9)), "e0m3": (1.0,)},
+    # Twice as fine again, and out to alpha = 2. Only sensible together with `amin<t>`: without the
+    # gate a denser grid fits more MSE noise (round 7's `headxx`, round 17a's dense grid on
+    # Llama-2-7B), and the gate is what makes extra candidates safe to offer.
+    "dense17": {"e2m1": tuple(1.0 + 0.03125 * i for i in range(17)), "e0m3": (1.0,)},
+    "dense2x": {"e2m1": tuple(1.0 + 0.0625 * i for i in range(17)), "e0m3": (1.0,)},
     # ... and the same subdivision on E0M3, whose alpha = 7/n reaches uniform n-level grids
     "dense9e0": {"e2m1": tuple(1.0 + 0.0625 * i for i in range(9)),
                  "e0m3": (1.0, 7.0 / 6.5, 7.0 / 6.0, 7.0 / 5.5, 7.0 / 5.0)},
