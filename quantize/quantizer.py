@@ -1097,6 +1097,35 @@ def quant_nvfp4_razer_e4m3(w_fp, n_bits: int=4, groupsize: Optional[int]=None):
     return w_dq.view(orig_shape).to(torch.bfloat16)
 
 
+def parse_mix_4_6_dtype(name: str):
+    """
+        Decode a mix_4_6 data type name into its selection settings.
+
+            mix_4_6[_sqnr|_cossim][_hess][_dom|_m<z>]
+
+        "hess" weights the selection loss by the per-input-channel importance E[x_j^2], turning it
+        from raw weight error into the diagonal-Hessian estimate of LAYER OUTPUT error.
+        "dom" elects E0M3 only when no scale block in the tile is harmed.
+        "m<z>" elects only when the mean gain exceeds z standard errors.
+
+        Returns (metric, elect, margin, use_importance).
+    """
+    assert name.startswith("mix_4_6"), name
+    metric, elect, margin, use_importance = "mse", "argmin", 0.0, False
+    for part in [p for p in name[len("mix_4_6"):].split("_") if p]:
+        if part in ("sqnr", "cossim"):
+            metric = part
+        elif part == "hess":
+            use_importance = True
+        elif part == "dom":
+            elect = "dominance"
+        elif part.startswith("m") and part[1:].replace(".", "", 1).isdigit():
+            elect, margin = "margin", float(part[1:])
+        else:
+            raise ValueError(f'Unrecognized mix_4_6 data type qualifier "{part}" in "{name}".')
+    return metric, elect, margin, use_importance
+
+
 def quant_weight(model, quant_config: QuantConfig, importance=None):
     """
         `importance`: optional {module_name: 1-D tensor of E[x_j^2]} from
@@ -1145,10 +1174,11 @@ def quant_weight(model, quant_config: QuantConfig, importance=None):
         quant_func = quant_nvif4
     elif (w_dtype == "mixfp4"):
         quant_func = partial(quant_mixfp4, type_block=w_type_block)
-    elif (w_dtype in ("mix_4_6", "mix_4_6_sqnr", "mix_4_6_cossim")):
+    elif w_dtype.startswith("mix_4_6"):
+        _metric, _elect, _margin, _use_imp = parse_mix_4_6_dtype(w_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=w_type_block,
-            metric={"mix_4_6": "mse", "mix_4_6_sqnr": "sqnr", "mix_4_6_cossim": "cossim"}[w_dtype],
+            metric=_metric, elect=_elect, margin=_margin,
         )
     elif (w_dtype == "nvfp4_razer_e3m3"):
         quant_func = partial(quant_nvfp4_razer_e3m3, outlier=w_outlier)
@@ -1157,7 +1187,7 @@ def quant_weight(model, quant_config: QuantConfig, importance=None):
     else:
         raise ValueError(f"Unsupported Data Type: {w_dtype}")
     
-    supports_importance = w_dtype.startswith("mix_4_6")
+    supports_importance = w_dtype.startswith("mix_4_6") and _use_imp
     for n, m in model.named_modules():
         if isinstance(m, torch.nn.Linear) and ('head' not in n):
             kwargs = {}
@@ -1204,10 +1234,11 @@ def quant_act(act, quant_config: QuantConfig):
         quant_func = quant_nvif4
     elif (a_dtype == "mixfp4"):
         quant_func = partial(quant_mixfp4, type_block=a_type_block, is_act=True)
-    elif (a_dtype in ("mix_4_6", "mix_4_6_sqnr", "mix_4_6_cossim")):
+    elif a_dtype.startswith("mix_4_6"):
+        _metric, _elect, _margin, _ = parse_mix_4_6_dtype(a_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=a_type_block, is_act=True,
-            metric={"mix_4_6": "mse", "mix_4_6_sqnr": "sqnr", "mix_4_6_cossim": "cossim"}[a_dtype],
+            metric=_metric, elect=_elect, margin=_margin,
         )
     elif (a_dtype == "nvfp4_razer_e4m3"):
         quant_func = quant_nvfp4_razer_e4m3

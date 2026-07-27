@@ -31,7 +31,7 @@ from tqdm import tqdm
 
 warnings.filterwarnings("ignore")
 
-from quantize import QuantConfig, quant_weight
+from quantize import QuantConfig, quant_weight, collect_importance
 from utils import load_model_and_tokenizer, set_seed, model2path
 
 
@@ -59,8 +59,8 @@ SWEEP_W4A4 = [
 # MixFP4 type-block shapes, and the selection metric used to choose 4-vs-6 per scale block and
 # E2M1-vs-E0M3 per type block. The metric rides on the data type name so that result file names
 # stay distinct without extra config plumbing.
-TYPE_BLOCKS  = ["1x16", "16x16", "256x16", "8x64", "16x64", "32x64", "32x128"]
-MIX_VARIANTS = ["mix_4_6", "mix_4_6_sqnr", "mix_4_6_cossim"]
+TYPE_BLOCKS  = ["1x16", "8x64", "16x64", "32x64", "32x128"]
+MIX_VARIANTS = ["mix_4_6", "mix_4_6_hess", "mix_4_6_m1", "mix_4_6_hess_m1"]
 
 # The A operand tile is 16 rows, the B operand tile is 8, so a weight block of 8x64 pairs with an
 # activation block of 16x64. Everything else pairs with itself.
@@ -85,6 +85,22 @@ SWEEP_W4A16 += _mix_rows(quantize_activations=False)
 SWEEP_W4A4  += _mix_rows(quantize_activations=True)
 
 SWEEPS = {"w4a16": SWEEP_W4A16, "w4a4": SWEEP_W4A4}
+
+
+def build_calibration(tokenizer, seq_len, num_batches, seed=0):
+    """
+        Calibration sequences for the activation-importance estimate.
+
+        Drawn from the wikitext TRAIN split, never from the evaluation data -- estimating the
+        importance on the same tokens we then report perplexity on would leak the test set into the
+        quantization decisions.
+    """
+    train = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
+    ids = tokenizer("\n\n".join(train["text"][:20000]), return_tensors="pt").input_ids
+    rng = random.Random(seed)
+    max_start = max(ids.shape[1] - seq_len - 1, 0)
+    return [ids[:, i:i + seq_len] for i in
+            (rng.randint(0, max_start) for _ in range(num_batches))]
 
 
 def build_wikitext(tokenizer, seq_len):
@@ -154,6 +170,8 @@ def main():
     parser.add_argument("--shard_id", type=int, default=0)
     parser.add_argument("--num_shards", type=int, default=1)
     parser.add_argument("--w_outlier", type=float, default=8.0)
+    parser.add_argument("--calib_batches", type=int, default=4,
+                        help="Calibration sequences used to estimate activation importance.")
     parser.add_argument("--limit_samples", type=int, default=None,
                         help="Cap the number of evaluated windows (smoke tests).")
     args = parser.parse_args()
@@ -195,6 +213,16 @@ def main():
             data[ds] = data[ds][:, : args.limit_samples * args.seq_len]
         print(f"  {ds}: {data[ds].numel() // args.seq_len} windows of {args.seq_len}", flush=True)
 
+    # Importance must be measured on the UNQUANTIZED model, before any weight is overwritten.
+    # Only the *_hess configurations consume it.
+    importance = None
+    if any("hess" in c[1] or "hess" in c[3] for c in configs):
+        t0 = time.time()
+        calib = build_calibration(tokenizer, args.seq_len, args.calib_batches)
+        importance = collect_importance(model, calib, device=model.device)
+        print(f"Collected activation importance for {len(importance)} layers "
+              f"in {time.time() - t0:.0f}s", flush=True)
+
     results = {}
     if os.path.isfile(args.output):
         results = json.load(open(args.output))
@@ -215,7 +243,7 @@ def main():
         quant_config.a_bits       = 16 if a_dtype == "fp16" else 4
 
         if w_dtype != "fp16":
-            quant_weight(model, quant_config)
+            quant_weight(model, quant_config, importance=importance)
         t_quant = time.time() - t0
 
         entry = {"w_dtype": w_dtype, "w_type_block": w_tb, "a_dtype": a_dtype,
