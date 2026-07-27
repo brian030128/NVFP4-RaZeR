@@ -896,17 +896,17 @@ def test_dtype_name_parsing():
     """
     from quantize.quantizer import parse_mix_4_6_dtype
     cases = {
-        "mix_4_6":                ("mse",    "argmin",    0.0,  False, "base", "none", "none", 16),
-        "mix_4_6_m2":             ("mse",    "margin",    2.0,  False, "base", "none", "none", 16),
-        "mix_4_6_mae":            ("mae",    "argmin",    0.0,  False, "base", "none", "none", 16),
-        "mix_4_6_l0.5":           ("l0.5",   "argmin",    0.0,  False, "base", "none", "none", 16),
-        "mix_4_6_corr0.2_clipe0_h2": ("corr0.2", "harm", 2.0, False, "e0", "none", "none", 16),
-        "mix_4_6_clipbothx":      ("mse",    "argmin",    0.0,  False, "bothx", "none", "none", 16),
-        "mix_4_6_mae_clipwide_rm2": ("mae",  "relmargin", 2.0,  False, "wide", "none", "none", 16),
-        "mix_4_6_tol0.25":        ("mse",    "tol",       0.25, False, "base", "none", "none", 16),
-        "mix_4_6_h3":             ("mse",    "harm",      3.0,  False, "base", "none", "none", 16),
-        "mix_4_6_v0.6":           ("mse",    "vote",      0.6,  False, "base", "none", "none", 16),
-        "mix_4_6_hess_dom":       ("mse",    "dominance", 0.0,  True,  "base", "none", "none", 16),
+        "mix_4_6":                ("mse",    "argmin",    0.0,  False, "base", "none", "none", 16, 0.0),
+        "mix_4_6_m2":             ("mse",    "margin",    2.0,  False, "base", "none", "none", 16, 0.0),
+        "mix_4_6_mae":            ("mae",    "argmin",    0.0,  False, "base", "none", "none", 16, 0.0),
+        "mix_4_6_l0.5":           ("l0.5",   "argmin",    0.0,  False, "base", "none", "none", 16, 0.0),
+        "mix_4_6_corr0.2_clipe0_h2": ("corr0.2", "harm", 2.0, False, "e0", "none", "none", 16, 0.0),
+        "mix_4_6_clipbothx":      ("mse",    "argmin",    0.0,  False, "bothx", "none", "none", 16, 0.0),
+        "mix_4_6_mae_clipwide_rm2": ("mae",  "relmargin", 2.0,  False, "wide", "none", "none", 16, 0.0),
+        "mix_4_6_tol0.25":        ("mse",    "tol",       0.25, False, "base", "none", "none", 16, 0.0),
+        "mix_4_6_h3":             ("mse",    "harm",      3.0,  False, "base", "none", "none", 16, 0.0),
+        "mix_4_6_v0.6":           ("mse",    "vote",      0.6,  False, "base", "none", "none", 16, 0.0),
+        "mix_4_6_hess_dom":       ("mse",    "dominance", 0.0,  True,  "base", "none", "none", 16, 0.0),
     }
     for name, want in cases.items():
         got = parse_mix_4_6_dtype(name)
