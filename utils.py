@@ -68,7 +68,7 @@ def dtype_tag(dtype: str, type_block: str) -> str:
         Data type tag used in result file names. MixFP4 appends its type-block shape so that
         sweeps over different type-block configurations do not overwrite each other.
     """
-    if isinstance(dtype, str) and dtype.lower() == "mixfp4":
+    if isinstance(dtype, str) and dtype.lower() in ("mixfp4", "mix_4_6"):
         return f"{dtype}-{format_type_block(type_block)}"
     return dtype
 

@@ -15,7 +15,9 @@ from quantize.quantizer import (
     _tile_type_blocks,
     _untile_type_blocks,
     quant_mixfp4,
+    quant_mix_4_6,
     quant_nvif4,
+    quant_nvfp4_4over6,
 )
 from quantize.utils import parse_type_block, format_type_block
 
@@ -227,6 +229,124 @@ def test_padded_rows_do_not_leak():
     y_head = quant_mixfp4(x[:288], groupsize=16, type_block="32x128")
     assert torch.equal(y[:288], y_head), "padding leaked into the unpadded type blocks"
     print("ok  zero padding of the outer dimension does not leak")
+
+
+########################### mix_4_6 ###########################
+
+def _nmse(x, y):
+    x, y = x.float(), y.float()
+    return ((x - y).pow(2).sum() / x.pow(2).sum()).item()
+
+
+def _outlier_tensor(rows=1024, cols=512, seed=0):
+    torch.manual_seed(seed)
+    x = torch.randn(rows, cols)
+    x[:, ::13] *= 18.0
+    return x.to(torch.bfloat16)
+
+
+def test_mix_4_6_shapes():
+    for shape in [(128, 256), (2, 64, 512), (2, 8, 37, 128)]:
+        x = torch.randn(*shape).to(torch.bfloat16)
+        for tb in TYPE_BLOCKS:
+            y = quant_mix_4_6(x, groupsize=16, type_block=tb)
+            assert y.shape == x.shape and y.dtype == torch.bfloat16, (shape, tb)
+    print("ok  mix_4_6 preserves shape / dtype for 2D, 3D and 4D inputs")
+
+
+def test_mix_4_6_never_worse_than_mixfp4():
+    """
+        mix_4_6 chooses from a superset of mixfp4's options (it adds the 4-normalization of the
+        same E2M1 grid), so its squared error can never be larger at the same type block.
+    """
+    x = _outlier_tensor()
+    for tb in TYPE_BLOCKS:
+        a = _nmse(x, quant_mix_4_6(x, groupsize=16, type_block=tb))
+        b = _nmse(x, quant_mixfp4(x, groupsize=16, type_block=tb))
+        assert a <= b * (1 + 1e-6), f"mix_4_6 {a:.4e} worse than mixfp4 {b:.4e} at {tb}"
+        print(f"ok  mix_4_6 {a:.4e} <= mixfp4 {b:.4e}  ({tb})")
+
+
+def test_mix_4_6_1x16_never_worse_than_either_parent():
+    """At 1x16 the option set is a strict superset of both nvif4's and nvfp4_4over6's."""
+    x = _outlier_tensor()
+    mix = _nmse(x, quant_mix_4_6(x, groupsize=16, type_block="1x16"))
+    for name, ref in [("nvif4", quant_nvif4(x, groupsize=16)),
+                      ("nvfp4_4over6", quant_nvfp4_4over6(x, groupsize=16))]:
+        r = _nmse(x, ref)
+        assert mix <= r * (1 + 1e-6), f"mix_4_6 {mix:.4e} worse than {name} {r:.4e}"
+        print(f"ok  mix_4_6 1x16 {mix:.4e} <= {name} {r:.4e}")
+
+
+def _classify_scale_block(block, atol=0.06):
+    """Which (grid, normalization) a quantized scale block is consistent with."""
+    vals = block.abs().flatten()
+    peak = vals.max()
+    if peak == 0:
+        return set()
+    fits = set()
+    for label, grid, qmax in [("e2m1@6", E2M1_GRID, 6.0),
+                              ("e2m1@4", E2M1_GRID, 4.0),
+                              ("e0m3", E0M3_GRID, 7.0)]:
+        rescaled = vals * (qmax / peak)
+        if (rescaled.unsqueeze(-1) - grid).abs().min(dim=-1).values.max().item() <= atol:
+            fits.add(label)
+    return fits
+
+
+def test_mix_4_6_uses_both_normalizations():
+    """
+        If only the 6-normalization were ever chosen, mix_4_6 would just be mixfp4. Blocks
+        normalized to 4 put their maximum on the E2M1 grid point 4, blocks normalized to 6 put it
+        on 6, so the two are distinguishable from the dequantized output.
+    """
+    x = _outlier_tensor()
+    y = quant_mix_4_6(x, groupsize=16, type_block="1x16")
+    tiled, _ = _tile_type_blocks(y.to(torch.float32), 1, 16, 16)
+
+    only6 = only4 = e0m3 = 0
+    for i in range(0, tiled.shape[0], 7):          # subsample, the tensor has 32k blocks
+        fits = _classify_scale_block(tiled[i, 0])
+        only6 += int(fits == {"e2m1@6"})
+        only4 += int(fits == {"e2m1@4"})
+        e0m3  += int(fits == {"e0m3"})
+    assert only4 > 0, "the 4-normalization is never selected -- mix_4_6 degenerates to mixfp4"
+    assert only6 > 0, "the 6-normalization is never selected"
+    print(f"ok  mix_4_6 uses both normalizations (only-6={only6}, only-4={only4}, e0m3={e0m3})")
+
+
+def test_mix_4_6_type_uniform_per_type_block():
+    """
+        The 4/6 choice is metadata-free and may vary per scale block, but the E2M1-vs-E0M3 choice
+        must still be uniform across a type block, because that is what the MMA declares.
+    """
+    x = _outlier_tensor(rows=512)
+    for tb in TYPE_BLOCKS:
+        block_m, block_k = parse_type_block(tb)
+        y = quant_mix_4_6(x, groupsize=16, type_block=tb)
+        tiled, _ = _tile_type_blocks(y.to(torch.float32), block_m, block_k, 16)
+
+        conflicts = 0
+        for i in range(tiled.shape[0]):
+            any_e2m1 = any_e0m3 = 0
+            for j in range(tiled.shape[1]):
+                fits = _classify_scale_block(tiled[i, j])
+                if not fits:
+                    continue
+                any_e2m1 += int(fits <= {"e2m1@6", "e2m1@4"} and len(fits) > 0)
+                any_e0m3 += int(fits == {"e0m3"})
+            conflicts += int(bool(any_e2m1) and bool(any_e0m3))
+        assert conflicts == 0, f"{conflicts}/{tiled.shape[0]} type blocks of {tb} mix E2M1 and E0M3"
+        print(f"ok  mix_4_6 keeps one element type per type block ({tb}, {tiled.shape[0]} blocks)")
+
+
+def test_mix_4_6_rejects_bad_group_size():
+    try:
+        quant_mix_4_6(torch.randn(64, 128), groupsize=32, type_block="16x16")
+    except AssertionError:
+        print("ok  mix_4_6 rejects a non-16 scale-block size")
+        return
+    raise AssertionError("quant_mix_4_6 should require a scale-block size of 16")
 
 
 def test_rejects_bad_group_size():

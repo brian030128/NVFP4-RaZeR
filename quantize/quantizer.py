@@ -738,6 +738,132 @@ def quant_mixfp4(
 
 
 @torch.no_grad()
+def _quant_e2m1(x, block_scale):
+    """
+        Round to the E2M1 grid {0, +-0.5, +-1, +-1.5, +-2, +-3, +-4, +-6} after dividing by
+        `block_scale`. Returns the DEQUANTIZED values (still in the globally scaled domain).
+    """
+    FP4_MAN_BITS = 1
+    E2M1_MAX     = 6.0
+
+    x_s         = x / block_scale
+    private_exp = torch.floor(
+        torch.log2(
+            torch.abs(x_s) + (x_s == 0).type(x_s.dtype)
+        )
+    ).clamp(min=0)
+    x_m = x_s / (2**private_exp) * (2**FP4_MAN_BITS)
+    x_m = torch.sign(x_m) * torch.floor(torch.abs(x_m) + 0.5)
+    x_q = (x_m * (2**private_exp) / (2**FP4_MAN_BITS)).clamp(min=-E2M1_MAX, max=E2M1_MAX)
+
+    return x_q * block_scale
+
+
+@torch.no_grad()
+def quant_mix_4_6(
+    w_fp,
+    n_bits: int=4,
+    groupsize: Optional[int]=None,
+    type_block=(1, 16),
+    is_act: bool=False,
+):
+    """
+        MixFP4 "4over6" variant (CPU simulation / fake quantization).
+
+        Same two block granularities as `quant_mixfp4` -- a 16-element NVFP4 scale block carrying an
+        E4M3 scale, and a configurable type block carrying ONE element data type -- with one extra
+        degree of freedom on the E2M1 side:
+
+            E2M1 blocks may normalize the block maximum to 6.0 OR to 4.0 (FourOverSix,
+            https://arxiv.org/abs/2512.02010).
+
+        Normalizing to 4 spends the sparse top of the E2M1 grid (the 4 -> 6 step) on the block
+        maximum instead of on the bulk, which wins for blocks with heavy upper tails; normalizing to
+        6 keeps finer absolute resolution near zero. The choice only changes the VALUE stored in the
+        existing ue4m3 scale field -- the decoder multiplies code by scale either way -- so it costs
+        no metadata and, unlike the E2M1/E0M3 choice, does NOT have to be uniform across a type
+        block. It is therefore selected per SCALE block, independently inside each type block.
+
+        Selection:
+          * per scale block: the better of E2M1@6 and E2M1@4 (free, no metadata)
+          * per type block:  E2M1 (using those per-scale-block choices) vs E0M3, by summed squared
+                             error, exactly as in `quant_mixfp4`
+    """
+    E2M1_MAX      = 6.0
+    E2M1_ALT      = 4.0        # the "4" of 4over6
+    E0M3_MAX      = 7.0
+    FP8_SCALE_MAX = 448.0
+    FP8_SCALE_MIN = 2**(-9)
+
+    groupsize     = 16 if groupsize is None else groupsize
+    assert groupsize == 16, \
+        f'MixFP4 inherits the NVFP4 scale-block size, which must be 16, but got {groupsize}.'
+    block_m, block_k = parse_type_block(type_block)
+
+    #################### Reshape Tensor ####################
+    orig_shape = w_fp.shape
+    w_fp_new   = w_fp.reshape(-1, orig_shape[-1]).to(torch.float32)
+    num_col    = w_fp_new.shape[-1]
+    assert num_col % groupsize == 0, \
+        f'The reduction dimension {num_col} must be divisible by the scale-block size {groupsize}.'
+    if num_col % block_k != 0:
+        assert block_k > num_col, \
+            f'The reduction dimension {num_col} must be divisible by the type-block K dimension {block_k}.'
+        block_k = num_col
+
+    #################### Global Scale ####################
+    global_qmax  = E2M1_MAX * FP8_SCALE_MAX
+    global_scale = (w_fp_new.abs().amax() / global_qmax).clamp(min=torch.finfo(torch.float32).tiny)
+    w_scaled     = w_fp_new / global_scale
+
+    w_tiled, meta = _tile_type_blocks(w_scaled, block_m, block_k, groupsize)
+    block_max     = w_tiled.abs().amax(dim=-1, keepdim=True)
+
+    ####### E2M1: per-scale-block search over the 4 / 6 normalization #######
+    w_dq_e2m1  = None
+    error_e2m1 = None
+    for qmax in (E2M1_MAX, E2M1_ALT):
+        block_scale = (block_max / qmax).clamp(
+            max=FP8_SCALE_MAX,
+            min=FP8_SCALE_MIN
+        ).to(torch.float8_e4m3fn).to(w_tiled.dtype)
+        w_dq_tmp    = _quant_e2m1(w_tiled, block_scale)
+        error_tmp   = (w_dq_tmp - w_tiled).pow(2).sum(dim=-1, keepdim=True)
+
+        if w_dq_e2m1 is None:
+            w_dq_e2m1, error_e2m1 = w_dq_tmp, error_tmp
+        else:
+            better     = error_tmp < error_e2m1
+            w_dq_e2m1  = torch.where(better, w_dq_tmp, w_dq_e2m1)
+            error_e2m1 = torch.where(better, error_tmp, error_e2m1)
+
+    ############### E0M3 Scale Block Quantization ###############
+    block_scale_e0m3 = (block_max / E0M3_MAX).clamp(
+        max=FP8_SCALE_MAX,
+        min=FP8_SCALE_MIN
+    ).to(torch.float8_e4m3fn).to(w_tiled.dtype)
+    w_dq_e0m3        = (w_tiled / block_scale_e0m3).round().clamp(
+        min=-E0M3_MAX, max=E0M3_MAX
+    ) * block_scale_e0m3
+    error_e0m3       = (w_dq_e0m3 - w_tiled).pow(2).sum(dim=-1, keepdim=True)
+
+    ############### Per-Type-Block Data Type Selection ###############
+    # Sum the per-scale-block errors over every scale block of the same type block
+    select_e0m3 = (
+        error_e0m3.sum(dim=(-1, -2)) < error_e2m1.sum(dim=(-1, -2))
+    )[:, None, None]
+
+    w_dq = torch.where(
+        select_e0m3,
+        w_dq_e0m3,
+        w_dq_e2m1,
+    )
+    w_dq = _untile_type_blocks(w_dq, block_m, block_k, meta) * global_scale
+
+    return w_dq.view(orig_shape).to(torch.bfloat16)
+
+
+@torch.no_grad()
 def quant_nvfp4_razer_e3m3(w_fp, n_bits: int=4, groupsize: Optional[int]=None, outlier: float=8.0):
     """
         NVFP4-RaZeR quantization.
@@ -864,7 +990,7 @@ def quant_weight(model, quant_config: QuantConfig):
     w_outlier    = quant_config.w_outlier
     w_type_block = quant_config.w_type_block
 
-    if w_dtype == "mixfp4":
+    if w_dtype in ("mixfp4", "mix_4_6"):
         block_m, block_k = parse_type_block(w_type_block)
         print(f"Performing LLM weight quantization using Data Type:  {w_dtype}  "
               f"(type block: {block_m}x{block_k})\n")
@@ -900,6 +1026,8 @@ def quant_weight(model, quant_config: QuantConfig):
         quant_func = quant_nvif4
     elif (w_dtype == "mixfp4"):
         quant_func = partial(quant_mixfp4, type_block=w_type_block)
+    elif (w_dtype == "mix_4_6"):
+        quant_func = partial(quant_mix_4_6, type_block=w_type_block)
     elif (w_dtype == "nvfp4_razer_e3m3"):
         quant_func = partial(quant_nvfp4_razer_e3m3, outlier=w_outlier)
     elif (w_dtype == "nvfp4_razer_e4m3"):
@@ -948,6 +1076,8 @@ def quant_act(act, quant_config: QuantConfig):
         quant_func = quant_nvif4
     elif (a_dtype == "mixfp4"):
         quant_func = partial(quant_mixfp4, type_block=a_type_block, is_act=True)
+    elif (a_dtype == "mix_4_6"):
+        quant_func = partial(quant_mix_4_6, type_block=a_type_block, is_act=True)
     elif (a_dtype == "nvfp4_razer_e4m3"):
         quant_func = quant_nvfp4_razer_e4m3
     else:

@@ -31,7 +31,7 @@ class QuantConfig(dict):
 
         # MixFP4 type-block shapes are validated eagerly so that a bad sweep argument fails fast
         for dtype, type_block in [(w_dtype, w_type_block), (a_dtype, a_type_block)]:
-            if isinstance(dtype, str) and dtype.lower() == "mixfp4":
+            if isinstance(dtype, str) and dtype.lower() in ("mixfp4", "mix_4_6"):
                 parse_type_block(type_block)
 
         self.w_bits = w_bits

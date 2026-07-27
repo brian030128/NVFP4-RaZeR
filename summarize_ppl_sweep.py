@@ -16,10 +16,13 @@ ROW_ORDER = [
     "fp16", "mxfp4", "nvfp4", "nvfp4_4over6", "nvif4", "razer", "razer_e3m3",
     "mixfp4_1x16", "mixfp4_16x16", "mixfp4_256x16",
     "mixfp4_8x64", "mixfp4_16x64", "mixfp4_32x64", "mixfp4_32x128",
+    "mix_4_6_1x16", "mix_4_6_16x16", "mix_4_6_256x16",
+    "mix_4_6_8x64", "mix_4_6_16x64", "mix_4_6_32x64", "mix_4_6_32x128",
 ]
 
 # MixFP4 type blocks with K < 64 are not expressible by a single mxf4nvf4 MMA operand
-NOT_REALIZABLE = {"mixfp4_1x16", "mixfp4_16x16", "mixfp4_256x16"}
+NOT_REALIZABLE = {"mixfp4_1x16", "mixfp4_16x16", "mixfp4_256x16",
+                  "mix_4_6_1x16", "mix_4_6_16x16", "mix_4_6_256x16"}
 
 
 def load(result_dir):
@@ -61,7 +64,7 @@ def main():
 
         for label in labels:
             e = entries[label]
-            tb = e.get("w_type_block", "-") if e.get("w_dtype") == "mixfp4" else "-"
+            tb = e.get("w_type_block", "-") if e.get("w_dtype") in ("mixfp4", "mix_4_6") else "-"
             cells = [fmt(e.get(d)) for d in datasets]
             deltas = []
             for d in datasets:
@@ -69,11 +72,11 @@ def main():
                     deltas.append("-")
                 else:
                     deltas.append(f"{e[d] - baseline[d]:+.4f}")
-            hw = "-" if label in NOT_REALIZABLE else ("y" if label.startswith("mixfp4") else "")
+            hw = "-" if label in NOT_REALIZABLE else ("y" if label.startswith(("mixfp4","mix_4_6")) else "")
             lines.append(f"| {label} | {tb} | " + " | ".join(cells) + " | " +
                          " | ".join(deltas) + f" | {hw} |")
 
-        missing = [l for l in ROW_ORDER if l not in entries and l.startswith("mixfp4")]
+        missing = [l for l in ROW_ORDER if l not in entries and l.startswith(('mixfp4','mix_4_6'))]
         if missing:
             lines.append(f"\n_missing: {', '.join(missing)}_")
 

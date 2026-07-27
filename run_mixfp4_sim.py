@@ -18,8 +18,10 @@ import torch
 
 from quantize.quantizer import (
     quant_mixfp4,
+    quant_mix_4_6,
     quant_nvfp4,
     quant_nvif4,
+    quant_nvfp4_4over6,
 )
 from quantize.utils import parse_type_block
 
@@ -45,13 +47,15 @@ def quant_error(w_fp, w_dq):
 
 
 @torch.no_grad()
-def e0m3_fraction(w_fp, type_block, groupsize: int = 16):
+def e0m3_fraction(w_fp, type_block, groupsize: int = 16, four_over_six: bool = False):
     """
         Fraction of type blocks that select the E0M3 data type. Recomputed here (rather than
-        returned by the quantizer) so that `quant_mixfp4` keeps the same signature as every other
-        fake quantizer in this repo.
+        returned by the quantizer) so that the quantizers keep the same signature as every other
+        fake quantizer in this repo -- but using the quantizer's own helpers, and mirroring the
+        selection rule of the variant being reported: with `four_over_six=True` the E2M1 side may
+        also normalize to 4, which makes E2M1 win more often.
     """
-    from quantize.quantizer import _tile_type_blocks
+    from quantize.quantizer import _tile_type_blocks, _quant_e2m1
 
     block_m, block_k = parse_type_block(type_block)
     x = w_fp.reshape(-1, w_fp.shape[-1]).to(torch.float32)
@@ -62,19 +66,19 @@ def e0m3_fraction(w_fp, type_block, groupsize: int = 16):
     tiled, _     = _tile_type_blocks(x / global_scale, block_m, block_k, groupsize)
     block_max    = tiled.abs().amax(dim=-1, keepdim=True)
 
-    scale_e2m1 = (block_max / 6.0).clamp(min=2**(-9), max=448.0).to(torch.float8_e4m3fn).to(tiled.dtype)
-    scaled     = tiled / scale_e2m1
-    exp        = torch.floor(torch.log2(torch.abs(scaled) + (scaled == 0).type(scaled.dtype))).clamp(min=0)
-    man        = torch.sign(scaled / (2**exp) * 2) * torch.floor(torch.abs(scaled / (2**exp) * 2) + 0.5)
-    dq_e2m1    = (man * (2**exp) / 2).clamp(-6.0, 6.0) * scale_e2m1
+    err_e2m1 = None
+    for qmax in ((6.0, 4.0) if four_over_six else (6.0,)):
+        scale = (block_max / qmax).clamp(min=2**(-9), max=448.0).to(torch.float8_e4m3fn).to(tiled.dtype)
+        err   = (_quant_e2m1(tiled, scale) - tiled).pow(2).sum(dim=-1, keepdim=True)
+        err_e2m1 = err if err_e2m1 is None else torch.minimum(err_e2m1, err)
 
     scale_e0m3 = (block_max / 7.0).clamp(min=2**(-9), max=448.0).to(torch.float8_e4m3fn).to(tiled.dtype)
     dq_e0m3    = (tiled / scale_e0m3).round().clamp(-7.0, 7.0) * scale_e0m3
+    err_e0m3   = (dq_e0m3 - tiled).pow(2).sum(dim=-1, keepdim=True)
 
-    err_e2m1 = (dq_e2m1 - tiled).pow(2).sum(dim=(-1, -2))
-    err_e0m3 = (dq_e0m3 - tiled).pow(2).sum(dim=(-1, -2))
-
-    return (err_e0m3 < err_e2m1).float().mean().item()
+    return (
+        err_e0m3.sum(dim=(-1, -2)) < err_e2m1.sum(dim=(-1, -2))
+    ).float().mean().item()
 
 
 def synthetic_tensors(seed: int = 0):
@@ -144,13 +148,18 @@ def main():
         nmse, sqnr = quant_error(w_fp, quant_nvif4(w_fp, groupsize=args.groupsize))
         print(f"{'nvif4 (per 16 blk)':<24}{nmse:>14.3e}{sqnr:>12.3f}{'-':>14}")
 
-        for block_m, block_k in type_blocks:
-            w_dq = quant_mixfp4(w_fp, groupsize=args.groupsize, type_block=(block_m, block_k))
-            nmse, sqnr = quant_error(w_fp, w_dq)
-            frac = e0m3_fraction(w_fp, (block_m, block_k), args.groupsize)
-            # K < 64 cannot be expressed by one mxf4nvf4 MMA operand -> reference point only
-            mark = " *" if block_k < MMA_K else ""
-            print(f"{f'mixfp4 {block_m}x{block_k}{mark}':<24}{nmse:>14.3e}{sqnr:>12.3f}{frac*100:>13.1f}%")
+        nmse, sqnr = quant_error(w_fp, quant_nvfp4_4over6(w_fp, groupsize=args.groupsize))
+        print(f"{'nvfp4_4over6':<24}{nmse:>14.3e}{sqnr:>12.3f}{'-':>14}")
+
+        for variant, fn in [("mixfp4", quant_mixfp4), ("mix_4_6", quant_mix_4_6)]:
+            for block_m, block_k in type_blocks:
+                w_dq = fn(w_fp, groupsize=args.groupsize, type_block=(block_m, block_k))
+                nmse, sqnr = quant_error(w_fp, w_dq)
+                frac = e0m3_fraction(w_fp, (block_m, block_k), args.groupsize,
+                                     four_over_six=(variant == "mix_4_6"))
+                # K < 64 cannot be expressed by one mxf4nvf4 MMA operand -> reference point only
+                mark = " *" if block_k < MMA_K else ""
+                print(f"{f'{variant} {block_m}x{block_k}{mark}':<24}{nmse:>14.3e}{sqnr:>12.3f}{frac*100:>13.1f}%")
 
     print("\n* K < 64: not expressible by a single mma.sync...mxf4nvf4.m16n8k64 operand. "
           "Accuracy upper bound only.")
