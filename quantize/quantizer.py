@@ -829,6 +829,11 @@ CLIP_PRESETS = {
                "e0m3": (1.0, 7.0 / 6.0, 7.0 / 5.0)},
     "heade0x": {"e2m1": (1.0, 1.25, 1.5, 2.0, 3.0),
                 "e0m3": (1.0, 7.0 / 6.0, 7.0 / 5.0, 7.0 / 4.0, 7.0 / 3.0)},
+    # Headroom on both grids PLUS clipping candidates. Only usable with `clipmin<t>`: the clipping
+    # alphas are gated behind a minimum gain, which is what makes them safe (round 7 measures
+    # clipbothx + clipmin0.15 at the best c4 of the study, against a loss for ungated clipping).
+    "full":  {"e2m1": (0.8, 0.9, 1.0, 1.25, 1.5, 2.0, 3.0),
+              "e0m3": (0.8, 0.9, 1.0, 7.0 / 6.0, 7.0 / 5.0)},
     # E2M1 only -- on top of FourOverSix
     "e2":    {"e2m1": (0.9, 1.0, 1.5),                     "e0m3": (1.0,)},
     "e2x":   {"e2m1": (0.8, 0.9, 1.0, 1.5),                "e0m3": (1.0,)},
