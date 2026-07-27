@@ -530,7 +530,11 @@ def quant_nvfp4_4over6(w_fp, n_bits: int=4, groupsize: Optional[int]=None):
     return w_dq.view(orig_shape).to(torch.bfloat16)
 
 
-NOVER6_ALPHAS = (1.0, 1.25, 1.5, 2.0, 3.0)
+# Nine points at 6.25% spacing across [1, 1.5]. The endpoints are plain NVFP4 (alpha=1) and
+# FourOverSix (alpha=1.5); everything between is new. 6.25% is about the finest spacing the ue4m3
+# scale's 3-bit mantissa still resolves, and measurement says the whole useful range is [1, 1.5] --
+# on real Llama-2-7B weights, alpha = 2 and 3 are chosen by 0.0% of scale blocks.
+NOVER6_ALPHAS = tuple(1.0 + 0.0625 * i for i in range(9))
 
 
 @torch.no_grad()
@@ -556,14 +560,23 @@ def quant_nvfp4_nover6(w_fp, n_bits: int=4, groupsize: Optional[int]=None,
 
         Measured against `quant_nvfp4_4over6` at W4A16, wikitext / c4:
 
-            Llama-3.1-8B   -0.0082 / -0.0050
-            Llama-2-7B     -0.0044 / -0.0050
+            Llama-3.1-8B   -0.0146 / -0.0218
+            Llama-3.2-3B   -0.0159 / -0.0417
+            Llama-2-7B     +0.0094 / -0.0109
 
-        This is `quant_mix_4_6(clip="headx", elect="never")` with the type-block machinery stripped
-        out, and it is the half of that study that generalizes -- it needs no type block, no E0M3
-        operand, and no metadata beyond the ue4m3 scale NVFP4 already stores, so it runs on the
-        existing kernel. `alphas < 1` would be clipping and measurably costs perplexity; do not add
-        them here.
+        i.e. the largest average gain of anything measured in this study, and it needs **no type
+        block, no E0M3 operand and no election rule** -- it is plain NVFP4 with a proper
+        per-scale-block scale search, running on the existing kernel with no metadata beyond the
+        ue4m3 scale NVFP4 already stores. This is `quant_mix_4_6(clip="dense9", elect="never")` with
+        the type-block machinery stripped out.
+
+        The Llama-2-7B wikitext row is the one weak spot, offset by c4 on the same model. If you
+        need a configuration that is negative on every model AND every dataset, use
+        `mix_4_6_clipbothx_clipmin0.3_h3` instead -- smaller (-0.0076 three-model mean against
+        -0.0159) but strictly safe. See `results/DECIDE_SUMMARY.md`.
+
+        `alphas < 1` would be clipping. Ungated it measurably costs perplexity, so do not add them
+        here; the gated form lives in `quant_mix_4_6` behind `clip_min_gain`.
     """
     E2M1_MAX      = 6.0
     FP8_SCALE_MAX = 448.0

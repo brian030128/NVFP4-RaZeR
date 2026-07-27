@@ -9,9 +9,29 @@ checks that shared baselines agree across rounds.
 
 ---
 
-## The answer, in one line
+## The answer
 
-**Use `mix_4_6_clipbothx_clipmin0.3_h3` at an 8x64 type block.** Clipping candidates on both grids,
+Two configurations are defensible, and they trade off differently. Mean delta over both datasets,
+at an 8x64 type block, against `nvfp4_4over6`:
+
+| config | Llama-3.1-8B | Llama-3.2-3B | Llama-2-7B | 3-model mean | negative on all 6? |
+|---|---|---|---|---|---|
+| **`clipdense9_e2m1`** | -0.0182 | **-0.0288** | -0.0008 | **-0.0159** | no (2-7B wikitext +0.0094) |
+| **`clipbothx_clipmin0.3_h3`** | -0.0123 | -0.0074 | -0.0032 | -0.0076 | **yes** |
+| `clipheadx_e2m1` | -0.0066 | +0.0003 | -0.0047 | -0.0035 | no |
+
+**If you want the larger gain: `nvfp4_nover6` with a dense alpha set** — nine points at 6.25%
+spacing across `[1, 1.5]`, about the finest the ue4m3 scale's 3-bit mantissa resolves. It needs
+**no type block, no E0M3 operand and no election rule at all**: it is plain NVFP4 with a proper
+per-scale-block scale search, so it runs on the existing kernel. Twice the average gain of anything
+else measured. Its one weak spot is Llama-2-7B wikitext (+0.0094), offset by -0.0109 on that model's
+c4.
+
+That is the most surprising outcome of this study: **the best answer to "E2M1 or E0M3" turns out to
+be "E2M1, with the block scale searched properly".** The element-type decision this project was
+about is worth less than the free scale search underneath it.
+
+**If you want the strictly safe option: `mix_4_6_clipbothx_clipmin0.3_h3` at an 8x64 type block.** Clipping candidates on both grids,
 gated behind a 30% minimum error reduction, with the conservative election. It is the only
 configuration measured here that is negative on **every model and both datasets**:
 
@@ -198,7 +218,6 @@ the MSE gain is big, and *raises* it where the gain is small.
 | **`corr<r>`**, the equicorrelated-input loss | Inert. `(sum dW)^2 / sum dW^2` measures 0.998–1.005 per scale block, so the rank-one term it prices is ~0.3% of the loss. |
 | **Calibration-free `diag(S)` proxies** | RMSNorm `gamma^2` correlates +0.63 on q/k/v_proj but **-0.50** on gate/up_proj and is undefined for o_proj/down_proj. Weight column energy has no consistent sign. |
 | **Predicting the E0M3 regime from weights** | The per-tensor gain fraction is identical across the two models (0.205 vs 0.199). A large `1x16` gain does not predict it either (round 9). |
-| **A dense alpha grid** (`dense9`, nine points across [1,1.5]) | The best weight-side result on Llama-3.1-8B by far (-0.0182 mean with E0M3 off, -0.0203 with `h1.5`) and a **wash on Llama-2-7B** (-0.0008), where it is beaten by the coarse five-point set (-0.0047). Every dense row on that model is better on c4 and worse on wikitext — the signature of over-aggressive MSE optimization, same as round 1 clipping and round 7 `headxx`. Treat as model-specific, not a default. |
 
 ---
 
