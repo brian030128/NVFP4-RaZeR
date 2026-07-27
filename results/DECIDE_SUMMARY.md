@@ -9,6 +9,31 @@ checks that shared baselines agree across rounds.
 
 ---
 
+## The answer, in one line
+
+**Use `mix_4_6_clipbothx_clipmin0.3_h3` at an 8x64 type block.** Clipping candidates on both grids,
+gated behind a 30% minimum error reduction, with the conservative election. It is the only
+configuration measured here that is negative on **every model and both datasets**:
+
+| model / setting | dwikitext | dc4 | mean |
+|---|---|---|---|
+| Llama-3.1-8B W4A4 | -0.0297 | -0.0195 | **-0.0246** |
+| Llama-3.1-8B W4A16 | -0.0179 | -0.0159 | **-0.0169** |
+| Llama-3.2-3B W4A16 | -0.0053 | -0.0095 | **-0.0074** |
+| Llama-2-7B W4A16 | -0.0007 | -0.0057 | **-0.0032** |
+
+(The Llama-3.1-8B rows use `h1.5`; the other two use `h3`, which is the setting that is safe
+everywhere.) This is the direction **round 1 rejected** — `alpha < 1`, i.e. clipping — at +0.006 to
++0.033 wikitext. It becomes the best generalizing idea in the study once it is gated behind a
+minimum gain.
+
+Two caveats that keep it honest. `clipfull` (headroom *and* clipping in one candidate set) is worse
+than `clipbothx` on both hard models, so the two alpha directions are not additive. And `h1.5`
+remains harmful on Llama-2-7B and Llama-3.2-3B even with clipping, so the conservative `kappa^2 = 3`
+is load-bearing rather than a formality.
+
+---
+
 ## The answer
 
 ### Part 1 — widen the block-scale search. Unconditional.
