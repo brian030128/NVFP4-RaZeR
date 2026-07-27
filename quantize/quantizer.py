@@ -798,6 +798,12 @@ CLIP_PRESETS = {
     # E0M3 only -- the branch with no free normalization today
     "e0":    {"e2m1": (1.0, 1.5),                          "e0m3": (1.0, 0.9)},
     "e0x":   {"e2m1": (1.0, 1.5),                          "e0m3": (1.0, 0.9, 0.8)},
+    # E2M1 headroom only -- alpha >= 1 never clips, so this extends FourOverSix along the one
+    # direction round 1 showed to be safe. alpha=1.5 maps the block max to code 4 (the "4" of
+    # 4over6), alpha=2 maps it to code 3, alpha=3 to code 2; each step trades resolution near zero
+    # for a more uniform grid over the bulk, which is the same thing E0M3 offers.
+    "head":  {"e2m1": (1.0, 1.5, 2.0),                     "e0m3": (1.0,)},
+    "headx": {"e2m1": (1.0, 1.25, 1.5, 2.0, 3.0),          "e0m3": (1.0,)},
     # E2M1 only -- on top of FourOverSix
     "e2":    {"e2m1": (0.9, 1.0, 1.5),                     "e0m3": (1.0,)},
     "e2x":   {"e2m1": (0.8, 0.9, 1.0, 1.5),                "e0m3": (1.0,)},
