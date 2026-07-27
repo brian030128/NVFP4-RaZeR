@@ -15,15 +15,18 @@ checks that shared baselines agree across rounds.
 gated behind a 30% minimum error reduction, with the conservative election. It is the only
 configuration measured here that is negative on **every model and both datasets**:
 
-| model / setting | dwikitext | dc4 | mean |
-|---|---|---|---|
-| Llama-3.1-8B W4A4 | -0.0297 | -0.0195 | **-0.0246** |
-| Llama-3.1-8B W4A16 | -0.0179 | -0.0159 | **-0.0169** |
-| Llama-3.2-3B W4A16 | -0.0053 | -0.0095 | **-0.0074** |
-| Llama-2-7B W4A16 | -0.0007 | -0.0057 | **-0.0032** |
+The same `h3` setting on all three models — no per-model tuning:
 
-(The Llama-3.1-8B rows use `h1.5`; the other two use `h3`, which is the setting that is safe
-everywhere.) This is the direction **round 1 rejected** — `alpha < 1`, i.e. clipping — at +0.006 to
+| model, W4A16 8x64 | dwikitext | dc4 | mean |
+|---|---|---|---|
+| Llama-3.1-8B | -0.0086 | -0.0159 | **-0.0123** |
+| Llama-3.2-3B | -0.0053 | -0.0095 | **-0.0074** |
+| Llama-2-7B | -0.0007 | -0.0057 | **-0.0032** |
+
+and with the aggressive `h1.5`, which is only safe on Llama-3.1-8B, it reaches -0.0169 at W4A16 and
+**-0.0297 / -0.0195 at W4A4**, where the whole family pays about twice as much.
+
+This is the direction **round 1 rejected** — `alpha < 1`, i.e. clipping — at +0.006 to
 +0.033 wikitext. It becomes the best generalizing idea in the study once it is gated behind a
 minimum gain.
 
