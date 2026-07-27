@@ -918,7 +918,7 @@ def _selection_loss(x, x_dq, metric: str, weight=None, eps: float=1e-30):
     raise ValueError(f"Unsupported selection metric \"{metric}\". Expected one of {SELECT_METRICS}.")
 
 
-ELECT_RULES = ("argmin", "dominance", "margin", "never",
+ELECT_RULES = ("argmin", "dominance", "margin", "never", "always",
                "vote", "harm", "relmargin", "tol")
 
 
@@ -993,6 +993,11 @@ def _elect_e0m3(gain, rule: str="argmin", margin: float=0.0, ref=None, eps: floa
         # NOTE: a huge `margin` does NOT achieve this. At a 1x16 type block the tile holds a single
         # scale block, so std(gain) is 0 and every margin collapses back to `argmin`.
         elect = torch.zeros_like(total, dtype=torch.bool)
+    elif rule == "always":
+        # Always elect E0M3. The mirror of "never", and the control that says whether the type block
+        # is doing anything at all: if a variant ties this row, the E2M1 branch is never used and
+        # the format has collapsed to plain INT4 with an NVFP4 scale.
+        elect = torch.ones_like(total, dtype=torch.bool)
     elif rule == "argmin":
         elect = total > 0
     elif rule == "dominance":
@@ -1425,8 +1430,9 @@ def parse_mix_4_6_dtype(name: str):
                               of LAYER OUTPUT error. NEEDS CALIBRATION DATA.
         Election rule      -- "dom" (dominance), "m<z>" (margin), "rm<z>" (relative margin),
                               "tol<d>" (dominance with a relative-harm tolerance), "h<lambda>"
-                              (harm ratio), "v<tau>" (vote share), "e2m1" (never elect E0M3);
-                              default argmin.
+                              (harm ratio), "v<tau>" (vote share), "e2m1" (never elect E0M3),
+                              "e0m3" (always elect it -- the control for whether the type block is
+                              doing anything); default argmin.
 
         "perm"             -- sort rows by their E0M3 preference before tiling into type blocks,
                               so the tiles are homogeneous and the election overrules far fewer
@@ -1468,6 +1474,8 @@ def parse_mix_4_6_dtype(name: str):
             elect = "dominance"
         elif part == "e2m1":
             elect = "never"
+        elif part == "e0m3":
+            elect = "always"
         elif part.startswith("rm") and _num(part[2:]):
             elect, margin = "relmargin", float(part[2:])
         elif part.startswith("tol") and _num(part[3:]):
