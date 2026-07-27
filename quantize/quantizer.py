@@ -900,6 +900,17 @@ CLIP_PRESETS = {
     # clipbothx + clipmin0.15 at the best c4 of the study, against a loss for ungated clipping).
     "full":  {"e2m1": (0.8, 0.9, 1.0, 1.25, 1.5, 2.0, 3.0),
               "e0m3": (0.8, 0.9, 1.0, 7.0 / 6.0, 7.0 / 5.0)},
+    # DENSE headroom in [1, 1.5], which is where the action actually is. Measured on Llama-2-7B,
+    # the share of scale blocks choosing each `headx` candidate is 58.3% / 3.6% / 38.0% / 0% / 0%
+    # for alpha = 1 / 1.25 / 1.5 / 2 / 3 -- the coarse uniform grids are never selected, and the
+    # whole gain comes from the single extra point at 1.25. Subdividing [1, 1.5] instead cuts weight
+    # NMSE by 4.2% (five points) and 5.4% (nine), against 0.76% for `headx`. The ue4m3 scale has a
+    # 3-bit mantissa, so ~6% steps are near the finest that survives the scale rounding.
+    "dense5":  {"e2m1": (1.0, 1.125, 1.25, 1.375, 1.5),    "e0m3": (1.0,)},
+    "dense9":  {"e2m1": tuple(1.0 + 0.0625 * i for i in range(9)), "e0m3": (1.0,)},
+    # ... and the same subdivision on E0M3, whose alpha = 7/n reaches uniform n-level grids
+    "dense9e0": {"e2m1": tuple(1.0 + 0.0625 * i for i in range(9)),
+                 "e0m3": (1.0, 7.0 / 6.5, 7.0 / 6.0, 7.0 / 5.5, 7.0 / 5.0)},
     # E2M1 only -- on top of FourOverSix
     "e2":    {"e2m1": (0.9, 1.0, 1.5),                     "e0m3": (1.0,)},
     "e2x":   {"e2m1": (0.8, 0.9, 1.0, 1.5),                "e0m3": (1.0,)},
