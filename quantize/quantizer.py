@@ -1030,6 +1030,51 @@ def _elect_e0m3(gain, rule: str="argmin", margin: float=0.0, ref=None, eps: floa
 
 PERMUTE_MODES = ("none", "rows")
 
+# Rotation of the reduction dimension by a normalized Walsh-Hadamard matrix, applied in
+# non-overlapping chunks of `rotate_size` columns.
+#
+#   "none" -- no rotation.
+#   "all"  -- every chunk is rotated.
+#   "col"  -- each chunk decides for itself, by the same error criterion everything else here uses.
+#
+# WHY THIS IS ALLOWED, AND WHY THE DECISION CANNOT BE PER SCALE BLOCK.
+# For Y = X W^T with an orthogonal H applied to a chunk of the reduction dimension,
+# (X H) (W H)^T = X H H^T W^T = X W^T, so rotating BOTH operands is exact. The activation side
+# rotates a chunk of columns for every token at once, so all output rows of W must agree on whether
+# that chunk is rotated. The decision is therefore per COLUMN CHUNK -- one bit per `rotate_size`
+# input channels, shared down the whole tensor -- and not per scale block, which would let different
+# rows disagree and silently compute a different GEMM.
+#
+# In fake quantization the whole thing collapses to: rotate, quantize, rotate back. That is exact
+# for W4A16, where the activation is not quantized and its rotation is undone in full precision.
+# For W4A4 it is exact only for "all", where both operands rotate everything and no pattern has to
+# be communicated; "col" would need the weight-derived bit vector plumbed into `quant_act`.
+ROTATE_MODES = ("none", "all", "col")
+
+
+@torch.no_grad()
+def _hadamard(n: int, dtype, device):
+    """Normalized n x n Walsh-Hadamard matrix (n a power of two), so that H @ H.T == I."""
+    assert n > 0 and (n & (n - 1)) == 0, f"Hadamard size must be a power of two, got {n}."
+    h = torch.ones(1, 1, dtype=torch.float32, device=device)
+    while h.shape[0] < n:
+        h = torch.cat([torch.cat([h, h], dim=1),
+                       torch.cat([h, -h], dim=1)], dim=0)
+    return (h / (n ** 0.5)).to(dtype)
+
+
+@torch.no_grad()
+def _rotate_chunks(x, size: int, transpose: bool=False):
+    """
+        Rotate the last dimension of a 2-D tensor in non-overlapping chunks of `size` columns.
+        `transpose=True` applies H^T, which undoes it exactly.
+    """
+    num_row, num_col = x.shape
+    assert num_col % size == 0, \
+        f"The reduction dimension {num_col} must be divisible by the rotation size {size}."
+    h = _hadamard(size, x.dtype, x.device)
+    return (x.view(num_row, -1, size) @ (h.t() if transpose else h)).view(num_row, num_col)
+
 
 @torch.no_grad()
 def row_preference(w_scaled, groupsize: int, metric: str, clip: str):
@@ -1078,6 +1123,8 @@ def quant_mix_4_6(
     margin: float=0.0,
     clip: str="base",
     permute: str="none",
+    rotate: str="none",
+    rotate_size: int=16,
     is_act: bool=False,
 ):
     """
@@ -1121,12 +1168,42 @@ def quant_mix_4_6(
         f'Unsupported clip preset "{clip}". Expected one of {tuple(CLIP_PRESETS)}.'
     assert permute in PERMUTE_MODES, \
         f'Unsupported permute mode "{permute}". Expected one of {PERMUTE_MODES}.'
+    assert rotate in ROTATE_MODES, \
+        f'Unsupported rotate mode "{rotate}". Expected one of {ROTATE_MODES}.'
     block_m, block_k = parse_type_block(type_block)
 
     #################### Reshape Tensor ####################
     orig_shape = w_fp.shape
     w_fp_new   = w_fp.reshape(-1, orig_shape[-1]).to(torch.float32)
     num_col    = w_fp_new.shape[-1]
+
+    #################### Hadamard Rotation ####################
+    # Handled by recursing on the rotated tensor and rotating the result back, which is exactly what
+    # a real implementation does: rotate both operands, quantize in the rotated basis, and let the
+    # two rotations cancel inside the GEMM. See ROTATE_MODES for why the choice is per column chunk.
+    if rotate != "none" and num_col >= rotate_size:
+        inner = dict(n_bits=n_bits, groupsize=groupsize, type_block=type_block, metric=metric,
+                     importance=importance, elect=elect, margin=margin, clip=clip,
+                     permute=permute, rotate="none", is_act=is_act)
+        rotated = _rotate_chunks(w_fp_new, rotate_size)
+        dq_rot  = _rotate_chunks(
+            quant_mix_4_6(rotated, **inner).to(torch.float32), rotate_size, transpose=True
+        )
+        if rotate == "all":
+            return dq_rot.view(orig_shape).to(torch.bfloat16)
+
+        # "col": each column chunk keeps whichever basis quantizes it better. The rotation is
+        # orthogonal, so the squared error of a chunk is the same measured in either basis and the
+        # two candidates are directly comparable. Summed over ALL rows, because every row of the
+        # tensor has to make the same choice.
+        dq_id = quant_mix_4_6(w_fp_new, **inner).to(torch.float32)
+        err   = lambda d: (d - w_fp_new).pow(2).view(-1, num_col // rotate_size,
+                                                     rotate_size).sum(dim=(0, 2))
+        take_rot = (err(dq_rot) < err(dq_id))[None, :, None]
+        dq = torch.where(take_rot,
+                         dq_rot.view(-1, num_col // rotate_size, rotate_size),
+                         dq_id.view(-1, num_col // rotate_size, rotate_size))
+        return dq.view(orig_shape).to(torch.bfloat16)
     assert num_col % groupsize == 0, \
         f'The reduction dimension {num_col} must be divisible by the scale-block size {groupsize}.'
     if num_col % block_k != 0:
@@ -1337,7 +1414,8 @@ def parse_mix_4_6_dtype(name: str):
         Decode a mix_4_6 data type name into its selection settings.
 
             mix_4_6[_sqnr|_cossim|_mae|_l<p>][_clip<preset>][_hess]
-                   [_perm][_dom|_m<z>|_rm<z>|_tol<d>|_h<lambda>|_v<tau>|_e2m1]
+                   [_perm][_rot<n>|_rotcol<n>]
+                   [_dom|_m<z>|_rm<z>|_tol<d>|_h<lambda>|_v<tau>|_e2m1]
 
         Selection metric   -- "sqnr", "cossim", "mae", "l<p>"; default MSE.
         Clip preset        -- "clip<name>" for any key of CLIP_PRESETS; default "base" (FourOverSix
@@ -1354,11 +1432,15 @@ def parse_mix_4_6_dtype(name: str):
                               so the tiles are homogeneous and the election overrules far fewer
                               scale blocks. Calibration-free (it reads only the weights).
 
-        Returns (metric, elect, margin, use_importance, clip, permute).
+        "rot" / "rot<n>"   -- rotate every chunk of n reduction-dimension columns (default 16) by a
+                              normalized Hadamard before quantizing, and rotate back after.
+        "rotcol" / "rotcol<n>" -- same, but each column chunk decides for itself whether to rotate.
+
+        Returns (metric, elect, margin, use_importance, clip, permute, rotate, rotate_size).
     """
     assert name.startswith("mix_4_6"), name
     metric, elect, margin, use_importance, clip = "mse", "argmin", 0.0, False, "base"
-    permute = "none"
+    permute, rotate, rotate_size = "none", "none", 16
 
     def _num(s):
         return s.replace(".", "", 1).isdigit()
@@ -1372,6 +1454,14 @@ def parse_mix_4_6_dtype(name: str):
             clip = part[len("clip"):]
         elif part == "perm":
             permute = "rows"
+        elif part == "rot":
+            rotate = "all"
+        elif part == "rotcol":
+            rotate = "col"
+        elif part.startswith("rot") and part[3:].isdigit():
+            rotate, rotate_size = "all", int(part[3:])
+        elif part.startswith("rotcol") and part[6:].isdigit():
+            rotate, rotate_size = "col", int(part[6:])
         elif part == "hess":
             use_importance = True
         elif part == "dom":
@@ -1390,7 +1480,7 @@ def parse_mix_4_6_dtype(name: str):
             elect, margin = "margin", float(part[1:])
         else:
             raise ValueError(f'Unrecognized mix_4_6 data type qualifier "{part}" in "{name}".')
-    return metric, elect, margin, use_importance, clip, permute
+    return metric, elect, margin, use_importance, clip, permute, rotate, rotate_size
 
 
 def quant_weight(model, quant_config: QuantConfig, importance=None):
@@ -1442,10 +1532,12 @@ def quant_weight(model, quant_config: QuantConfig, importance=None):
     elif (w_dtype == "mixfp4"):
         quant_func = partial(quant_mixfp4, type_block=w_type_block)
     elif w_dtype.startswith("mix_4_6"):
-        _metric, _elect, _margin, _use_imp, _clip, _perm = parse_mix_4_6_dtype(w_dtype)
+        (_metric, _elect, _margin, _use_imp, _clip,
+         _perm, _rot, _rot_n) = parse_mix_4_6_dtype(w_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=w_type_block,
             metric=_metric, elect=_elect, margin=_margin, clip=_clip, permute=_perm,
+            rotate=_rot, rotate_size=_rot_n,
         )
     elif (w_dtype == "nvfp4_razer_e3m3"):
         quant_func = partial(quant_nvfp4_razer_e3m3, outlier=w_outlier)
@@ -1502,10 +1594,12 @@ def quant_act(act, quant_config: QuantConfig):
     elif (a_dtype == "mixfp4"):
         quant_func = partial(quant_mixfp4, type_block=a_type_block, is_act=True)
     elif a_dtype.startswith("mix_4_6"):
-        _metric, _elect, _margin, _, _clip, _perm = parse_mix_4_6_dtype(a_dtype)
+        (_metric, _elect, _margin, _, _clip,
+         _perm, _rot, _rot_n) = parse_mix_4_6_dtype(a_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=a_type_block, is_act=True,
             metric=_metric, elect=_elect, margin=_margin, clip=_clip, permute=_perm,
+            rotate=_rot, rotate_size=_rot_n,
         )
     elif (a_dtype == "nvfp4_razer_e4m3"):
         quant_func = quant_nvfp4_razer_e4m3

@@ -21,8 +21,14 @@ TB_RE = re.compile(r"^(?P<variant>.+)_(?P<tb>\d+x\d+)$")
 
 
 def split_label(label):
-    """'mix_4_6_clipe0_m2_8x64' -> ('mix_4_6_clipe0_m2', '8x64'); baselines get tb=None."""
-    m = TB_RE.match(label)
+    """
+        'mix_4_6_clipe0_m2_8x64' -> ('mix_4_6_clipe0_m2', '8x64'); baselines get tb=None.
+
+        A '__a-<dtype>' suffix (a row whose activations use a different data type from its weights)
+        is stripped before matching, so those rows still get their type block recognised.
+    """
+    head = label.split("__a-")[0]
+    m = TB_RE.match(head)
     return (m.group("variant"), m.group("tb")) if m else (label, None)
 
 

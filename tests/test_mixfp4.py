@@ -699,6 +699,79 @@ def test_election_rules_are_nested():
     print("ok  harm(1) == argmin")
 
 
+########################### Hadamard rotation ###########################
+
+def test_hadamard_is_orthogonal_and_chunked_rotation_inverts():
+    from quantize.quantizer import _hadamard, _rotate_chunks
+    for n in (2, 4, 16, 64, 128):
+        h = _hadamard(n, torch.float64, "cpu")
+        assert torch.allclose(h @ h.t(), torch.eye(n, dtype=torch.float64), atol=1e-10), n
+    x = torch.randn(37, 256, dtype=torch.float64)
+    for n in (16, 64, 128):
+        back = _rotate_chunks(_rotate_chunks(x, n), n, transpose=True)
+        assert torch.allclose(back, x, atol=1e-10), f"chunked rotation of size {n} is not invertible"
+    print("ok  Hadamard is orthogonal and the chunked rotation inverts exactly")
+
+
+def test_rotation_preserves_the_gemm():
+    """
+        The identity the whole scheme rests on: rotating a chunk of the reduction dimension in BOTH
+        operands leaves Y = X W^T unchanged. If this failed, a rotated layer would quietly compute
+        something else and the perplexity numbers would be meaningless.
+    """
+    from quantize.quantizer import _rotate_chunks
+    torch.manual_seed(0)
+    X = torch.randn(11, 256, dtype=torch.float64)     # tokens x K
+    W = torch.randn(7, 256, dtype=torch.float64)      # out    x K
+    for n in (16, 64):
+        Y  = X @ W.t()
+        Yr = _rotate_chunks(X, n) @ _rotate_chunks(W, n).t()
+        assert torch.allclose(Y, Yr, atol=1e-9), f"rotation of size {n} changed the GEMM"
+    print("ok  rotating both operands leaves the GEMM identical")
+
+
+def test_rotation_changes_and_shrinks_block_max():
+    """
+        Rotation earns its keep by spreading a block's outlier over the whole block, which is what
+        drops the block maximum the 4-bit grid has to span. Check the mechanism, not just that the
+        output moved.
+    """
+    from quantize.quantizer import _rotate_chunks
+    x = torch.zeros(4, 16)
+    x[:, 0] = 10.0
+    x[:, 1:] = 0.3
+    peak_before = x.abs().amax(dim=-1)
+    peak_after  = _rotate_chunks(x, 16).abs().amax(dim=-1)
+    assert (peak_after < peak_before * 0.5).all(), (peak_before, peak_after)
+    print(f"ok  rotation cuts an outlier block's peak from {peak_before[0]:.2f} "
+          f"to {peak_after[0]:.2f}")
+
+
+def test_rotate_modes_behave():
+    x = _outlier_tensor()
+    base = quant_mix_4_6(x, groupsize=16, type_block="8x64")
+    rot  = quant_mix_4_6(x, groupsize=16, type_block="8x64", rotate="all")
+    col  = quant_mix_4_6(x, groupsize=16, type_block="8x64", rotate="col")
+    assert not torch.equal(base, rot), 'rotate="all" changed nothing'
+    assert x.shape == rot.shape == col.shape
+
+    # "col" picks the better basis per column chunk, so by construction it cannot be worse than
+    # EITHER of the two fixed choices under the squared error it selects on
+    e = lambda y: (y.float() - x.float()).pow(2).sum().item()
+    assert e(col) <= min(e(base), e(rot)) * (1 + 1e-6), (e(base), e(rot), e(col))
+    print(f"ok  rotate: none={e(base):.4e}, all={e(rot):.4e}, col={e(col):.4e} (col <= both)")
+
+
+def test_rejects_unknown_rotate_mode():
+    for bad in ("hadamard", "yes"):
+        try:
+            quant_mix_4_6(torch.randn(64, 128), groupsize=16, type_block="16x16", rotate=bad)
+        except (AssertionError, ValueError):
+            continue
+        raise AssertionError(f'quant_mix_4_6 should reject rotate="{bad}"')
+    print("ok  unknown rotate mode is rejected")
+
+
 ########################### row permutation ###########################
 
 def test_permutation_is_undone_exactly():
@@ -823,17 +896,17 @@ def test_dtype_name_parsing():
     """
     from quantize.quantizer import parse_mix_4_6_dtype
     cases = {
-        "mix_4_6":                ("mse",    "argmin",    0.0,  False, "base", "none"),
-        "mix_4_6_m2":             ("mse",    "margin",    2.0,  False, "base", "none"),
-        "mix_4_6_mae":            ("mae",    "argmin",    0.0,  False, "base", "none"),
-        "mix_4_6_l0.5":           ("l0.5",   "argmin",    0.0,  False, "base", "none"),
-        "mix_4_6_corr0.2_clipe0_h2": ("corr0.2", "harm", 2.0, False, "e0", "none"),
-        "mix_4_6_clipbothx":      ("mse",    "argmin",    0.0,  False, "bothx", "none"),
-        "mix_4_6_mae_clipwide_rm2": ("mae",  "relmargin", 2.0,  False, "wide", "none"),
-        "mix_4_6_tol0.25":        ("mse",    "tol",       0.25, False, "base", "none"),
-        "mix_4_6_h3":             ("mse",    "harm",      3.0,  False, "base", "none"),
-        "mix_4_6_v0.6":           ("mse",    "vote",      0.6,  False, "base", "none"),
-        "mix_4_6_hess_dom":       ("mse",    "dominance", 0.0,  True,  "base", "none"),
+        "mix_4_6":                ("mse",    "argmin",    0.0,  False, "base", "none", "none", 16),
+        "mix_4_6_m2":             ("mse",    "margin",    2.0,  False, "base", "none", "none", 16),
+        "mix_4_6_mae":            ("mae",    "argmin",    0.0,  False, "base", "none", "none", 16),
+        "mix_4_6_l0.5":           ("l0.5",   "argmin",    0.0,  False, "base", "none", "none", 16),
+        "mix_4_6_corr0.2_clipe0_h2": ("corr0.2", "harm", 2.0, False, "e0", "none", "none", 16),
+        "mix_4_6_clipbothx":      ("mse",    "argmin",    0.0,  False, "bothx", "none", "none", 16),
+        "mix_4_6_mae_clipwide_rm2": ("mae",  "relmargin", 2.0,  False, "wide", "none", "none", 16),
+        "mix_4_6_tol0.25":        ("mse",    "tol",       0.25, False, "base", "none", "none", 16),
+        "mix_4_6_h3":             ("mse",    "harm",      3.0,  False, "base", "none", "none", 16),
+        "mix_4_6_v0.6":           ("mse",    "vote",      0.6,  False, "base", "none", "none", 16),
+        "mix_4_6_hess_dom":       ("mse",    "dominance", 0.0,  True,  "base", "none", "none", 16),
     }
     for name, want in cases.items():
         got = parse_mix_4_6_dtype(name)

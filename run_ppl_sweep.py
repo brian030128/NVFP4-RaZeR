@@ -100,20 +100,31 @@ def parse_configs(spec: str, quantize_activations: bool):
         Build the sweep from a command-line spec instead of the hardcoded lists, so that exploring
         new selection rules does not need a code edit (and a stale copy on every other GPU).
 
-            "<dtype>[@<type_block>]" , comma separated
+            "<dtype>[/<a_dtype>][@<type_block>]" , comma separated
 
         Examples:
             fp16,nvfp4_4over6,mix_4_6_clipc3_m2@8x64,mix_4_6_mae_rm2@32x128
+            mix_4_6_perm_h3/mix_4_6_h3@8x64        # row sorting on weights only
+
+        The optional "/<a_dtype>" gives the activations a DIFFERENT data type from the weights. That
+        matters for anything that is only deployable on one operand: sorting rows is a weight
+        rewrite done once offline, but on activations it would be a gather on every GEMM, so a
+        W4A4 row must be able to say "sorted weights, unsorted activations".
 
         The label is "<dtype>_<type_block>", or just "<dtype>" for formats without a type block, so
         it matches the labels the hardcoded sweeps already wrote.
     """
     rows = []
     for item in [s.strip() for s in spec.split(",") if s.strip()]:
-        dtype, _, tb = item.partition("@")
+        head, _, tb = item.partition("@")
+        dtype, _, a_override = head.partition("/")
         tb = tb or "1x16"
         w_dtype, a_dtype = RAZER_PAIR.get(dtype, (dtype, dtype))
+        if a_override:
+            a_dtype = a_override
         label = dtype if (dtype in TYPELESS or dtype in RAZER_PAIR) else f"{dtype}_{tb}"
+        if a_override:
+            label = f"{label}__a-{a_override}"
 
         if dtype == "fp16":
             rows.append((label, "fp16", "1x16", "fp16", "1x16"))
