@@ -963,9 +963,21 @@ def _elect_e0m3(gain, rule: str="argmin", margin: float=0.0, ref=None, eps: floa
 
         "harm"      -- elect only if the gain the winners collect outweighs the damage the losers
             take by a factor of `margin`:  sum(gain_b | gain_b>0) > margin * sum(-gain_b | gain_b<0).
-            margin=1 is exactly "argmin"; margin>1 is a direct handle on the harm ratio, with no
-            distributional assumption behind it (unlike the standard-error rules, which implicitly
-            treat the per-block gains as i.i.d. samples -- they are not).
+            margin=1 is exactly "argmin".
+
+            This is the ROBUST version of the decision, and the only rule here with a derivation
+            rather than a heuristic. What we actually want to minimize is sum_b w_b * loss_b for the
+            unknown per-block importance w_b > 0; argmin assumes w_b = 1 for every block, which is
+            the assumption CLAUDE.md shows to be wrong by orders of magnitude. Electing E0M3 only
+            when sum_b w_b gain_b > 0 for EVERY w in an uncertainty set gives, for the set
+            {w : 1/kappa <= w_b <= kappa},
+
+                sum_{gain>0} gain_b / kappa  >  kappa * sum_{gain<0} |gain_b|,
+
+            i.e. exactly this rule with margin = kappa^2. So `margin` is not a free knob: it is the
+            squared spread of the per-block importance one is willing to be wrong about. kappa -> inf
+            recovers "dominance", kappa = 1 recovers "argmin", and the rules in between are the
+            robust decisions for intermediate spreads.
 
         "vote"      -- elect iff the FRACTION of scale blocks that individually prefer E0M3 exceeds
             `margin`. Ignores magnitudes entirely, so no single block can carry a tile. margin=0.5 is

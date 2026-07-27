@@ -699,6 +699,25 @@ def test_election_rules_are_nested():
     print("ok  harm(1) == argmin")
 
 
+def test_harm_is_the_robust_decision():
+    """
+        `harm(lambda)` claims to be the robust decision under an unknown per-block importance
+        w_b in [1/kappa, kappa] with lambda = kappa^2: elect E0M3 iff sum_b w_b gain_b > 0 for EVERY
+        admissible w. Check that against the explicit worst case, which puts the smallest weight on
+        every gain and the largest on every harm.
+    """
+    from quantize.quantizer import _elect_e0m3
+    torch.manual_seed(0)
+    gain = torch.randn(400, 32, 1)
+    for kappa in (1.0, 1.5, 2.0, 3.0):
+        worst = (gain.clamp(min=0) / kappa - kappa * (-gain).clamp(min=0)).sum(dim=(-1, -2))
+        want  = (worst > 0)[:, None, None]
+        got   = _elect_e0m3(gain, rule="harm", margin=kappa ** 2)
+        assert torch.equal(got, want), f"harm({kappa**2}) is not the robust rule for kappa={kappa}"
+        print(f"ok  harm({kappa**2:.2f}) == robust decision for importance spread kappa={kappa}"
+              f"  ({int(got.sum())}/{gain.shape[0]} tiles)")
+
+
 def test_tol_interpolates_dominance_to_argmin():
     """
         "tol" is dominance with a slack: tol(0) must be dominance, and a huge tolerance must be
