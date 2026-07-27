@@ -60,7 +60,7 @@ SWEEP_W4A4 = [
 # E2M1-vs-E0M3 per type block. The metric rides on the data type name so that result file names
 # stay distinct without extra config plumbing.
 TYPE_BLOCKS  = ["1x16", "8x64", "16x64", "32x64", "32x128"]
-MIX_VARIANTS = ["mix_4_6", "mix_4_6_m1", "mix_4_6_m2", "mix_4_6_dom"]
+MIX_VARIANTS = ["mix_4_6", "mix_4_6_m2"]
 
 # The A operand tile is 16 rows, the B operand tile is 8, so a weight block of 8x64 pairs with an
 # activation block of 16x64. Everything else pairs with itself.

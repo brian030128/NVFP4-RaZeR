@@ -533,6 +533,28 @@ def test_never_rule_suppresses_e0m3_and_margin_does_not():
     print("ok  elect='never' suppresses E0M3; a large margin only does so for multi-block tiles")
 
 
+def test_dominance_degenerates_to_e2m1_at_realizable_blocks():
+    """
+        At any type block spanning more than a couple of scale blocks, requiring EVERY block to
+        prefer E0M3 is so strict that it never happens on real data: dominance becomes bit-identical
+        to elect="never", i.e. to plain 4over6. Measured on Llama-2-7B weights AND activations at
+        8x64/16x64/32x64/32x128: zero elements differ.
+
+        So a "dominance" row in a results table is a 4over6 row, and any delta it shows against
+        nvfp4_4over6 is the E2M1 rounding-tie convention, not a benefit of the E0M3 type block.
+        Only at 1x16 (one scale block per tile) does dominance coincide with argmin instead.
+    """
+    x = _outlier_tensor(rows=512)
+    for tb in ["8x64", "32x64", "32x128"]:
+        dom = quant_mix_4_6(x, groupsize=16, type_block=tb, elect="dominance")
+        nev = quant_mix_4_6(x, groupsize=16, type_block=tb, elect="never")
+        assert torch.equal(dom, nev), f"dominance elected E0M3 somewhere at {tb} -- rerun the analysis"
+    dom1 = quant_mix_4_6(x, groupsize=16, type_block="1x16", elect="dominance")
+    nev1 = quant_mix_4_6(x, groupsize=16, type_block="1x16", elect="never")
+    assert not torch.equal(dom1, nev1), "dominance should still elect E0M3 at 1x16"
+    print("ok  dominance == plain E2M1 (4over6) at realizable blocks, but not at 1x16")
+
+
 if __name__ == "__main__":
     torch.manual_seed(0)
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
