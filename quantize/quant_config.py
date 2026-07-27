@@ -1,5 +1,8 @@
 from typing import Optional
 
+from .utils import parse_type_block
+
+
 class QuantConfig(dict):
     def __init__(
         self,
@@ -7,6 +10,8 @@ class QuantConfig(dict):
         w_bits: int=16,
         w_dtype: str="fp16",
         w_outlier: float=8.0,
+        w_type_block: str="1x16",  # MixFP4 type-block shape "<M>x<K>" for weights
+        a_type_block: str="1x16",  # MixFP4 type-block shape "<M>x<K>" for activations
         a_bits: int=16,
         a_dtype: str="fp16",
         k_bits: int=16,
@@ -24,9 +29,16 @@ class QuantConfig(dict):
             assert (nbits is None) or (nbits in [4, 8, 16]), \
                 f'Invalid precision \"{nbits}\" provided for activation / query. Allowed precisions are {{8, 16}}'
 
+        # MixFP4 type-block shapes are validated eagerly so that a bad sweep argument fails fast
+        for dtype, type_block in [(w_dtype, w_type_block), (a_dtype, a_type_block)]:
+            if isinstance(dtype, str) and dtype.lower() == "mixfp4":
+                parse_type_block(type_block)
+
         self.w_bits = w_bits
         self.w_dtype = w_dtype
         self.w_outlier = w_outlier
+        self.w_type_block = w_type_block
+        self.a_type_block = a_type_block
         self.a_bits = a_bits
         self.a_dtype = a_dtype
         self.k_bits = k_bits

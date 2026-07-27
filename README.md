@@ -46,9 +46,11 @@ Some python command parameters for evaluation are described below.
 - `--w_groupsize`: Weight group size.
 - `--w_dtype`: Weight data format, e.g., "nvfp4".
 - `--w_outlier`: The second special value pair for RaZeR weights. E.g., if set to `8.0`, then the four special values for RaZeR weights will be {±5, ±8}. Refer to Appendix B.2 of our paper for more details.
+- `--w_type_block`: MixFP4 weight type-block shape `"<M>x<K>"`, e.g. `"1x16"`, `"256x16"`, `"32x128"`. Only used when `--w_dtype mixfp4`. `K` must be a multiple of the NVFP4 scale-block size 16.
 - `--a_bits`: Activation precision.
 - `--a_groupsize`: Activation group size.
 - `--a_dtype`: Activation data format, e.g., "nvfp4".
+- `--a_type_block`: MixFP4 activation type-block shape `"<M>x<K>"`. Only used when `--a_dtype mixfp4`.
 - `--kv_quant`: Whether to quantize KV-cache.
 - `--k_bits`: Key precision.
 - `--k_groupsize`: Key group size.
@@ -77,6 +79,7 @@ See [`inference/README.md`](inference/README.md) for the artifact layout and [`i
 |  **hf4**                  | The [HiFloat4](https://arxiv.org/abs/2602.11287) format developed by Huawei  |
 |  **nvfp4**                | The [NVFP4](https://developer.nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference/) format developed by NVIDIA |
 |  **nvfp4_4over6**         | The [4over6](https://arxiv.org/abs/2512.02010) format on top of NVFP4 |
+|  **mixfp4**               | NVFP4 with a configurable *type block* that selects E2M1 or E0M3 per tile. See [`CLAUDE.md`](CLAUDE.md#mixfp4) |
 |  **nvfp4_razer_e3m3**     | The RaZeR format with E3M3 block scale and 4 special values for weight quantization |
 |  **nvfp4_razer_e4m3**     | The RaZeR format with E4M3 block scale and 2 special values for activation quantization |
 

@@ -22,6 +22,7 @@ from utils import (
     add_quant_args, 
     get_quant_config,
     set_seed,
+    get_output_file_tag,
     model2path
 )
 from quantize import quant_weight
@@ -86,7 +87,7 @@ if __name__ == '__main__':
     if args.use_fp16:
         output_file_name = "Baseline_FP16.txt"
     else:
-        output_file_name = f"w{args.w_bits}_g{args.w_groupsize}_{args.w_dtype}__a{args.a_bits}_g{args.a_groupsize}_{args.a_dtype}.json"
+        output_file_name = f"{get_output_file_tag(args)}.json"
     output_file_path = os.path.join(output_dir, f"{output_file_name}")
     # check if result file exists
     if os.path.isfile(output_file_path):
@@ -99,10 +100,14 @@ if __name__ == '__main__':
     print(f"Weight Quantization Data Type:      {quant_config.w_dtype}")
     print(f"Weight Quantization Bits:           {quant_config.w_bits}")
     print(f"Weight Quantization Group Size:     {quant_config.w_groupsize}")
+    if str(quant_config.w_dtype).lower() == "mixfp4":
+        print(f"Weight MixFP4 Type Block:           {quant_config.w_type_block}")
     print()
     print(f"Activation Quantization Data Type:  {quant_config.a_dtype}")
     print(f"Activation Quantization Bits:       {quant_config.a_bits}")
     print(f"Activation Quantization Group Size: {quant_config.a_groupsize}")
+    if str(quant_config.a_dtype).lower() == "mixfp4":
+        print(f"Activation MixFP4 Type Block:       {quant_config.a_type_block}")
     print(f"==================================================")
 
     logger.info("#################### Loading model and tokenizer ... ####################")

@@ -6,6 +6,7 @@ from functools import reduce
 from transformers import AutoTokenizer, AutoModelForCausalLM, LlamaConfig, Qwen3Config
 
 from quantize import QuantConfig
+from quantize.utils import format_type_block
 
 import json
 import os
@@ -22,6 +23,10 @@ def add_quant_args(parser):
     parser.add_argument('--w_bits', type=int, default=16, help="Number of bits for weight quantization.")
     parser.add_argument('--w_dtype', type=str, default="fp16", help="Weight data type for quantization.")
     parser.add_argument('--w_outlier', type=float, default=8.0, help="Outlier special value for Razer weight")
+    parser.add_argument('--w_type_block', type=str, default="1x16",
+                        help="MixFP4 weight type-block shape \"<M>x<K>\", e.g. \"1x16\", \"256x16\", \"32x128\". K must be a multiple of 16.")
+    parser.add_argument('--a_type_block', type=str, default="1x16",
+                        help="MixFP4 activation type-block shape \"<M>x<K>\", e.g. \"1x16\", \"256x16\", \"32x128\". K must be a multiple of 16.")
     parser.add_argument('--a_bits', type=int, default=16, help="Number of bits for activation quantization.")
     parser.add_argument('--a_dtype', type=str, default="fp16", help="Activation data type for quantization.")
     parser.add_argument('--k_bits', type=int, default=16, help="Number of bits for key quantization.")
@@ -42,6 +47,8 @@ def get_quant_config(args):
         w_bits=args.w_bits,
         w_dtype=args.w_dtype,
         w_outlier=args.w_outlier,
+        w_type_block=getattr(args, "w_type_block", "1x16"),
+        a_type_block=getattr(args, "a_type_block", "1x16"),
         a_bits=args.a_bits,
         a_dtype=args.a_dtype,
         k_bits=args.k_bits,
@@ -54,6 +61,25 @@ def get_quant_config(args):
         kv_quant=args.kv_quant
     )
     return quant_config
+
+
+def dtype_tag(dtype: str, type_block: str) -> str:
+    """
+        Data type tag used in result file names. MixFP4 appends its type-block shape so that
+        sweeps over different type-block configurations do not overwrite each other.
+    """
+    if isinstance(dtype, str) and dtype.lower() == "mixfp4":
+        return f"{dtype}-{format_type_block(type_block)}"
+    return dtype
+
+
+def get_output_file_tag(args) -> str:
+    """
+        The "w..__a.." portion of a result file name for the current quantization configuration.
+    """
+    w_tag = dtype_tag(args.w_dtype, getattr(args, "w_type_block", "1x16"))
+    a_tag = dtype_tag(args.a_dtype, getattr(args, "a_type_block", "1x16"))
+    return f"w{args.w_bits}_g{args.w_groupsize}_{w_tag}__a{args.a_bits}_g{args.a_groupsize}_{a_tag}"
 
 
 # Set seed for reproducibility
