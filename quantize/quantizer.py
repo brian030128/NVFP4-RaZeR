@@ -759,12 +759,55 @@ def _quant_e2m1(x, block_scale):
     return x_q * block_scale
 
 
+SELECT_METRICS = ("mse", "sqnr", "cossim")
+
+
+@torch.no_grad()
+def _selection_loss(x, x_dq, metric: str, eps: float=1e-30):
+    """
+        Per-scale-block selection loss (LOWER is better), shape (..., num_scale_block, 1).
+
+        metric:
+          "mse"    - summed squared error over the scale block.
+          "sqnr"   - negated signal-to-quantization-noise ratio in dB,
+                     -10*log10(||x||^2 / ||x - x_q||^2).
+                     NOTE: for choosing between candidates WITHIN one scale block this is exactly
+                     equivalent to "mse" -- the signal energy is the same for every candidate, so it
+                     cancels out of the ranking. It differs only when the per-block losses are summed
+                     to pick a TYPE-BLOCK data type, because each scale block is then normalized by
+                     its own energy instead of high-energy blocks dominating the total.
+          "cossim" - 1 - cosine similarity. Scale invariant: it scores direction only and ignores a
+                     uniform magnitude error, which the block scale can partly absorb anyway.
+
+        All-zero blocks score 0 for "mse"/"sqnr" and 1 for "cossim", and never produce NaN/inf.
+    """
+    error = (x_dq - x).pow(2).sum(dim=-1, keepdim=True)
+
+    if metric == "mse":
+        return error
+
+    if metric == "sqnr":
+        signal = x.pow(2).sum(dim=-1, keepdim=True)
+        # +eps on both sides keeps an exactly-representable block (error 0) finite and keeps an
+        # all-zero block at 0 dB instead of 0/0
+        return -10.0 * torch.log10((signal + eps) / (error + eps))
+
+    if metric == "cossim":
+        dot    = (x * x_dq).sum(dim=-1, keepdim=True)
+        norm_x = x.pow(2).sum(dim=-1, keepdim=True).sqrt()
+        norm_q = x_dq.pow(2).sum(dim=-1, keepdim=True).sqrt()
+        return 1.0 - dot / (norm_x * norm_q).clamp(min=eps)
+
+    raise ValueError(f"Unsupported selection metric \"{metric}\". Expected one of {SELECT_METRICS}.")
+
+
 @torch.no_grad()
 def quant_mix_4_6(
     w_fp,
     n_bits: int=4,
     groupsize: Optional[int]=None,
     type_block=(1, 16),
+    metric: str="mse",
     is_act: bool=False,
 ):
     """
@@ -798,6 +841,8 @@ def quant_mix_4_6(
     groupsize     = 16 if groupsize is None else groupsize
     assert groupsize == 16, \
         f'MixFP4 inherits the NVFP4 scale-block size, which must be 16, but got {groupsize}.'
+    assert metric in SELECT_METRICS, \
+        f'Unsupported selection metric "{metric}". Expected one of {SELECT_METRICS}.'
     block_m, block_k = parse_type_block(type_block)
 
     #################### Reshape Tensor ####################
@@ -828,7 +873,7 @@ def quant_mix_4_6(
             min=FP8_SCALE_MIN
         ).to(torch.float8_e4m3fn).to(w_tiled.dtype)
         w_dq_tmp    = _quant_e2m1(w_tiled, block_scale)
-        error_tmp   = (w_dq_tmp - w_tiled).pow(2).sum(dim=-1, keepdim=True)
+        error_tmp   = _selection_loss(w_tiled, w_dq_tmp, metric)
 
         if w_dq_e2m1 is None:
             w_dq_e2m1, error_e2m1 = w_dq_tmp, error_tmp
@@ -845,7 +890,7 @@ def quant_mix_4_6(
     w_dq_e0m3        = (w_tiled / block_scale_e0m3).round().clamp(
         min=-E0M3_MAX, max=E0M3_MAX
     ) * block_scale_e0m3
-    error_e0m3       = (w_dq_e0m3 - w_tiled).pow(2).sum(dim=-1, keepdim=True)
+    error_e0m3       = _selection_loss(w_tiled, w_dq_e0m3, metric)
 
     ############### Per-Type-Block Data Type Selection ###############
     # Sum the per-scale-block errors over every scale block of the same type block
@@ -990,7 +1035,7 @@ def quant_weight(model, quant_config: QuantConfig):
     w_outlier    = quant_config.w_outlier
     w_type_block = quant_config.w_type_block
 
-    if w_dtype in ("mixfp4", "mix_4_6"):
+    if w_dtype.startswith(("mixfp4", "mix_4_6")):
         block_m, block_k = parse_type_block(w_type_block)
         print(f"Performing LLM weight quantization using Data Type:  {w_dtype}  "
               f"(type block: {block_m}x{block_k})\n")
@@ -1026,8 +1071,11 @@ def quant_weight(model, quant_config: QuantConfig):
         quant_func = quant_nvif4
     elif (w_dtype == "mixfp4"):
         quant_func = partial(quant_mixfp4, type_block=w_type_block)
-    elif (w_dtype == "mix_4_6"):
-        quant_func = partial(quant_mix_4_6, type_block=w_type_block)
+    elif (w_dtype in ("mix_4_6", "mix_4_6_sqnr", "mix_4_6_cossim")):
+        quant_func = partial(
+            quant_mix_4_6, type_block=w_type_block,
+            metric={"mix_4_6": "mse", "mix_4_6_sqnr": "sqnr", "mix_4_6_cossim": "cossim"}[w_dtype],
+        )
     elif (w_dtype == "nvfp4_razer_e3m3"):
         quant_func = partial(quant_nvfp4_razer_e3m3, outlier=w_outlier)
     elif (w_dtype == "nvfp4_razer_e4m3"):
@@ -1076,8 +1124,11 @@ def quant_act(act, quant_config: QuantConfig):
         quant_func = quant_nvif4
     elif (a_dtype == "mixfp4"):
         quant_func = partial(quant_mixfp4, type_block=a_type_block, is_act=True)
-    elif (a_dtype == "mix_4_6"):
-        quant_func = partial(quant_mix_4_6, type_block=a_type_block, is_act=True)
+    elif (a_dtype in ("mix_4_6", "mix_4_6_sqnr", "mix_4_6_cossim")):
+        quant_func = partial(
+            quant_mix_4_6, type_block=a_type_block, is_act=True,
+            metric={"mix_4_6": "mse", "mix_4_6_sqnr": "sqnr", "mix_4_6_cossim": "cossim"}[a_dtype],
+        )
     elif (a_dtype == "nvfp4_razer_e4m3"):
         quant_func = quant_nvfp4_razer_e4m3
     else:

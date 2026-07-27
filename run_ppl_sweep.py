@@ -45,13 +45,6 @@ SWEEP_W4A16 = [
     ("nvfp4_4over6",          "nvfp4_4over6",     "1x16",   "fp16", "1x16"),
     ("nvif4",                 "nvif4",            "1x16",   "fp16", "1x16"),
     ("razer_e3m3",            "nvfp4_razer_e3m3", "1x16",   "fp16", "1x16"),
-    ("mix_4_6_1x16",           "mix_4_6",          "1x16",   "fp16", "1x16"),
-    ("mix_4_6_16x16",          "mix_4_6",          "16x16",  "fp16", "1x16"),
-    ("mix_4_6_256x16",         "mix_4_6",          "256x16", "fp16", "1x16"),
-    ("mix_4_6_8x64",           "mix_4_6",          "8x64",   "fp16", "1x16"),
-    ("mix_4_6_16x64",          "mix_4_6",          "16x64",  "fp16", "1x16"),
-    ("mix_4_6_32x64",          "mix_4_6",          "32x64",  "fp16", "1x16"),
-    ("mix_4_6_32x128",         "mix_4_6",          "32x128", "fp16", "1x16"),
 ]
 
 SWEEP_W4A4 = [
@@ -61,14 +54,35 @@ SWEEP_W4A4 = [
     ("nvfp4_4over6",          "nvfp4_4over6",     "1x16",   "nvfp4_4over6",     "1x16"),
     ("nvif4",                 "nvif4",            "1x16",   "nvif4",            "1x16"),
     ("razer",                 "nvfp4_razer_e3m3", "1x16",   "nvfp4_razer_e4m3", "1x16"),
-    ("mix_4_6_1x16",           "mix_4_6",          "1x16",   "mix_4_6",          "1x16"),
-    ("mix_4_6_16x16",          "mix_4_6",          "16x16",  "mix_4_6",          "16x16"),
-    ("mix_4_6_256x16",         "mix_4_6",          "256x16", "mix_4_6",          "256x16"),
-    ("mix_4_6_8x64",           "mix_4_6",          "8x64",   "mix_4_6",          "16x64"),
-    ("mix_4_6_16x64",          "mix_4_6",          "16x64",  "mix_4_6",          "16x64"),
-    ("mix_4_6_32x64",          "mix_4_6",          "32x64",  "mix_4_6",          "32x64"),
-    ("mix_4_6_32x128",         "mix_4_6",          "32x128", "mix_4_6",          "32x128"),
 ]
+
+# MixFP4 type-block shapes, and the selection metric used to choose 4-vs-6 per scale block and
+# E2M1-vs-E0M3 per type block. The metric rides on the data type name so that result file names
+# stay distinct without extra config plumbing.
+TYPE_BLOCKS  = ["1x16", "16x16", "256x16", "8x64", "16x64", "32x64", "32x128"]
+MIX_VARIANTS = ["mix_4_6", "mix_4_6_sqnr", "mix_4_6_cossim"]
+
+# The A operand tile is 16 rows, the B operand tile is 8, so a weight block of 8x64 pairs with an
+# activation block of 16x64. Everything else pairs with itself.
+A_BLOCK_FOR = {"8x64": "16x64"}
+
+
+def _mix_rows(quantize_activations: bool):
+    rows = []
+    for dtype in MIX_VARIANTS:
+        for tb in TYPE_BLOCKS:
+            # "mix_4_6_8x64" for MSE keeps the labels of the already-computed results, so a rerun
+            # skips them instead of repeating ~8 GPU-minutes each
+            label = f"{dtype}_{tb}"
+            if quantize_activations:
+                rows.append((label, dtype, tb, dtype, A_BLOCK_FOR.get(tb, tb)))
+            else:
+                rows.append((label, dtype, tb, "fp16", "1x16"))
+    return rows
+
+
+SWEEP_W4A16 += _mix_rows(quantize_activations=False)
+SWEEP_W4A4  += _mix_rows(quantize_activations=True)
 
 SWEEPS = {"w4a16": SWEEP_W4A16, "w4a4": SWEEP_W4A4}
 

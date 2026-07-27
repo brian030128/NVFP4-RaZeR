@@ -349,6 +349,97 @@ def test_mix_4_6_rejects_bad_group_size():
     raise AssertionError("quant_mix_4_6 should require a scale-block size of 16")
 
 
+def test_selection_loss_edge_cases():
+    from quantize.quantizer import _selection_loss
+    zero = torch.zeros(2, 3, 16)
+    for m in ("mse", "sqnr", "cossim"):
+        loss = _selection_loss(zero, zero, m)
+        assert torch.isfinite(loss).all(), f"{m} produced non-finite loss on an all-zero block"
+    x = torch.randn(2, 3, 16)
+    for m in ("mse", "sqnr", "cossim"):
+        exact = _selection_loss(x, x, m)              # perfectly represented block
+        assert torch.isfinite(exact).all(), f"{m} non-finite when error is exactly 0"
+    print("ok  selection loss is finite for all-zero and zero-error blocks")
+
+
+def test_sqnr_equals_mse_at_1x16():
+    """
+        Within one scale block the signal energy is identical for every candidate, so ranking by
+        SQNR is the same as ranking by MSE. At a 1x16 type block BOTH decisions are per scale
+        block, so the two metrics are equivalent in exact arithmetic.
+
+        They are NOT bit-identical, though: the log transform loses precision, so candidates whose
+        errors differ by less than float32 epsilon can tie in the log domain and break the other
+        way. Measured here that is 1 scale block in 32768 (relative error gap 7e-8, below the
+        1.2e-7 float32 epsilon). So assert agreement to well within that, not equality.
+    """
+    x = _outlier_tensor()
+    a = quant_mix_4_6(x, groupsize=16, type_block="1x16", metric="mse")
+    b = quant_mix_4_6(x, groupsize=16, type_block="1x16", metric="sqnr")
+
+    disagree = (a.float() != b.float()).float().mean().item()
+    assert disagree < 1e-4, f"sqnr and mse differ on {disagree:.2%} of elements at 1x16, expected ~0"
+
+    nmse_a, nmse_b = _nmse(x, a), _nmse(x, b)
+    assert abs(nmse_a - nmse_b) / nmse_a < 1e-6, (nmse_a, nmse_b)
+    print(f"ok  sqnr == mse at 1x16 up to float32 ties "
+          f"({disagree*100:.4f}% of elements, nmse {nmse_a:.6e} vs {nmse_b:.6e})")
+
+
+def test_sqnr_differs_from_mse_at_coarse_type_blocks():
+    """
+        Once a type block spans several scale blocks the aggregation differs: MSE sums raw squared
+        error (high-energy blocks dominate), SQNR sums per-block dB (every block weighs the same).
+    """
+    x = _outlier_tensor()
+    differed = []
+    for tb in ["16x16", "8x64", "32x128"]:
+        a = quant_mix_4_6(x, groupsize=16, type_block=tb, metric="mse")
+        b = quant_mix_4_6(x, groupsize=16, type_block=tb, metric="sqnr")
+        if not torch.equal(a, b):
+            differed.append(tb)
+    assert differed, "sqnr never changed the type-block decision -- aggregation is not normalizing"
+    print(f"ok  sqnr changes the type-block choice at {differed}")
+
+
+def test_cossim_differs_and_stays_valid():
+    """cosine similarity is scale invariant, so it is not a monotone function of the error."""
+    x = _outlier_tensor()
+    differed = []
+    for tb in ["1x16", "8x64", "32x128"]:
+        a = quant_mix_4_6(x, groupsize=16, type_block=tb, metric="mse")
+        c = quant_mix_4_6(x, groupsize=16, type_block=tb, metric="cossim")
+        assert c.shape == x.shape and c.dtype == torch.bfloat16
+        assert torch.isfinite(c.float()).all(), f"cossim produced non-finite output at {tb}"
+        if not torch.equal(a, c):
+            differed.append(tb)
+    assert differed, "cossim never changed a decision"
+    print(f"ok  cossim changes decisions at {differed}, output finite everywhere")
+
+
+def test_mse_stays_the_best_by_mse():
+    """
+        Sanity check on the metrics: selecting by MSE must give the lowest MSE. If SQNR or cossim
+        ever won on this measure, the MSE path would be buggy.
+    """
+    x = _outlier_tensor()
+    for tb in ["1x16", "8x64"]:
+        scores = {m: _nmse(x, quant_mix_4_6(x, groupsize=16, type_block=tb, metric=m))
+                  for m in ("mse", "sqnr", "cossim")}
+        assert scores["mse"] <= min(scores.values()) * (1 + 1e-9), (tb, scores)
+        print(f"ok  {tb}: nmse by metric " +
+              ", ".join(f"{m}={v:.4e}" for m, v in scores.items()))
+
+
+def test_rejects_unknown_metric():
+    try:
+        quant_mix_4_6(torch.randn(64, 128), groupsize=16, type_block="16x16", metric="l1")
+    except (AssertionError, ValueError):
+        print("ok  unknown selection metric is rejected")
+        return
+    raise AssertionError("quant_mix_4_6 should reject an unknown metric")
+
+
 def test_rejects_bad_group_size():
     x = torch.randn(64, 128)
     try:

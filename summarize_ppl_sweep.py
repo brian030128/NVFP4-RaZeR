@@ -11,18 +11,34 @@ import os
 from collections import defaultdict
 
 
-# Row order for the report. Anything not listed is appended in file order.
-ROW_ORDER = [
-    "fp16", "mxfp4", "nvfp4", "nvfp4_4over6", "nvif4", "razer", "razer_e3m3",
-    "mixfp4_1x16", "mixfp4_16x16", "mixfp4_256x16",
-    "mixfp4_8x64", "mixfp4_16x64", "mixfp4_32x64", "mixfp4_32x128",
-    "mix_4_6_1x16", "mix_4_6_16x16", "mix_4_6_256x16",
-    "mix_4_6_8x64", "mix_4_6_16x64", "mix_4_6_32x64", "mix_4_6_32x128",
-]
+# Baseline rows first, then MixFP4 variants ordered by selection metric and type block.
+BASELINE_ORDER = ["fp16", "mxfp4", "nvfp4", "nvfp4_4over6", "nvif4", "razer", "razer_e3m3"]
+METRIC_ORDER   = ["mix_4_6_cossim", "mix_4_6_sqnr", "mix_4_6"]   # longest prefix first when matching
+TB_ORDER       = ["1x16", "16x16", "256x16", "8x64", "16x64", "32x64", "32x128"]
 
-# MixFP4 type blocks with K < 64 are not expressible by a single mxf4nvf4 MMA operand
-NOT_REALIZABLE = {"mixfp4_1x16", "mixfp4_16x16", "mixfp4_256x16",
-                  "mix_4_6_1x16", "mix_4_6_16x16", "mix_4_6_256x16"}
+
+def split_label(label):
+    """('mix_4_6_sqnr_8x64') -> ('mix_4_6_sqnr', '8x64'); returns (label, None) for baselines."""
+    for prefix in METRIC_ORDER:
+        if label.startswith(prefix + "_"):
+            return prefix, label[len(prefix) + 1:]
+    return label, None
+
+
+def sort_key(label):
+    variant, tb = split_label(label)
+    if tb is None:
+        idx = BASELINE_ORDER.index(label) if label in BASELINE_ORDER else len(BASELINE_ORDER)
+        return (0, idx, label)
+    return (1, METRIC_ORDER[::-1].index(variant), TB_ORDER.index(tb) if tb in TB_ORDER else 99)
+
+
+def is_realizable(label):
+    """A type block is expressible by one mxf4nvf4 MMA operand only if its K is at least 64."""
+    _, tb = split_label(label)
+    if tb is None:
+        return None
+    return int(tb.split("x")[1]) >= 64
 
 
 def load(result_dir):
@@ -54,8 +70,7 @@ def main():
 
     for (model, sweep), entries in sorted(merged.items()):
         datasets = [d for d in ("wikitext", "c4") if any(d in e for e in entries.values())]
-        labels = [l for l in ROW_ORDER if l in entries]
-        labels += [l for l in entries if l not in ROW_ORDER]
+        labels = sorted(entries, key=sort_key)
 
         baseline = entries.get(args.baseline, {})
         lines.append(f"\n### {model} — {sweep.upper()} (group size 16, seq len 2048)\n")
@@ -66,7 +81,7 @@ def main():
 
         for label in labels:
             e = entries[label]
-            tb = e.get("w_type_block", "-") if e.get("w_dtype") in ("mixfp4", "mix_4_6") else "-"
+            tb = split_label(label)[1] or "-"
             cells = [fmt(e.get(d)) for d in datasets]
             deltas = []
             for d in datasets:
@@ -74,13 +89,15 @@ def main():
                     deltas.append("-")
                 else:
                     deltas.append(f"{e[d] - baseline[d]:+.4f}")
-            hw = "-" if label in NOT_REALIZABLE else ("y" if label.startswith(("mixfp4","mix_4_6")) else "")
+            r = is_realizable(label)
+            hw = "" if r is None else ("y" if r else "-")
             lines.append(f"| {label} | {tb} | " + " | ".join(cells) + " | " +
                          " | ".join(deltas) + f" | {hw} |")
 
-        missing = [l for l in ROW_ORDER if l not in entries and l.startswith(('mixfp4','mix_4_6'))]
+        expected = {f"{v}_{t}" for v in METRIC_ORDER for t in TB_ORDER}
+        missing = sorted(expected - set(entries), key=sort_key)
         if missing:
-            lines.append(f"\n_missing: {', '.join(missing)}_")
+            lines.append(f"\n_missing ({len(missing)}): {', '.join(missing)}_")
 
     report = "\n".join(lines)
     report += ("\n\n`HW` = expressible by one mma.sync...kind::mxf4nvf4.m16n8k64 operand. "
