@@ -60,7 +60,7 @@ SWEEP_W4A4 = [
 # E2M1-vs-E0M3 per type block. The metric rides on the data type name so that result file names
 # stay distinct without extra config plumbing.
 TYPE_BLOCKS  = ["1x16", "8x64", "16x64", "32x64", "32x128"]
-MIX_VARIANTS = ["mix_4_6", "mix_4_6_hess", "mix_4_6_m1", "mix_4_6_hess_m1"]
+MIX_VARIANTS = ["mix_4_6", "mix_4_6_m1", "mix_4_6_m2", "mix_4_6_dom"]
 
 # The A operand tile is 16 rows, the B operand tile is 8, so a weight block of 8x64 pairs with an
 # activation block of 16x64. Everything else pairs with itself.
@@ -80,12 +80,6 @@ def _mix_rows(quantize_activations: bool):
                 rows.append((label, dtype, tb, "fp16", "1x16"))
     return rows
 
-
-# Control: elect="never" suppresses E0M3 entirely, so this is
-# exactly nvfp4_4over6 with importance-weighted 4/6 selection. It isolates how much of the *_hess
-# gain comes from the calibration data rather than from the E0M3 type block.
-SWEEP_W4A16 += [("4over6_hess", "mix_4_6_hess_e2m1", "1x16", "fp16", "1x16")]
-SWEEP_W4A4  += [("4over6_hess", "mix_4_6_hess_e2m1", "1x16", "mix_4_6_hess_e2m1", "1x16")]
 
 SWEEP_W4A16 += _mix_rows(quantize_activations=False)
 SWEEP_W4A4  += _mix_rows(quantize_activations=True)
