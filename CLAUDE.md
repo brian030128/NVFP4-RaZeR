@@ -75,13 +75,49 @@ type block 32x64  (M = 32 rows, K = 64 columns) -> ONE data type for the whole t
 
 - **E2M1** — the standard FP4 grid `{0, ±0.5, ±1, ±1.5, ±2, ±3, ±4, ±6}`, max magnitude 6. This is
   what plain NVFP4 always uses.
-- **E0M3** — no exponent bits, 3 (subnormal) mantissa bits: the *uniform* grid `{0, ±1, ..., ±7}/8`,
-  max magnitude 7/8. The `1/8` is a power of two and is folded into the E4M3 block scale, so the
-  implementation simulates E0M3 on the integer lattice `{0, ±1, ..., ±7}` with a block scale of
-  `block_max / 7`. E0M3 is therefore numerically equivalent to signed INT4.
+- **E0M3** — the *evenly spaced* signed 4-bit grid `{0, ±1, ..., ±7}`, max magnitude 7. Numerically
+  equivalent to signed INT4. The block scale is `block_max / 7`.
 
-E2M1 has finer resolution near zero and coarser resolution near the block maximum; E0M3 is uniform.
-Which one wins depends on the distribution inside the tile, which is why the choice is data driven.
+Both grids encode 15 distinct values in 16 codes — the redundant zero that RaZeR exploits — and both
+use the same ue4m3 block scale. Only the spacing differs: E2M1 has finer resolution near zero and
+coarser resolution near the block maximum, E0M3 is uniform. Which one wins depends on the
+distribution inside the tile, which is why the choice is data driven.
+
+### Hardware grounding and the minimum type-block size
+
+MixFP4 is not a paper format: the public NVFP4 path already issues
+
+```
+mma.sync.aligned.kind::mxf4nvf4.block_scale.scale_vec::4X.m16n8k64.row.col.f32.e2m1.e2m1.f32.ue4m3
+```
+
+and the same instruction can read **A, B, or both** as E0M3 instead of E2M1. That fixes three things:
+
+- **`scale_vec::4X` + `ue4m3`** is exactly the NVFP4 scale block: four ue4m3 scales across `k64`,
+  i.e. one scale per 16 elements. The scale block is 16 for both element types, and the E0M3 branch
+  reuses the same ue4m3 scale — which is what `quant_mixfp4` does.
+- **The data type is selected per operand, not per element.** Weights and activations choose
+  independently, hence the separate `--w_type_block` and `--a_type_block`.
+- **A single instruction cannot subdivide its operand tile**, so the *smallest hardware-realizable*
+  type block is one MMA operand tile. For the usual `Y = X · Wᵀ` mapping (`X` = A, `Wᵀ` = B):
+
+  | operand | tile | minimum type block |
+  |---|---|---|
+  | A — activations | `m16 x k64` | **16x64** (16 tokens x 64 K) |
+  | B — weights | `n8 x k64` | **8x64** (8 output channels x 64 K) |
+
+  Confirm this mapping against the actual kernel before quoting it — a kernel that puts weights in
+  A swaps the two rows.
+
+Anything coarser (`32x64`, `32x128`, `256x64`, ...) is a union of whole operand tiles and is
+realizable. Anything with **K < 64** — including `1x16`, `16x16` and `256x16` — is *not* expressible
+with this instruction, because one MMA consumes 64 contiguous K elements under a single declared
+element type. Those configurations are still worth sweeping as **accuracy upper bounds**: `1x16` is
+the finest possible selection and bounds what any coarser scheme can achieve. Just do not report
+them as deployable without a different instruction or a 4x-cost K-splitting trick.
+
+`quant_mixfp4` deliberately does not enforce the K >= 64 rule, so that these reference points stay
+measurable.
 
 ### Quantization procedure
 

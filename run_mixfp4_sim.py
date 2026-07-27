@@ -24,7 +24,11 @@ from quantize.quantizer import (
 from quantize.utils import parse_type_block
 
 
-DEFAULT_TYPE_BLOCKS = ["1x16", "16x16", "256x16", "32x64", "32x128"]
+# 8x64 (B / weights) and 16x64 (A / activations) are the smallest type blocks an
+# mma.sync...kind::mxf4nvf4.m16n8k64 operand can express. Shapes with K < 64 are marked "*" in the
+# output: they are accuracy upper bounds, not deployable configurations. See CLAUDE.md.
+DEFAULT_TYPE_BLOCKS = ["1x16", "16x16", "256x16", "8x64", "16x64", "32x64", "32x128"]
+MMA_K = 64
 
 
 def quant_error(w_fp, w_dq):
@@ -144,7 +148,12 @@ def main():
             w_dq = quant_mixfp4(w_fp, groupsize=args.groupsize, type_block=(block_m, block_k))
             nmse, sqnr = quant_error(w_fp, w_dq)
             frac = e0m3_fraction(w_fp, (block_m, block_k), args.groupsize)
-            print(f"{f'mixfp4 {block_m}x{block_k}':<24}{nmse:>14.3e}{sqnr:>12.3f}{frac*100:>13.1f}%")
+            # K < 64 cannot be expressed by one mxf4nvf4 MMA operand -> reference point only
+            mark = " *" if block_k < MMA_K else ""
+            print(f"{f'mixfp4 {block_m}x{block_k}{mark}':<24}{nmse:>14.3e}{sqnr:>12.3f}{frac*100:>13.1f}%")
+
+    print("\n* K < 64: not expressible by a single mma.sync...mxf4nvf4.m16n8k64 operand. "
+          "Accuracy upper bound only.")
 
 
 if __name__ == "__main__":

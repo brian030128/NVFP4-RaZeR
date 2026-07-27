@@ -657,17 +657,17 @@ def quant_mixfp4(
             share ONE element data type, either E2M1 or E0M3. A type block always contains a whole
             number of scale blocks (block_k is a multiple of 16).
 
-        E2M1 is the standard FP4 grid {0, 0.5, 1, 1.5, 2, 3, 4, 6}. E0M3 has no exponent bits and
-        3 (subnormal) mantissa bits, i.e. the uniform grid {0, 1, ..., 7} / 8. The constant 1/8 is a
-        power of two and is folded into the E4M3 block scale, so E0M3 is simulated on the integer
-        lattice {0, ..., 7} with a block scale of block_max / 7.
+        E2M1 is the standard FP4 grid {0, +-0.5, +-1, +-1.5, +-2, +-3, +-4, +-6}. E0M3 is the evenly
+        spaced signed 4-bit grid {0, +-1, ..., +-7}, i.e. the value set the mxf4nvf4 MMA reads when
+        an operand is declared E0M3. Both grids hold 15 distinct values out of 16 codes (the
+        redundant zero), and both use the same ue4m3 block scale; only the spacing differs.
 
         The data type is chosen per type block by minimizing the sum of squared quantization errors
         over every scale block it contains.
     """
     FP4_MAN_BITS  = 1
     E2M1_MAX      = 6.0
-    E0M3_MAX      = 7.0        # 7/8 on the integer lattice {0, ..., 7}, the 1/8 is folded into the block scale
+    E0M3_MAX      = 7.0        # evenly spaced signed 4-bit grid {0, +-1, ..., +-7}
     FP8_SCALE_MAX = 448.0
     FP8_SCALE_MIN = 2**(-9)
 
