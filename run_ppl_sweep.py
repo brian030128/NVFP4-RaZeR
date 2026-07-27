@@ -81,6 +81,12 @@ def _mix_rows(quantize_activations: bool):
     return rows
 
 
+# Control: elect="never" suppresses E0M3 entirely, so this is
+# exactly nvfp4_4over6 with importance-weighted 4/6 selection. It isolates how much of the *_hess
+# gain comes from the calibration data rather than from the E0M3 type block.
+SWEEP_W4A16 += [("4over6_hess", "mix_4_6_hess_e2m1", "1x16", "fp16", "1x16")]
+SWEEP_W4A4  += [("4over6_hess", "mix_4_6_hess_e2m1", "1x16", "mix_4_6_hess_e2m1", "1x16")]
+
 SWEEP_W4A16 += _mix_rows(quantize_activations=False)
 SWEEP_W4A4  += _mix_rows(quantize_activations=True)
 

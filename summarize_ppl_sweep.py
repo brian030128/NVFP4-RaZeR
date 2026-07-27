@@ -13,8 +13,11 @@ from collections import defaultdict
 
 # Baseline rows first, then MixFP4 variants ordered by selection metric and type block.
 BASELINE_ORDER = ["fp16", "mxfp4", "nvfp4", "nvfp4_4over6", "nvif4", "razer", "razer_e3m3"]
-METRIC_ORDER   = ["mix_4_6_cossim", "mix_4_6_sqnr", "mix_4_6"]   # longest prefix first when matching
+METRIC_ORDER   = ["mix_4_6_hess_m1", "mix_4_6_hess", "mix_4_6_m1", "mix_4_6_cossim",
+                  "mix_4_6_sqnr", "mix_4_6"]   # longest prefix first when matching
 TB_ORDER       = ["1x16", "16x16", "256x16", "8x64", "16x64", "32x64", "32x128"]
+VARIANT_ORDER  = ["mix_4_6", "mix_4_6_hess", "mix_4_6_m1", "mix_4_6_hess_m1",
+                  "mix_4_6_sqnr", "mix_4_6_cossim"]
 
 
 def split_label(label):
@@ -30,7 +33,8 @@ def sort_key(label):
     if tb is None:
         idx = BASELINE_ORDER.index(label) if label in BASELINE_ORDER else len(BASELINE_ORDER)
         return (0, idx, label)
-    return (1, METRIC_ORDER[::-1].index(variant), TB_ORDER.index(tb) if tb in TB_ORDER else 99)
+    vi = VARIANT_ORDER.index(variant) if variant in VARIANT_ORDER else 99
+    return (1, vi, TB_ORDER.index(tb) if tb in TB_ORDER else 99)
 
 
 def is_realizable(label):
@@ -94,7 +98,7 @@ def main():
             lines.append(f"| {label} | {tb} | " + " | ".join(cells) + " | " +
                          " | ".join(deltas) + f" | {hw} |")
 
-        expected = {f"{v}_{t}" for v in METRIC_ORDER for t in TB_ORDER}
+        expected = set()
         missing = sorted(expected - set(entries), key=sort_key)
         if missing:
             lines.append(f"\n_missing ({len(missing)}): {', '.join(missing)}_")

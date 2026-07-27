@@ -809,7 +809,7 @@ def _selection_loss(x, x_dq, metric: str, weight=None, eps: float=1e-30):
     raise ValueError(f"Unsupported selection metric \"{metric}\". Expected one of {SELECT_METRICS}.")
 
 
-ELECT_RULES = ("argmin", "dominance", "margin")
+ELECT_RULES = ("argmin", "dominance", "margin", "never")
 
 
 @torch.no_grad()
@@ -840,7 +840,13 @@ def _elect_e0m3(gain, rule: str="argmin", margin: float=0.0):
     """
     total = gain.sum(dim=(-1, -2))
 
-    if rule == "argmin":
+    if rule == "never":
+        # Never elect E0M3. The result is the E2M1 branch alone, i.e. plain 4over6 under whatever
+        # metric/importance is in force -- the control for "how much comes from calibration".
+        # NOTE: a huge `margin` does NOT achieve this. At a 1x16 type block the tile holds a single
+        # scale block, so std(gain) is 0 and every margin collapses back to `argmin`.
+        elect = torch.zeros_like(total, dtype=torch.bool)
+    elif rule == "argmin":
         elect = total > 0
     elif rule == "dominance":
         elect = (gain >= 0).all(dim=(-1, -2)) & (total > 0)
@@ -1119,6 +1125,8 @@ def parse_mix_4_6_dtype(name: str):
             use_importance = True
         elif part == "dom":
             elect = "dominance"
+        elif part == "e2m1":
+            elect = "never"
         elif part.startswith("m") and part[1:].replace(".", "", 1).isdigit():
             elect, margin = "margin", float(part[1:])
         else:

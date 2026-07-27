@@ -515,6 +515,24 @@ def test_importance_uniform_is_a_noop():
     print("ok  constant importance is a no-op")
 
 
+def test_never_rule_suppresses_e0m3_and_margin_does_not():
+    """
+        A large margin does NOT suppress E0M3 at a 1x16 type block: the tile holds one scale block,
+        so std(gain) is 0 and the test degenerates to argmin. Only elect="never" is a valid
+        "E2M1 only" control. This caught a broken experiment, so it is pinned.
+    """
+    from quantize.quantizer import _elect_e0m3
+    torch.manual_seed(0)
+    gain = torch.randn(200, 1, 1)                      # 1x16: one scale block per tile
+    assert _elect_e0m3(gain, rule="never").sum() == 0
+    assert _elect_e0m3(gain, rule="margin", margin=999).sum() > 0, \
+        "margin unexpectedly suppressed E0M3 at 1x16; the control would be silently valid"
+    # and with several blocks per tile a huge margin does suppress it
+    gain_multi = torch.randn(200, 16, 1)
+    assert _elect_e0m3(gain_multi, rule="margin", margin=999).sum() == 0
+    print("ok  elect='never' suppresses E0M3; a large margin only does so for multi-block tiles")
+
+
 if __name__ == "__main__":
     torch.manual_seed(0)
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
