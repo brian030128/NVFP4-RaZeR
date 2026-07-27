@@ -16,10 +16,15 @@ checks that shared baselines agree across rounds.
 The block scale is `alpha * block_max / grid_max`. FourOverSix is the two-point search
 `alpha in {1, 1.5}` on E2M1. Widen it to `{1, 1.25, 1.5, 2, 3}`.
 
-| | wikitext | c4 |
-|---|---|---|
-| Llama-3.1-8B W4A16 | **-0.0082** | **-0.0050** |
-| Llama-2-7B W4A16 | **-0.0044** | **-0.0050** |
+| | wikitext | c4 | mean |
+|---|---|---|---|
+| Llama-3.1-8B W4A16 | -0.0082 | -0.0050 | **-0.0066** |
+| Llama-2-7B W4A16 | -0.0044 | -0.0050 | **-0.0047** |
+| Llama-3.2-3B W4A16 | +0.0036 | -0.0030 | +0.0003 |
+
+**Neutral-to-positive, never harmful — but not a guaranteed win.** Worth about -0.005 mean on two of
+the three models and nothing on the third. Take it because it is free and cannot hurt, not because
+it always pays.
 
 Free: `alpha` only changes the value written into the ue4m3 scale field NVFP4 already stores. Needs
 no type block, no E0M3 operand, no extra metadata — it runs on the existing kernel. Shipped as the
@@ -62,11 +67,20 @@ Add E0M3 headroom (`alpha in {1, 7/6, 7/5}`) and elect per type block with the r
 |---|---|---|
 | `mix_4_6_clipheade0_h1.5` @ 8x64 | **-0.0265 / -0.0081** | **+0.0165 / +0.0061** |
 
-Worth a further -0.018 wikitext where it works, and a loss of comparable size where it does not.
+Worth a further -0.018 wikitext where it works, and a loss of comparable size where it does not --
+and it does not work on **two models out of three**:
+
+| `h1.5` @ 8x64 | Llama-3.1-8B | Llama-2-7B | Llama-3.2-3B |
+|---|---|---|---|
+| dwikitext | **-0.0117** | +0.0128 | +0.0208 |
+
+`kappa^2 = 3` is the only election setting non-harmful on all three, and it is worth about -0.002.
 This is not the type block's fault: on Llama-2-7B the same configuration is +0.0051 at a `1x16` type
 block, the finest election possible, so E0M3 hurts that model at every granularity. Round 6 tried to
 predict the regime from the weights and failed — the per-tensor E0M3 gain fraction is 0.205 on
-Llama-2-7B and 0.199 on Llama-3.1-8B, identical.
+Llama-2-7B and 0.199 on Llama-3.1-8B, identical. Round 9 rules out the next obvious predictor too:
+Llama-3.2-3B has a *large* `1x16` gain (-0.0416 / -0.0943, comparable to Llama-3.1-8B) and yet no
+realizable tile rule captures any of it. A large per-block gain is necessary but not sufficient.
 
 **The election rule.** `h<lambda>`: elect E0M3 only when
 

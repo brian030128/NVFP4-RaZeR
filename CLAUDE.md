@@ -231,8 +231,9 @@ On Llama-2-7B v_proj at 8x64, `margin=1` keeps 60% of the MSE gain while cutting
 
 **Part 1 -- widen the block-scale search. Do this unconditionally.** The block scale is
 `alpha * block_max / grid_max`. FourOverSix is the two-point search `alpha in {1, 1.5}` on E2M1.
-Extending it to `{1, 1.25, 1.5, 2, 3}` (preset `headx`) is worth **-0.004 to -0.008 wikitext and
-about -0.005 c4 on every model measured**, costs no metadata -- `alpha` only changes the value
+Extending it to `{1, 1.25, 1.5, 2, 3}` (preset `headx`) is **neutral-to-positive and never harmful**
+across three models -- about -0.005 mean on Llama-3.1-8B and Llama-2-7B, and a wash (+0.0003 mean)
+on Llama-3.2-3B. Take it because it is free and cannot hurt. It costs no metadata -- `alpha` only changes the value
 written into the ue4m3 scale field that already exists -- and needs neither a type block nor the
 E0M3 hardware path. It is plain NVFP4 with a wider FourOverSix, deployable on the existing kernel.
 
@@ -265,8 +266,9 @@ which is the exact decision that survives any per-block importance `w_b` in `[1/
 `lambda = kappa^2` (see `_elect_e0m3`). `lambda = 1` is plain argmin, `lambda -> inf` is dominance.
 
 `lambda` is model-dependent and cannot be split the difference on. **`lambda` in [1.5, 2] is optimal
-on Llama-3.1-8B and a real loss on Llama-2-7B; `lambda = 3` is the only value measured that is
-non-harmful on both**, and there it is worth almost nothing (-0.0014 / -0.0024 wikitext). Round 6
+on Llama-3.1-8B and a real loss on BOTH Llama-2-7B (+0.0128) and Llama-3.2-3B (+0.0208);
+`lambda = 3` is the only value measured that is non-harmful on all three**, and there it is worth
+almost nothing (about -0.002 wikitext). Round 6
 tried and failed to predict which regime a model is in from its weights alone.
 
 Everything in `results/decide_r*/REPORT.md` reduces to one principle:
