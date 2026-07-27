@@ -25,6 +25,9 @@ export HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
 
 mkdir -p "$OUTDIR" "$LOGDIR"
 
+# GPUS="0,1,2" restricts the search to those indices, so two sweeps can share the machine.
+RESTRICT=${GPUS:-}
+
 BUSY=$(nvidia-smi --query-compute-apps=gpu_uuid --format=csv,noheader | sort -u)
 
 FREE=()
@@ -32,6 +35,9 @@ while IFS=, read -r idx used uuid; do
     idx=$(echo "$idx" | tr -d ' ')
     used=$(echo "$used" | tr -d ' MiB')
     uuid=$(echo "$uuid" | tr -d ' ')
+    if [[ -n "$RESTRICT" ]] && ! grep -qw "$idx" <<< "${RESTRICT//,/ }"; then
+        continue
+    fi
     if [[ -n "$BUSY" ]] && grep -q "$uuid" <<< "$BUSY"; then
         echo "gpu$idx: in use by another process, skipping"
         continue
