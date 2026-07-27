@@ -171,3 +171,26 @@ python run_mixfp4_sim.py --model_name llama-2-7b --max_layers 4   # ... on real 
 `tests/test_mixfp4.py` includes a negative control: the per-type-block uniformity check must *fail*
 on `nvif4` output. Keep that control if you touch the check, otherwise it can silently pass on
 anything.
+
+### Measured accuracy (Llama-2-7B, Llama-3.1-8B)
+
+`results/mixfp4_sweep/REPORT.md` holds the full perplexity sweep. The headline, which should shape
+any further work on this format:
+
+- **MixFP4 only helps at `1x16`**, where it is bit-identical to `nvif4` and beats NVFP4 by
+  0.009 (Llama-2-7B) / 0.064 (Llama-3.1-8B) wikitext ppl.
+- **Every type block coarser than one scale block is worse than plain NVFP4**, including all
+  hardware-realizable shapes (`8x64` and up): +0.03 wikitext ppl on Llama-2-7B W4A16, +0.014 on
+  Llama-3.1-8B. Almost the entire loss happens in the first coarsening step (`1x16` -> `16x16`);
+  `16x16` through `32x128` are within ~0.005 ppl of each other.
+- RaZeR remains the strongest format in every setting measured.
+
+The cause is visible in the E0M3 selection rates: at `1x16` the choice is genuinely mixed within a
+tensor (41% E0M3 in `q_proj`, 60% in `v_proj`), but a large tile has to elect a single winner, so
+`q_proj` collapses to ~all E2M1 (5.5% E0M3 at `32x128`, i.e. back to NVFP4) while `v_proj` collapses
+to ~all E0M3 (99.6%). The mixing that produced the gain is exactly what the coarse granularity
+averages away.
+
+Note also that the selection minimizes MSE, and lower MSE does not always mean lower perplexity --
+`nvif4`/`mixfp4_1x16` has clearly lower NMSE than `nvfp4_4over6` yet slightly higher wikitext ppl on
+Llama-2-7B. Treat the sim NMSE as a fast proxy only, and confirm with `run_ppl_sweep.py`.
