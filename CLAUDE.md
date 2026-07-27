@@ -225,6 +225,42 @@ Three knobs now exist on `quant_mix_4_6`:
 On Llama-2-7B v_proj at 8x64, `margin=1` keeps 60% of the MSE gain while cutting harmed blocks from
 17.3% to 4.9%; `margin=2` cuts them to 0.73%. `dominance` reaches 0% but elects nothing.
 
+### Two calibration-free objectives that were tried and do NOT work
+
+Both were attempts to close the "MSE is the wrong criterion" gap without calibration data. Both are
+cheap to re-derive and both fail for a measurable reason, so do not spend GPU time on them again.
+
+**1. Coherent (correlated-input) error — `corr<r>`.** MSE cannot distinguish 16 errors of `+d` from
+16 errors of alternating sign, yet the first accumulates in `sum_j x_j dW_ij` and the second cancels.
+Modelling the inputs as equicorrelated, `S = sigma^2 [(1-r) I + r 11^T]`, gives the exact
+calibration-free loss `sum_j dW_j^2 + r ((sum_j dW_j)^2 - sum_j dW_j^2)`. It is implemented and
+tested (`metric="corr<r>"`).
+
+It is a near no-op, because **the second term is empirically equal to the first**.
+`analyze_coherent_error.py` on Llama-2-7B measures `(sum dW)^2 / sum dW^2` per scale block at
+**0.998–1.005** for every grid and every clip preset. Round-to-nearest error is white at a
+16-element block even under clipping, because only one or two elements per block are actually
+clipped and the rest just re-round with random signs. So `coh - incoh` is ~0.3% of the loss and `r`
+below 1 perturbs nothing. The hypothesis that "MSE-optimal clipping is overrated because it buys MSE
+with coherent error" is **false**: clipping does not raise the coherent share at all.
+
+Note this also disposes of the row-level version. If per-block error sums are independent then
+`E[(sum_row dW)^2] = sum_blocks E[(sum_block dW)^2]`, which is exactly the quantity measured.
+
+**2. Calibration-free proxies for `diag(S)`.** The `hess` variant works but needs calibration data.
+Two proxies that need none were checked against the measured `E[x_j^2]` in
+`results/mix_4_6_sweep/importance_llama-2-7b.pt` (Llama-2-7B, all 224 layers):
+
+| proxy | q/k/v_proj | gate/up_proj | o_proj, down_proj |
+|---|---|---|---|
+| preceding RMSNorm `gamma^2` | Pearson +0.63, Spearman +0.37 | Pearson **-0.50** | not defined |
+| weight column energy `\|\|W_:,j\|\|^2` | -0.54 to +0.65 | -0.72 to +0.01 | -0.19 |
+
+`gamma^2` is the more interesting of the two -- it is a model weight, so it costs no data -- but it
+points the **wrong way** on the MLP projections and is only defined for the five layers fed directly
+by a norm. Weight column energy has no consistent sign at all. Neither is safe to weight a selection
+loss by.
+
 Certificate for the exact objective: with `D = diag(S)`, the diagonal surrogate errs by at most
 `||S - D||_2 (||dW_A||_F^2 + ||dW_B||_F^2)`. Electing E0M3 only when the D-weighted gain exceeds
 that bound guarantees an improvement in the true `||dW||^2_S`. That is the conservative version of
