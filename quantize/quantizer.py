@@ -819,9 +819,16 @@ CLIP_PRESETS = {
     "head":  {"e2m1": (1.0, 1.5, 2.0),                     "e0m3": (1.0,)},
     "headx": {"e2m1": (1.0, 1.25, 1.5, 2.0, 3.0),          "e0m3": (1.0,)},
     "headxx": {"e2m1": (1.0, 1.2, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0), "e0m3": (1.0,)},
-    # headroom on E0M3 as well: alpha = 7/6 maps the block max to code 6, 7/5 to code 5
+    # Headroom on E0M3 as well, and this is where the family becomes principled: E0M3 with
+    # alpha = 7/n maps the block maximum to code n, giving a UNIFORM n-LEVEL grid, for any n <= 7.
+    # E2M1 cannot do that above n = 4 -- its codes are {0,.5,1,1.5,2,3,4,6}, uniform only up to
+    # code 2 -- so E0M3 plus headroom is the efficient way to reach uniform grids of 5, 6 and 7
+    # levels, and E2M1 plus headroom supplies the log-spaced options and the coarse uniform ones.
+    # Together they span the whole useful range of block quantizers at zero metadata cost.
     "heade0": {"e2m1": (1.0, 1.25, 1.5, 2.0, 3.0),
                "e0m3": (1.0, 7.0 / 6.0, 7.0 / 5.0)},
+    "heade0x": {"e2m1": (1.0, 1.25, 1.5, 2.0, 3.0),
+                "e0m3": (1.0, 7.0 / 6.0, 7.0 / 5.0, 7.0 / 4.0, 7.0 / 3.0)},
     # E2M1 only -- on top of FourOverSix
     "e2":    {"e2m1": (0.9, 1.0, 1.5),                     "e0m3": (1.0,)},
     "e2x":   {"e2m1": (0.8, 0.9, 1.0, 1.5),                "e0m3": (1.0,)},
