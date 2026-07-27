@@ -197,7 +197,8 @@ the MSE gain is big, and *raises* it where the gain is small.
 | **Row permutation** (`_perm`) | Worse than the same election rule without it, every time. An 8x64 tile is 8 rows x 4 scale blocks and the disagreement is mostly *within* a row across k-blocks, so straddling stays near 100% however rows are ordered. |
 | **`corr<r>`**, the equicorrelated-input loss | Inert. `(sum dW)^2 / sum dW^2` measures 0.998–1.005 per scale block, so the rank-one term it prices is ~0.3% of the loss. |
 | **Calibration-free `diag(S)` proxies** | RMSNorm `gamma^2` correlates +0.63 on q/k/v_proj but **-0.50** on gate/up_proj and is undefined for o_proj/down_proj. Weight column energy has no consistent sign. |
-| **Predicting the E0M3 regime from weights** | The per-tensor gain fraction is identical across the two models (0.205 vs 0.199). |
+| **Predicting the E0M3 regime from weights** | The per-tensor gain fraction is identical across the two models (0.205 vs 0.199). A large `1x16` gain does not predict it either (round 9). |
+| **A dense alpha grid** (`dense9`, nine points across [1,1.5]) | The best weight-side result on Llama-3.1-8B by far (-0.0182 mean with E0M3 off, -0.0203 with `h1.5`) and a **wash on Llama-2-7B** (-0.0008), where it is beaten by the coarse five-point set (-0.0047). Every dense row on that model is better on c4 and worse on wikitext — the signature of over-aggressive MSE optimization, same as round 1 clipping and round 7 `headxx`. Treat as model-specific, not a default. |
 
 ---
 
