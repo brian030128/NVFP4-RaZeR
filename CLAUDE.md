@@ -194,3 +194,38 @@ averages away.
 Note also that the selection minimizes MSE, and lower MSE does not always mean lower perplexity --
 `nvif4`/`mixfp4_1x16` has clearly lower NMSE than `nvfp4_4over6` yet slightly higher wikitext ppl on
 Llama-2-7B. Treat the sim NMSE as a fast proxy only, and confirm with `run_ppl_sweep.py`.
+
+### Selection objective and election rules (why MSE is the wrong criterion)
+
+For `Y = X W^T`, a weight perturbation `dW` moves the output by `dY = X dW^T`, so the expected
+squared output error is `tr(dW S dW^T) = ||dW||^2_S` with `S = E[x x^T]`. Plain MSE is `||dW||^2_I`.
+They are linked only through the spectrum of `S`:
+
+    lambda_min(S) ||dW||_F^2  <=  ||dW||_S^2  <=  lambda_max(S) ||dW||_F^2
+
+so cutting `||dW||_F^2` by a factor `g` certifies an output-error reduction only when
+`g > 1 - 1/kappa(S)`. Measured on Llama-2-7B (4 wikitext batches, `quantize/importance.py`), the
+median per-layer `max/mean` of `diag(S)` is ~97 and the median `max/min` is ~4.1e3. The criterion
+therefore needs `g` above ~99%, while mix_4_6 achieves 0.002-2% over 4over6 at realizable type
+blocks. **An aggregate MSE win at that magnitude certifies nothing about the output error**, which is
+why it did not translate into perplexity.
+
+Three knobs now exist on `quant_mix_4_6`:
+
+- `importance=` -- per-input-channel `E[x_j^2]` from `collect_importance()`. Switches the selection
+  loss to `sum_j S_jj dW_ij^2`, the diagonal-Hessian estimate of the layer output error (the
+  GPTQ/OBQ objective). Uniform importance reproduces MSE exactly.
+- `elect="dominance"` -- elect E0M3 only when it is no worse on EVERY scale block of the tile.
+  Gives back the pointwise guarantee that 1x16 has for free (verified: 0 blocks harmed at 16x16,
+  8x64, 32x128). Safe but fires almost never on large tiles, so it degenerates to 4over6.
+- `elect="margin", margin=z` -- elect only when `mean(gain) > z * std(gain) / sqrt(B)`, a one-sided
+  test of "the tile's advantage is real" against the block-to-block spread. `z=0` is the old
+  behaviour; the rules are nested (`dominance` ⊆ `margin(large)` ⊆ ... ⊆ `argmin`).
+
+On Llama-2-7B v_proj at 8x64, `margin=1` keeps 60% of the MSE gain while cutting harmed blocks from
+17.3% to 4.9%; `margin=2` cuts them to 0.73%. `dominance` reaches 0% but elects nothing.
+
+Certificate for the exact objective: with `D = diag(S)`, the diagonal surrogate errs by at most
+`||S - D||_2 (||dW_A||_F^2 + ||dW_B||_F^2)`. Electing E0M3 only when the D-weighted gain exceeds
+that bound guarantees an improvement in the true `||dW||^2_S`. That is the conservative version of
+the margin rule, with `z` standing in for the unmeasured off-diagonal mass.

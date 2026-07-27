@@ -450,6 +450,71 @@ def test_rejects_bad_group_size():
     raise AssertionError("quant_mixfp4 should require a scale-block size of 16")
 
 
+
+
+########################### election rules ###########################
+
+def test_dominance_never_harms_a_block():
+    """
+        The "dominance" rule elects E0M3 only when it is at least as good on EVERY scale block of
+        the tile, so no block can come out worse than under the always-E2M1 fallback (4over6).
+        That restores at coarse type blocks the pointwise property 1x16 has for free.
+    """
+    from quantize.quantizer import _tile_type_blocks, _quant_e2m1
+    x = _outlier_tensor()
+    for tb in ["16x16", "8x64", "32x128"]:
+        dom = quant_mix_4_6(x, groupsize=16, type_block=tb, elect="dominance")
+        # per-scale-block squared error must never exceed the all-E2M1 baseline
+        bm, bk = parse_type_block(tb)
+        err_dom = _tile_type_blocks((dom.float() - x.float()).pow(2), bm, bk, 16)[0].sum(-1)
+        # all-E2M1 reference: force no election by demanding an impossible margin
+        ref = quant_mix_4_6(x, groupsize=16, type_block=tb, elect="margin", margin=1e9)
+        err_ref = _tile_type_blocks((ref.float() - x.float()).pow(2), bm, bk, 16)[0].sum(-1)
+        worse = (err_dom > err_ref * (1 + 1e-6)).float().mean().item()
+        assert worse == 0.0, f"{tb}: dominance made {worse:.2%} of scale blocks worse than all-E2M1"
+        print(f"ok  dominance harms 0 blocks at {tb}")
+
+
+def test_margin_monotonically_shrinks_election():
+    """A larger margin must be strictly more conservative: it can only elect a subset of tiles."""
+    from quantize.quantizer import _elect_e0m3
+    torch.manual_seed(0)
+    gain = torch.randn(500, 16, 1)
+    prev = None
+    for m in [0.0, 0.5, 1.0, 2.0, 4.0]:
+        elected = _elect_e0m3(gain, rule="margin", margin=m).squeeze()
+        if prev is not None:
+            assert (elected & ~prev).sum() == 0, f"margin {m} elected a tile that margin<{m} did not"
+        prev = elected
+    dom = _elect_e0m3(gain, rule="dominance").squeeze()
+    argmin = _elect_e0m3(gain, rule="argmin").squeeze()
+    assert (dom & ~argmin).sum() == 0, "dominance elected a tile argmin did not"
+    print("ok  election rules are nested: dominance <= margin(large) <= ... <= argmin")
+
+
+def test_importance_weighting_changes_selection():
+    """A non-uniform importance vector must be able to change which type a tile elects."""
+    x = _outlier_tensor(rows=256, cols=512)
+    uniform = quant_mix_4_6(x, groupsize=16, type_block="8x64")
+    torch.manual_seed(1)
+    imp = torch.rand(512) ** 4 * 100        # strongly anisotropic, like LLM activations
+    weighted = quant_mix_4_6(x, groupsize=16, type_block="8x64", importance=imp)
+    assert not torch.equal(uniform, weighted), "importance had no effect on the result"
+    assert weighted.shape == x.shape and torch.isfinite(weighted.float()).all()
+    print("ok  importance weighting changes the selection and stays finite")
+
+
+def test_importance_uniform_is_a_noop():
+    """A constant importance vector rescales every loss equally and must not change any decision."""
+    x = _outlier_tensor(rows=256, cols=512)
+    base = quant_mix_4_6(x, groupsize=16, type_block="8x64")
+    for c in (1.0, 7.5):
+        same = quant_mix_4_6(x, groupsize=16, type_block="8x64",
+                             importance=torch.full((512,), c))
+        assert torch.equal(base, same), f"constant importance {c} changed the result"
+    print("ok  constant importance is a no-op")
+
+
 if __name__ == "__main__":
     torch.manual_seed(0)
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]

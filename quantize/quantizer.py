@@ -763,7 +763,7 @@ SELECT_METRICS = ("mse", "sqnr", "cossim")
 
 
 @torch.no_grad()
-def _selection_loss(x, x_dq, metric: str, eps: float=1e-30):
+def _selection_loss(x, x_dq, metric: str, weight=None, eps: float=1e-30):
     """
         Per-scale-block selection loss (LOWER is better), shape (..., num_scale_block, 1).
 
@@ -781,24 +781,79 @@ def _selection_loss(x, x_dq, metric: str, eps: float=1e-30):
 
         All-zero blocks score 0 for "mse"/"sqnr" and 1 for "cossim", and never produce NaN/inf.
     """
-    error = (x_dq - x).pow(2).sum(dim=-1, keepdim=True)
+    sq = (x_dq - x).pow(2)
+    if weight is not None:
+        # `weight` is the per-element importance s_j^2 = E[x_j^2] of the input channel that this
+        # weight multiplies. Summing s_j^2 * dW_ij^2 over a block is the diagonal-Hessian estimate
+        # of how much this block's quantization raises the LAYER OUTPUT error, which is the
+        # quantity we actually care about -- unweighted MSE is the special case s_j^2 = 1.
+        sq = sq * weight
+    error = sq.sum(dim=-1, keepdim=True)
 
     if metric == "mse":
         return error
 
     if metric == "sqnr":
-        signal = x.pow(2).sum(dim=-1, keepdim=True)
+        signal = (x.pow(2) if weight is None else x.pow(2) * weight).sum(dim=-1, keepdim=True)
         # +eps on both sides keeps an exactly-representable block (error 0) finite and keeps an
         # all-zero block at 0 dB instead of 0/0
         return -10.0 * torch.log10((signal + eps) / (error + eps))
 
     if metric == "cossim":
-        dot    = (x * x_dq).sum(dim=-1, keepdim=True)
-        norm_x = x.pow(2).sum(dim=-1, keepdim=True).sqrt()
-        norm_q = x_dq.pow(2).sum(dim=-1, keepdim=True).sqrt()
+        w      = 1.0 if weight is None else weight
+        dot    = (x * x_dq * w).sum(dim=-1, keepdim=True)
+        norm_x = (x.pow(2) * w).sum(dim=-1, keepdim=True).sqrt()
+        norm_q = (x_dq.pow(2) * w).sum(dim=-1, keepdim=True).sqrt()
         return 1.0 - dot / (norm_x * norm_q).clamp(min=eps)
 
     raise ValueError(f"Unsupported selection metric \"{metric}\". Expected one of {SELECT_METRICS}.")
+
+
+ELECT_RULES = ("argmin", "dominance", "margin")
+
+
+@torch.no_grad()
+def _elect_e0m3(gain, rule: str="argmin", margin: float=0.0):
+    """
+        Decide, per type block, whether to elect E0M3 over E2M1.
+
+        `gain` has shape (num_type_block, num_scale_block, 1) and holds, per SCALE block,
+            gain_b = loss_E2M1(b) - loss_E0M3(b),
+        so gain_b > 0 means E0M3 is better on that block. Returns a (num_type_block, 1, 1) mask.
+
+        Rules, in increasing order of aggressiveness:
+
+        "dominance" -- elect only if gain_b >= 0 for EVERY scale block in the tile. Then no block is
+            ever worse than it would be under plain 4over6, so the improvement is POINTWISE, not
+            merely aggregate. This is the property a 1x16 type block has for free, and it is what
+            makes 1x16 the only size that reliably beats 4over6 on perplexity. Safe but rarely fires
+            on large tiles.
+
+        "margin"    -- elect only if the mean gain exceeds `margin` standard errors of the per-block
+            gain:  mean(gain) > margin * std(gain) / sqrt(B).
+            This is a one-sided test of "the expected gain is positive" against the block-to-block
+            spread. margin=0 reduces to "argmin"; margin~2 demands the tile's advantage be large
+            compared to how much the decision hurts individual blocks, which is exactly the churn
+            that makes an aggregate MSE win meaningless.
+
+        "argmin"    -- the plain sum comparison: elect iff total gain > 0.
+    """
+    total = gain.sum(dim=(-1, -2))
+
+    if rule == "argmin":
+        elect = total > 0
+    elif rule == "dominance":
+        elect = (gain >= 0).all(dim=(-1, -2)) & (total > 0)
+    elif rule == "margin":
+        num_block = gain.shape[-2] * gain.shape[-1]
+        mean = total / num_block
+        std  = gain.flatten(start_dim=1).std(dim=-1, unbiased=False)
+        # margin * standard error of the mean; with one block std is 0 and this is just total > 0
+        elect = mean > margin * std / (num_block ** 0.5)
+    else:
+        raise ValueError(f"Unsupported election rule \"{rule}\". Expected one of {ELECT_RULES}.")
+
+    return elect[:, None, None]
 
 
 @torch.no_grad()
@@ -808,6 +863,9 @@ def quant_mix_4_6(
     groupsize: Optional[int]=None,
     type_block=(1, 16),
     metric: str="mse",
+    importance=None,
+    elect: str="argmin",
+    margin: float=0.0,
     is_act: bool=False,
 ):
     """
@@ -843,6 +901,8 @@ def quant_mix_4_6(
         f'MixFP4 inherits the NVFP4 scale-block size, which must be 16, but got {groupsize}.'
     assert metric in SELECT_METRICS, \
         f'Unsupported selection metric "{metric}". Expected one of {SELECT_METRICS}.'
+    assert elect in ELECT_RULES, \
+        f'Unsupported election rule "{elect}". Expected one of {ELECT_RULES}.'
     block_m, block_k = parse_type_block(type_block)
 
     #################### Reshape Tensor ####################
@@ -864,6 +924,16 @@ def quant_mix_4_6(
     w_tiled, meta = _tile_type_blocks(w_scaled, block_m, block_k, groupsize)
     block_max     = w_tiled.abs().amax(dim=-1, keepdim=True)
 
+    # Per-input-channel importance, tiled the same way so it lines up element-for-element.
+    imp_tiled = None
+    if importance is not None:
+        imp = importance.to(w_tiled.dtype).to(w_tiled.device).reshape(1, -1)
+        assert imp.shape[-1] == num_col, \
+            f'importance has {imp.shape[-1]} entries but the reduction dimension is {num_col}.'
+        imp_tiled, _ = _tile_type_blocks(
+            imp.expand(w_fp_new.shape[0], -1), block_m, block_k, groupsize
+        )
+
     ####### E2M1: per-scale-block search over the 4 / 6 normalization #######
     w_dq_e2m1  = None
     error_e2m1 = None
@@ -873,7 +943,7 @@ def quant_mix_4_6(
             min=FP8_SCALE_MIN
         ).to(torch.float8_e4m3fn).to(w_tiled.dtype)
         w_dq_tmp    = _quant_e2m1(w_tiled, block_scale)
-        error_tmp   = _selection_loss(w_tiled, w_dq_tmp, metric)
+        error_tmp   = _selection_loss(w_tiled, w_dq_tmp, metric, imp_tiled)
 
         if w_dq_e2m1 is None:
             w_dq_e2m1, error_e2m1 = w_dq_tmp, error_tmp
@@ -890,13 +960,12 @@ def quant_mix_4_6(
     w_dq_e0m3        = (w_tiled / block_scale_e0m3).round().clamp(
         min=-E0M3_MAX, max=E0M3_MAX
     ) * block_scale_e0m3
-    error_e0m3       = _selection_loss(w_tiled, w_dq_e0m3, metric)
+    error_e0m3       = _selection_loss(w_tiled, w_dq_e0m3, metric, imp_tiled)
 
     ############### Per-Type-Block Data Type Selection ###############
     # Sum the per-scale-block errors over every scale block of the same type block
-    select_e0m3 = (
-        error_e0m3.sum(dim=(-1, -2)) < error_e2m1.sum(dim=(-1, -2))
-    )[:, None, None]
+    # gain_b > 0 means E0M3 is the better element type for scale block b
+    select_e0m3 = _elect_e0m3(error_e2m1 - error_e0m3, rule=elect, margin=margin)
 
     w_dq = torch.where(
         select_e0m3,
@@ -1028,7 +1097,12 @@ def quant_nvfp4_razer_e4m3(w_fp, n_bits: int=4, groupsize: Optional[int]=None):
     return w_dq.view(orig_shape).to(torch.bfloat16)
 
 
-def quant_weight(model, quant_config: QuantConfig):
+def quant_weight(model, quant_config: QuantConfig, importance=None):
+    """
+        `importance`: optional {module_name: 1-D tensor of E[x_j^2]} from
+        `quantize.importance.collect_importance`. When given, MixFP4 variants weight their selection
+        error by it, which measures the LAYER OUTPUT error rather than the raw weight error.
+    """
     n_bits       = quant_config.w_bits
     w_groupsize  = quant_config.w_groupsize
     w_dtype      = quant_config.w_dtype.lower()
@@ -1083,9 +1157,15 @@ def quant_weight(model, quant_config: QuantConfig):
     else:
         raise ValueError(f"Unsupported Data Type: {w_dtype}")
     
+    supports_importance = w_dtype.startswith("mix_4_6")
     for n, m in model.named_modules():
         if isinstance(m, torch.nn.Linear) and ('head' not in n):
-            m.weight.data = quant_func(m.weight.data, n_bits=n_bits, groupsize=w_groupsize)
+            kwargs = {}
+            if supports_importance and importance is not None and n in importance:
+                kwargs["importance"] = importance[n].to(m.weight.device)
+            m.weight.data = quant_func(
+                m.weight.data, n_bits=n_bits, groupsize=w_groupsize, **kwargs
+            )
 
 
 def quant_act(act, quant_config: QuantConfig):
