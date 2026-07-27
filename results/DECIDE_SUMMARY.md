@@ -40,6 +40,19 @@ top of the grid rather than the resolution near zero. `alpha < 1` is clipping �
 block maximum — and costs +0.006 to +0.033 wikitext (round 1). Five candidates is where the search
 saturates; eight is worse.
 
+**Which alphas actually get chosen.** Measured over the first seven linear layers of Llama-2-7B,
+the share of 16-element scale blocks selecting each candidate:
+
+| alpha | 1 | 1.25 | 1.5 | 2 | 3 |
+|---|---|---|---|---|---|
+| share | 58.3% | **3.6%** | 38.0% | **0.0%** | **0.0%** |
+
+So the whole gain over FourOverSix comes from **one extra candidate, `alpha = 1.25`**, taken by
+under 4% of blocks. The coarse uniform grids at `alpha = 2` and `3` are never selected on real
+weights, which is why `headxx` (eight candidates, reaching out to `alpha = 4`) is no better and
+measurably worse on wikitext — the extra candidates only add ways for MSE to pick something that
+does not help perplexity. The action is entirely in the interval `[1, 1.5]`.
+
 ### Part 2 — the E0M3 type block is a model-dependent extra.
 
 Add E0M3 headroom (`alpha in {1, 7/6, 7/5}`) and elect per type block with the robust rule at
