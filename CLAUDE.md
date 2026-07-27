@@ -225,6 +225,69 @@ Three knobs now exist on `quant_mix_4_6`:
 On Llama-2-7B v_proj at 8x64, `margin=1` keeps 60% of the MSE gain while cutting harmed blocks from
 17.3% to 4.9%; `margin=2` cuts them to 0.73%. `dominance` reaches 0% but elects nothing.
 
+### How to decide E2M1 vs E0M3 (the answer, and the one principle behind it)
+
+Use `mix_4_6_h1.5` at the smallest realizable type block (`8x64` for weights). `h<lambda>` is the
+robust election rule: elect E0M3 only when the gain the winning scale blocks collect outweighs the
+damage the losing ones take by a factor `lambda`,
+
+    sum_{gain>0} gain_b  >  lambda * sum_{gain<0} |gain_b|
+
+which is the exact decision that survives any per-block importance `w_b` in `[1/kappa, kappa]` with
+`lambda = kappa^2` (see `_elect_e0m3`). `lambda = 1` is plain argmin, `lambda -> inf` is dominance.
+**`lambda` in [1.5, 2] is the range that is positive on every model measured.**
+
+Everything in `results/decide_r*/REPORT.md` reduces to one principle:
+
+> **A rule of the form "do X when it lowers the quantization error" always loses. The same rule with
+> "...by a decisive margin" wins.**
+
+This showed up independently three times, on three different mechanisms:
+
+| mechanism | "when it helps" | "when it decisively helps" |
+|---|---|---|
+| elect E0M3 for a type block | `argmin`: +0.0021 / +0.0185 | `h1.5`: **-0.0117 / -0.0044** |
+| rotate a column chunk | `rotcol`: +0.0946 / +0.1431 | `rotmin0.1`: **-0.0149 / -0.0025** |
+| clip the block scale | any `alpha < 1`: +0.006 to +0.033 | (no threshold form tested) |
+
+(Llama-3.1-8B W4A16 at 8x64, against `nvfp4_4over6`.) The reason is the same each time: weight MSE
+and the true layer output error agree on the *sign* of a large change and disagree freely on small
+ones, so a criterion that fires on small gains is fitting noise with respect to the objective that
+matters. Round 3 measures this directly -- rotation cuts weight MSE on every layer of Llama-2-7B,
+but cuts the true output error only where the MSE gain is big (>15%: q/k/o_proj, -62%/-55%/-13%) and
+*raises* it where the MSE gain is small (<6%: v_proj +73%, MLP +3..+8%).
+
+Ranked, at 8x64 on Llama-3.1-8B W4A16, against `nvfp4_4over6`:
+
+| | dwikitext | dc4 |
+|---|---|---|
+| `mix_4_6_rotmin0.1_h1.5` | -0.0149 | -0.0025 |
+| `mix_4_6_h1.5` | -0.0117 | -0.0044 |
+| `mix_4_6_m1` (margin z=1) | -0.0108 | -0.0037 |
+| `mix_4_6_h2` | -0.0063 | -0.0066 |
+| E2M1 only (`_e2m1`), i.e. 4over6 | +0.0001 | -0.0019 |
+| `mix_4_6` (argmin) | +0.0021 | +0.0185 |
+| `mix_4_6_e0m3` (always E0M3) | +0.0393 | +0.0546 |
+
+For scale, `nvif4` (per-scale-block choice, not realizable) is -0.0387 and `razer_e3m3` is -0.0982.
+So the best realizable rule keeps about **a quarter** of what per-block choice would give, and RaZeR
+remains far ahead of the whole family.
+
+### Ideas that were tried and do NOT work
+
+- **Clipping the block scale** (`alpha < 1`, i.e. `block_max * 0.9 / grid_max`). Lowers the loss it
+  optimizes and costs +0.006 to +0.033 wikitext; clipping E0M3 is worse than clipping E2M1, and
+  `clipe0_m2` at 32x128 is the worst row measured. Consistent across 12 configs on Llama-2-7B.
+- **MAE / Lp selection losses.** `mae` (= `l1`) is within 0.0005 of `mse`; `l0.5` and `l1.5` are
+  worse. The squared-error criterion is not the thing to fix.
+- **Row permutation** (`_perm`), sorting output channels by their E0M3 preference so tiles stop
+  straddling the boundary. Every variant is worse than the same election rule without it. An 8x64
+  tile is 8 rows x 4 scale blocks and the disagreement is mostly *within* a row across its k-blocks,
+  so straddling stays near 100% however the rows are ordered. The axis that matters is K, and K
+  cannot be permuted per tile without changing the GEMM.
+- **Unconditional Hadamard rotation** (`_rot`, `_rotcol`). See round 3: +0.09 to +0.15 wikitext.
+- **`corr<r>` and calibration-free `diag(S)` proxies.** See below.
+
 ### Two calibration-free objectives that were tried and do NOT work
 
 Both were attempts to close the "MSE is the wrong criterion" gap without calibration data. Both are
