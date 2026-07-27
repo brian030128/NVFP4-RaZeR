@@ -1028,6 +1028,44 @@ def _elect_e0m3(gain, rule: str="argmin", margin: float=0.0, ref=None, eps: floa
     return elect[:, None, None]
 
 
+PERMUTE_MODES = ("none", "rows")
+
+
+@torch.no_grad()
+def row_preference(w_scaled, groupsize: int, metric: str, clip: str):
+    """
+        Per row, how much that row as a whole prefers E0M3 over E2M1:
+
+            pref_i = sum over the row's scale blocks of ( loss_E2M1(b) - loss_E0M3(b) )
+
+        computed at the 1x16 granularity, i.e. with each scale block free to pick its own grid and
+        its own clip ratio -- the same quantities the type-block election later sums, just grouped by
+        row instead of by tile. `w_scaled` is (M, K) in the globally scaled domain.
+
+        This is a property of the WEIGHTS ALONE. No activations, no calibration set.
+    """
+    E2M1_MAX, E0M3_MAX = 6.0, 7.0
+    FP8_SCALE_MAX, FP8_SCALE_MIN = 448.0, 2 ** (-9)
+
+    blocks    = w_scaled.reshape(w_scaled.shape[0], -1, groupsize)
+    block_max = blocks.abs().amax(dim=-1, keepdim=True)
+    alphas    = CLIP_PRESETS[clip]
+
+    def best(quant_fn, grid_max, alpha_list):
+        best_err = None
+        for alpha in alpha_list:
+            scale = (block_max * (alpha / grid_max)).clamp(
+                max=FP8_SCALE_MAX, min=FP8_SCALE_MIN
+            ).to(torch.float8_e4m3fn).to(blocks.dtype)
+            err = _selection_loss(blocks, quant_fn(blocks, scale), metric)
+            best_err = err if best_err is None else torch.minimum(best_err, err)
+        return best_err
+
+    err_e2m1 = best(_quant_e2m1, E2M1_MAX, alphas["e2m1"])
+    err_e0m3 = best(_quant_e0m3, E0M3_MAX, alphas["e0m3"])
+    return (err_e2m1 - err_e0m3).sum(dim=(-1, -2))
+
+
 @torch.no_grad()
 def quant_mix_4_6(
     w_fp,
@@ -1039,6 +1077,7 @@ def quant_mix_4_6(
     elect: str="argmin",
     margin: float=0.0,
     clip: str="base",
+    permute: str="none",
     is_act: bool=False,
 ):
     """
@@ -1080,6 +1119,8 @@ def quant_mix_4_6(
         f'Unsupported election rule "{elect}". Expected one of {ELECT_RULES}.'
     assert clip in CLIP_PRESETS, \
         f'Unsupported clip preset "{clip}". Expected one of {tuple(CLIP_PRESETS)}.'
+    assert permute in PERMUTE_MODES, \
+        f'Unsupported permute mode "{permute}". Expected one of {PERMUTE_MODES}.'
     block_m, block_k = parse_type_block(type_block)
 
     #################### Reshape Tensor ####################
@@ -1097,6 +1138,22 @@ def quant_mix_4_6(
     global_qmax  = E2M1_MAX * FP8_SCALE_MAX
     global_scale = (w_fp_new.abs().amax() / global_qmax).clamp(min=torch.finfo(torch.float32).tiny)
     w_scaled     = w_fp_new / global_scale
+
+    #################### Row Grouping ####################
+    # The reason a coarse type block loses the gain is structural, not statistical: rows that prefer
+    # E0M3 and rows that prefer E2M1 are interleaved, so every tile has to overrule a large minority
+    # of its scale blocks. Sorting the rows by how strongly they prefer E0M3 puts like with like, so
+    # the tiles it then cuts are far more homogeneous and the election has much less to overrule.
+    #
+    # This is a permutation of the OUTER dimension only (output channels for weights, tokens for
+    # activations). It leaves the reduction dimension -- and therefore every dot product -- exactly
+    # as it was, so the result is the same GEMM with its output rows/columns reordered. See
+    # `row_preference` for how the key is computed and CLAUDE.md for where the permutation is
+    # actually free to absorb.
+    perm = None
+    if permute == "rows" and block_m > 1:
+        perm     = row_preference(w_scaled, groupsize, metric, clip).argsort(descending=True)
+        w_scaled = w_scaled[perm]
 
     w_tiled, meta = _tile_type_blocks(w_scaled, block_m, block_k, groupsize)
     block_max     = w_tiled.abs().amax(dim=-1, keepdim=True)
@@ -1146,7 +1203,11 @@ def quant_mix_4_6(
         w_dq_e0m3,
         w_dq_e2m1,
     )
-    w_dq = _untile_type_blocks(w_dq, block_m, block_k, meta) * global_scale
+    w_dq = _untile_type_blocks(w_dq, block_m, block_k, meta)
+    if perm is not None:
+        # undo the row sort: row perm[i] of the original tensor is row i of the sorted one
+        w_dq = torch.empty_like(w_dq).index_copy_(0, perm, w_dq)
+    w_dq = w_dq * global_scale
 
     return w_dq.view(orig_shape).to(torch.bfloat16)
 
@@ -1276,7 +1337,7 @@ def parse_mix_4_6_dtype(name: str):
         Decode a mix_4_6 data type name into its selection settings.
 
             mix_4_6[_sqnr|_cossim|_mae|_l<p>][_clip<preset>][_hess]
-                   [_dom|_m<z>|_rm<z>|_tol<d>|_h<lambda>|_v<tau>|_e2m1]
+                   [_perm][_dom|_m<z>|_rm<z>|_tol<d>|_h<lambda>|_v<tau>|_e2m1]
 
         Selection metric   -- "sqnr", "cossim", "mae", "l<p>"; default MSE.
         Clip preset        -- "clip<name>" for any key of CLIP_PRESETS; default "base" (FourOverSix
@@ -1289,10 +1350,15 @@ def parse_mix_4_6_dtype(name: str):
                               (harm ratio), "v<tau>" (vote share), "e2m1" (never elect E0M3);
                               default argmin.
 
-        Returns (metric, elect, margin, use_importance, clip).
+        "perm"             -- sort rows by their E0M3 preference before tiling into type blocks,
+                              so the tiles are homogeneous and the election overrules far fewer
+                              scale blocks. Calibration-free (it reads only the weights).
+
+        Returns (metric, elect, margin, use_importance, clip, permute).
     """
     assert name.startswith("mix_4_6"), name
     metric, elect, margin, use_importance, clip = "mse", "argmin", 0.0, False, "base"
+    permute = "none"
 
     def _num(s):
         return s.replace(".", "", 1).isdigit()
@@ -1304,6 +1370,8 @@ def parse_mix_4_6_dtype(name: str):
             metric = part
         elif part.startswith("clip") and part[len("clip"):] in CLIP_PRESETS:
             clip = part[len("clip"):]
+        elif part == "perm":
+            permute = "rows"
         elif part == "hess":
             use_importance = True
         elif part == "dom":
@@ -1322,7 +1390,7 @@ def parse_mix_4_6_dtype(name: str):
             elect, margin = "margin", float(part[1:])
         else:
             raise ValueError(f'Unrecognized mix_4_6 data type qualifier "{part}" in "{name}".')
-    return metric, elect, margin, use_importance, clip
+    return metric, elect, margin, use_importance, clip, permute
 
 
 def quant_weight(model, quant_config: QuantConfig, importance=None):
@@ -1374,10 +1442,10 @@ def quant_weight(model, quant_config: QuantConfig, importance=None):
     elif (w_dtype == "mixfp4"):
         quant_func = partial(quant_mixfp4, type_block=w_type_block)
     elif w_dtype.startswith("mix_4_6"):
-        _metric, _elect, _margin, _use_imp, _clip = parse_mix_4_6_dtype(w_dtype)
+        _metric, _elect, _margin, _use_imp, _clip, _perm = parse_mix_4_6_dtype(w_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=w_type_block,
-            metric=_metric, elect=_elect, margin=_margin, clip=_clip,
+            metric=_metric, elect=_elect, margin=_margin, clip=_clip, permute=_perm,
         )
     elif (w_dtype == "nvfp4_razer_e3m3"):
         quant_func = partial(quant_nvfp4_razer_e3m3, outlier=w_outlier)
@@ -1434,10 +1502,10 @@ def quant_act(act, quant_config: QuantConfig):
     elif (a_dtype == "mixfp4"):
         quant_func = partial(quant_mixfp4, type_block=a_type_block, is_act=True)
     elif a_dtype.startswith("mix_4_6"):
-        _metric, _elect, _margin, _, _clip = parse_mix_4_6_dtype(a_dtype)
+        _metric, _elect, _margin, _, _clip, _perm = parse_mix_4_6_dtype(a_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=a_type_block, is_act=True,
-            metric=_metric, elect=_elect, margin=_margin, clip=_clip,
+            metric=_metric, elect=_elect, margin=_margin, clip=_clip, permute=_perm,
         )
     elif (a_dtype == "nvfp4_razer_e4m3"):
         quant_func = quant_nvfp4_razer_e4m3

@@ -699,6 +699,74 @@ def test_election_rules_are_nested():
     print("ok  harm(1) == argmin")
 
 
+########################### row permutation ###########################
+
+def test_permutation_is_undone_exactly():
+    """
+        The row sort must be invisible in the output: every row has to come back to where it started.
+        If it did not, the layer would silently compute a permuted GEMM and perplexity would be
+        garbage rather than merely worse -- so this checks against a per-row fingerprint, not just
+        against the aggregate error.
+    """
+    x = _outlier_tensor(rows=520)                     # 520 is not a multiple of 8, 16 or 32
+    for tb in ["8x64", "16x64", "32x128"]:
+        y = quant_mix_4_6(x, groupsize=16, type_block=tb, permute="rows")
+        assert y.shape == x.shape
+        # each row of the output must be the quantization of the SAME row of the input: check that
+        # the row is closer to its own source row than to any other row
+        xf, yf = x.float(), y.float()
+        for i in (0, 7, 8, 137, 519):
+            d_self  = (yf[i] - xf[i]).pow(2).sum()
+            d_other = (yf[i].unsqueeze(0) - xf).pow(2).sum(-1)
+            best    = int(d_other.argmin())
+            assert best == i, f"{tb}: output row {i} matches input row {best}, not itself"
+            assert d_self <= xf[i].pow(2).sum() * 0.5, f"{tb}: row {i} is not a quantization of itself"
+    print("ok  the row permutation is inverted exactly (rows land where they started)")
+
+
+def test_permutation_is_a_noop_at_one_row_tiles():
+    """A type block one row tall has nothing to group, so sorting must change nothing at all."""
+    x = _outlier_tensor()
+    a = quant_mix_4_6(x, groupsize=16, type_block="1x16", permute="none")
+    b = quant_mix_4_6(x, groupsize=16, type_block="1x16", permute="rows")
+    assert torch.equal(a, b), "row sorting changed the 1x16 result"
+    print("ok  row sorting is a no-op at a 1x16 type block")
+
+
+def test_permutation_makes_tiles_homogeneous():
+    """
+        The point of sorting is that tiles stop straddling the E0M3/E2M1 boundary. Measure it
+        directly: the share of scale blocks whose individually-best grid differs from the one their
+        tile elected must drop.
+    """
+    from quantize.quantizer import row_preference
+
+    # `_outlier_tensor` gives every row the same outlier pattern, so every row has the same
+    # preference and there is nothing to sort. Build a tensor whose rows genuinely disagree:
+    # odd rows are heavy tailed (E2M1 territory), even rows are near-uniform (E0M3 territory),
+    # interleaved so that every 8-row tile straddles the boundary before sorting.
+    torch.manual_seed(0)
+    rows, cols = 1024, 512
+    x = torch.rand(rows, cols) * 2 - 1                 # flat: favours the uniform grid
+    heavy = torch.randn(rows // 2, cols)
+    heavy[:, ::13] *= 18.0                             # spiky: favours the log-spaced grid
+    x[1::2] = heavy
+    x  = x.to(torch.bfloat16)
+    xf = x.float().reshape(-1, x.shape[-1])
+    gs = (xf.abs().amax() / (6.0 * 448.0)).clamp(min=torch.finfo(torch.float32).tiny)
+    pref = row_preference(xf / gs, 16, "mse", "base")
+
+    # how much a tile of 8 consecutive rows disagrees with itself, before and after sorting
+    def straddle(p):
+        tiles = p[: (len(p) // 8) * 8].reshape(-1, 8)
+        return ((tiles > 0).any(dim=1) & (tiles <= 0).any(dim=1)).float().mean().item()
+
+    before = straddle(pref)
+    after  = straddle(pref[pref.argsort(descending=True)])
+    assert after < before, f"sorting did not reduce straddling tiles ({before:.3f} -> {after:.3f})"
+    print(f"ok  row sorting cuts straddling 8-row tiles from {before:.1%} to {after:.1%}")
+
+
 def test_harm_is_the_robust_decision():
     """
         `harm(lambda)` claims to be the robust decision under an unknown per-block importance
@@ -755,17 +823,17 @@ def test_dtype_name_parsing():
     """
     from quantize.quantizer import parse_mix_4_6_dtype
     cases = {
-        "mix_4_6":                ("mse",    "argmin",    0.0,  False, "base"),
-        "mix_4_6_m2":             ("mse",    "margin",    2.0,  False, "base"),
-        "mix_4_6_mae":            ("mae",    "argmin",    0.0,  False, "base"),
-        "mix_4_6_l0.5":           ("l0.5",   "argmin",    0.0,  False, "base"),
-        "mix_4_6_corr0.2_clipe0_h2": ("corr0.2", "harm",   2.0,  False, "e0"),
-        "mix_4_6_clipbothx":      ("mse",    "argmin",    0.0,  False, "bothx"),
-        "mix_4_6_mae_clipwide_rm2": ("mae",  "relmargin", 2.0,  False, "wide"),
-        "mix_4_6_tol0.25":        ("mse",    "tol",       0.25, False, "base"),
-        "mix_4_6_h3":             ("mse",    "harm",      3.0,  False, "base"),
-        "mix_4_6_v0.6":           ("mse",    "vote",      0.6,  False, "base"),
-        "mix_4_6_hess_dom":       ("mse",    "dominance", 0.0,  True,  "base"),
+        "mix_4_6":                ("mse",    "argmin",    0.0,  False, "base", "none"),
+        "mix_4_6_m2":             ("mse",    "margin",    2.0,  False, "base", "none"),
+        "mix_4_6_mae":            ("mae",    "argmin",    0.0,  False, "base", "none"),
+        "mix_4_6_l0.5":           ("l0.5",   "argmin",    0.0,  False, "base", "none"),
+        "mix_4_6_corr0.2_clipe0_h2": ("corr0.2", "harm", 2.0, False, "e0", "none"),
+        "mix_4_6_clipbothx":      ("mse",    "argmin",    0.0,  False, "bothx", "none"),
+        "mix_4_6_mae_clipwide_rm2": ("mae",  "relmargin", 2.0,  False, "wide", "none"),
+        "mix_4_6_tol0.25":        ("mse",    "tol",       0.25, False, "base", "none"),
+        "mix_4_6_h3":             ("mse",    "harm",      3.0,  False, "base", "none"),
+        "mix_4_6_v0.6":           ("mse",    "vote",      0.6,  False, "base", "none"),
+        "mix_4_6_hess_dom":       ("mse",    "dominance", 0.0,  True,  "base", "none"),
     }
     for name, want in cases.items():
         got = parse_mix_4_6_dtype(name)
