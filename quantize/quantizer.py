@@ -804,6 +804,10 @@ CLIP_PRESETS = {
     # for a more uniform grid over the bulk, which is the same thing E0M3 offers.
     "head":  {"e2m1": (1.0, 1.5, 2.0),                     "e0m3": (1.0,)},
     "headx": {"e2m1": (1.0, 1.25, 1.5, 2.0, 3.0),          "e0m3": (1.0,)},
+    "headxx": {"e2m1": (1.0, 1.2, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0), "e0m3": (1.0,)},
+    # headroom on E0M3 as well: alpha = 7/6 maps the block max to code 6, 7/5 to code 5
+    "heade0": {"e2m1": (1.0, 1.25, 1.5, 2.0, 3.0),
+               "e0m3": (1.0, 7.0 / 6.0, 7.0 / 5.0)},
     # E2M1 only -- on top of FourOverSix
     "e2":    {"e2m1": (0.9, 1.0, 1.5),                     "e0m3": (1.0,)},
     "e2x":   {"e2m1": (0.8, 0.9, 1.0, 1.5),                "e0m3": (1.0,)},
