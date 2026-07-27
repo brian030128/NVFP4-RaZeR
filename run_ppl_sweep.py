@@ -88,7 +88,7 @@ SWEEPS = {"w4a16": SWEEP_W4A16, "w4a4": SWEEP_W4A4}
 
 
 # Formats that ignore --w_type_block entirely, so their label carries no type block.
-TYPELESS = {"fp16", "mxfp4", "nvfp4", "nvfp4_4over6", "nvif4",
+TYPELESS = {"fp16", "mxfp4", "nvfp4", "nvfp4_4over6", "nvfp4_nover6", "nvif4",
             "nvfp4_razer_e3m3", "nvfp4_razer_e4m3"}
 
 # The RaZeR weight/activation pair, so "razer" can be named as one config.
