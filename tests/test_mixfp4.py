@@ -607,6 +607,29 @@ def test_clip_min_gain_gates_only_the_clipping_candidates():
     print("ok  clipmin gates alpha < 1 only; t=0 is the plain preset, t=inf drops clipping")
 
 
+def test_alpha_min_gain_gates_the_scale_search():
+    """
+        `amin<t>` applies the decisive-margin principle to the scale search itself. A huge threshold
+        must collapse the search to alpha = 1 exactly -- plain NVFP4 -- and t = 0 must leave the
+        ordinary argmin search untouched.
+    """
+    x = _outlier_tensor()
+    for preset in ("base", "headx", "dense9"):
+        gated = quant_mix_4_6(x, groupsize=16, type_block="1x16",
+                              clip=preset, elect="never", alpha_min_gain=1e9)
+        only1 = quant_mix_4_6(x, groupsize=16, type_block="1x16",
+                              clip="base", elect="never", alpha_min_gain=1e9)
+        assert torch.equal(gated, only1), f"amin(inf) on {preset} did not collapse to alpha=1"
+
+        open_ = quant_mix_4_6(x, groupsize=16, type_block="1x16",
+                              clip=preset, elect="never", alpha_min_gain=0.0)
+        plain = quant_mix_4_6(x, groupsize=16, type_block="1x16", clip=preset, elect="never")
+        assert torch.equal(open_, plain), f"amin(0) on {preset} changed the result"
+        if preset != "base":
+            assert not torch.equal(gated, plain), f"amin(inf) on {preset} changed nothing"
+    print("ok  amin(inf) collapses the scale search to alpha=1; amin(0) is the plain search")
+
+
 def test_rejects_unknown_clip_preset():
     try:
         quant_mix_4_6(torch.randn(64, 128), groupsize=16, type_block="16x16", clip="nope")
@@ -959,17 +982,17 @@ def test_dtype_name_parsing():
     """
     from quantize.quantizer import parse_mix_4_6_dtype
     cases = {
-        "mix_4_6":                ("mse",    "argmin",    0.0,  False, "base", 0.0, "none", "none", 16, 0.0),
-        "mix_4_6_m2":             ("mse",    "margin",    2.0,  False, "base", 0.0, "none", "none", 16, 0.0),
-        "mix_4_6_mae":            ("mae",    "argmin",    0.0,  False, "base", 0.0, "none", "none", 16, 0.0),
-        "mix_4_6_l0.5":           ("l0.5",   "argmin",    0.0,  False, "base", 0.0, "none", "none", 16, 0.0),
-        "mix_4_6_corr0.2_clipe0_h2": ("corr0.2", "harm", 2.0, False, "e0", 0.0, "none", "none", 16, 0.0),
-        "mix_4_6_clipbothx":      ("mse",    "argmin",    0.0,  False, "bothx", 0.0, "none", "none", 16, 0.0),
-        "mix_4_6_mae_clipwide_rm2": ("mae",  "relmargin", 2.0,  False, "wide", 0.0, "none", "none", 16, 0.0),
-        "mix_4_6_tol0.25":        ("mse",    "tol",       0.25, False, "base", 0.0, "none", "none", 16, 0.0),
-        "mix_4_6_h3":             ("mse",    "harm",      3.0,  False, "base", 0.0, "none", "none", 16, 0.0),
-        "mix_4_6_v0.6":           ("mse",    "vote",      0.6,  False, "base", 0.0, "none", "none", 16, 0.0),
-        "mix_4_6_hess_dom":       ("mse",    "dominance", 0.0,  True,  "base", 0.0, "none", "none", 16, 0.0),
+        "mix_4_6":                ("mse",    "argmin",    0.0,  False, "base", 0.0, 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_m2":             ("mse",    "margin",    2.0,  False, "base", 0.0, 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_mae":            ("mae",    "argmin",    0.0,  False, "base", 0.0, 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_l0.5":           ("l0.5",   "argmin",    0.0,  False, "base", 0.0, 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_corr0.2_clipe0_h2": ("corr0.2", "harm", 2.0, False, "e0", 0.0, 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_clipbothx":      ("mse",    "argmin",    0.0,  False, "bothx", 0.0, 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_mae_clipwide_rm2": ("mae",  "relmargin", 2.0,  False, "wide", 0.0, 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_tol0.25":        ("mse",    "tol",       0.25, False, "base", 0.0, 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_h3":             ("mse",    "harm",      3.0,  False, "base", 0.0, 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_v0.6":           ("mse",    "vote",      0.6,  False, "base", 0.0, 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_hess_dom":       ("mse",    "dominance", 0.0,  True,  "base", 0.0, 0.0, "none", "none", 16, 0.0),
     }
     for name, want in cases.items():
         got = parse_mix_4_6_dtype(name)

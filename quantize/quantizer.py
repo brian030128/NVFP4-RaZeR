@@ -1254,6 +1254,7 @@ def quant_mix_4_6(
     margin: float=0.0,
     clip: str="base",
     clip_min_gain: float=0.0,
+    alpha_min_gain: float=0.0,
     permute: str="none",
     rotate: str="none",
     rotate_size: int=16,
@@ -1419,6 +1420,17 @@ def quant_mix_4_6(
         safe     = [a for a in alphas if a >= 1.0] or [1.0]
         clipping = [a for a in alphas if a < 1.0]
         dq, err  = search(safe)
+
+        # `alpha_min_gain` applies the decisive-margin principle to the SCALE SEARCH ITSELF, which
+        # is otherwise the last plain argmin left in this quantizer -- exactly the pattern that
+        # loses for the element-type election, for rotation and for clipping. A candidate alpha != 1
+        # is taken only when it beats alpha = 1 (plain NVFP4, the block maximum on the top code) by
+        # at least this fraction. alpha_min_gain = 0 is the ordinary argmin search.
+        if alpha_min_gain > 0.0 and len(safe) > 1:
+            dq_1, err_1 = search([1.0])
+            take = err < err_1 * (1.0 - alpha_min_gain)
+            dq, err = torch.where(take, dq, dq_1), torch.where(take, err, err_1)
+
         if not clipping:
             return dq, err
 
@@ -1606,13 +1618,17 @@ def parse_mix_4_6_dtype(name: str):
         "clipmin<t>"       -- take a clipping candidate (alpha < 1) only when it beats the best
                               non-clipping candidate by at least the fraction t.
 
-        Returns (metric, elect, margin, use_importance, clip, clip_min_gain, permute, rotate,
-                 rotate_size, rotate_min_gain).
+        "amin<t>"          -- take a scale candidate alpha != 1 only when it beats alpha = 1 by at
+                              least the fraction t. Applies the decisive-margin principle to the
+                              scale search itself, the last plain argmin in this quantizer.
+
+        Returns (metric, elect, margin, use_importance, clip, clip_min_gain, alpha_min_gain,
+                 permute, rotate, rotate_size, rotate_min_gain).
     """
     assert name.startswith("mix_4_6"), name
     metric, elect, margin, use_importance, clip = "mse", "argmin", 0.0, False, "base"
     permute, rotate, rotate_size, rotate_min_gain = "none", "none", 16, 0.0
-    clip_min_gain = 0.0
+    clip_min_gain, alpha_min_gain = 0.0, 0.0
 
     def _num(s):
         return s.replace(".", "", 1).isdigit()
@@ -1624,6 +1640,8 @@ def parse_mix_4_6_dtype(name: str):
             metric = part
         elif part.startswith("clipmin") and part[7:].replace(".", "", 1).isdigit():
             clip_min_gain = float(part[7:])
+        elif part.startswith("amin") and part[4:].replace(".", "", 1).isdigit():
+            alpha_min_gain = float(part[4:])
         elif part.startswith("clip") and part[len("clip"):] in CLIP_PRESETS:
             clip = part[len("clip"):]
         elif part == "perm":
@@ -1658,7 +1676,7 @@ def parse_mix_4_6_dtype(name: str):
             elect, margin = "margin", float(part[1:])
         else:
             raise ValueError(f'Unrecognized mix_4_6 data type qualifier "{part}" in "{name}".')
-    return (metric, elect, margin, use_importance, clip, clip_min_gain,
+    return (metric, elect, margin, use_importance, clip, clip_min_gain, alpha_min_gain,
             permute, rotate, rotate_size, rotate_min_gain)
 
 
@@ -1714,10 +1732,10 @@ def quant_weight(model, quant_config: QuantConfig, importance=None):
         quant_func = partial(quant_mixfp4, type_block=w_type_block)
     elif w_dtype.startswith("mix_4_6"):
         (_metric, _elect, _margin, _use_imp, _clip,
-         _clip_g, _perm, _rot, _rot_n, _rot_g) = parse_mix_4_6_dtype(w_dtype)
+         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g) = parse_mix_4_6_dtype(w_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=w_type_block,
-            metric=_metric, elect=_elect, margin=_margin, clip=_clip, clip_min_gain=_clip_g, permute=_perm,
+            metric=_metric, elect=_elect, margin=_margin, clip=_clip, clip_min_gain=_clip_g, alpha_min_gain=_alpha_g, permute=_perm,
             rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g,
         )
     elif (w_dtype == "nvfp4_razer_e3m3"):
@@ -1778,10 +1796,10 @@ def quant_act(act, quant_config: QuantConfig):
         quant_func = partial(quant_mixfp4, type_block=a_type_block, is_act=True)
     elif a_dtype.startswith("mix_4_6"):
         (_metric, _elect, _margin, _, _clip,
-         _clip_g, _perm, _rot, _rot_n, _rot_g) = parse_mix_4_6_dtype(a_dtype)
+         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g) = parse_mix_4_6_dtype(a_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=a_type_block, is_act=True,
-            metric=_metric, elect=_elect, margin=_margin, clip=_clip, clip_min_gain=_clip_g, permute=_perm,
+            metric=_metric, elect=_elect, margin=_margin, clip=_clip, clip_min_gain=_clip_g, alpha_min_gain=_alpha_g, permute=_perm,
             rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g,
         )
     elif (a_dtype == "nvfp4_razer_e4m3"):
