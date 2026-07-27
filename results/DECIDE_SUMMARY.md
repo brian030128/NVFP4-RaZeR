@@ -78,6 +78,28 @@ explicit worst case in the tests. `lambda = 1` is plain argmin, `lambda -> inf` 
 `lambda` in [1.5, 2] is optimal on Llama-3.1-8B; `lambda = 3` is the only value measured that is
 non-harmful on both models, and there it is worth almost nothing.
 
+### Part 3 — which direction of alpha helps depends on the OPERAND
+
+Weights and activations want opposite things from the same knob, and the reason is the shape of a
+16-element block in each.
+
+| Llama-3.1-8B, 8x64, vs `nvfp4_4over6` | W4A16 (weights only) | W4A4 (weights + activations) |
+|---|---|---|
+| `h1.5` — election alone, 4over6 scales | -0.0117 / -0.0044 | -0.0079 / -0.0085 |
+| `clipheade0_h1.5` — **headroom**, alpha > 1 | **-0.0265 / -0.0081** | -0.0316 / -0.0032 |
+| `clipbothx_clipmin0.3_h1.5` — **gated clipping**, alpha < 1 | -0.0179 / -0.0159 | **-0.0297 / -0.0195** |
+
+On weights, headroom wins: a 16-element slice of a weight row has a light upper tail, so the block
+maximum is worth keeping and the payoff is in spending the sparse top of the E2M1 grid. On
+activations, gated clipping wins by mean delta: an activation block frequently contains a genuine
+outlier that the other fifteen elements are paying for, and saturating it is cheap **provided the
+gain is decisive** — ungated clipping is a loss in both settings.
+
+Note also how much larger the prize is on activations. The unrealizable `1x16` upper bound is
+-0.0810 / -0.1006 at W4A4 against -0.0468 / -0.0623 at W4A16, so the E0M3 decision is worth roughly
+twice as much on the A operand as on the B operand. `nvif4` is -0.0689 / -0.0868 there. That is the
+opposite of where the study started -- the type block was introduced for weights.
+
 ### Why E0M3 exists at all
 
 E0M3 with `alpha = 7/n` is exactly a **uniform n-level grid** (verified against the quantizer):
