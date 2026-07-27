@@ -45,6 +45,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("result_dir", type=str)
     parser.add_argument("--markdown", type=str, default=None, help="Also write the report here.")
+    parser.add_argument("--baseline", type=str, default="nvfp4",
+                        help="Row to measure deltas against, e.g. \"nvfp4\" or \"nvfp4_4over6\".")
     args = parser.parse_args()
 
     merged = load(args.result_dir)
@@ -55,10 +57,10 @@ def main():
         labels = [l for l in ROW_ORDER if l in entries]
         labels += [l for l in entries if l not in ROW_ORDER]
 
-        baseline = entries.get("nvfp4", {})
+        baseline = entries.get(args.baseline, {})
         lines.append(f"\n### {model} — {sweep.upper()} (group size 16, seq len 2048)\n")
         header = "| format | type block | " + " | ".join(f"{d} ppl" for d in datasets)
-        header += " | " + " | ".join(f"d{d} vs nvfp4" for d in datasets) + " | HW |"
+        header += " | " + " | ".join(f"d{d} vs {args.baseline}" for d in datasets) + " | HW |"
         lines.append(header)
         lines.append("|" + "---|" * (2 + 2 * len(datasets) + 1))
 
@@ -68,7 +70,7 @@ def main():
             cells = [fmt(e.get(d)) for d in datasets]
             deltas = []
             for d in datasets:
-                if label == "fp16" or d not in e or d not in baseline:
+                if label in ("fp16", args.baseline) or d not in e or d not in baseline:
                     deltas.append("-")
                 else:
                     deltas.append(f"{e[d] - baseline[d]:+.4f}")
