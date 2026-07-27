@@ -225,30 +225,63 @@ Three knobs now exist on `quant_mix_4_6`:
 On Llama-2-7B v_proj at 8x64, `margin=1` keeps 60% of the MSE gain while cutting harmed blocks from
 17.3% to 4.9%; `margin=2` cuts them to 0.73%. `dominance` reaches 0% but elects nothing.
 
-### How to decide E2M1 vs E0M3 (the answer, and the one principle behind it)
+### How to decide E2M1 vs E0M3 (the answer)
 
-Use `mix_4_6_h1.5` at the smallest realizable type block (`8x64` for weights). `h<lambda>` is the
-robust election rule: elect E0M3 only when the gain the winning scale blocks collect outweighs the
-damage the losing ones take by a factor `lambda`,
+**The answer is in two parts, and only the first one generalizes.**
+
+**Part 1 -- widen the block-scale search. Do this unconditionally.** The block scale is
+`alpha * block_max / grid_max`. FourOverSix is the two-point search `alpha in {1, 1.5}` on E2M1.
+Extending it to `{1, 1.25, 1.5, 2, 3}` (preset `headx`) is worth **-0.004 to -0.008 wikitext and
+about -0.005 c4 on every model measured**, costs no metadata -- `alpha` only changes the value
+written into the ue4m3 scale field that already exists -- and needs neither a type block nor the
+E0M3 hardware path. It is plain NVFP4 with a wider FourOverSix, deployable on the existing kernel.
+
+Why `alpha > 1` and not `alpha < 1`: writing the usable code values in units of the block maximum,
+
+    alpha=1    block max -> code 6   {0,.083,.167,.25,.333,.5,.667,1}   log-spaced
+    alpha=1.5  block max -> code 4   {0,.125,.25,.375,.5,.75,1}         FourOverSix
+    alpha=2    block max -> code 3   {0,.167,.333,.5,.667,1}            uniform, 6 levels
+    alpha=3    block max -> code 2   {0,.25,.5,.75,1}                   uniform, 4 levels
+
+so headroom walks E2M1 from log-spaced-at-full-range to uniform-with-few-levels, discarding exactly
+the sparse top of the grid. `alpha < 1` is clipping, which saturates the block maximum, and round 1
+rejected it at +0.006 to +0.033 wikitext. Five candidates is where the search saturates -- eight
+(`headxx`) is worse.
+
+**Part 2 -- the E0M3 type block is a model-dependent extra.** On Llama-3.1-8B, adding E0M3 headroom
+(`heade0`, E0M3 alphas `{1, 7/6, 7/5}`) and electing with `h1.5` is worth a further **-0.018
+wikitext**, reaching -0.0265 / -0.0081 at 8x64. On Llama-2-7B the identical configuration is
+**+0.0165 / +0.0061**, a loss. E0M3 with `alpha = 7/n` is exactly a uniform *n*-level grid, which is
+the one thing E2M1 cannot supply above n=4, so when it helps it helps for a clear reason -- but
+whether it helps is a property of the activations, and round 6 shows no calibration-free weight
+statistic distinguishes the two models (E0M3 gain fraction 0.205 vs 0.199, identical).
+
+If Part 2 is used anyway, the election rule is `h<lambda>`: elect E0M3 only when the gain the
+winning scale blocks collect outweighs the damage the losing ones take by a factor `lambda`,
 
     sum_{gain>0} gain_b  >  lambda * sum_{gain<0} |gain_b|
 
 which is the exact decision that survives any per-block importance `w_b` in `[1/kappa, kappa]` with
 `lambda = kappa^2` (see `_elect_e0m3`). `lambda = 1` is plain argmin, `lambda -> inf` is dominance.
-**`lambda` in [1.5, 2] is the range that is positive on every model measured.**
+
+`lambda` is model-dependent and cannot be split the difference on. **`lambda` in [1.5, 2] is optimal
+on Llama-3.1-8B and a real loss on Llama-2-7B; `lambda = 3` is the only value measured that is
+non-harmful on both**, and there it is worth almost nothing (-0.0014 / -0.0024 wikitext). Round 6
+tried and failed to predict which regime a model is in from its weights alone.
 
 Everything in `results/decide_r*/REPORT.md` reduces to one principle:
 
 > **A rule of the form "do X when it lowers the quantization error" always loses. The same rule with
 > "...by a decisive margin" wins.**
 
-This showed up independently three times, on three different mechanisms:
+This showed up independently three times, on three unrelated mechanisms, and in the third case it
+turned a rejected idea into one of the best configurations measured:
 
 | mechanism | "when it helps" | "when it decisively helps" |
 |---|---|---|
 | elect E0M3 for a type block | `argmin`: +0.0021 / +0.0185 | `h1.5`: **-0.0117 / -0.0044** |
 | rotate a column chunk | `rotcol`: +0.0946 / +0.1431 | `rotmin0.1`: **-0.0149 / -0.0025** |
-| clip the block scale | any `alpha < 1`: +0.006 to +0.033 | (no threshold form tested) |
+| clip the block scale | any `alpha < 1`: +0.006 to +0.033 | `clipmin0.3`: **-0.0179 / -0.0159** |
 
 (Llama-3.1-8B W4A16 at 8x64, against `nvfp4_4over6`.) The reason is the same each time: weight MSE
 and the true layer output error agree on the *sign* of a large change and disagree freely on small
