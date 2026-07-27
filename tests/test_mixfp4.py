@@ -18,6 +18,7 @@ from quantize.quantizer import (
     quant_mix_4_6,
     quant_nvif4,
     quant_nvfp4_4over6,
+    quant_nvfp4_nover6,
 )
 from quantize.utils import parse_type_block, format_type_block
 
@@ -498,6 +499,32 @@ def test_corr_changes_decisions_and_rejects_bad_r():
             continue
         raise AssertionError(f'quant_mix_4_6 should reject "{bad}" (r must be < 1)')
     print("ok  corr changes decisions, and r outside [0, 1) is rejected")
+
+
+def test_nover6_matches_the_headx_preset():
+    """
+        `quant_nvfp4_nover6` is the deployable extract of this study: the widened FourOverSix search
+        with the type-block machinery removed. It must be bit-identical to the general path with
+        clip="headx" and the E0M3 branch switched off, or the standalone function is a different
+        format from the one that was measured.
+    """
+    for x in (_outlier_tensor(rows=256), torch.randn(128, 512).to(torch.bfloat16)):
+        a = quant_nvfp4_nover6(x, groupsize=16)
+        b = quant_mix_4_6(x, groupsize=16, type_block="1x16", clip="headx", elect="never")
+        assert torch.equal(a, b), "nover6 diverges from mix_4_6(clip=headx, elect=never)"
+    print("ok  nvfp4_nover6 == mix_4_6(clip=headx, elect=never)")
+
+
+def test_nover6_beats_4over6_on_mse():
+    """
+        `nover6` searches a superset of 4over6's scale candidates ({1, 1.5} is inside
+        {1, 1.25, 1.5, 2, 3}) under the same per-block squared error, so it cannot score worse.
+    """
+    for x in (_outlier_tensor(), torch.randn(512, 512).to(torch.bfloat16)):
+        n = _nmse(x, quant_nvfp4_nover6(x, groupsize=16))
+        f = _nmse(x, quant_mix_4_6(x, groupsize=16, type_block="1x16", elect="never"))
+        assert n <= f * (1 + 1e-6), f"nover6 {n:.4e} worse than 4over6 {f:.4e}"
+        print(f"ok  nover6 {n:.4e} <= 4over6 {f:.4e}")
 
 
 ########################### clipping ###########################

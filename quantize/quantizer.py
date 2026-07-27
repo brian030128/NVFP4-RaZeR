@@ -530,6 +530,72 @@ def quant_nvfp4_4over6(w_fp, n_bits: int=4, groupsize: Optional[int]=None):
     return w_dq.view(orig_shape).to(torch.bfloat16)
 
 
+NOVER6_ALPHAS = (1.0, 1.25, 1.5, 2.0, 3.0)
+
+
+@torch.no_grad()
+def quant_nvfp4_nover6(w_fp, n_bits: int=4, groupsize: Optional[int]=None,
+                       alphas=NOVER6_ALPHAS):
+    """
+        NVFP4 with a WIDER FourOverSix search -- "N over six".
+
+        FourOverSix normalizes a scale block's maximum to code 6 or to code 4, whichever quantizes
+        the block better. Nothing distinguishes 4: the choice is just the value written into the
+        ue4m3 scale field, so any `block_scale = alpha * block_max / 6` is equally free, and each
+        alpha lands the block maximum on a different code:
+
+            alpha=1    -> code 6   {0,.083,.167,.25,.333,.5,.667,1}   log-spaced
+            alpha=1.25 -> code 4.8
+            alpha=1.5  -> code 4   {0,.125,.25,.375,.5,.75,1}         FourOverSix
+            alpha=2    -> code 3   {0,.167,.333,.5,.667,1}            uniform, 6 levels
+            alpha=3    -> code 2   {0,.25,.5,.75,1}                   uniform, 4 levels
+
+        (values in units of the block maximum). So the family walks E2M1 from log-spaced at full
+        range to uniform with few levels, spending the sparse top of the grid rather than the
+        resolution near zero.
+
+        Measured against `quant_nvfp4_4over6` at W4A16, wikitext / c4:
+
+            Llama-3.1-8B   -0.0082 / -0.0050
+            Llama-2-7B     -0.0044 / -0.0050
+
+        This is `quant_mix_4_6(clip="headx", elect="never")` with the type-block machinery stripped
+        out, and it is the half of that study that generalizes -- it needs no type block, no E0M3
+        operand, and no metadata beyond the ue4m3 scale NVFP4 already stores, so it runs on the
+        existing kernel. `alphas < 1` would be clipping and measurably costs perplexity; do not add
+        them here.
+    """
+    E2M1_MAX      = 6.0
+    FP8_SCALE_MAX = 448.0
+    FP8_SCALE_MIN = 2 ** (-9)
+
+    groupsize  = 16 if groupsize is None else groupsize
+    orig_shape = w_fp.shape
+    w_fp_new   = w_fp.reshape(-1, groupsize).to(torch.float32)
+
+    global_scale = (w_fp_new.abs().amax() / (E2M1_MAX * FP8_SCALE_MAX)).clamp(
+        min=torch.finfo(torch.float32).tiny
+    )
+    w_scaled  = w_fp_new / global_scale
+    block_max = w_scaled.abs().amax(dim=-1, keepdim=True)
+
+    best_dq, best_err = None, None
+    for alpha in alphas:
+        block_scale = (block_max * (alpha / E2M1_MAX)).clamp(
+            max=FP8_SCALE_MAX, min=FP8_SCALE_MIN
+        ).to(torch.float8_e4m3fn).to(w_scaled.dtype)
+        dq  = _quant_e2m1(w_scaled, block_scale)
+        err = (dq - w_scaled).pow(2).sum(dim=-1, keepdim=True)
+        if best_dq is None:
+            best_dq, best_err = dq, err
+        else:
+            take     = err < best_err
+            best_dq  = torch.where(take, dq, best_dq)
+            best_err = torch.where(take, err, best_err)
+
+    return (best_dq * global_scale).view(orig_shape).to(torch.bfloat16)
+
+
 @torch.no_grad()
 def quant_nvif4(w_fp, n_bits: int=4, groupsize: Optional[int]=None):
     """
@@ -1616,6 +1682,8 @@ def quant_weight(model, quant_config: QuantConfig, importance=None):
         quant_func = quant_nvfp4
     elif (w_dtype == "nvfp4_4over6"):
         quant_func = quant_nvfp4_4over6
+    elif (w_dtype == "nvfp4_nover6"):
+        quant_func = quant_nvfp4_nover6
     elif (w_dtype == "nvif4"):
         quant_func = quant_nvif4
     elif (w_dtype == "mixfp4"):
@@ -1678,6 +1746,8 @@ def quant_act(act, quant_config: QuantConfig):
         quant_func = quant_nvfp4
     elif (a_dtype == "nvfp4_4over6"):
         quant_func = quant_nvfp4_4over6
+    elif (a_dtype == "nvfp4_nover6"):
+        quant_func = quant_nvfp4_nover6
     elif (a_dtype == "nvif4"):
         quant_func = quant_nvif4
     elif (a_dtype == "mixfp4"):
