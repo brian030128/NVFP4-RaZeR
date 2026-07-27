@@ -1,0 +1,52 @@
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:01<00:01,  1.05s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:01<00:00,  1.55it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:01<00:00,  1.41it/s]
+
+=================== model.layers.0.self_attn.q_proj (4096, 4096) ===================
+format                            NMSE   SQNR (dB)   E0M3 blocks
+nvfp4 (E2M1 only)            8.351e-03      20.783             -
+nvif4 (per 16 blk)           7.266e-03      21.387             -
+mixfp4 1x16 *                7.266e-03      21.387         41.4%
+mixfp4 16x16 *               8.042e-03      20.946         34.0%
+mixfp4 256x16 *              8.214e-03      20.854         28.6%
+mixfp4 8x64                  8.254e-03      20.834         14.2%
+mixfp4 16x64                 8.285e-03      20.817         12.7%
+mixfp4 32x64                 8.310e-03      20.804         11.1%
+mixfp4 32x128                8.336e-03      20.790          5.5%
+
+=================== model.layers.0.self_attn.k_proj (4096, 4096) ===================
+format                            NMSE   SQNR (dB)   E0M3 blocks
+nvfp4 (E2M1 only)            8.468e-03      20.722             -
+nvif4 (per 16 blk)           7.152e-03      21.456             -
+mixfp4 1x16 *                7.152e-03      21.456         43.0%
+mixfp4 16x16 *               8.049e-03      20.942         34.2%
+mixfp4 256x16 *              8.303e-03      20.808         28.2%
+mixfp4 8x64                  8.308e-03      20.805         16.0%
+mixfp4 16x64                 8.345e-03      20.786         13.7%
+mixfp4 32x64                 8.376e-03      20.770         11.7%
+mixfp4 32x128                8.420e-03      20.747          6.6%
+
+=================== model.layers.0.self_attn.v_proj (4096, 4096) ===================
+format                            NMSE   SQNR (dB)   E0M3 blocks
+nvfp4 (E2M1 only)            8.985e-03      20.465             -
+nvif4 (per 16 blk)           6.292e-03      22.012             -
+mixfp4 1x16 *                6.292e-03      22.012         60.3%
+mixfp4 16x16 *               7.589e-03      21.198         79.2%
+mixfp4 256x16 *              7.768e-03      21.097         99.0%
+mixfp4 8x64                  7.700e-03      21.135         87.3%
+mixfp4 16x64                 7.747e-03      21.109         93.8%
+mixfp4 32x64                 7.765e-03      21.099         97.7%
+mixfp4 32x128                7.769e-03      21.096         99.6%
+
+=================== model.layers.0.self_attn.o_proj (4096, 4096) ===================
+format                            NMSE   SQNR (dB)   E0M3 blocks
+nvfp4 (E2M1 only)            8.649e-03      20.630             -
+nvif4 (per 16 blk)           6.559e-03      21.832             -
+mixfp4 1x16 *                6.559e-03      21.832         51.5%
+mixfp4 16x16 *               7.908e-03      21.019         41.8%
+mixfp4 256x16 *              8.136e-03      20.896         37.8%
+mixfp4 8x64                  8.095e-03      20.918         29.7%
+mixfp4 16x64                 8.162e-03      20.882         25.6%
+mixfp4 32x64                 8.200e-03      20.862         22.9%
+mixfp4 32x128                8.230e-03      20.846         18.6%
+
+* K < 64: not expressible by a single mma.sync...mxf4nvf4.m16n8k64 operand. Accuracy upper bound only.
