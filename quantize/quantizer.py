@@ -799,9 +799,23 @@ CLIP_PRESETS = {
     "e0":    {"e2m1": (1.0, 1.5),                          "e0m3": (1.0, 0.9)},
     "e0x":   {"e2m1": (1.0, 1.5),                          "e0m3": (1.0, 0.9, 0.8)},
     # E2M1 headroom only -- alpha >= 1 never clips, so this extends FourOverSix along the one
-    # direction round 1 showed to be safe. alpha=1.5 maps the block max to code 4 (the "4" of
-    # 4over6), alpha=2 maps it to code 3, alpha=3 to code 2; each step trades resolution near zero
-    # for a more uniform grid over the bulk, which is the same thing E0M3 offers.
+    # direction round 1 showed to be safe, and it is the largest single win measured here
+    # (-0.0186/-0.0098 for `headx`, against -0.0117/-0.0044 for `base`).
+    #
+    # What headroom actually does is turn E2M1 into a UNIFORM grid with fewer levels. Writing the
+    # usable code values in units of the block maximum, with alpha mapping the block max to code
+    # 6/alpha:
+    #
+    #   alpha=1    block max -> code 6   {0, .083, .167, .25, .333, .5, .667, 1}   log-spaced
+    #   alpha=1.5  block max -> code 4   {0, .125, .25, .375, .5, .75, 1}          4over6
+    #   alpha=2    block max -> code 3   {0, .167, .333, .5, .667, 1}              uniform, 6 levels
+    #   alpha=3    block max -> code 2   {0, .25, .5, .75, 1}                      uniform, 4 levels
+    #
+    # so the family interpolates from "log-spaced at full range" to "uniform with few levels", and
+    # the top codes it wastes are exactly the sparse part of the E2M1 grid. E0M3 is the one point
+    # this family cannot reach: uniform with SEVEN levels at full range. That is why headroom and
+    # the E0M3 election are worth more together than apart -- headroom lets a scale block sit well
+    # on whichever grid its tile elected, and E0M3 supplies the finest uniform grid on offer.
     "head":  {"e2m1": (1.0, 1.5, 2.0),                     "e0m3": (1.0,)},
     "headx": {"e2m1": (1.0, 1.25, 1.5, 2.0, 3.0),          "e0m3": (1.0,)},
     "headxx": {"e2m1": (1.0, 1.2, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0), "e0m3": (1.0,)},
