@@ -432,12 +432,87 @@ def test_mse_stays_the_best_by_mse():
 
 
 def test_rejects_unknown_metric():
+    # "l1"/"l0.5" ARE valid (the generalized power loss), so the negative case has to be a name
+    # that parses as neither a named metric nor "l<p>".
+    for bad in ("kldiv", "lx", "l"):
+        try:
+            quant_mix_4_6(torch.randn(64, 128), groupsize=16, type_block="16x16", metric=bad)
+        except (AssertionError, ValueError):
+            continue
+        raise AssertionError(f'quant_mix_4_6 should reject the unknown metric "{bad}"')
+    print("ok  unknown selection metric is rejected")
+
+
+def test_mae_is_l1_and_differs_from_mse():
+    """
+        MAE must be a real alternative, not a relabelling of MSE: it has to change at least some
+        decisions on a tensor with outliers, and "mae" and "l1" must be the same thing.
+    """
+    x = _outlier_tensor()
+    for tb in ["1x16", "8x64"]:
+        mae = quant_mix_4_6(x, groupsize=16, type_block=tb, metric="mae", clip="bothx")
+        l1  = quant_mix_4_6(x, groupsize=16, type_block=tb, metric="l1",  clip="bothx")
+        mse = quant_mix_4_6(x, groupsize=16, type_block=tb, metric="mse", clip="bothx")
+        assert torch.equal(mae, l1), f'"mae" and "l1" disagree at {tb}'
+        assert not torch.equal(mae, mse), f'"mae" reproduces "mse" exactly at {tb}'
+        # and MAE must win on its own criterion
+        e_mae = (mae.float() - x.float()).abs().mean().item()
+        e_mse = (mse.float() - x.float()).abs().mean().item()
+        assert e_mae <= e_mse * (1 + 1e-6), (tb, e_mae, e_mse)
+        print(f"ok  {tb}: mae == l1, and mean|err| mae={e_mae:.4e} <= mse={e_mse:.4e}")
+
+
+########################### clipping ###########################
+
+def test_clip_presets_reduce_mse():
+    """
+        Every clip preset is a SUPERSET of `base`'s scale candidates on both grids, and the choice
+        is per scale block by the same loss, so a richer preset can never score worse under the
+        metric it selects with. This is the analogue of the mixfp4 <= 4over6 monotonicity check.
+    """
+    from quantize.quantizer import CLIP_PRESETS
+    for name in ("e0", "e0x", "e2", "e2x", "both", "bothx", "wide"):
+        base_a = CLIP_PRESETS["base"]
+        this_a = CLIP_PRESETS[name]
+        if not (set(base_a["e2m1"]) <= set(this_a["e2m1"]) and
+                set(base_a["e0m3"]) <= set(this_a["e0m3"])):
+            continue     # not a superset -- monotonicity does not apply, skip
+        x = _outlier_tensor()
+        for tb in ["1x16", "8x64", "32x128"]:
+            b = _nmse(x, quant_mix_4_6(x, groupsize=16, type_block=tb, clip="base"))
+            c = _nmse(x, quant_mix_4_6(x, groupsize=16, type_block=tb, clip=name))
+            assert c <= b * (1 + 1e-6), f"clip={name} {c:.4e} worse than base {b:.4e} at {tb}"
+        print(f"ok  clip={name} never worse than base (superset of scale candidates)")
+
+
+def test_clipping_actually_clips():
+    """
+        A clip ratio below 1 must genuinely saturate values above alpha*block_max -- otherwise the
+        preset is a no-op and any measured difference comes from somewhere else.
+    """
+    from quantize.quantizer import _quant_e0m3
+    # one scale block whose maximum is a lone outlier the rest of the block pays for:
+    # at alpha=1 the step is 10/7, so every 0.4 rounds to zero and the bulk is entirely lost.
+    x = torch.full((1, 16), 0.4)
+    x[0, 0] = 10.0
+    bmax = x.abs().amax()
+    dq_exact = _quant_e0m3(x, bmax / 7.0)
+    dq_clip  = _quant_e0m3(x, 0.2 * bmax / 7.0)
+    assert dq_exact[0, 0].item() == 10.0, dq_exact[0, 0]
+    assert abs(dq_clip[0, 0].item() - 2.0) < 1e-5, dq_clip[0, 0]
+    assert (dq_exact[0, 1:] == 0).all(), "alpha=1 should round the whole bulk to zero here"
+    # ... and the clipped version represents the bulk strictly better
+    assert (dq_clip[0, 1:] - x[0, 1:]).abs().sum() < (dq_exact[0, 1:] - x[0, 1:]).abs().sum()
+    print("ok  alpha < 1 saturates the outlier and refines the bulk")
+
+
+def test_rejects_unknown_clip_preset():
     try:
-        quant_mix_4_6(torch.randn(64, 128), groupsize=16, type_block="16x16", metric="l1")
+        quant_mix_4_6(torch.randn(64, 128), groupsize=16, type_block="16x16", clip="nope")
     except (AssertionError, ValueError):
-        print("ok  unknown selection metric is rejected")
+        print("ok  unknown clip preset is rejected")
         return
-    raise AssertionError("quant_mix_4_6 should reject an unknown metric")
+    raise AssertionError("quant_mix_4_6 should reject an unknown clip preset")
 
 
 def test_rejects_bad_group_size():
@@ -553,6 +628,97 @@ def test_dominance_degenerates_to_e2m1_at_realizable_blocks():
     nev1 = quant_mix_4_6(x, groupsize=16, type_block="1x16", elect="never")
     assert not torch.equal(dom1, nev1), "dominance should still elect E0M3 at 1x16"
     print("ok  dominance == plain E2M1 (4over6) at realizable blocks, but not at 1x16")
+
+
+def test_election_rules_are_nested():
+    """
+        The rules form a chain of increasing caution. On the SAME per-block gains, each of them must
+        elect a subset of what `argmin` elects -- none of them may elect a tile whose total gain is
+        negative, because then the tile is worse than 4over6 under its own criterion.
+
+        `harm` is the one rule where this needs stating carefully: harm(1) IS argmin (won > lost is
+        the same as total > 0), and larger lambda only shrinks the set.
+    """
+    from quantize.quantizer import _elect_e0m3
+    torch.manual_seed(0)
+    gain = torch.randn(500, 32, 1)
+    ref  = gain.abs() + 0.5                     # a plausible positive E2M1 loss per block
+    base = _elect_e0m3(gain, rule="argmin")
+
+    cases = [
+        ("dominance", 0.0), ("margin", 2.0), ("relmargin", 2.0),
+        ("tol", 0.5), ("harm", 2.0), ("vote", 0.5),
+    ]
+    for rule, m in cases:
+        e = _elect_e0m3(gain, rule=rule, margin=m, ref=ref)
+        assert bool((e & ~base).any()) is False, \
+            f'rule "{rule}" elected a tile that argmin rejects (total gain <= 0)'
+        print(f"ok  {rule}({m}) elects {int(e.sum())}/{int(base.sum())} of argmin's tiles")
+
+    # harm(1) is argmin exactly
+    assert torch.equal(_elect_e0m3(gain, rule="harm", margin=1.0), base), \
+        "harm(lambda=1) must reproduce argmin"
+    print("ok  harm(1) == argmin")
+
+
+def test_tol_interpolates_dominance_to_argmin():
+    """
+        "tol" is dominance with a slack: tol(0) must be dominance, and a huge tolerance must be
+        argmin. If it did not bracket both, the knob would not be the interpolation it claims.
+    """
+    from quantize.quantizer import _elect_e0m3
+    torch.manual_seed(0)
+    gain = torch.randn(500, 16, 1)
+    ref  = gain.abs() + 0.5
+    assert torch.equal(_elect_e0m3(gain, rule="tol", margin=0.0, ref=ref),
+                       _elect_e0m3(gain, rule="dominance"))
+    assert torch.equal(_elect_e0m3(gain, rule="tol", margin=1e9, ref=ref),
+                       _elect_e0m3(gain, rule="argmin"))
+    print("ok  tol(0) == dominance and tol(inf) == argmin")
+
+
+def test_vote_ignores_magnitude():
+    """
+        The point of "vote" is that one huge scale block cannot carry a tile. Construct a tile where
+        a single block has an enormous gain and every other block is mildly harmed: argmin elects it,
+        a majority vote must not.
+    """
+    from quantize.quantizer import _elect_e0m3
+    gain = torch.full((1, 16, 1), -1.0)
+    gain[0, 0, 0] = 1000.0
+    assert _elect_e0m3(gain, rule="argmin").item() is True
+    assert _elect_e0m3(gain, rule="vote", margin=0.5).item() is False
+    print("ok  vote(0.5) rejects a tile carried by one high-energy block")
+
+
+def test_dtype_name_parsing():
+    """
+        The data type name is the only channel the sweep has for these settings, so a typo must
+        raise rather than silently fall back to the default.
+    """
+    from quantize.quantizer import parse_mix_4_6_dtype
+    cases = {
+        "mix_4_6":                ("mse",    "argmin",    0.0,  False, "base"),
+        "mix_4_6_m2":             ("mse",    "margin",    2.0,  False, "base"),
+        "mix_4_6_mae":            ("mae",    "argmin",    0.0,  False, "base"),
+        "mix_4_6_l0.5":           ("l0.5",   "argmin",    0.0,  False, "base"),
+        "mix_4_6_clipbothx":      ("mse",    "argmin",    0.0,  False, "bothx"),
+        "mix_4_6_mae_clipwide_rm2": ("mae",  "relmargin", 2.0,  False, "wide"),
+        "mix_4_6_tol0.25":        ("mse",    "tol",       0.25, False, "base"),
+        "mix_4_6_h3":             ("mse",    "harm",      3.0,  False, "base"),
+        "mix_4_6_v0.6":           ("mse",    "vote",      0.6,  False, "base"),
+        "mix_4_6_hess_dom":       ("mse",    "dominance", 0.0,  True,  "base"),
+    }
+    for name, want in cases.items():
+        got = parse_mix_4_6_dtype(name)
+        assert got == want, f"{name}: got {got}, want {want}"
+    for bad in ("mix_4_6_zzz", "mix_4_6_clipnope", "mix_4_6_m"):
+        try:
+            parse_mix_4_6_dtype(bad)
+        except ValueError:
+            continue
+        raise AssertionError(f'parse_mix_4_6_dtype should reject "{bad}"')
+    print(f"ok  {len(cases)} data type names parse, and unknown qualifiers are rejected")
 
 
 if __name__ == "__main__":
