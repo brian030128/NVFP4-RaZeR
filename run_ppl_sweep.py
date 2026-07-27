@@ -255,15 +255,33 @@ def main():
     print("Snapshotting pristine weights to CPU ...", flush=True)
     pristine = snapshot_weights(model)
 
+    # Building c4 tokenizes 256 documents one at a time and takes ~15 minutes, which every shard of
+    # every sweep was paying independently. The result is a deterministic function of
+    # (model, dataset, seq_len) -- the sampling is seeded -- so it is cached to disk and shared.
+    # Correctness note: the cache key includes the model, because the tokenizer differs per model,
+    # and the eval set must stay byte-identical across configurations for the deltas to mean
+    # anything. A stale cache would silently compare against different text.
     print(f"Preparing evaluation data: {args.datasets}", flush=True)
+    cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".eval_cache")
+    os.makedirs(cache_dir, exist_ok=True)
     data = {}
     for ds in args.datasets:
-        if ds == "wikitext":
+        cache = os.path.join(cache_dir, f"{args.model_name}_{ds}_{args.seq_len}.pt")
+        if os.path.isfile(cache):
+            data[ds] = torch.load(cache)
+            print(f"  {ds}: loaded from {cache}", flush=True)
+        elif ds == "wikitext":
             data[ds] = build_wikitext(tokenizer, args.seq_len)
         elif ds == "c4":
             data[ds] = build_c4(tokenizer, args.seq_len)
         else:
             raise ValueError(f"Unknown dataset {ds}")
+        if not os.path.isfile(cache):
+            # atomic-ish: write to a shard-private temp then rename, so concurrent shards racing on
+            # the same key cannot leave a half-written file behind
+            tmp = f"{cache}.tmp{args.shard_id}"
+            torch.save(data[ds], tmp)
+            os.replace(tmp, cache)
         if args.limit_samples is not None:
             data[ds] = data[ds][:, : args.limit_samples * args.seq_len]
         print(f"  {ds}: {data[ds].numel() // args.seq_len} windows of {args.seq_len}", flush=True)
