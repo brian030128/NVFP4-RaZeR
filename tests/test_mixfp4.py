@@ -544,6 +544,37 @@ def test_clipping_actually_clips():
     print("ok  alpha < 1 saturates the outlier and refines the bulk")
 
 
+def test_clip_min_gain_gates_only_the_clipping_candidates():
+    """
+        `clipmin<t>` must gate alpha < 1 only. A huge threshold has to fall back exactly to the
+        preset with the clipping alphas removed -- not to `base`, and not to something in between,
+        or the knob would be silently changing the non-clipping search too.
+    """
+    from quantize.quantizer import CLIP_PRESETS
+    x = _outlier_tensor()
+    for preset in ("e0x", "bothx", "wide"):
+        gated = quant_mix_4_6(x, groupsize=16, type_block="8x64",
+                              clip=preset, clip_min_gain=1e9)
+        # the same preset with every alpha < 1 dropped, done by hand
+        kept = {g: tuple(a for a in v if a >= 1.0) or (1.0,)
+                for g, v in CLIP_PRESETS[preset].items()}
+        saved = CLIP_PRESETS["__tmp"] = kept
+        manual = quant_mix_4_6(x, groupsize=16, type_block="8x64", clip="__tmp")
+        del CLIP_PRESETS["__tmp"]
+        assert torch.equal(gated, manual), f"clipmin(inf) on {preset} is not the no-clip search"
+
+        # and a zero threshold must reproduce the ungated preset exactly
+        open_ = quant_mix_4_6(x, groupsize=16, type_block="8x64", clip=preset, clip_min_gain=0.0)
+        plain = quant_mix_4_6(x, groupsize=16, type_block="8x64", clip=preset)
+        assert torch.equal(open_, plain), f"clipmin(0) on {preset} changed the result"
+        # gating must be observable -- but only where the gated candidates can reach the output.
+        # In "e0x" only E0M3 clips, and if no tile elects E0M3 on this tensor the gate is invisible,
+        # which is correct behaviour rather than a dead knob.
+        if any(a < 1.0 for a in CLIP_PRESETS[preset]["e2m1"]):
+            assert not torch.equal(gated, plain), f"clipmin(inf) on {preset} changed nothing"
+    print("ok  clipmin gates alpha < 1 only; t=0 is the plain preset, t=inf drops clipping")
+
+
 def test_rejects_unknown_clip_preset():
     try:
         quant_mix_4_6(torch.randn(64, 128), groupsize=16, type_block="16x16", clip="nope")
@@ -896,17 +927,17 @@ def test_dtype_name_parsing():
     """
     from quantize.quantizer import parse_mix_4_6_dtype
     cases = {
-        "mix_4_6":                ("mse",    "argmin",    0.0,  False, "base", "none", "none", 16, 0.0),
-        "mix_4_6_m2":             ("mse",    "margin",    2.0,  False, "base", "none", "none", 16, 0.0),
-        "mix_4_6_mae":            ("mae",    "argmin",    0.0,  False, "base", "none", "none", 16, 0.0),
-        "mix_4_6_l0.5":           ("l0.5",   "argmin",    0.0,  False, "base", "none", "none", 16, 0.0),
-        "mix_4_6_corr0.2_clipe0_h2": ("corr0.2", "harm", 2.0, False, "e0", "none", "none", 16, 0.0),
-        "mix_4_6_clipbothx":      ("mse",    "argmin",    0.0,  False, "bothx", "none", "none", 16, 0.0),
-        "mix_4_6_mae_clipwide_rm2": ("mae",  "relmargin", 2.0,  False, "wide", "none", "none", 16, 0.0),
-        "mix_4_6_tol0.25":        ("mse",    "tol",       0.25, False, "base", "none", "none", 16, 0.0),
-        "mix_4_6_h3":             ("mse",    "harm",      3.0,  False, "base", "none", "none", 16, 0.0),
-        "mix_4_6_v0.6":           ("mse",    "vote",      0.6,  False, "base", "none", "none", 16, 0.0),
-        "mix_4_6_hess_dom":       ("mse",    "dominance", 0.0,  True,  "base", "none", "none", 16, 0.0),
+        "mix_4_6":                ("mse",    "argmin",    0.0,  False, "base", 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_m2":             ("mse",    "margin",    2.0,  False, "base", 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_mae":            ("mae",    "argmin",    0.0,  False, "base", 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_l0.5":           ("l0.5",   "argmin",    0.0,  False, "base", 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_corr0.2_clipe0_h2": ("corr0.2", "harm", 2.0, False, "e0", 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_clipbothx":      ("mse",    "argmin",    0.0,  False, "bothx", 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_mae_clipwide_rm2": ("mae",  "relmargin", 2.0,  False, "wide", 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_tol0.25":        ("mse",    "tol",       0.25, False, "base", 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_h3":             ("mse",    "harm",      3.0,  False, "base", 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_v0.6":           ("mse",    "vote",      0.6,  False, "base", 0.0, "none", "none", 16, 0.0),
+        "mix_4_6_hess_dom":       ("mse",    "dominance", 0.0,  True,  "base", 0.0, "none", "none", 16, 0.0),
     }
     for name, want in cases.items():
         got = parse_mix_4_6_dtype(name)
