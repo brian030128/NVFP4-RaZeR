@@ -1183,6 +1183,13 @@ PERMUTE_MODES = ("none", "rows")
 #   "none" -- no rotation.
 #   "all"  -- every chunk is rotated.
 #   "col"  -- each chunk decides for itself, by the same error criterion everything else here uses.
+#   "outlier" -- each chunk decides for itself on a DISTRIBUTIONAL criterion instead of an error one:
+#             rotate only if the chunk comes out CLEAN, i.e. if the post-rotation block max / block
+#             rms is below `rotate_outlier_max`. The point of rotation is to spread a block's
+#             outlier over the block; if outliers survive the rotation, the rotation has not done
+#             its job and there is no reason to pay for it. A 16-sample Gaussian block has
+#             max/rms ~2.0, so a threshold slightly above 2 accepts "rotation made this Gaussian"
+#             and rejects "outliers are still here".
 #
 # WHY THIS IS ALLOWED, AND WHY THE DECISION CANNOT BE PER SCALE BLOCK.
 # For Y = X W^T with an orthogonal H applied to a chunk of the reduction dimension,
@@ -1196,7 +1203,7 @@ PERMUTE_MODES = ("none", "rows")
 # for W4A16, where the activation is not quantized and its rotation is undone in full precision.
 # For W4A4 it is exact only for "all", where both operands rotate everything and no pattern has to
 # be communicated; "col" would need the weight-derived bit vector plumbed into `quant_act`.
-ROTATE_MODES = ("none", "all", "col")
+ROTATE_MODES = ("none", "all", "col", "outlier")
 
 
 @torch.no_grad()
@@ -1275,6 +1282,7 @@ def quant_mix_4_6(
     rotate: str="none",
     rotate_size: int=16,
     rotate_min_gain: float=0.0,
+    rotate_outlier_max: float=2.1,
     is_act: bool=False,
 ):
     """
@@ -1342,6 +1350,21 @@ def quant_mix_4_6(
         )
         if rotate == "all":
             return dq_rot.view(orig_shape).to(torch.bfloat16)
+
+        if rotate == "outlier":
+            # Per column chunk: rotate only where the ROTATED data is clean. Measured on the
+            # 16-element scale blocks the quantizer actually uses, averaged over every row of the
+            # chunk -- the decision has to be uniform down the rows, see ROTATE_MODES.
+            blocks = rotated.reshape(-1, groupsize)
+            peak   = blocks.abs().amax(dim=-1)
+            rms    = blocks.pow(2).mean(dim=-1).sqrt().clamp(min=1e-12)
+            ratio  = (peak / rms).view(w_fp_new.shape[0], nchunk, -1).mean(dim=(0, 2))
+            take   = (ratio <= rotate_outlier_max)[None, :, None]
+            dq_id  = quant_mix_4_6(w_fp_new, **inner).to(torch.float32)
+            dq = torch.where(take,
+                             dq_rot.view(-1, nchunk, rotate_size),
+                             dq_id.view(-1, nchunk, rotate_size))
+            return dq.view(orig_shape).to(torch.bfloat16)
 
         # "col": each column chunk keeps whichever basis quantizes it better. The rotation is
         # orthogonal, so the squared error of a chunk is the same measured in either basis and the
@@ -1644,7 +1667,7 @@ def parse_mix_4_6_dtype(name: str):
     assert name.startswith("mix_4_6"), name
     metric, elect, margin, use_importance, clip = "mse", "argmin", 0.0, False, "base"
     permute, rotate, rotate_size, rotate_min_gain = "none", "none", 16, 0.0
-    clip_min_gain, alpha_min_gain = 0.0, 0.0
+    clip_min_gain, alpha_min_gain, rotate_outlier_max = 0.0, 0.0, 2.1
 
     def _num(s):
         return s.replace(".", "", 1).isdigit()
@@ -1666,6 +1689,8 @@ def parse_mix_4_6_dtype(name: str):
             rotate = "all"
         elif part == "rotcol":
             rotate = "col"
+        elif part.startswith("roto") and part[4:].replace(".", "", 1).isdigit():
+            rotate, rotate_outlier_max = "outlier", float(part[4:])
         elif part.startswith("rot") and part[3:].isdigit():
             rotate, rotate_size = "all", int(part[3:])
         elif part.startswith("rotcol") and part[6:].isdigit():
@@ -1693,7 +1718,7 @@ def parse_mix_4_6_dtype(name: str):
         else:
             raise ValueError(f'Unrecognized mix_4_6 data type qualifier "{part}" in "{name}".')
     return (metric, elect, margin, use_importance, clip, clip_min_gain, alpha_min_gain,
-            permute, rotate, rotate_size, rotate_min_gain)
+            permute, rotate, rotate_size, rotate_min_gain, rotate_outlier_max)
 
 
 def quant_weight(model, quant_config: QuantConfig, importance=None):
@@ -1748,11 +1773,11 @@ def quant_weight(model, quant_config: QuantConfig, importance=None):
         quant_func = partial(quant_mixfp4, type_block=w_type_block)
     elif w_dtype.startswith("mix_4_6"):
         (_metric, _elect, _margin, _use_imp, _clip,
-         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g) = parse_mix_4_6_dtype(w_dtype)
+         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g, _rot_o) = parse_mix_4_6_dtype(w_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=w_type_block,
             metric=_metric, elect=_elect, margin=_margin, clip=_clip, clip_min_gain=_clip_g, alpha_min_gain=_alpha_g, permute=_perm,
-            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g,
+            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g, rotate_outlier_max=_rot_o,
         )
     elif (w_dtype == "nvfp4_razer_e3m3"):
         quant_func = partial(quant_nvfp4_razer_e3m3, outlier=w_outlier)
@@ -1812,11 +1837,11 @@ def quant_act(act, quant_config: QuantConfig):
         quant_func = partial(quant_mixfp4, type_block=a_type_block, is_act=True)
     elif a_dtype.startswith("mix_4_6"):
         (_metric, _elect, _margin, _, _clip,
-         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g) = parse_mix_4_6_dtype(a_dtype)
+         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g, _rot_o) = parse_mix_4_6_dtype(a_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=a_type_block, is_act=True,
             metric=_metric, elect=_elect, margin=_margin, clip=_clip, clip_min_gain=_clip_g, alpha_min_gain=_alpha_g, permute=_perm,
-            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g,
+            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g, rotate_outlier_max=_rot_o,
         )
     elif (a_dtype == "nvfp4_razer_e4m3"):
         quant_func = quant_nvfp4_razer_e4m3
