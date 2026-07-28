@@ -753,13 +753,39 @@ def _quant_e2m1(x, block_scale):
         )
     ).clamp(min=0)
     x_m = x_s / (2**private_exp) * (2**FP4_MAN_BITS)
-    x_m = torch.sign(x_m) * torch.floor(torch.abs(x_m) + 0.5)
+    # Round to nearest, TIES TOWARD ZERO -- ceil(|m| - 0.5), not floor(|m| + 0.5).
+    #
+    # This must match `quant_nvfp4_4over6`, whose midpoint comparisons use `ax <= mid_value[i]` and
+    # so assign the LOWER code on a tie. The two rules agree everywhere else, but ties are not rare
+    # here: the block scale is float8_e4m3fn with a 3-bit mantissa, so x_s lands exactly on a half
+    # integer for ~0.16% of real weight elements (measured on Llama-3.1-8B layer 0). With the
+    # opposite convention, `quant_mix_4_6(elect="never")` was NOT bit-identical to plain 4over6 and
+    # carried a spurious +0.0017 wikitext / +0.0090 c4 handicap into every MixFP4 comparison --
+    # larger than most of the effects being measured.
+    x_m = torch.sign(x_m) * torch.ceil(torch.abs(x_m) - 0.5)
     x_q = (x_m * (2**private_exp) / (2**FP4_MAN_BITS)).clamp(min=-E2M1_MAX, max=E2M1_MAX)
 
     return x_q * block_scale
 
 
 SELECT_METRICS = ("mse", "sqnr", "cossim")
+
+
+def parse_metric(metric: str):
+    """
+        Validate a selection metric name and return its Lp exponent, or None for the fixed metrics.
+
+        "lp<p>" (e.g. "lp0.7") is the HQQ-style robust loss -- see `_selection_loss`.
+    """
+    if metric in SELECT_METRICS:
+        return None
+    if metric.startswith("lp"):
+        p = float(metric[2:])
+        assert p > 0.0, f'The Lp exponent must be positive, got "{metric}".'
+        return p
+    raise ValueError(
+        f'Unsupported selection metric "{metric}". Expected one of {SELECT_METRICS} or "lp<p>".'
+    )
 
 
 @torch.no_grad()
@@ -781,6 +807,26 @@ def _selection_loss(x, x_dq, metric: str, weight=None, eps: float=1e-30):
 
         All-zero blocks score 0 for "mse"/"sqnr" and 1 for "cossim", and never produce NaN/inf.
     """
+    p = parse_metric(metric)
+    if p is not None:
+        # HQQ-style robust loss (https://dropbox.github.io/hqq_blog/): sum |e|^p with p < 1.
+        #
+        # Why this is the right shape for the E2M1-vs-E0M3 election. Squared error is dominated by
+        # the block's worst elements, which are exactly the outliers near the block maximum -- the
+        # elements a 4-bit grid can never place well anyway. Minimizing it therefore buys accuracy
+        # on a handful of hopeless elements by spending it on the bulk. p < 1 saturates: pushing an
+        # already-large error a little larger costs almost nothing, so the criterion is decided by
+        # how well the BULK of the block is fitted.
+        #
+        # HQQ solves for a scale (and zero point) under this loss with half-quadratic splitting. We
+        # are symmetric -- scale only, no zero point -- and the candidates here are discrete (the
+        # 6-vs-4 E2M1 normalization, and E2M1 vs E0M3), so there is nothing to solve: we simply
+        # score the candidates with the robust loss instead of with MSE.
+        err = (x_dq - x).abs().pow(p)
+        if weight is not None:
+            err = err * weight
+        return err.sum(dim=-1, keepdim=True)
+
     sq = (x_dq - x).pow(2)
     if weight is not None:
         # `weight` is the per-element importance s_j^2 = E[x_j^2] of the input channel that this
@@ -809,11 +855,11 @@ def _selection_loss(x, x_dq, metric: str, weight=None, eps: float=1e-30):
     raise ValueError(f"Unsupported selection metric \"{metric}\". Expected one of {SELECT_METRICS}.")
 
 
-ELECT_RULES = ("argmin", "dominance", "margin", "never")
+ELECT_RULES = ("argmin", "dominance", "margin", "bounded", "never")
 
 
 @torch.no_grad()
-def _elect_e0m3(gain, rule: str="argmin", margin: float=0.0):
+def _elect_e0m3(gain, rule: str="argmin", margin: float=0.0, ref=None):
     """
         Decide, per type block, whether to elect E0M3 over E2M1.
 
@@ -850,6 +896,18 @@ def _elect_e0m3(gain, rule: str="argmin", margin: float=0.0):
         elect = total > 0
     elif rule == "dominance":
         elect = (gain >= 0).all(dim=(-1, -2)) & (total > 0)
+    elif rule == "bounded":
+        # Elect only if the tile helps overall AND no single scale block is harmed by more than
+        # `margin` (a FRACTION of what that block already loses under the E2M1/4over6 branch).
+        #
+        # `margin` bounds the WORST block; the "margin" rule bounds the MEAN. That distinction is
+        # the point: argmin harms 24-40% of scale blocks and still shows an aggregate MSE win,
+        # because a few badly-harmed blocks hide behind many mildly-helped ones -- and it is the
+        # harmed blocks that cost perplexity. eps=0 recovers `dominance`, eps=inf recovers `argmin`.
+        assert ref is not None, "the bounded rule needs the E2M1 per-block loss as `ref`"
+        harm     = (-gain).clamp(min=0.0)
+        rel_harm = harm / ref.clamp(min=torch.finfo(gain.dtype).tiny)
+        elect    = (total > 0) & (rel_harm.flatten(start_dim=1).max(dim=-1).values <= margin)
     elif rule == "margin":
         num_block = gain.shape[-2] * gain.shape[-1]
         mean = total / num_block
@@ -872,6 +930,7 @@ def quant_mix_4_6(
     importance=None,
     elect: str="argmin",
     margin: float=0.0,
+    importance_scope: str="all",
     is_act: bool=False,
 ):
     """
@@ -905,8 +964,7 @@ def quant_mix_4_6(
     groupsize     = 16 if groupsize is None else groupsize
     assert groupsize == 16, \
         f'MixFP4 inherits the NVFP4 scale-block size, which must be 16, but got {groupsize}.'
-    assert metric in SELECT_METRICS, \
-        f'Unsupported selection metric "{metric}". Expected one of {SELECT_METRICS}.'
+    parse_metric(metric)   # raises on an unknown metric name
     assert elect in ELECT_RULES, \
         f'Unsupported election rule "{elect}". Expected one of {ELECT_RULES}.'
     block_m, block_k = parse_type_block(type_block)
@@ -940,6 +998,14 @@ def quant_mix_4_6(
             imp.expand(w_fp_new.shape[0], -1), block_m, block_k, groupsize
         )
 
+    # `importance_scope="elect"` weights ONLY the type-block election, leaving the per-scale-block
+    # 4-vs-6 normalization search on plain MSE. That isolates the question the election is supposed
+    # to answer: if a CALIBRATED type choice wins while the scale choice stays calibration-free,
+    # then E0M3 does help and the MSE criterion was simply electing the wrong tiles. Note the
+    # nvfp4_4over6 baseline needs no calibration at all -- only the election does.
+    assert importance_scope in ("all", "elect"), importance_scope
+    imp_scale = None if importance_scope == "elect" else imp_tiled
+
     ####### E2M1: per-scale-block search over the 4 / 6 normalization #######
     w_dq_e2m1  = None
     error_e2m1 = None
@@ -949,7 +1015,7 @@ def quant_mix_4_6(
             min=FP8_SCALE_MIN
         ).to(torch.float8_e4m3fn).to(w_tiled.dtype)
         w_dq_tmp    = _quant_e2m1(w_tiled, block_scale)
-        error_tmp   = _selection_loss(w_tiled, w_dq_tmp, metric, imp_tiled)
+        error_tmp   = _selection_loss(w_tiled, w_dq_tmp, metric, imp_scale)
 
         if w_dq_e2m1 is None:
             w_dq_e2m1, error_e2m1 = w_dq_tmp, error_tmp
@@ -966,12 +1032,20 @@ def quant_mix_4_6(
     w_dq_e0m3        = (w_tiled / block_scale_e0m3).round().clamp(
         min=-E0M3_MAX, max=E0M3_MAX
     ) * block_scale_e0m3
-    error_e0m3       = _selection_loss(w_tiled, w_dq_e0m3, metric, imp_tiled)
+    error_e0m3       = _selection_loss(w_tiled, w_dq_e0m3, metric, imp_scale)
+
+    # Election losses. With scope="elect" the 4-vs-6 choice above was made on plain MSE and only
+    # the E2M1-vs-E0M3 comparison below sees the calibrated importance.
+    if importance_scope == "elect" and imp_tiled is not None:
+        elect_e2m1 = _selection_loss(w_tiled, w_dq_e2m1, metric, imp_tiled)
+        elect_e0m3 = _selection_loss(w_tiled, w_dq_e0m3, metric, imp_tiled)
+    else:
+        elect_e2m1, elect_e0m3 = error_e2m1, error_e0m3
 
     ############### Per-Type-Block Data Type Selection ###############
     # Sum the per-scale-block errors over every scale block of the same type block
     # gain_b > 0 means E0M3 is the better element type for scale block b
-    select_e0m3 = _elect_e0m3(error_e2m1 - error_e0m3, rule=elect, margin=margin)
+    select_e0m3 = _elect_e0m3(elect_e2m1 - elect_e0m3, rule=elect, margin=margin, ref=elect_e2m1)
 
     w_dq = torch.where(
         select_e0m3,
@@ -1114,24 +1188,33 @@ def parse_mix_4_6_dtype(name: str):
         "dom" elects E0M3 only when no scale block in the tile is harmed.
         "m<z>" elects only when the mean gain exceeds z standard errors.
 
-        Returns (metric, elect, margin, use_importance).
+        Returns (metric, elect, margin, use_importance, importance_scope).
     """
     assert name.startswith("mix_4_6"), name
-    metric, elect, margin, use_importance = "mse", "argmin", 0.0, False
+    metric, elect, margin, use_importance, scope = "mse", "argmin", 0.0, False, "all"
     for part in [p for p in name[len("mix_4_6"):].split("_") if p]:
         if part in ("sqnr", "cossim"):
             metric = part
+        elif part.startswith("p") and part[1:].replace(".", "", 1).isdigit():
+            # "p0.7" -> the HQQ-style robust loss sum |e|^0.7
+            metric = "lp" + part[1:]
         elif part == "hess":
             use_importance = True
+        elif part == "hesst":
+            # calibrated TYPE election only; the 4-vs-6 scale choice stays on plain MSE
+            use_importance, scope = True, "elect"
         elif part == "dom":
             elect = "dominance"
         elif part == "e2m1":
             elect = "never"
         elif part.startswith("m") and part[1:].replace(".", "", 1).isdigit():
             elect, margin = "margin", float(part[1:])
+        elif part.startswith("b") and part[1:].replace(".", "", 1).isdigit():
+            # "b0.25" -> elect only when no scale block is harmed by more than 25% of its 4over6 loss
+            elect, margin = "bounded", float(part[1:])
         else:
             raise ValueError(f'Unrecognized mix_4_6 data type qualifier "{part}" in "{name}".')
-    return metric, elect, margin, use_importance
+    return metric, elect, margin, use_importance, scope
 
 
 def quant_weight(model, quant_config: QuantConfig, importance=None):
@@ -1183,10 +1266,10 @@ def quant_weight(model, quant_config: QuantConfig, importance=None):
     elif (w_dtype == "mixfp4"):
         quant_func = partial(quant_mixfp4, type_block=w_type_block)
     elif w_dtype.startswith("mix_4_6"):
-        _metric, _elect, _margin, _use_imp = parse_mix_4_6_dtype(w_dtype)
+        _metric, _elect, _margin, _use_imp, _scope = parse_mix_4_6_dtype(w_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=w_type_block,
-            metric=_metric, elect=_elect, margin=_margin,
+            metric=_metric, elect=_elect, margin=_margin, importance_scope=_scope,
         )
     elif (w_dtype == "nvfp4_razer_e3m3"):
         quant_func = partial(quant_nvfp4_razer_e3m3, outlier=w_outlier)
@@ -1243,10 +1326,10 @@ def quant_act(act, quant_config: QuantConfig):
     elif (a_dtype == "mixfp4"):
         quant_func = partial(quant_mixfp4, type_block=a_type_block, is_act=True)
     elif a_dtype.startswith("mix_4_6"):
-        _metric, _elect, _margin, _ = parse_mix_4_6_dtype(a_dtype)
+        _metric, _elect, _margin, _, _scope = parse_mix_4_6_dtype(a_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=a_type_block, is_act=True,
-            metric=_metric, elect=_elect, margin=_margin,
+            metric=_metric, elect=_elect, margin=_margin, importance_scope=_scope,
         )
     elif (a_dtype == "nvfp4_razer_e4m3"):
         quant_func = quant_nvfp4_razer_e4m3

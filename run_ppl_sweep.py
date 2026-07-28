@@ -94,9 +94,46 @@ SWEEP_W4A4_WMIX = [
     # errors of the per-scale-block gain -- the guard against an aggregate MSE win that harms
     # individual scale blocks. See _elect_e0m3.
     ("mix_4_6_m2_w16x64", "mix_4_6_m2", "16x64", "nvfp4_4over6", "1x16"),
+    # Elect E0M3 only when NO scale block in the tile is harmed. This is the pointwise guarantee
+    # that 1x16 has for free, so it cannot be worse than plain 4over6 on any block -- the invariant
+    # that argmin gives up in exchange for an aggregate weight-MSE win.
+    ("mix_4_6_dom_w16x64", "mix_4_6_dom", "16x64", "nvfp4_4over6", "1x16"),
+    # HQQ-style robust selection loss, sum |e|^0.7 instead of sum e^2. Squared error is dominated by
+    # the elements nearest the block maximum -- the outliers a 4-bit grid cannot place well in any
+    # case -- so it elects whichever grid coddles them. p < 1 saturates on those and decides the
+    # election on the bulk instead.
+    ("mix_4_6_p0.7_w16x64", "mix_4_6_p0.7", "16x64", "nvfp4_4over6", "1x16"),
 ]
 
-SWEEPS = {"w4a16": SWEEP_W4A16, "w4a4": SWEEP_W4A4, "w4a4_wmix": SWEEP_W4A4_WMIX}
+# Post-rounding-fix rerun. `nvfp4_4over6` and `mix_4_6_dom` are omitted deliberately: the baseline
+# is untouched by the fix (llama-3.1-8b 6.8773/9.8177, qwen3-8b 10.0208/13.7555 on A6000), and
+# dominance now provably equals it, since it elects E0M3 on 0.0% of 16x64 tiles and `elect="never"`
+# is bit-identical to `quant_nvfp4_4over6` again.
+SWEEP_W4A4_WMIX2 = [
+    ("mix_4_6_w16x64",    "mix_4_6",    "16x64", "nvfp4_4over6", "1x16"),
+    ("mix_4_6_m2_w16x64", "mix_4_6_m2", "16x64", "nvfp4_4over6", "1x16"),
+    # bounded harm: elect only when no scale block is more than eps worse than its 4over6 loss.
+    # Measured firing rates on llama-3.1-8b gate_proj at 16x64: b1 0.1%, b2 13.0%, b5 37.2%,
+    # against argmin's 37.9% -- so b2/b3 are the points that are genuinely between the two rules.
+    ("mix_4_6_b2_w16x64", "mix_4_6_b2", "16x64", "nvfp4_4over6", "1x16"),
+    ("mix_4_6_b3_w16x64", "mix_4_6_b3", "16x64", "nvfp4_4over6", "1x16"),
+    # HQQ-style robust loss. Pre-fix it was a large qwen win (-0.0320 wikitext) and a llama
+    # non-event (+0.0016), from an intervention that changes the 4-vs-6 choice on ~20% of scale
+    # blocks in BOTH models -- so the asymmetry is not explained by how often it fires.
+    ("mix_4_6_p0.7_w16x64", "mix_4_6_p0.7", "16x64", "nvfp4_4over6", "1x16"),
+]
+
+# Calibrated TYPE election only. The 4-vs-6 scale search stays on plain MSE (verified bit-identical
+# to the uncalibrated path), and the nvfp4_4over6 baseline needs no calibration at all -- so any win
+# here is attributable to electing the element type better, not to a better scale search.
+# Importance is E[x_j^2] from the wikitext TRAIN split, never the evaluation data.
+SWEEP_W4A4_WMIX3 = [
+    ("mix_4_6_hesst_w16x64",    "mix_4_6_hesst",    "16x64", "nvfp4_4over6", "1x16"),
+    ("mix_4_6_hesst_m1_w16x64", "mix_4_6_hesst_m1", "16x64", "nvfp4_4over6", "1x16"),
+]
+
+SWEEPS = {"w4a16": SWEEP_W4A16, "w4a4": SWEEP_W4A4, "w4a4_wmix": SWEEP_W4A4_WMIX,
+          "w4a4_wmix2": SWEEP_W4A4_WMIX2, "w4a4_wmix3": SWEEP_W4A4_WMIX3}
 
 
 def build_calibration(tokenizer, seq_len, num_batches, seed=0):
