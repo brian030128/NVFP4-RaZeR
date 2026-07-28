@@ -929,6 +929,17 @@ CLIP_PRESETS = {
     # ... and the same subdivision on E0M3, whose alpha = 7/n reaches uniform n-level grids
     "dense9e0": {"e2m1": tuple(1.0 + 0.0625 * i for i in range(9)),
                  "e0m3": (1.0, 7.0 / 6.5, 7.0 / 6.0, 7.0 / 5.5, 7.0 / 5.0)},
+    # SYMMETRIC: both grids get the identical nine-point alpha range. Every other preset gives E2M1
+    # more candidates than E0M3 -- `base` is the extreme case, {1, 1.5} against {1}, i.e. FourOverSix
+    # searches the E2M1 scale and never searches the E0M3 one. Any claim that "E0M3 stops
+    # contributing once alpha is searched" is confounded unless both branches get the same search,
+    # which is what this preset is for.
+    "dense9sym": {"e2m1": tuple(1.0 + 0.0625 * i for i in range(9)),
+                  "e0m3": tuple(1.0 + 0.0625 * i for i in range(9))},
+    "dense5sym": {"e2m1": (1.0, 1.125, 1.25, 1.375, 1.5),
+                  "e0m3": (1.0, 1.125, 1.25, 1.375, 1.5)},
+    # and the symmetric version of the ORIGINAL setting: give E0M3 its own 4/6-style second option
+    "basesym":  {"e2m1": (1.0, 1.5),                       "e0m3": (1.0, 1.5)},
     # E2M1 only -- on top of FourOverSix
     "e2":    {"e2m1": (0.9, 1.0, 1.5),                     "e0m3": (1.0,)},
     "e2x":   {"e2m1": (0.8, 0.9, 1.0, 1.5),                "e0m3": (1.0,)},
