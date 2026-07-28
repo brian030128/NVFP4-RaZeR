@@ -84,7 +84,19 @@ def _mix_rows(quantize_activations: bool):
 SWEEP_W4A16 += _mix_rows(quantize_activations=False)
 SWEEP_W4A4  += _mix_rows(quantize_activations=True)
 
-SWEEPS = {"w4a16": SWEEP_W4A16, "w4a4": SWEEP_W4A4}
+# Weights mixed, activations held at the plain 4/6 baseline. Every other W4A4 mix_4_6 row in this
+# file quantizes BOTH operands with mix_4_6, which confounds the weight-side and the activation-side
+# effect; this sweep isolates the weight side. The activation type block is unused by nvfp4_4over6.
+SWEEP_W4A4_WMIX = [
+    ("nvfp4_4over6",   "nvfp4_4over6", "1x16",  "nvfp4_4over6", "1x16"),
+    ("mix_4_6_w16x64", "mix_4_6",      "16x64", "nvfp4_4over6", "1x16"),
+    # Same weight type block, but E0M3 is elected only when the tile's mean gain exceeds 2 standard
+    # errors of the per-scale-block gain -- the guard against an aggregate MSE win that harms
+    # individual scale blocks. See _elect_e0m3.
+    ("mix_4_6_m2_w16x64", "mix_4_6_m2", "16x64", "nvfp4_4over6", "1x16"),
+]
+
+SWEEPS = {"w4a16": SWEEP_W4A16, "w4a4": SWEEP_W4A4, "w4a4_wmix": SWEEP_W4A4_WMIX}
 
 
 def build_calibration(tokenizer, seq_len, num_batches, seed=0):
