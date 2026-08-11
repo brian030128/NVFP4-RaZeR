@@ -1,0 +1,46 @@
+=== node hgpn02  gpu: NVIDIA H100 80GB HBM3
+=== 2026-08-11T23:14:20+08:00  downloading google/diffusiongemma-26B-A4B-it -> /tmp/u4320956/diffgemma_298870 (weights + json only) ===
+snapshot at /tmp/u4320956/diffgemma_298870
+=== 2026-08-11T23:16:00+08:00  running weight-MSE sim (8x64 weights) ===
+device=cuda  type_block=8x64  model_dir=/tmp/u4320956/diffgemma_298870
+hidden_size=2816  moe_intermediate_size=704
+265 decoder weight tensors selected across 11 shards
+  [20/265] model.decoder.layers.10.experts.gate_up_proj  (12.5s)
+  [40/265] model.decoder.layers.9.mlp.gate_proj.weight  (15.4s)
+  [60/265] model.decoder.layers.12.self_attn.o_proj.weight  (18.5s)
+  [80/265] model.decoder.layers.14.self_attn.v_proj.weight  (21.5s)
+  [100/265] model.decoder.layers.17.experts.gate_up_proj  (25.9s)
+  [120/265] model.decoder.layers.19.mlp.up_proj.weight  (28.8s)
+  [140/265] model.decoder.layers.3.self_attn.o_proj.weight  (31.8s)
+  [160/265] model.decoder.layers.20.self_attn.v_proj.weight  (34.9s)
+  [180/265] model.decoder.layers.23.experts.gate_up_proj  (39.2s)
+  [200/265] model.decoder.layers.25.mlp.up_proj.weight  (42.2s)
+  [220/265] model.decoder.layers.27.self_attn.o_proj.weight  (45.2s)
+  [240/265] model.decoder.layers.5.experts.down_proj  (48.7s)
+  [260/265] model.decoder.layers.7.mlp.gate_proj.weight  (52.5s)
+  [265/265] model.decoder.layers.7.self_attn.v_proj.weight  (52.6s)
+
+wrote 265 rows -> results/diffgemma_mse/diffgemma_mse_8x64.csv
+
+================= AGGREGATE (energy-weighted NMSE = sum noise / sum signal) =================
+group                   nvfp4    nvfp4_4over6          mixfp4         mix_4_6
+ALL           8.993e-03(20.5) 7.555e-03(21.2) 7.637e-03(21.2) 7.297e-03(21.4)
+attention     8.947e-03(20.5) 7.557e-03(21.2) 7.800e-03(21.1) 7.348e-03(21.3)
+dense_mlp     8.852e-03(20.5) 7.549e-03(21.2) 8.109e-03(20.9) 7.452e-03(21.3)
+moe_experts   8.998e-03(20.5) 7.555e-03(21.2) 7.620e-03(21.2) 7.291e-03(21.4)
+  (each cell: NMSE(SQNR dB).  smaller NMSE / larger SQNR = better)
+
+----- headline: nvfp4_4over6 vs mixfp4 @ 8x64 -----
+  ALL           4over6 NMSE=7.5547e-03  mixfp4 NMSE=7.6369e-03  (mixfp4 +1.09% vs 4over6, 4over6 better)
+  attention     4over6 NMSE=7.5566e-03  mixfp4 NMSE=7.7997e-03  (mixfp4 +3.22% vs 4over6, 4over6 better)
+  dense_mlp     4over6 NMSE=7.5494e-03  mixfp4 NMSE=8.1089e-03  (mixfp4 +7.41% vs 4over6, 4over6 better)
+  moe_experts   4over6 NMSE=7.5548e-03  mixfp4 NMSE=7.6202e-03  (mixfp4 +0.87% vs 4over6, 4over6 better)
+
+----- E0M3 election fraction (mean over type blocks) -----
+  ALL           mixfp4=90.2%  mix_4_6=45.7%
+  attention     mixfp4=79.4%  mix_4_6=35.1%
+  dense_mlp     mixfp4=65.7%  mix_4_6=20.6%
+  moe_experts   mixfp4=90.6%  mix_4_6=46.1%
+
+done in 52.6s
+=== done 2026-08-11T23:16:55+08:00 ===
