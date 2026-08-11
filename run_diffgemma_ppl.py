@@ -134,12 +134,17 @@ def decode_logits(model, past, canvas):
 
 
 @torch.no_grad()
-def pseudo_ppl(model, blocks, vocab, canvas_len, window_blocks, max_windows, n_draws, base_seed):
+def pseudo_ppl(model, blocks, vocab, canvas_len, window_blocks, max_windows, n_draws, base_seed,
+               reveal_frac=0.0):
     """
         Windowed block-wise teacher-forced denoiser CE. Each window: block 0 = clean context,
         blocks 1.. are scored given all earlier true blocks in the window (cache reset per window
         to bound the KV cache ~ window_blocks*canvas_len and mirror a seq_len window).
-        Canvases are seeded by (global_block_index, draw) so every config sees identical noise.
+
+        reveal_frac in [0,1): fraction of canvas positions filled with the TRUE token (a partial-
+        denoising probe); the CE is computed only over the remaining MASKED (random) positions.
+        reveal_frac=0 => max-noise canvas, CE over all positions. Canvas noise AND the reveal mask
+        are seeded by (global_block_index, draw) so every config sees identical probes (paired).
     """
     dev = model.device
     total_nll, total_tok, n_scored = 0.0, 0, 0
@@ -160,10 +165,16 @@ def pseudo_ppl(model, blocks, vocab, canvas_len, window_blocks, max_windows, n_d
             for d in range(n_draws):
                 gen.manual_seed(base_seed + gidx * 131 + d)
                 canvas = torch.randint(0, vocab, (1, L), generator=gen, device=dev, dtype=torch.long)
-                logits = decode_logits(model, past, canvas).float()
-                total_nll += F.cross_entropy(logits.reshape(-1, vocab), true.reshape(-1),
-                                             reduction="sum").item()
-                total_tok += L
+                masked = torch.ones(L, dtype=torch.bool, device=dev)
+                if reveal_frac > 0:
+                    k = int(round(reveal_frac * L))
+                    if k > 0:
+                        rev = torch.randperm(L, generator=gen, device=dev)[:k]
+                        canvas[0, rev] = true[0, rev]        # reveal true tokens
+                        masked[rev] = False                  # score only the still-noisy ones
+                logits = decode_logits(model, past, canvas).float()[0][masked]
+                total_nll += F.cross_entropy(logits, true[0][masked], reduction="sum").item()
+                total_tok += int(masked.sum().item())
             n_scored += 1
             past = extend_cache(model, past, true)                     # add clean block to context
         if (wi + 1) % 10 == 0 or wi == len(windows) - 1:
@@ -195,6 +206,7 @@ def main():
     ap.add_argument("--window_blocks", type=int, default=8)   # 8*256 = 2048-token context window
     ap.add_argument("--max_windows", type=int, default=32)    # 0 = all
     ap.add_argument("--n_draws", type=int, default=2)         # random-canvas draws averaged
+    ap.add_argument("--reveal_frac", type=float, default=0.0)  # frac of true tokens shown (probe level)
     ap.add_argument("--max_tokens", type=int, default=0)      # 0 = all test tokens
     ap.add_argument("--seed", type=int, default=1234)
     args = ap.parse_args()
@@ -227,7 +239,8 @@ def main():
 
         ppl, n_scored, n_tok = pseudo_ppl(
             model, blocks, vocab, canvas_len,
-            args.window_blocks, args.max_windows, args.n_draws, args.seed)
+            args.window_blocks, args.max_windows, args.n_draws, args.seed,
+            reveal_frac=args.reveal_frac)
 
         if cname == "fp":
             fp_ppl = ppl

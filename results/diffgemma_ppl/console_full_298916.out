@@ -1,0 +1,77 @@
+=== node hgpn01  gpu: NVIDIA H100 80GB HBM3, 81559 MiB
+=== config: CONFIGS=fp,nvfp4_4over6,mixfp4-8x64,mix_4_6-8x64 MAXWIN=64 NDRAWS=3 MAXTOK=0 TAG=full
+=== 2026-08-12T00:10:06+08:00  downloading google/diffusiongemma-26B-A4B-it -> /tmp/u4320956/diffgemma_model ===
+snapshot ready at /tmp/u4320956/diffgemma_model
+=== 2026-08-12T00:11:52+08:00  running pseudo-PPL (full) ===
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+canvas_length=256  vocab_size=262144  configs=['fp', 'nvfp4_4over6', 'mixfp4-8x64', 'mix_4_6-8x64']
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 508775.48 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 1110532.70 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 919728.41 examples/s]
+wikitext-2 test: 292096 tokens -> 1141 full 256-token blocks
+
+=================== config: fp ===================
+Loading weights:   0%|          | 0/1047 [00:00<?, ?it/s]Loading weights:   0%|          | 1/1047 [00:00<02:00,  8.65it/s]Loading weights:   0%|          | 3/1047 [00:00<01:53,  9.22it/s]Loading weights:   2%|▏         | 25/1047 [00:00<00:18, 55.27it/s]Loading weights:   4%|▍         | 47/1047 [00:00<00:13, 72.15it/s]Loading weights:   7%|▋         | 69/1047 [00:01<00:12, 81.34it/s]Loading weights:   9%|▊         | 91/1047 [00:01<00:10, 87.06it/s]Loading weights:  11%|█         | 113/1047 [00:01<00:10, 90.32it/s]Loading weights:  13%|█▎        | 134/1047 [00:01<00:10, 91.03it/s]Loading weights:  15%|█▍        | 156/1047 [00:01<00:09, 92.53it/s]Loading weights:  17%|█▋        | 178/1047 [00:02<00:09, 93.33it/s]Loading weights:  19%|█▉        | 199/1047 [00:02<00:09, 92.86it/s]Loading weights:  21%|██        | 222/1047 [00:02<00:08, 95.04it/s]Loading weights:  23%|██▎       | 244/1047 [00:02<00:08, 95.37it/s]Loading weights:  25%|██▌       | 265/1047 [00:03<00:08, 93.86it/s]Loading weights:  27%|██▋       | 287/1047 [00:03<00:08, 94.82it/s]Loading weights:  30%|██▉       | 309/1047 [00:03<00:07, 95.19it/s]Loading weights:  32%|███▏      | 331/1047 [00:03<00:07, 95.49it/s]Loading weights:  34%|███▎      | 353/1047 [00:03<00:07, 96.20it/s]Loading weights:  36%|███▌      | 374/1047 [00:04<00:07, 94.65it/s]Loading weights:  38%|███▊      | 396/1047 [00:04<00:06, 95.09it/s]Loading weights:  40%|███▉      | 418/1047 [00:04<00:06, 95.66it/s]Loading weights:  42%|████▏     | 440/1047 [00:04<00:06, 96.41it/s]Loading weights:  44%|████▍     | 462/1047 [00:05<00:06, 96.64it/s]Loading weights:  46%|████▌     | 484/1047 [00:05<00:05, 96.20it/s]Loading weights:  48%|████▊     | 506/1047 [00:05<00:05, 96.01it/s]Loading weights:  50%|█████     | 527/1047 [00:05<00:05, 94.67it/s]Loading weights:  52%|█████▏    | 549/1047 [00:06<00:05, 95.76it/s]Loading weights:  55%|█████▍    | 571/1047 [00:06<00:04, 96.64it/s]Loading weights:  57%|█████▋    | 593/1047 [00:06<00:04, 97.19it/s]Loading weights:  59%|█████▊    | 615/1047 [00:06<00:04, 97.08it/s]Loading weights:  61%|██████    | 637/1047 [00:06<00:04, 97.10it/s]Loading weights:  80%|████████  | 838/1047 [00:07<00:00, 400.77it/s]Loading weights: 100%|█████████▉| 1043/1047 [00:07<00:00, 705.65it/s]Loading weights: 100%|██████████| 1047/1047 [00:07<00:00, 146.51it/s]
+  loaded in 9.0s  device=cuda:0
+  quantized: 0 linear tensors, 0 expert stacks (FP baseline)
+    window 10/64  scored_blocks=70  pPPL=2380.724  (31.3s)
+    window 20/64  scored_blocks=140  pPPL=2242.881  (62.1s)
+    window 30/64  scored_blocks=210  pPPL=2650.705  (93.0s)
+    window 40/64  scored_blocks=280  pPPL=2619.413  (123.6s)
+    window 50/64  scored_blocks=350  pPPL=2845.014  (154.5s)
+    window 60/64  scored_blocks=420  pPPL=2804.959  (185.7s)
+    window 64/64  scored_blocks=448  pPPL=2885.034  (198.0s)
+  ==> fp: pseudo-PPL = 2885.0336
+  wrote results/diffgemma_ppl/diffgemma_ppl_full.csv (1 configs so far)
+
+=================== config: nvfp4_4over6 ===================
+Loading weights:   0%|          | 0/1047 [00:00<?, ?it/s]Loading weights:   0%|          | 1/1047 [00:00<02:00,  8.68it/s]Loading weights:   0%|          | 3/1047 [00:00<01:52,  9.31it/s]Loading weights:   2%|▏         | 25/1047 [00:00<00:18, 55.84it/s]Loading weights:   4%|▍         | 47/1047 [00:00<00:13, 73.09it/s]Loading weights:   7%|▋         | 69/1047 [00:01<00:11, 82.25it/s]Loading weights:   9%|▊         | 91/1047 [00:01<00:10, 88.13it/s]Loading weights:  11%|█         | 113/1047 [00:01<00:10, 91.25it/s]Loading weights:  13%|█▎        | 134/1047 [00:01<00:09, 91.71it/s]Loading weights:  15%|█▍        | 156/1047 [00:01<00:09, 94.02it/s]Loading weights:  17%|█▋        | 178/1047 [00:02<00:09, 95.16it/s]Loading weights:  19%|█▉        | 200/1047 [00:02<00:08, 95.70it/s]Loading weights:  21%|██        | 222/1047 [00:02<00:08, 96.04it/s]Loading weights:  23%|██▎       | 244/1047 [00:02<00:08, 96.71it/s]Loading weights:  25%|██▌       | 265/1047 [00:03<00:08, 95.17it/s]Loading weights:  27%|██▋       | 287/1047 [00:03<00:07, 95.94it/s]Loading weights:  30%|██▉       | 309/1047 [00:03<00:07, 96.71it/s]Loading weights:  32%|███▏      | 331/1047 [00:03<00:07, 96.95it/s]Loading weights:  34%|███▎      | 353/1047 [00:03<00:07, 97.20it/s]Loading weights:  36%|███▌      | 375/1047 [00:04<00:06, 96.90it/s]Loading weights:  38%|███▊      | 396/1047 [00:04<00:06, 95.59it/s]Loading weights:  40%|███▉      | 418/1047 [00:04<00:06, 96.39it/s]Loading weights:  42%|████▏     | 440/1047 [00:04<00:06, 97.04it/s]Loading weights:  44%|████▍     | 462/1047 [00:05<00:06, 97.29it/s]Loading weights:  46%|████▌     | 484/1047 [00:05<00:05, 97.22it/s]Loading weights:  48%|████▊     | 506/1047 [00:05<00:05, 96.96it/s]Loading weights:  50%|█████     | 527/1047 [00:05<00:05, 95.81it/s]Loading weights:  52%|█████▏    | 549/1047 [00:05<00:05, 96.62it/s]Loading weights:  55%|█████▍    | 571/1047 [00:06<00:04, 97.24it/s]Loading weights:  57%|█████▋    | 593/1047 [00:06<00:04, 97.81it/s]Loading weights:  59%|█████▊    | 615/1047 [00:06<00:04, 97.79it/s]Loading weights:  61%|██████    | 637/1047 [00:06<00:04, 97.92it/s]Loading weights:  81%|████████▏ | 851/1047 [00:06<00:00, 425.69it/s]Loading weights: 100%|██████████| 1047/1047 [00:07<00:00, 148.44it/s]
+  loaded in 10.3s  device=cuda:0
+  quantized: 205 linear tensors, 60 expert stacks (nvfp4_4over6)
+    window 10/64  scored_blocks=70  pPPL=4969.400  (31.0s)
+    window 20/64  scored_blocks=140  pPPL=4262.723  (61.8s)
+    window 30/64  scored_blocks=210  pPPL=4971.606  (92.8s)
+    window 40/64  scored_blocks=280  pPPL=4945.699  (123.7s)
+    window 50/64  scored_blocks=350  pPPL=5345.783  (154.8s)
+    window 60/64  scored_blocks=420  pPPL=5313.413  (186.0s)
+    window 64/64  scored_blocks=448  pPPL=5530.874  (198.4s)
+  ==> nvfp4_4over6: pseudo-PPL = 5530.8736  (Δ vs fp = +2645.8400)
+  wrote results/diffgemma_ppl/diffgemma_ppl_full.csv (2 configs so far)
+
+=================== config: mixfp4-8x64 ===================
+Loading weights:   0%|          | 0/1047 [00:00<?, ?it/s]Loading weights:   0%|          | 1/1047 [00:00<03:18,  5.27it/s]Loading weights:   0%|          | 3/1047 [00:00<01:46,  9.78it/s]Loading weights:   2%|▏         | 24/1047 [00:00<00:18, 54.25it/s]Loading weights:   4%|▍         | 47/1047 [00:00<00:13, 73.40it/s]Loading weights:   7%|▋         | 69/1047 [00:01<00:11, 81.97it/s]Loading weights:   9%|▊         | 91/1047 [00:01<00:10, 88.01it/s]Loading weights:  11%|█         | 113/1047 [00:01<00:10, 91.57it/s]Loading weights:  13%|█▎        | 134/1047 [00:01<00:09, 92.16it/s]Loading weights:  15%|█▍        | 156/1047 [00:01<00:09, 94.60it/s]Loading weights:  17%|█▋        | 178/1047 [00:02<00:09, 95.68it/s]Loading weights:  19%|█▉        | 200/1047 [00:02<00:08, 96.58it/s]Loading weights:  21%|██        | 222/1047 [00:02<00:08, 97.06it/s]Loading weights:  23%|██▎       | 244/1047 [00:02<00:08, 97.47it/s]Loading weights:  25%|██▌       | 265/1047 [00:03<00:08, 95.86it/s]Loading weights:  27%|██▋       | 287/1047 [00:03<00:07, 96.77it/s]Loading weights:  30%|██▉       | 309/1047 [00:03<00:07, 97.40it/s]Loading weights:  32%|███▏      | 331/1047 [00:03<00:07, 97.90it/s]Loading weights:  34%|███▎      | 353/1047 [00:03<00:07, 97.99it/s]Loading weights:  36%|███▌      | 375/1047 [00:04<00:06, 96.15it/s]Loading weights:  38%|███▊      | 396/1047 [00:04<00:06, 94.07it/s]Loading weights:  40%|███▉      | 418/1047 [00:04<00:06, 95.14it/s]Loading weights:  42%|████▏     | 439/1047 [00:04<00:06, 94.85it/s]Loading weights:  44%|████▍     | 462/1047 [00:05<00:06, 96.93it/s]Loading weights:  46%|████▌     | 484/1047 [00:05<00:05, 96.99it/s]Loading weights:  48%|████▊     | 506/1047 [00:05<00:05, 96.90it/s]Loading weights:  50%|█████     | 527/1047 [00:05<00:05, 95.37it/s]Loading weights:  52%|█████▏    | 549/1047 [00:05<00:05, 96.12it/s]Loading weights:  55%|█████▍    | 571/1047 [00:06<00:04, 96.83it/s]Loading weights:  57%|█████▋    | 593/1047 [00:06<00:04, 97.33it/s]Loading weights:  59%|█████▊    | 615/1047 [00:06<00:04, 97.16it/s]Loading weights:  61%|██████    | 637/1047 [00:06<00:04, 97.12it/s]Loading weights:  81%|████████▏ | 851/1047 [00:06<00:00, 422.42it/s]Loading weights: 100%|██████████| 1047/1047 [00:07<00:00, 147.77it/s]
+  loaded in 8.6s  device=cuda:0
+  quantized: 205 linear tensors, 60 expert stacks (mixfp4-8x64)
+    window 10/64  scored_blocks=70  pPPL=3773.261  (30.8s)
+    window 20/64  scored_blocks=140  pPPL=3627.945  (61.7s)
+    window 30/64  scored_blocks=210  pPPL=4226.770  (92.6s)
+    window 40/64  scored_blocks=280  pPPL=4125.019  (123.3s)
+    window 50/64  scored_blocks=350  pPPL=4385.439  (154.2s)
+    window 60/64  scored_blocks=420  pPPL=4413.310  (185.3s)
+    window 64/64  scored_blocks=448  pPPL=4571.680  (197.7s)
+  ==> mixfp4-8x64: pseudo-PPL = 4571.6804  (Δ vs fp = +1686.6468)
+  wrote results/diffgemma_ppl/diffgemma_ppl_full.csv (3 configs so far)
+
+=================== config: mix_4_6-8x64 ===================
+Loading weights:   0%|          | 0/1047 [00:00<?, ?it/s]Loading weights:   0%|          | 1/1047 [00:00<02:00,  8.71it/s]Loading weights:   0%|          | 3/1047 [00:00<01:52,  9.27it/s]Loading weights:   2%|▏         | 25/1047 [00:00<00:18, 55.76it/s]Loading weights:   4%|▍         | 47/1047 [00:00<00:13, 73.06it/s]Loading weights:   7%|▋         | 69/1047 [00:01<00:11, 81.95it/s]Loading weights:   9%|▊         | 90/1047 [00:01<00:11, 85.83it/s]Loading weights:  11%|█         | 113/1047 [00:01<00:10, 91.08it/s]Loading weights:  13%|█▎        | 134/1047 [00:01<00:09, 91.35it/s]Loading weights:  15%|█▍        | 155/1047 [00:01<00:09, 92.36it/s]Loading weights:  17%|█▋        | 178/1047 [00:02<00:09, 94.90it/s]Loading weights:  19%|█▉        | 200/1047 [00:02<00:08, 95.32it/s]Loading weights:  21%|██        | 222/1047 [00:02<00:08, 95.61it/s]Loading weights:  23%|██▎       | 244/1047 [00:02<00:08, 95.92it/s]Loading weights:  25%|██▌       | 265/1047 [00:03<00:08, 94.50it/s]Loading weights:  27%|██▋       | 287/1047 [00:03<00:07, 95.19it/s]Loading weights:  30%|██▉       | 309/1047 [00:03<00:07, 96.03it/s]Loading weights:  32%|███▏      | 331/1047 [00:03<00:07, 96.38it/s]Loading weights:  34%|███▎      | 353/1047 [00:03<00:07, 96.78it/s]Loading weights:  36%|███▌      | 375/1047 [00:04<00:06, 96.37it/s]Loading weights:  38%|███▊      | 396/1047 [00:04<00:06, 94.78it/s]Loading weights:  40%|███▉      | 418/1047 [00:04<00:06, 95.62it/s]Loading weights:  42%|████▏     | 440/1047 [00:04<00:06, 96.48it/s]Loading weights:  44%|████▍     | 462/1047 [00:05<00:06, 96.60it/s]Loading weights:  46%|████▌     | 484/1047 [00:05<00:05, 96.50it/s]Loading weights:  48%|████▊     | 506/1047 [00:05<00:05, 96.29it/s]Loading weights:  50%|█████     | 526/1047 [00:05<00:05, 93.71it/s]Loading weights:  52%|█████▏    | 549/1047 [00:06<00:05, 96.48it/s]Loading weights:  55%|█████▍    | 571/1047 [00:06<00:04, 96.95it/s]Loading weights:  57%|█████▋    | 593/1047 [00:06<00:04, 97.23it/s]Loading weights:  59%|█████▊    | 614/1047 [00:06<00:04, 95.87it/s]Loading weights:  61%|██████    | 637/1047 [00:06<00:04, 97.45it/s]Loading weights:  81%|████████▏ | 852/1047 [00:07<00:00, 423.40it/s]Loading weights: 100%|██████████| 1047/1047 [00:07<00:00, 147.41it/s]
+  loaded in 8.4s  device=cuda:0
+  quantized: 205 linear tensors, 60 expert stacks (mix_4_6-8x64)
+    window 10/64  scored_blocks=70  pPPL=4340.211  (31.1s)
+    window 20/64  scored_blocks=140  pPPL=4035.880  (62.2s)
+    window 30/64  scored_blocks=210  pPPL=4735.294  (93.3s)
+    window 40/64  scored_blocks=280  pPPL=4624.863  (124.2s)
+    window 50/64  scored_blocks=350  pPPL=4932.250  (155.2s)
+    window 60/64  scored_blocks=420  pPPL=4908.406  (186.6s)
+    window 64/64  scored_blocks=448  pPPL=5073.101  (199.0s)
+  ==> mix_4_6-8x64: pseudo-PPL = 5073.1009  (Δ vs fp = +2188.0674)
+  wrote results/diffgemma_ppl/diffgemma_ppl_full.csv (4 configs so far)
+
+================= SUMMARY (block-wise teacher-forced pseudo-PPL, weight-only) =================
+config              pseudo-PPL     Δ vs fp
+fp                   2885.0336            
+nvfp4_4over6         5530.8736  +2645.8400
+mixfp4-8x64          4571.6804  +1686.6468
+mix_4_6-8x64         5073.1009  +2188.0674
+
+(relative metric only; NOT a calibrated perplexity — see REPORT.md)
+=== done 2026-08-12T00:26:18+08:00 ===

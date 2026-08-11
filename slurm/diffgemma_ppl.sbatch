@@ -15,6 +15,7 @@ CONFIGS="${CONFIGS:-fp,nvfp4_4over6,mixfp4-8x64,mix_4_6-8x64}"
 MAXWIN="${MAXWIN:-32}"
 NDRAWS="${NDRAWS:-2}"
 MAXTOK="${MAXTOK:-0}"
+REVEAL="${REVEAL:-0.0}"
 TAG="${TAG:-full}"
 
 WORKDIR="/home/u4320956/NVFP4-RaZeR/.claude/worktrees/diffgemma-mse"
@@ -59,6 +60,7 @@ echo "=== $(date -Iseconds)  running pseudo-PPL ($TAG) ==="
     --model_dir "$MODEL_DIR" \
     --configs "$CONFIGS" \
     --window_blocks 8 --max_windows "$MAXWIN" --n_draws "$NDRAWS" --max_tokens "$MAXTOK" \
+    --reveal_frac "$REVEAL" \
     --out "$OUT_DIR/diffgemma_ppl_${TAG}.csv" \
     2>&1 | tee "$OUT_DIR/run_${TAG}_${SLURM_JOB_ID}.log"
 
