@@ -69,7 +69,12 @@ SKIP_SUBSTR = ("lm_head", ".router.", ".self_conditioning.", ".embed_vision.",
 
 @torch.no_grad()
 def quantize_model_weights_(model, quant_fn):
-    """Rewrite quantizable weights in place. Dedup shared (tied) storage by data_ptr."""
+    """
+        Rewrite quantizable weights in place. Dedup shared (tied) storage by data_ptr.
+        Scope: the TEXT language model only (decoder + tied encoder language_model). The vision
+        tower is left FP -- it is never exercised by a text corpus and its odd tile dims (e.g. 4304)
+        are not valid 8x64 type blocks. This matches the text-decoder scope of results/diffgemma_mse.
+    """
     if quant_fn is None:
         return 0, 0
     seen = set()
@@ -79,7 +84,13 @@ def quantize_model_weights_(model, quant_fn):
         padded = f".{name}."          # so ".router." etc. match regardless of leading context
         return any(s in padded for s in SKIP_SUBSTR)
 
+    def in_text(name):
+        padded = f".{name}."
+        return ".decoder." in padded or ".language_model." in padded
+
     for name, module in model.named_modules():
+        if not in_text(name):
+            continue
         if isinstance(module, nn.Linear):
             if skip(name):
                 continue
@@ -231,14 +242,15 @@ def main():
         del model
         torch.cuda.empty_cache()
 
-    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    with open(args.out, "w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=["config", "pseudo_ppl", "delta_vs_fp",
-                                           "scored_blocks", "tokens", "n_lin", "n_exp"])
-        w.writeheader()
-        for r in rows:
-            w.writerow(r)
-    print(f"\nwrote {args.out}")
+        # persist after every config so a later crash cannot lose completed results
+        os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+        with open(args.out, "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=["config", "pseudo_ppl", "delta_vs_fp",
+                                               "scored_blocks", "tokens", "n_lin", "n_exp"])
+            w.writeheader()
+            for r in rows:
+                w.writerow(r)
+        print(f"  wrote {args.out} ({len(rows)} configs so far)", flush=True)
 
     print("\n================= SUMMARY (block-wise teacher-forced pseudo-PPL, weight-only) =================")
     print(f"{'config':<18}{'pseudo-PPL':>12}{'Δ vs fp':>12}")
