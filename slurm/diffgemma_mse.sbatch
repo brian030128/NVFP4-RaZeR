@@ -4,7 +4,7 @@
 #SBATCH --job-name=diffgemma_mse
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=12
 #SBATCH --gres=gpu:H100:1
 #SBATCH --time=02:00:00
 #SBATCH --output=slurm/logs/%x_%j.out
