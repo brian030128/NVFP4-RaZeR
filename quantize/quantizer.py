@@ -1175,7 +1175,7 @@ def _elect_e0m3(gain, rule: str="argmin", margin: float=0.0, ref=None, eps: floa
     return elect[:, None, None]
 
 
-PERMUTE_MODES = ("none", "rows")
+PERMUTE_MODES = ("none", "rows", "cocluster", "colchunk", "coclrows")
 
 # Rotation of the reduction dimension by a normalized Walsh-Hadamard matrix, applied in
 # non-overlapping chunks of `rotate_size` columns.
@@ -1411,10 +1411,27 @@ def quant_mix_4_6(
     # as it was, so the result is the same GEMM with its output rows/columns reordered. See
     # `row_preference` for how the key is computed and CLAUDE.md for where the permutation is
     # actually free to absorb.
-    perm = None
+    perm, col_perm = None, None
     if permute == "rows" and block_m > 1:
         perm     = row_preference(w_scaled, groupsize, metric, clip).argsort(descending=True)
         w_scaled = w_scaled[perm]
+    elif permute in ("cocluster", "colchunk", "coclrows"):
+        # Balanced co-clustering of the tag grid. See quantize/reorder.py and
+        # results/reorder/ALGORITHM.md. Columns move only in whole 16-element chunks, so the scale
+        # blocks -- and therefore the tag grid the search optimizes -- are exactly invariant.
+        from .reorder import expand_chunk_perm, scale_block_gain, search_permutation
+        axes  = {"cocluster": "both", "colchunk": "cols", "coclrows": "rows"}[permute]
+        gain  = scale_block_gain(w_scaled, groupsize, metric, clip, importance=importance)
+        found = search_permutation(gain, block_m, block_k, groupsize, rule=elect, margin=margin,
+                                   axes=axes)
+        if axes != "cols" and block_m > 1:
+            perm     = found["row_perm"]
+            w_scaled = w_scaled[perm]
+        if axes != "rows":
+            col_perm = expand_chunk_perm(found["chunk_perm"], groupsize).to(w_scaled.device)
+            w_scaled = w_scaled[:, col_perm]
+            if importance is not None:
+                importance = importance.reshape(-1)[col_perm.cpu()]
 
     w_tiled, meta = _tile_type_blocks(w_scaled, block_m, block_k, groupsize)
     block_max     = w_tiled.abs().amax(dim=-1, keepdim=True)
@@ -1494,6 +1511,10 @@ def quant_mix_4_6(
         w_dq_e2m1,
     )
     w_dq = _untile_type_blocks(w_dq, block_m, block_k, meta)
+    if col_perm is not None:
+        # undo the column-chunk permutation; in a real deployment this is not undone at all, the
+        # matching permutation of the activation channels is absorbed upstream instead
+        w_dq = w_dq.index_copy_(1, col_perm, w_dq.clone())
     if perm is not None:
         # undo the row sort: row perm[i] of the original tensor is row i of the sorted one
         w_dq = torch.empty_like(w_dq).index_copy_(0, perm, w_dq)
@@ -1646,6 +1667,21 @@ def parse_mix_4_6_dtype(name: str):
                               so the tiles are homogeneous and the election overrules far fewer
                               scale blocks. Calibration-free (it reads only the weights).
 
+        "cocl" / "coclcol" / "coclrow"
+                           -- the same idea done properly: a balanced CO-CLUSTERING search over both
+                              axes at once (`quantize/reorder.py`), maximizing the gain the type
+                              blocks actually realize under the election rule in force. Columns move
+                              only in whole 16-element chunks, so the scale blocks are untouched.
+                              "coclcol" permutes columns only, "coclrow" rows only, "cocl" both.
+
+                              DEPLOYABILITY DIFFERS BY AXIS, see results/reorder/ALGORITHM.md §7.
+                              A per-layer column permutation is free for `down_proj` (absorbed into
+                              gate/up_proj's rows) and within-head for `o_proj`; for q/k/v/gate/up
+                              the column axis is the shared residual dimension and only ONE global
+                              permutation is free. So "cocl" applied to every tensor independently
+                              is an upper bound, in the same way `1x16` is -- not a deployable
+                              configuration. Calibration-free.
+
         "rot" / "rot<n>"   -- rotate every chunk of n reduction-dimension columns (default 16) by a
                               normalized Hadamard before quantizing, and rotate back after.
         "rotcol" / "rotcol<n>" -- same, but each column chunk decides for itself whether to rotate.
@@ -1685,6 +1721,12 @@ def parse_mix_4_6_dtype(name: str):
             clip = part[len("clip"):]
         elif part == "perm":
             permute = "rows"
+        elif part == "cocl":
+            permute = "cocluster"
+        elif part == "coclcol":
+            permute = "colchunk"
+        elif part == "coclrow":
+            permute = "coclrows"
         elif part == "rot":
             rotate = "all"
         elif part == "rotcol":

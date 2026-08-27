@@ -22,16 +22,31 @@ cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
 MODEL=${1:-llama-2-7b}
 STRIDE=${2:-8}
+TYPE_BLOCKS=${TYPE_BLOCKS:-8x64,32x128}
+RULES=${RULES:-argmin,h1.5}
+PROJ=${PROJ:-q_proj,v_proj,o_proj,up_proj,down_proj}
+TAG=${TAG:-$MODEL}
 
 # --- environment ---
 source /etc/profile.d/lmod.sh 2>/dev/null || true
 export PATH="$HOME/.local/bin:$PATH"
 PYTHON=${PYTHON:-/home/u4320956/DiRotQ/.venv/bin/python}
 
-# --- HF cache on node-local scratch, never /home or /work ---
-export HF_HOME="/tmp/$USER/hf_$SLURM_JOB_ID"
-mkdir -p "$HF_HOME"
-trap 'rm -rf "/tmp/$USER/hf_$SLURM_JOB_ID"' EXIT
+# --- weights ---
+# This account has no HF token, so gated repos cannot be downloaded. The models that matter are
+# already in the legacy /work cache, so read it OFFLINE: HF_HUB_OFFLINE=1 guarantees no download
+# and no new blobs written to the quota'd filesystem. Set OFFLINE=0 for an ungated repo that has to
+# be fetched, and it falls back to the usual node-local /tmp cache.
+OFFLINE=${OFFLINE:-1}
+if [[ "$OFFLINE" == "1" ]]; then
+    export HF_HOME="/work/$USER/hf"
+    export HF_HUB_OFFLINE=1
+    export TRANSFORMERS_OFFLINE=1
+else
+    export HF_HOME="/tmp/$USER/hf_$SLURM_JOB_ID"
+    mkdir -p "$HF_HOME"
+    trap 'rm -rf "/tmp/$USER/hf_$SLURM_JOB_ID"' EXIT
+fi
 export HF_TOKEN="${HF_TOKEN:-$(cat "$HOME/.cache/huggingface/token" 2>/dev/null)}"
 
 OUT_DIR="results/reorder"
@@ -42,11 +57,11 @@ echo "=== $MODEL  stride=$STRIDE  start $(date -Iseconds)  on $(hostname) ==="
 "$PYTHON" run_reorder_sim.py \
     --model_name "$MODEL" \
     --layer_stride "$STRIDE" \
-    --projections q_proj,v_proj,o_proj,up_proj,down_proj \
-    --type_blocks 8x64,32x128 \
-    --rules argmin,h1.5 \
+    --projections "$PROJ" \
+    --type_blocks "$TYPE_BLOCKS" \
+    --rules "$RULES" \
     --clip heade0 \
     --threads 12 \
-    --out "$OUT_DIR/${MODEL}.csv" 2>&1 | tee -a "$OUT_DIR/${MODEL}.log"
+    --out "$OUT_DIR/${TAG}.csv" 2>&1 | tee -a "$OUT_DIR/${TAG}.log"
 
 echo "=== done $(date -Iseconds) ==="

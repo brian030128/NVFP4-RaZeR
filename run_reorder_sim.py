@@ -38,7 +38,7 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from quantize.reorder import (          # noqa: E402
-    scale_block_gain, search_permutation, shuffle_control,
+    additive_shares, scale_block_gain, search_permutation, shuffle_control,
 )
 
 
@@ -155,6 +155,9 @@ def main():
     ap.add_argument("--groupsize", type=int, default=16)
     ap.add_argument("--rounds", type=int, default=8)
     ap.add_argument("--swap_samples", type=int, default=40000)
+    ap.add_argument("--diagnostics_only", action="store_true",
+                    help="Report the structure statistics only; skip the (expensive) searches. "
+                         "This is the cheap way to answer whether reordering CAN help at all.")
     ap.add_argument("--no_control", action="store_true",
                     help="Skip the cell-shuffle control (halves the runtime).")
     ap.add_argument("--seed", type=int, default=0)
@@ -196,8 +199,19 @@ def main():
 
         pos_share = float((gain > 0).to(torch.float32).mean())
         rank1     = sign_structure(gain)
+        r_sh, c_sh, e_sh = additive_shares(gain)
         print(f"\n  {name}  grid={tuple(gain.shape)}  E0M3-preferring cells={pos_share:.3f}  "
-              f"rank1 sign fit={rank1:.3f}  ({time.time() - t0:.1f}s)", flush=True)
+              f"rank1 sign fit={rank1:.3f}  variance: row={r_sh:.3f} col={c_sh:.3f} "
+              f"resid={e_sh:.3f}  ({time.time() - t0:.1f}s)", flush=True)
+
+        if args.diagnostics_only:
+            rows.append(dict(model=tag, tensor=name, type_block="-", rule="-",
+                             clip=args.clip, metric=args.metric,
+                             pos_share=round(pos_share, 4), rank1_sign_fit=round(rank1, 4),
+                             row_share=round(r_sh, 4), col_share=round(c_sh, 4),
+                             resid_share=round(e_sh, 4)))
+            flush()
+            continue
 
         for tb in args.type_blocks:
             bm, bk = parse_type_block(tb)
@@ -217,6 +231,8 @@ def main():
                     model=tag, tensor=name, type_block=tb, rule=rspec,
                     clip=args.clip, metric=args.metric,
                     pos_share=round(pos_share, 4), rank1_sign_fit=round(rank1, 4),
+                    row_share=round(r_sh, 4), col_share=round(c_sh, 4),
+                    resid_share=round(e_sh, 4),
                     identity=round(res["baseline_recovered"], 4),
                     search=round(res["recovered"], 4),
                     control=round(ctrl, 4),
@@ -231,7 +247,18 @@ def main():
                       f"init={res['init']}, {rows[-1]['seconds']:.0f}s)", flush=True)
         flush()      # incremental, so a wall-clock timeout still leaves usable results
 
-    # ---- summary: mean over tensors, per (type block, rule) ----
+    # ---- summary ----
+    n = len(rows)
+    print(f"\n=== structure of the tag grid, mean over {n} rows ===")
+    for k in ("pos_share", "rank1_sign_fit", "row_share", "col_share", "resid_share"):
+        print(f"{k:>16}: {sum(r[k] for r in rows) / n:.4f}")
+    if args.diagnostics_only:
+        flush()
+        if args.out:
+            print(f"\nwrote {args.out}")
+        return
+
+    # ---- mean over tensors, per (type block, rule) ----
     print("\n=== mean over tensors (fraction of the 1x16 ceiling) ===")
     print(f"{'type_block':>10} {'rule':>8} {'identity':>9} {'search':>8} {'control':>8} "
           f"{'lift/id':>8} {'lift/ctl':>9}")

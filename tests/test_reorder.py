@@ -161,6 +161,49 @@ def test_permuted_weights_reproduce_gain():
     print("  [ok] 16-column chunk permutation leaves the tag grid invariant")
 
 
+def test_quantizer_permute_modes():
+    """
+        The `cocl` / `coclcol` family, end to end through `quant_mix_4_6`.
+
+        Three things must hold: the permutation round-trip is exact (quantizing the permuted tensor
+        and undoing the permutation gives the same answer as the built-in mode), the co-clustered
+        result is no worse than the unpermuted one on the loss the election optimizes, and the
+        name parser reaches all three modes.
+    """
+    from quantize.quantizer import parse_mix_4_6_dtype, quant_mix_4_6
+    from quantize.reorder import expand_chunk_perm
+
+    torch.manual_seed(7)
+    w = (torch.randn(256, 512) * torch.rand(256, 1)).bfloat16()
+    kw = dict(groupsize=16, type_block=(8, 64), clip="heade0", elect="harm", margin=1.5)
+
+    for name, want in [("mix_4_6_cocl_h1.5", "cocluster"),
+                       ("mix_4_6_coclcol_h1.5", "colchunk"),
+                       ("mix_4_6_coclrow_h1.5", "coclrows")]:
+        assert parse_mix_4_6_dtype(name)[7] == want, name
+
+    base = quant_mix_4_6(w, **kw, permute="none")
+    cocl = quant_mix_4_6(w, **kw, permute="cocluster")
+    ccol = quant_mix_4_6(w, **kw, permute="colchunk")
+    for out in (base, cocl, ccol):
+        assert out.shape == w.shape and out.dtype == torch.bfloat16
+
+    err = lambda q: float((q.float() - w.float()).pow(2).sum())
+    assert err(cocl) <= err(base), f"co-clustering raised the error: {err(cocl)} > {err(base)}"
+    assert err(ccol) <= err(base), f"column reordering raised the error: {err(ccol)} > {err(base)}"
+
+    # round-trip: permute by hand, quantize unpermuted, undo -> must match `colchunk` exactly
+    gscale = (w.float().abs().amax() / (6.0 * 448.0)).clamp(min=torch.finfo(torch.float32).tiny)
+    gain   = scale_block_gain(w.float() / gscale, 16, "mse", "heade0")
+    found  = search_permutation(gain, 8, 64, 16, rule="harm", margin=1.5, axes="cols")
+    cols   = expand_chunk_perm(found["chunk_perm"], 16)
+    manual = quant_mix_4_6(w[:, cols], **kw, permute="none")
+    undone = torch.empty_like(manual).index_copy_(1, cols, manual)
+    assert torch.equal(undone, ccol), "colchunk round-trip does not match a hand-applied permutation"
+    print(f"  [ok] quant_mix_4_6 permute modes: sse none={err(base):.4g} "
+          f"colchunk={err(ccol):.4g} cocluster={err(cocl):.4g}")
+
+
 if __name__ == "__main__":
     torch.set_num_threads(4)
     test_elect_matches_quantizer()
@@ -171,4 +214,5 @@ if __name__ == "__main__":
     test_planted_structure_is_recovered()
     test_noise_floor_is_measured_not_assumed()
     test_search_never_loses_to_identity()
+    test_quantizer_permute_modes()
     print("\nall reorder tests passed")

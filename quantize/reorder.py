@@ -388,15 +388,21 @@ def _swap_round(X, lab, num_group: int, rule: str, margin: float, cells_per_tile
 def search_permutation(gain, block_m: int, block_k: int, groupsize: int = 16,
                        rule: str = "argmin", margin: float = 0.0,
                        rounds: int = 12, swap_samples: int = 40000, lloyd_iters: int = 3,
-                       seed: int = 0, verbose: bool = False):
+                       seed: int = 0, axes: str = "both", verbose: bool = False):
     """
         Find a row permutation and a 16-column-chunk permutation of the tag grid `gain` (M x N)
         that maximize the realized E0M3 gain for a `block_m` x `block_k` type block under the
         election rule `rule`.
 
+        `axes` restricts which permutations are searched -- "both", "rows" or "cols". The
+        restriction is not cosmetic: §7 of results/reorder/ALGORITHM.md shows the column axis is the
+        freely permutable one for `down_proj` and `o_proj` while the row axis is not, so "cols" is
+        the deployable search for those and "both" is an upper bound.
+
         Returns a dict with `row_perm` (length M), `chunk_perm` (length N), the achieved score, the
         identity-order score, and the 1x16 ceiling.
     """
+    assert axes in ("both", "rows", "cols"), f'axes must be both/rows/cols, got "{axes}".'
     assert block_k % groupsize == 0
     chunks = block_k // groupsize
     gain   = gain.to(torch.float64).cpu()
@@ -420,6 +426,15 @@ def search_permutation(gain, block_m: int, block_k: int, groupsize: int = 16,
     baseline = objective(feat, ident_r, ident_c, n_rg, n_cg, rule, margin, cpt)
 
     scored = _initial_partitions(gain, feat, block_m, chunks, rule, margin, cpt, generator=gen)
+    if axes == "rows":
+        scored = {k: v for k, v in scored.items() if k in ("identity", "marginal", "spectral1_rows")}
+        scored = {k: (v[0], v[1], ident_c) for k, v in scored.items()}
+        scored = {k: (objective(feat, v[1], v[2], n_rg, n_cg, rule, margin, cpt), v[1], v[2])
+                  for k, v in scored.items()}
+    elif axes == "cols":
+        scored = {k: (v[0], ident_r, v[2]) for k, v in scored.items()}
+        scored = {k: (objective(feat, v[1], v[2], n_rg, n_cg, rule, margin, cpt), v[1], v[2])
+                  for k, v in scored.items()}
     init_name, (best, rlab, clab) = max(scored.items(), key=lambda kv: kv[1][0])
     if verbose:
         print("      init: " + ", ".join(f"{k}={v[0] / max(ceiling, 1e-30):.3f}"
@@ -429,39 +444,43 @@ def search_permutation(gain, block_m: int, block_k: int, groupsize: int = 16,
         before = best
 
         # ---- Lloyd: rows, then columns ----
-        for _ in range(lloyd_iters):
-            A    = _colgroup_sums(feat, clab, n_cg)                     # (M, n_cg, F)
-            cand = _lloyd_step(A, rlab, n_rg, block_m, rule, margin, cpt)
-            sc   = objective(feat, cand, clab, n_rg, n_cg, rule, margin, cpt)
-            if sc > best:
-                best, rlab = sc, cand
-            else:
-                break
+        if axes != "cols":
+            for _ in range(lloyd_iters):
+                A    = _colgroup_sums(feat, clab, n_cg)                 # (M, n_cg, F)
+                cand = _lloyd_step(A, rlab, n_rg, block_m, rule, margin, cpt)
+                sc   = objective(feat, cand, clab, n_rg, n_cg, rule, margin, cpt)
+                if sc > best:
+                    best, rlab = sc, cand
+                else:
+                    break
 
-        for _ in range(lloyd_iters):
-            B    = _group_sums(feat, rlab, n_rg).transpose(0, 1).contiguous()   # (N, n_rg, F)
-            cand = _lloyd_step(B, clab, n_cg, chunks, rule, margin, cpt)
-            sc   = objective(feat, rlab, cand, n_rg, n_cg, rule, margin, cpt)
-            if sc > best:
-                best, clab = sc, cand
-            else:
-                break
+        if axes != "rows":
+            for _ in range(lloyd_iters):
+                B    = _group_sums(feat, rlab, n_rg).transpose(0, 1).contiguous()  # (N, n_rg, F)
+                cand = _lloyd_step(B, clab, n_cg, chunks, rule, margin, cpt)
+                sc   = objective(feat, rlab, cand, n_rg, n_cg, rule, margin, cpt)
+                if sc > best:
+                    best, clab = sc, cand
+                else:
+                    break
 
         # ---- Kernighan-Lin swaps on the exact objective ----
-        A = _colgroup_sums(feat, clab, n_cg)
-        for _ in range(3):
-            rlab, gained, n_acc = _swap_round(A, rlab, n_rg, rule, margin, cpt,
-                                              swap_samples, gen)
-            if n_acc == 0:
-                break
+        if axes != "cols":
+            A = _colgroup_sums(feat, clab, n_cg)
+            for _ in range(3):
+                rlab, gained, n_acc = _swap_round(A, rlab, n_rg, rule, margin, cpt,
+                                                  swap_samples, gen)
+                if n_acc == 0:
+                    break
 
-        B = _group_sums(feat, rlab, n_rg).transpose(0, 1).contiguous()
-        for _ in range(3):
-            clab, gained, n_acc = _swap_round(B, clab, n_cg, rule, margin, cpt,
-                                              swap_samples, gen)
-            if n_acc == 0:
-                break
+        if axes != "rows":
             B = _group_sums(feat, rlab, n_rg).transpose(0, 1).contiguous()
+            for _ in range(3):
+                clab, gained, n_acc = _swap_round(B, clab, n_cg, rule, margin, cpt,
+                                                  swap_samples, gen)
+                if n_acc == 0:
+                    break
+                B = _group_sums(feat, rlab, n_rg).transpose(0, 1).contiguous()
 
         best = objective(feat, rlab, clab, n_rg, n_cg, rule, margin, cpt)   # resync exactly
         if verbose:
@@ -514,3 +533,39 @@ def shuffle_control(gain, generator=None):
     flat = gain.reshape(-1)
     perm = torch.randperm(flat.numel(), generator=generator)
     return flat[perm].reshape(gain.shape)
+
+
+@torch.no_grad()
+def additive_shares(gain):
+    """
+        Two-way additive decomposition of the tag grid,
+
+            G[i, j] = mu + a_i + b_j + e_ij          (a, b, e mutually orthogonal)
+
+        returning the share of the total variance carried by the row effects `a`, the column effects
+        `b`, and the residual `e`.
+
+        This is the sharpest statement of what a reordering CAN do. A tile's statistic is the mean
+        over its cells,
+
+            mean_tile = mu + mean_{i in b} a_i + mean_{j in c} b_j + mean_tile e
+
+        and a permutation moves only which rows and which columns share a tile. The `a` and `b`
+        terms it can concentrate arbitrarily well -- just sort them. The residual `e` it cannot
+        touch in any systematic way: if `e` is exchangeable, every arrangement is equally likely and
+        rearranging it is fitting noise, which is exactly what `shuffle_control` measures.
+
+        So `row_share + col_share` is the fraction of the signal any row/column reordering scheme --
+        this one, seriation, or an exact solver -- has to work with. If it is a few percent, the
+        idea is dead regardless of how good the search is, and the measured "gain" is the noise
+        floor.
+    """
+    g   = gain.to(torch.float64)
+    M, N = g.shape
+    mu  = g.mean()
+    a   = g.mean(dim=1, keepdim=True) - mu
+    b   = g.mean(dim=0, keepdim=True) - mu
+    tot = (g - mu).pow(2).sum().clamp(min=1e-300)
+    return (float(a.pow(2).sum() * N / tot),
+            float(b.pow(2).sum() * M / tot),
+            float((g - mu - a - b).pow(2).sum() / tot))
