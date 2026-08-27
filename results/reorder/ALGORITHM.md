@@ -273,17 +273,19 @@ Level 2 is not implemented yet; level 1 is.
 and the two lifts, all as fractions of the 1×16 ceiling. Plus `pos_share` (how mixed the tensor is
 at all) and `rank1_sign_fit` (whether a product partition can even express its structure).
 
-Calibrating against CLAUDE.md's measured perplexities on Llama-3.1-8B W4A16 at 8x64: `mix_4_6_h1.5`
-is −0.0117 wikitext and `nvif4` (per-scale-block choice, the ceiling) is −0.0387. So the realizable
-rule keeps about a quarter of the ceiling, and **each extra 0.1 of `recovered` is worth roughly
-0.004 wikitext** if the relationship is linear. A reordering that moves `recovered` by +0.15 with a
-matching `lift_vs_control` would be worth about −0.006 — real, and comparable to the best knobs in
-the study, but not transformative. If `lift_vs_control` is near zero on real weights, the honest
-conclusion is that the E0M3 preference of a scale block is **not** a product of a row property and a
-column property, and no permutation scheme of this family will help.
+**Do not assume `recovered` maps monotonically onto perplexity -- it is measured, and it does not.**
+An earlier draft of this section guessed that "each extra 0.1 of `recovered` is worth roughly 0.004
+wikitext if the relationship is linear". That guess is wrong, and wrong in SIGN: `REPORT.md` §0
+measures reordering moving `recovered` from 0.179 to 0.314 -- nearly doubling the weight-MSE cut --
+and wikitext getting **worse by +0.0088**.
 
-That last outcome is a live possibility and the reason the control is built in rather than bolted
-on. The i.i.d. Gaussian row of §6 is what the failure mode looks like.
+So `recovered` is a search objective, not a figure of merit. Use it to compare partitions under a
+FIXED election rule, which is what it is for; to compare configurations, run `run_ppl.py`.
+
+The reason is in `REPORT.md` §0b: aggregate MSE can be bought either by grouping blocks that agree
+or by packing blocks that disagree so their sum clears the election bar, and only the first survives
+contact with the layer output. `shuffle_control` is what tells them apart, which is why it is built
+in rather than bolted on. The i.i.d. Gaussian row of §6 is what the failure mode looks like.
 
 ---
 

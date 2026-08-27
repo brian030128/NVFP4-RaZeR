@@ -38,7 +38,8 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from quantize.reorder import (          # noqa: E402
-    additive_shares, scale_block_gain, search_permutation, shuffle_control,
+    _labels_from_order, additive_shares, election_stats, interaction_structure,
+    scale_block_gain, search_permutation, shuffle_control,
 )
 
 
@@ -193,23 +194,56 @@ def main():
         w = w.float()
         # the same global scale `quant_mix_4_6` uses; a positive scalar, so it changes no sign
         gscale   = (w.abs().amax() / (6.0 * 448.0)).clamp(min=torch.finfo(torch.float32).tiny)
-        gain     = scale_block_gain(w / gscale, args.groupsize, args.metric, args.clip)
+        gain, err_e2m1, _ = scale_block_gain(w / gscale, args.groupsize, args.metric, args.clip,
+                                             return_losses=True)
+        # The quantization error actually being paid, if every block used E2M1 (= plain NVFP4 under
+        # this clip preset). This is what turns "fraction of the 1x16 ceiling" into "fraction of the
+        # MSE", which is the number that says whether any of this matters.
+        e2m1_total = float(err_e2m1.to(torch.float64).sum())
         ctrlgain = None if args.no_control else shuffle_control(
             gain, torch.Generator().manual_seed(args.seed + 1))
 
         pos_share = float((gain > 0).to(torch.float32).mean())
         rank1     = sign_structure(gain)
         r_sh, c_sh, e_sh = additive_shares(gain)
+        ceil_pct  = 100.0 * float(gain.clamp(min=0).to(torch.float64).sum()) / e2m1_total
         print(f"\n  {name}  grid={tuple(gain.shape)}  E0M3-preferring cells={pos_share:.3f}  "
               f"rank1 sign fit={rank1:.3f}  variance: row={r_sh:.3f} col={c_sh:.3f} "
-              f"resid={e_sh:.3f}  ({time.time() - t0:.1f}s)", flush=True)
+              f"resid={e_sh:.3f}  1x16 ceiling={ceil_pct:.2f}% of MSE  "
+              f"({time.time() - t0:.1f}s)", flush=True)
 
         if args.diagnostics_only:
-            rows.append(dict(model=tag, tensor=name, type_block="-", rule="-",
-                             clip=args.clip, metric=args.metric,
-                             pos_share=round(pos_share, 4), rank1_sign_fit=round(rank1, 4),
-                             row_share=round(r_sh, 4), col_share=round(c_sh, 4),
-                             resid_share=round(e_sh, 4)))
+            # The additive decomposition above is blind to CO-CLUSTER structure: rows that fall
+            # into groups with different PROFILES have a_i ~ 0 and land wholly in the residual,
+            # yet are exactly what an 8x64 tile could exploit. So probe profile similarity too,
+            # and probe it against a cell-shuffled copy -- these statistics mean nothing in
+            # absolute terms, only as an excess over the structureless baseline.
+            gen  = torch.Generator().manual_seed(args.seed + 2)
+            real = interaction_structure(gain, generator=gen)
+            ctrl = interaction_structure(
+                shuffle_control(gain, torch.Generator().manual_seed(args.seed + 3)),
+                generator=torch.Generator().manual_seed(args.seed + 2))
+            print(f"      profile similarity   row |corr|={real['row_corr_abs']:.4f} "
+                  f"(shuffled {ctrl['row_corr_abs']:.4f})   p99.9={real['row_corr_p999']:.4f} "
+                  f"({ctrl['row_corr_p999']:.4f})", flush=True)
+            print(f"      profile similarity   col |corr|={real['col_corr_abs']:.4f} "
+                  f"(shuffled {ctrl['col_corr_abs']:.4f})   p99.9={real['col_corr_p999']:.4f} "
+                  f"({ctrl['col_corr_p999']:.4f})", flush=True)
+            print(f"      singular spectrum    sv1={real['sv1']:.4f} ({ctrl['sv1']:.4f})  "
+                  f"top4={real['sv_top4']:.4f} ({ctrl['sv_top4']:.4f})  "
+                  f"top16={real['sv_top16']:.4f} ({ctrl['sv_top16']:.4f})", flush=True)
+
+            rec = dict(model=tag, tensor=name, type_block="-", rule="-",
+                       clip=args.clip, metric=args.metric,
+                       pos_share=round(pos_share, 4), rank1_sign_fit=round(rank1, 4),
+                       row_share=round(r_sh, 4), col_share=round(c_sh, 4),
+                       resid_share=round(e_sh, 4),
+                       ceiling_pct_of_mse=round(ceil_pct, 4))
+            for k, v in real.items():
+                rec[k] = round(v, 6)
+            for k, v in ctrl.items():
+                rec[f"ctrl_{k}"] = round(v, 6)
+            rows.append(rec)
             flush()
             continue
 
@@ -227,12 +261,46 @@ def main():
                                               rounds=args.rounds,
                                               swap_samples=args.swap_samples,
                                               seed=args.seed)["recovered"]
+                # How the aggregate gain was banked: from homogeneous tiles, or by packing
+                # losers in with winners until the sum clears the bar? Same aggregate, very
+                # different perplexity behaviour -- see reorder.election_stats.
+                chunks = bk // args.groupsize
+                Mg, Ng = gain.shape
+                pad    = torch.nn.functional.pad(
+                    gain, (0, (-Ng) % chunks, 0, (-Mg) % bm)).to(torch.float64)
+                nrg, ncg = pad.shape[0] // bm, pad.shape[1] // chunks
+                ident_lab = (_labels_from_order(torch.arange(pad.shape[0]), bm, pad.shape[0]),
+                             _labels_from_order(torch.arange(pad.shape[1]), chunks, pad.shape[1]))
+                found_lab = (_labels_from_order(res["row_perm"], bm, pad.shape[0]),
+                             _labels_from_order(res["chunk_perm"], chunks, pad.shape[1]))
+                es = lambda lab: election_stats(pad, lab[0], lab[1], nrg, ncg, rule, margin,
+                                                bm * chunks, e2m1_total)
+                st_id, st_se = es(ident_lab), es(found_lab)
+                print(f"      {'':>8} {'':>8}   harmed blocks: identity="
+                      f"{100 * st_id['harmed_share']:.2f}%  search="
+                      f"{100 * st_se['harmed_share']:.2f}%   harm mass: "
+                      f"{st_id['harm_pct_of_mse']:.3f}% -> {st_se['harm_pct_of_mse']:.3f}% of MSE"
+                      f"   tiles electing E0M3: {100 * st_id['elected_tile_share']:.1f}% -> "
+                      f"{100 * st_se['elected_tile_share']:.1f}%", flush=True)
+
                 rows.append(dict(
                     model=tag, tensor=name, type_block=tb, rule=rspec,
+                    harmed_id=round(100 * st_id["harmed_share"], 4),
+                    harmed_se=round(100 * st_se["harmed_share"], 4),
+                    harmmass_id=round(st_id["harm_pct_of_mse"], 4),
+                    harmmass_se=round(st_se["harm_pct_of_mse"], 4),
+                    elected_id=round(100 * st_id["elected_tile_share"], 4),
+                    elected_se=round(100 * st_se["elected_tile_share"], 4),
                     clip=args.clip, metric=args.metric,
                     pos_share=round(pos_share, 4), rank1_sign_fit=round(rank1, 4),
                     row_share=round(r_sh, 4), col_share=round(c_sh, 4),
                     resid_share=round(e_sh, 4),
+                    ceiling_pct_of_mse=round(ceil_pct, 4),
+                    # the same three numbers as a PERCENTAGE OF THE QUANTIZATION MSE, which is what
+                    # "how much does the total MSE go down" actually asks
+                    identity_mse_cut=round(100.0 * res["baseline"] / e2m1_total, 4),
+                    search_mse_cut=round(100.0 * res["score"] / e2m1_total, 4),
+                    control_mse_cut=round(100.0 * ctrl * res["ceiling"] / e2m1_total, 4),
                     identity=round(res["baseline_recovered"], 4),
                     search=round(res["recovered"], 4),
                     control=round(ctrl, 4),
@@ -240,7 +308,11 @@ def main():
                     lift_vs_control=round(res["recovered"] - ctrl, 4),
                     init=res["init"], seconds=round(time.time() - t1, 1),
                 ))
-                print(f"      {tb:>8} {rspec:>8}   identity={rows[-1]['identity']:.3f}  "
+                print(f"      {tb:>8} {rspec:>8}   MSE cut: identity="
+                      f"{rows[-1]['identity_mse_cut']:.3f}%  search={rows[-1]['search_mse_cut']:.3f}%"
+                      f"  control={rows[-1]['control_mse_cut']:.3f}%  "
+                      f"(ceiling {ceil_pct:.3f}%)", flush=True)
+                print(f"      {'':>8} {'':>8}   identity={rows[-1]['identity']:.3f}  "
                       f"search={rows[-1]['search']:.3f}  control={rows[-1]['control']:.3f}  "
                       f"(+{rows[-1]['lift_vs_identity']:.3f} vs identity, "
                       f"+{rows[-1]['lift_vs_control']:.3f} vs control, "
@@ -250,8 +322,15 @@ def main():
     # ---- summary ----
     n = len(rows)
     print(f"\n=== structure of the tag grid, mean over {n} rows ===")
-    for k in ("pos_share", "rank1_sign_fit", "row_share", "col_share", "resid_share"):
-        print(f"{k:>16}: {sum(r[k] for r in rows) / n:.4f}")
+    keys = ["pos_share", "rank1_sign_fit", "row_share", "col_share", "resid_share",
+            "ceiling_pct_of_mse"]
+    if args.diagnostics_only:
+        keys += ["row_corr_abs", "ctrl_row_corr_abs", "row_corr_p999", "ctrl_row_corr_p999",
+                 "col_corr_abs", "ctrl_col_corr_abs", "col_corr_p999", "ctrl_col_corr_p999",
+                 "sv1", "ctrl_sv1", "sv_top4", "ctrl_sv_top4", "sv_top16", "ctrl_sv_top16"]
+    for k in keys:
+        if k in rows[0]:
+            print(f"{k:>20}: {sum(r[k] for r in rows) / n:.4f}")
     if args.diagnostics_only:
         flush()
         if args.out:
@@ -261,7 +340,8 @@ def main():
     # ---- mean over tensors, per (type block, rule) ----
     print("\n=== mean over tensors (fraction of the 1x16 ceiling) ===")
     print(f"{'type_block':>10} {'rule':>8} {'identity':>9} {'search':>8} {'control':>8} "
-          f"{'lift/id':>8} {'lift/ctl':>9}")
+          f"{'lift/id':>8} {'lift/ctl':>9} | {'MSEcut_id':>9} {'MSEcut_se':>9} {'MSEcut_ct':>9} "
+          f"{'ceiling':>8}")
     for tb in args.type_blocks:
         for rspec in args.rules:
             sel = [r for r in rows if r["type_block"] == tb and r["rule"] == rspec]
@@ -270,7 +350,13 @@ def main():
             avg = lambda k: sum(r[k] for r in sel) / len(sel)
             print(f"{tb:>10} {rspec:>8} {avg('identity'):9.3f} {avg('search'):8.3f} "
                   f"{avg('control'):8.3f} {avg('lift_vs_identity'):8.3f} "
-                  f"{avg('lift_vs_control'):9.3f}")
+                  f"{avg('lift_vs_control'):9.3f} | {avg('identity_mse_cut'):8.3f}% "
+                  f"{avg('search_mse_cut'):8.3f}% {avg('control_mse_cut'):8.3f}% "
+                  f"{avg('ceiling_pct_of_mse'):7.3f}%")
+            print(f"{'':>10} {'':>8}   harmed blocks {avg('harmed_id'):.2f}% -> "
+                  f"{avg('harmed_se'):.2f}%   harm mass {avg('harmmass_id'):.3f}% -> "
+                  f"{avg('harmmass_se'):.3f}% of MSE   tiles electing E0M3 "
+                  f"{avg('elected_id'):.1f}% -> {avg('elected_se'):.1f}%")
 
     flush()
     if args.out:

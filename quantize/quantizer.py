@@ -1425,7 +1425,9 @@ def quant_mix_4_6(
         found = search_permutation(gain, block_m, block_k, groupsize, rule=elect, margin=margin,
                                    axes=axes)
         if axes != "cols" and block_m > 1:
-            perm     = found["row_perm"]
+            # the search runs on CPU, so the permutations come back on CPU; index_copy_ later
+            # undoes them against a tensor that may live on the GPU
+            perm     = found["row_perm"].to(w_scaled.device)
             w_scaled = w_scaled[perm]
         if axes != "rows":
             col_perm = expand_chunk_perm(found["chunk_perm"], groupsize).to(w_scaled.device)

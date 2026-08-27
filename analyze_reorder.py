@@ -51,11 +51,29 @@ def main(path):
     _line("ALL", every)
 
     a = lambda k: st.mean(x[k] for x in every)
-    print(f"\nRow and column effects together carry {100 * (a('row') + a('col')):.1f}% of the "
-          f"variance in the E0M3 preference.")
-    print(f"A reordering can only exploit that part; the remaining "
-          f"{100 * a('resid'):.1f}% is idiosyncratic to the individual 16-element scale block and "
-          f"is invariant to any row or column permutation.")
+    print(f"\nPER CELL: row and column effects together carry {100 * (a('row') + a('col')):.1f}% of "
+          f"the variance in the E0M3 preference; the remaining {100 * a('resid'):.1f}% is "
+          f"idiosyncratic to\nthe individual 16-element scale block and is invariant to any row or "
+          f"column permutation.")
+
+    # The per-cell share understates what a tile sees, and the honest number is the tile-level one.
+    # For a BM x C tile, sum_tile G = C * sum(a over BM rows) + BM * sum(b over C chunks) + sum(e),
+    # so with independent effects the variances scale as C^2*BM, BM^2*C and BM*C. The row and column
+    # effects repeat COHERENTLY inside a tile while the residual adds incoherently, which amplifies
+    # them by the tile dimensions -- exactly the averaging that makes a big tile blind to `e`.
+    print("\nPER TILE (what the election actually sees; the effects add coherently, `e` does not):")
+    print(f"{'tile':>10} {'row':>8} {'col':>8} {'row+col':>9} {'resid':>8}")
+    for bm, c in ((8, 4), (16, 4), (32, 8)):
+        vr, vc, ve = c * c * bm * a("row"), bm * bm * c * a("col"), bm * c * a("resid")
+        t = vr + vc + ve
+        print(f"{f'{bm}x{c * 16}':>10} {vr / t:8.3f} {vc / t:8.3f} {(vr + vc) / t:9.3f} "
+              f"{ve / t:8.3f}")
+    bm, c = 8, 4
+    vr, vc, ve = c * c * bm * a("row"), bm * bm * c * a("col"), bm * c * a("resid")
+    print(f"\nSo at the deployable 8x64 weight tile, {100 * (vr + vc) / (vr + vc + ve):.1f}% of the "
+          f"variance in a tile's vote is row/column structure a permutation can steer,\nand "
+          f"{100 * ve / (vr + vc + ve):.1f}% is residual it can only shuffle. That is the budget "
+          f"the whole idea is working with.")
 
 
 def _line(label, v):

@@ -1,15 +1,68 @@
-# Reordering rows and columns does not help MixFP4 — and here is the proof it cannot
+# Reordering rows and columns does not help MixFP4 — measured on perplexity
 
 Algorithm and rationale: `ALGORITHM.md`. Implementation: `quantize/reorder.py`.
 
-**Result: at the deployable 8x64 weight type block on Llama-3.1-8B, the co-clustering reorder
-recovers +0.135 of the 1×16 ceiling over the current order — and +0.002 over a cell-shuffled
-control. The entire gain is the partition search overfitting noise. A two-way variance decomposition of the tag grid over all 224 layers explains
-why: row and column effects carry only 2.5% of the variance in the E0M3 preference, while 97.5% is
-residual — idiosyncratic to the individual 16-element scale block and invariant to every row and
-column permutation.**
+**Result: reordering nearly DOUBLES the weight-MSE reduction (3.47% -> 6.16% below all-E2M1) and
+makes wikitext perplexity WORSE by +0.0088. No election rule rescues it -- argmin, h1.5, h3, h5 and
+dominance are all worse reordered than `mix_4_6_h1.5` is unpermuted. The search cannot construct a
+single dominance-electable tile, which is the cleanest statement of why: given a constraint it
+cannot game, it produces nothing.**
 
-This is a bound on the whole idea, not on this particular solver.
+---
+
+## 0. The headline table
+
+Llama-3.1-8B, W4A16, 8x64 weight type block, `heade0` clip preset throughout, wikitext seq 2048.
+Every row differs from the one above it only in the election rule or the reordering
+(`results/reorder/ppl/`).
+
+| config | wikitext | d vs `4over6` | d vs best |
+|---|---|---|---|
+| `nvfp4_4over6` | 6.5987 | — | +0.0262 |
+| **`mix_4_6_clipheade0_h1.5`** (no reorder) | **6.5725** | **-0.0262** | — |
+| `..._coclcol_h1.5` | 6.5813 | -0.0174 | +0.0088 |
+| `..._coclcol` (argmin) | 6.5846 | -0.0141 | +0.0121 |
+| `..._coclcol_h3` | 6.5848 | -0.0139 | +0.0123 |
+| `..._coclcol_h5` | 6.5888 | -0.0090 | +0.0163 |
+| `..._dom` (no reorder) | 6.5896 | -0.0091 | +0.0171 |
+| `..._coclcol_dom` | 6.5898 | -0.0089 | +0.0173 |
+
+Two independent confirmations that the harness is sound: the unpermuted `h1.5` row reproduces
+CLAUDE.md's documented -0.0265 at 8x64 to three decimals, and the `dom` row isolates the `headx`
+alpha search on its own (-0.0091) since dominance elects no tiles at all.
+
+So the E0M3 election is worth -0.017 on top of the alpha search, and **reordering gives back half
+of it**.
+
+---
+
+## 0b. Why no election rule helps, and why `dominance` settles it
+
+From the sim (`llama-3.1-8b-rules.csv`), per rule, identity -> reordered:
+
+| rule | MSE cut | harmed blocks | tiles electing E0M3 | lift vs control |
+|---|---|---|---|---|
+| `argmin` | 4.51% -> 6.78% | 21.4% -> 19.9% | 53.4% -> 53.4% | +0.001 |
+| `h1.5` | 3.47% -> 6.16% | 9.6% -> 12.3% | 26.3% -> 36.2% | +0.002 |
+| `h3` | 0.72% -> 3.45% | 1.0% -> 3.8% | 3.3% -> 13.5% | **-0.002** |
+| `h5` | 0.14% -> 2.07% | 0.1% -> 1.4% | 0.4% -> 6.2% | **-0.004** |
+| `dominance` | 0.000% -> **0.001%** | 0.0% -> 0.0% | 0.0% -> **0.0%** | 0.000 |
+
+Raising the bar does not escape the problem, it relocates it: at every threshold the search
+manufactures roughly 3x more tiles that just clear it, and multiplies the harmed-block count
+(4x at `h3`, 13x at `h5`) while banking more aggregate MSE. At `h3` and `h5` the reordering is
+actually WORSE than shuffling the tags.
+
+`dominance` is the exception that proves the rule, and it is the strongest single result here.
+It elects only when NO block in the tile is harmed -- a hard constraint on tile composition that
+cannot be satisfied by packing losers in with winners. Handed that objective explicitly, the
+co-clustering search moves the MSE cut from 0.000% to **0.001%** and the elected-tile share from
+0.0% to 0.0%. It cannot build even one unanimous 32-cell tile in a thousand.
+
+That is exactly what 55% E0M3-preferring blocks with no exploitable row/column structure predicts:
+32 independently-tagged blocks all agreeing has probability ~0.55^32 ~ 4e-9, and there is no
+structure to beat those odds with. Every apparent MSE gain at looser rules is therefore
+arrangement, not agreement -- and the perplexity column is what arrangement is worth.
 
 ---
 

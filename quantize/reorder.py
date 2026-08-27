@@ -82,7 +82,7 @@ NUM_FEAT = 5    # s, p, n, cnt, sq
 # ----------------------------------------------------------------------------------------------
 @torch.no_grad()
 def scale_block_gain(w_scaled, groupsize: int = 16, metric: str = "mse", clip: str = "base",
-                     importance=None):
+                     importance=None, return_losses: bool = False):
     """
         Per SCALE block, how much it prefers E0M3 over E2M1:
 
@@ -118,7 +118,13 @@ def scale_block_gain(w_scaled, groupsize: int = 16, metric: str = "mse", clip: s
 
     err_e2m1 = best(_quant_e2m1, E2M1_MAX, alphas["e2m1"])
     err_e0m3 = best(_quant_e0m3, E0M3_MAX, alphas["e0m3"])
-    return (err_e2m1 - err_e0m3).squeeze(-1)            # (M, N)
+    gain     = (err_e2m1 - err_e0m3).squeeze(-1)        # (M, N)
+    if not return_losses:
+        return gain
+    # The all-E2M1 total is the DENOMINATOR that turns a "fraction of the 1x16 ceiling" back into a
+    # fraction of the quantization error actually being paid. It is the loss of plain NVFP4 under
+    # this clip preset -- i.e. what the E0M3 election is trying to improve on.
+    return gain, err_e2m1.squeeze(-1), err_e0m3.squeeze(-1)
 
 
 @torch.no_grad()
@@ -569,3 +575,94 @@ def additive_shares(gain):
     return (float(a.pow(2).sum() * N / tot),
             float(b.pow(2).sum() * M / tot),
             float((g - mu - a - b).pow(2).sum() / tot))
+
+
+@torch.no_grad()
+def interaction_structure(gain, num_sample: int = 2048, rank: int = 16, generator=None):
+    """
+        Probe for CO-CLUSTER structure -- the kind `additive_shares` is blind to.
+
+        `additive_shares` fits G = mu + a_i + b_j + e, so it only sees whether a row is uniformly
+        more E0M3-preferring than another ACROSS THE WHOLE reduction dimension. That is not what a
+        tile needs. A grid whose rows fall into k clusters with k different PROFILES is perfectly
+        co-clusterable while having a_i ~ 0 and b_j ~ 0, because the profiles cancel in the row
+        means. All of that structure is booked as "residual" by the additive decomposition.
+
+        What the tiling actually requires is profile similarity, and it requires it GLOBALLY: a row
+        group is formed once and then meets every column group, so its 8 rows must resemble each
+        other over the entire reduction dimension, not merely on the 4 chunks of one tile. Two
+        statistics capture that without assuming additivity:
+
+          * the distribution of pairwise correlations between mean-centred row profiles -- if rows
+            cluster at all, some pairs must be far more similar than chance;
+          * the singular spectrum of the centred grid -- k co-clusters produce k large singular
+            values, so this is the rank-k generalization of the rank-1 sign test.
+
+        Both are meaningless alone and only interpretable against `shuffle_control`, which is why
+        the caller should probe the real grid and a shuffled copy and compare.
+    """
+    g = gain.to(torch.float32)
+    g = g - g.mean()
+
+    def _corr(x):
+        n   = min(num_sample, x.shape[0])
+        idx = torch.randperm(x.shape[0], generator=generator)[:n]
+        v   = x[idx]
+        v   = v - v.mean(dim=1, keepdim=True)
+        v   = v / v.norm(dim=1, keepdim=True).clamp(min=1e-12)
+        c   = v @ v.transpose(0, 1)
+        off = c[~torch.eye(n, dtype=torch.bool)]
+        return float(off.abs().mean()), float(torch.quantile(off, 0.999))
+
+    row_mean, row_p999 = _corr(g)
+    col_mean, col_p999 = _corr(g.transpose(0, 1).contiguous())
+
+    q = max(min(rank, min(g.shape) - 1), 2)
+    U, S, V = torch.svd_lowrank(g, q=q, niter=4)
+    total   = float(g.pow(2).sum())
+    spec    = (S.pow(2) / max(total, 1e-30)).tolist()
+
+    return dict(
+        row_corr_abs=row_mean, row_corr_p999=row_p999,
+        col_corr_abs=col_mean, col_corr_p999=col_p999,
+        sv1=spec[0], sv_top4=sum(spec[:4]), sv_top16=sum(spec[:16]),
+    )
+
+
+@torch.no_grad()
+def election_stats(gain, rlab, clab, num_rowgroup: int, num_colgroup: int,
+                   rule: str, margin: float, cells_per_tile: int, e2m1_total: float = 0.0):
+    """
+        What the election did to the INDIVIDUAL scale blocks, not just in aggregate.
+
+        A tile that elects E0M3 forces that grid on every scale block it contains, including the
+        ones that preferred E2M1. Those blocks are HARMED -- they end up worse than they would have
+        been under plain NVFP4. The aggregate gain can rise while the harm rises with it, and
+        CLAUDE.md measures repeatedly that this is the regime where a weight-MSE win fails to reach
+        perplexity ("a rule that fires on small gains is fitting noise").
+
+        This distinguishes the two ways of banking the same aggregate MSE:
+
+          * from STRUCTURE -- elected tiles are homogeneous, few blocks are overruled;
+          * from ARRANGEMENT -- the search packs negative blocks in with positive ones so the sum
+            clears the bar, which raises the harmed share by construction.
+
+        Returns the realized gain, the share of scale blocks harmed, the harm mass as a fraction of
+        the all-E2M1 loss, and the share of tiles that elected E0M3.
+    """
+    feat  = gain_features(gain)
+    A     = _colgroup_sums(feat, clab, num_colgroup)
+    phi   = _group_sums(A, rlab, num_rowgroup)
+    elect = elect_mask(phi, rule, margin, cells_per_tile)          # (n_rg, n_cg)
+
+    # broadcast the per-tile decision back down to every cell
+    cell_elect = elect[rlab][:, clab]                              # (M, N)
+    harmed     = cell_elect & (gain < 0)
+    harm_mass  = float((-gain)[harmed].to(torch.float64).sum())
+
+    return dict(
+        realized=float(tile_value(phi, rule, margin, cells_per_tile).sum()),
+        harmed_share=float(harmed.to(torch.float32).mean()),
+        harm_pct_of_mse=(100.0 * harm_mass / e2m1_total) if e2m1_total else float("nan"),
+        elected_tile_share=float(elect.to(torch.float32).mean()),
+    )
