@@ -200,3 +200,81 @@ def refine_column_order(w, cols, groupsize: int = 16, rounds: int = 6, samples: 
         if accepted == 0:
             break
     return cols
+
+
+@torch.no_grad()
+def spread_order(w, stat: str = "rms", groupsize: int = 16, importance=None):
+    """
+        The OPPOSITE of `magnitude_order`, and the right pre-conditioner for rotation.
+
+        A Hadamard rotation over a chunk helps precisely when that chunk holds ONE outlier among
+        otherwise normal values: it turns {big, small x 15} into 16 medium values and collapses
+        block_max by ~4x. If every element of the chunk is large, rotation redistributes nothing and
+        the block still needs a coarse scale.
+
+        So rotation wants outliers SPREAD, one per chunk -- exactly what sorting destroys. This
+        sorts by magnitude and then deals the columns round-robin into chunks, so each chunk
+        receives one column from every magnitude stratum: one large, one medium, ..., one small.
+        Every chunk then has a high max/rms and every chunk is worth rotating.
+
+        `magnitude_order` and `spread_order` are the two extremes of the same axis, which makes them
+        a clean A/B for what rotation actually wants.
+    """
+    order = magnitude_order(w, stat, importance)
+    K     = order.numel()
+    nb    = K // groupsize
+    if nb < 1:
+        return order
+    # deal round-robin: position p of chunk c receives the (p * nb + c)-th largest column
+    dealt = order[: nb * groupsize].reshape(groupsize, nb).transpose(0, 1).reshape(-1)
+    return torch.cat([dealt, order[nb * groupsize:]])
+
+
+@torch.no_grad()
+def rotation_split_error(w_scaled, cols=None, groupsize: int = 16, clip: str = "heade0",
+                         metric: str = "mse", rotate_size: int = 16, min_gain: float = 0.0):
+    """
+        Per-column-chunk rotation, evaluated exactly, for a given column order.
+
+        Returns the total E2M1 error under three policies -- never rotate, always rotate, and rotate
+        a chunk only when it beats no-rotation by at least `min_gain` (the `rotmin<t>` rule, which
+        CLAUDE.md measures as the best realizable configuration in the study).
+
+        The decision is per COLUMN CHUNK and shared down every row, because the activation side
+        rotates a chunk for all tokens at once -- so the per-chunk errors are summed over rows
+        before the comparison. A Hadamard is orthogonal, so a chunk's squared error is the same
+        measured in either basis and the two candidates are directly comparable.
+
+        WHY `rotate_size` IS THE INTERESTING KNOB HERE. QuaRot rotates the WHOLE hidden dimension
+        with one randomized Hadamard, absorbed into the weights. Against a full-dimension rotation a
+        permutation is provably useless -- a dense Hadamard already mixes every channel, and `PH` is
+        just another orthogonal matrix, so reordering first changes nothing. Reordering has leverage
+        only for a BLOCK-DIAGONAL rotation, which is what a `rotate_size`-wide chunked Hadamard is
+        and what is cheap to apply on the fly. There, which columns land in a chunk decides how much
+        the rotation can dissolve, so the prediction is that any gain from `spread_order` SHRINKS as
+        `rotate_size` grows and vanishes once a chunk spans the whole dimension.
+    """
+    from .quantizer import _rotate_chunks
+    from .reorder import scale_block_gain
+
+    x = w_scaled if cols is None else w_scaled[:, cols]
+    assert rotate_size % groupsize == 0, \
+        f"rotate_size {rotate_size} must be a multiple of the scale block {groupsize}"
+    per = rotate_size // groupsize                     # scale blocks per rotation chunk
+
+    _, e_id, _  = scale_block_gain(x, groupsize, metric, clip, return_losses=True)
+    _, e_rot, _ = scale_block_gain(_rotate_chunks(x, rotate_size), groupsize, metric, clip,
+                                   return_losses=True)
+
+    # the rotation decision is per ROTATION CHUNK and shared down the rows, so fold the scale-block
+    # errors it spans together before comparing
+    fold  = lambda e: e.to(torch.float64).sum(dim=0).reshape(-1, per).sum(dim=-1)
+    c_id  = fold(e_id)                                 # (num_rotation_chunk,)
+    c_rot = fold(e_rot)
+    take  = c_rot < c_id * (1.0 - min_gain)
+    return dict(
+        norot=float(c_id.sum()),
+        allrot=float(c_rot.sum()),
+        percol=float(torch.where(take, c_rot, c_id).sum()),
+        rotated_share=float(take.to(torch.float32).mean()),
+    )
