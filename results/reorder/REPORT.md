@@ -2,9 +2,9 @@
 
 Algorithm and rationale: `ALGORITHM.md`. Implementation: `quantize/reorder.py`.
 
-**Result: the co-clustering reorder recovers +0.115 of the 1×16 ceiling over the current order on
-Llama-3.1-8B — and +0.001 over a cell-shuffled control. The entire gain is the partition search
-overfitting noise. A two-way variance decomposition of the tag grid over all 224 layers explains
+**Result: at the deployable 8x64 weight type block on Llama-3.1-8B, the co-clustering reorder
+recovers +0.135 of the 1×16 ceiling over the current order — and +0.002 over a cell-shuffled
+control. The entire gain is the partition search overfitting noise. A two-way variance decomposition of the tag grid over all 224 layers explains
 why: row and column effects carry only 2.5% of the variance in the E0M3 preference, while 97.5% is
 residual — idiosyncratic to the individual 16-element scale block and invariant to every row and
 column permutation.**
@@ -44,25 +44,23 @@ of the ceiling, and on a column-outlier tensor whose structure is invisible to t
 
 ---
 
-## 2. Llama-3.1-8B
+## 2. Llama-3.1-8B weights at 8x64
 
-Every 4th layer, `q_proj`/`v_proj`/`o_proj`/`up_proj`/`down_proj`, clip preset `heade0`, mean over
-the 40 tensors (`llama-3.1-8b.csv`):
+`8x64` is the smallest hardware-realizable type block for the weight operand (`n8 x k64`, one MMA
+B-tile), so it is the only shape that matters for deployment. Every 4th layer,
+`q_proj`/`v_proj`/`o_proj`/`up_proj`/`down_proj`, clip preset `heade0`, mean over the 40 tensors
+(`llama-3.1-8b.csv`):
 
-| type block | rule | identity | search | control | lift vs identity | **lift vs control** |
-|---|---|---|---|---|---|---|
-| `8x64`   | `argmin` | 0.232 | 0.345 | 0.344 | +0.114 | **+0.001** |
-| `8x64`   | `h1.5`   | 0.179 | 0.314 | 0.312 | +0.135 | **+0.002** |
-| `32x128` | `argmin` | 0.128 | 0.248 | 0.241 | +0.120 | **+0.007** |
-| `32x128` | `h1.5`   | 0.029 | 0.182 | 0.177 | +0.154 | **+0.006** |
+| rule | identity | search | control | lift vs identity | **lift vs control** |
+|---|---|---|---|---|---|
+| `argmin` | 0.232 | 0.345 | 0.344 | +0.114 | **+0.001** |
+| `h1.5`   | 0.179 | 0.314 | 0.312 | +0.135 | **+0.002** |
 
-The pattern is identical at both tile shapes and both election rules: a large, entirely spurious
-lift over the identity order, and essentially nothing over the control. `32x128` is the sharpest
-case — under `h1.5` the unpermuted order realizes only 2.9% of the ceiling, the search takes it to
-18.2%, and a grid with its cells shuffled reaches 17.7%.
+A large, entirely spurious lift over the identity order; nothing over the control.
 
-The `h1.5` rows matter most: that is the election rule CLAUDE.md establishes as the one worth
-deploying, and the search optimizes it directly rather than a proxy for it.
+The `h1.5` row is the one that counts: that is the election rule CLAUDE.md establishes as the one
+worth deploying, and the search optimizes it directly rather than a proxy for it. Reordering takes
+it from 0.179 to 0.314 of the ceiling — and a grid with its cells shuffled reaches 0.312.
 
 Per-tensor it never separates either. `down_proj` is the best case at +0.013 over control — and
 `down_proj` is precisely the matrix whose reduction axis is freely permutable per layer (§7 of
@@ -113,7 +111,7 @@ invariant to every row and column permutation.
 
 That is the whole result. A reordering scheme is competing for 2.5% of the signal, and it has to
 express that 2.5% through tiles that average 32 cells — which is why the measured lift over the
-control is +0.001 rather than something merely small.
+control is +0.002 rather than something merely small.
 
 The corroborating statistic points the same way: the best rank-1 sign model of `G` explains
 **0.565** of the `|G|` mass against 0.5 for a coin flip. The sign pattern of the tag grid is very

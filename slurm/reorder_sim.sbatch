@@ -22,7 +22,7 @@ cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
 MODEL=${1:-llama-2-7b}
 STRIDE=${2:-8}
-TYPE_BLOCKS=${TYPE_BLOCKS:-8x64,32x128}
+TYPE_BLOCKS=${TYPE_BLOCKS:-8x64}
 RULES=${RULES:-argmin,h1.5}
 PROJ=${PROJ:-q_proj,v_proj,o_proj,up_proj,down_proj}
 TAG=${TAG:-$MODEL}
