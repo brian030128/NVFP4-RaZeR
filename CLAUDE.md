@@ -2,6 +2,13 @@
 
 Guidance for working in this repository.
 
+**Read `../CLAUDE.md` (i.e. `/home/u4320956/CLAUDE.md`) first.** It sets the cluster-wide rules that
+override defaults everywhere on this machine — most importantly that all heavy compute (including
+CPU-only work) must go through `sbatch`/`srun` rather than the login node, where the HuggingFace
+cache belongs, which account/partitions to use, and the `uv` workflow. Nothing here needs GPUs (see
+below), but if a task in this repo ever does grow into something GPU- or CPU-heavy, follow that file
+for how to submit it as a job.
+
 ## Repository overview
 
 RaZeR is a research codebase for **simulated (fake) 4-bit LLM quantization**. Nothing here needs
