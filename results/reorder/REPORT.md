@@ -1,68 +1,124 @@
-# Reordering rows and columns does not help MixFP4 — measured on perplexity
+# Reordering rows and columns does not help MixFP4 — measured on 3 models and 2 datasets
 
 Algorithm and rationale: `ALGORITHM.md`. Implementation: `quantize/reorder.py`.
 
-**Result: reordering nearly DOUBLES the weight-MSE reduction (3.47% -> 6.16% below all-E2M1) and
-makes wikitext perplexity WORSE by +0.0088. No election rule rescues it -- argmin, h1.5, h3, h5 and
-dominance are all worse reordered than `mix_4_6_h1.5` is unpermuted. The search cannot construct a
-single dominance-electable tile, which is the cleanest statement of why: given a constraint it
-cannot game, it produces nothing.**
+**Result: on every model where the E0M3 type block actually works, reordering damages it -- by up to
++0.0489 wikitext on Qwen3-8B, which is enough to end up WORSE than plain `nvfp4_4over6`. It helps
+only on Qwen3-4B, where the E0M3 election is pathological (+0.54 wikitext) and reordering is
+repairing damage that is better avoided by not electing E0M3 at all. No configuration measured has
+reordering in its optimum.**
+
+The weight-space objective the search maximizes carries no sign information about the outcome:
+reordering moves MSE, elected-tile share and harmed-block share in the SAME direction on every
+model, while perplexity moves in different directions. This was visible before any perplexity ran,
+in the cell-shuffle control.
 
 ---
 
-## 0. The headline table
+## 0. Cost of reordering, everything measured
 
-Llama-3.1-8B, W4A16, 8x64 weight type block, `heade0` clip preset throughout, wikitext seq 2048.
-Every row differs from the one above it only in the election rule or the reordering
-(`results/reorder/ppl/`).
+`coclcol` (16-column-chunk permutation) against the same configuration unpermuted, W4A16, 8x64 type
+block, `heade0` clip, `h1.5` election. Positive = reordering made perplexity worse.
 
-| config | wikitext | d vs `4over6` | d vs best |
+| model | does E0M3 help this model? | wikitext | c4 |
 |---|---|---|---|
-| `nvfp4_4over6` | 6.5987 | — | +0.0262 |
-| **`mix_4_6_clipheade0_h1.5`** (no reorder) | **6.5725** | **-0.0262** | — |
-| `..._coclcol_h1.5` | 6.5813 | -0.0174 | +0.0088 |
-| `..._coclcol` (argmin) | 6.5846 | -0.0141 | +0.0121 |
-| `..._coclcol_h3` | 6.5848 | -0.0139 | +0.0123 |
-| `..._coclcol_h5` | 6.5888 | -0.0090 | +0.0163 |
-| `..._dom` (no reorder) | 6.5896 | -0.0091 | +0.0171 |
-| `..._coclcol_dom` | 6.5898 | -0.0089 | +0.0173 |
+| Qwen3-8B | yes, -0.0166 | **+0.0489** | **+0.0161** |
+| Llama-3.1-8B | yes, -0.0262 | **+0.0088** | -0.0060 |
+| Qwen3-4B | **no, +0.5145** | -0.4668 | -0.1797 |
 
-Two independent confirmations that the harness is sound: the unpermuted `h1.5` row reproduces
-CLAUDE.md's documented -0.0265 at 8x64 to three decimals, and the `dom` row isolates the `headx`
-alpha search on its own (-0.0091) since dominance elects no tiles at all.
+Three of four cells on the two healthy models are a loss, and the two largest costs are on Qwen3-8B.
+The Qwen3-4B row is a different phenomenon and is dissected in §0c.
 
-So the E0M3 election is worth -0.017 on top of the alpha search, and **reordering gives back half
-of it**.
+### 0a. Llama-3.1-8B, full axis decomposition
+
+Baselines: wikitext 6.5987, c4 9.4232 (`nvfp4_4over6`). Bit-identical across nodes and jobs -- the
+eval and the seeded co-clustering search are both deterministic.
+
+| config | axes permuted | wikitext | d vs 4over6 | cost vs `h1.5` |
+|---|---|---|---|---|
+| `..._h1.5` | — | 6.5725 | -0.0262 | — |
+| `..._coclrow_h1.5` | rows | 6.5801 | -0.0186 | +0.0076 |
+| `..._coclcol_h1.5` | cols | 6.5813 | -0.0174 | +0.0088 |
+| `..._cocl_h1.5` | rows + cols | 6.5947 | -0.0040 | +0.0222 |
+
+The damage is roughly additive and slightly superadditive (0.0076 + 0.0088 = 0.0164 vs 0.0222
+measured). **Both axes contribute about equally**, which corrects CLAUDE.md's reading that "the axis
+that matters is K" -- the earlier `_perm` row-sort did not fail because rows were the wrong axis.
+More permutation freedom simply does more damage.
+
+The unpermuted rows reproduce CLAUDE.md's documented numbers, so the harness is checked from both
+ends: `heade0`+`h1.5` measured -0.0262 / -0.0061 against a documented -0.0265 / -0.0081, and
+`base`+`h1.5` measured -0.0122 against a documented -0.0117.
+
+### 0b. No election rule rescues it (Llama-3.1-8B, wikitext)
+
+| rule | unpermuted | + `coclcol` |
+|---|---|---|
+| `argmin` | — | 6.5846 |
+| `h1.5` | **6.5725** | 6.5813 |
+| `h3` | — | 6.5848 |
+| `h5` | — | 6.5888 |
+| `dominance` | 6.5896 | 6.5898 |
+
+Weakening the rule (`argmin`) and strengthening it (`h3`, `h5`) are both worse. Raising the bar does
+not escape the problem, it relocates it: at every threshold the search manufactures ~3x more tiles
+that just clear it and multiplies the harmed-block count (4x at `h3`, 13x at `h5`).
+
+`dominance` is the one rule that cannot be gamed -- it elects only when NO block in the tile is
+harmed, a constraint on tile composition rather than a threshold on a sum. Handed that objective
+explicitly, the search moves the MSE cut from 0.000% to **0.001%** and the elected-tile share from
+0.0% to 0.0%. It cannot build one unanimous 32-cell tile in a thousand, which is what 55%
+E0M3-preferring blocks with no exploitable structure predicts: 0.55^32 ~ 4e-9.
+
+### 0c. Qwen3-4B: the E0M3 election is pathological, and that is a separate finding
+
+Baseline `nvfp4_4over6`: wikitext 14.0407, c4 17.0153.
+
+| config | E0M3 elected? | wikitext | d |
+|---|---|---|---|
+| `..._dom` | no | **13.9833** | **-0.0574** |
+| `..._e2m1` | no | 13.9865 | -0.0542 |
+| `mix_4_6_h1.5` (base clip) | yes | 14.5257 | +0.4850 |
+| `..._clipheadx_h1.5` | yes | 14.5028 | +0.4621 |
+| `..._clipheade0_h1.5` | yes | 14.5552 | +0.5145 |
+| `..._clipheade0_coclcol_h1.5` | yes | 14.0884 | +0.0477 |
+
+The E0M3 election costs **+0.49 to +0.57 under every clip preset**, and the wider alpha search alone
+*helps* (-0.057). So this is not an artifact of the `alpha=3` candidate; it is the type block itself.
+That is ~30x worse than the strongest model-dependence in CLAUDE.md (+0.0165 on Llama-2-7B), and it
+sits alongside Qwen3-8B, where the identical configuration is worth -0.0166. **A 30x sign-flipped
+swing within one architecture family.** CLAUDE.md's advice to take the wider alpha search
+unconditionally survives; its treatment of the E0M3 type block as a modest model-dependent extra
+does not.
+
+Reordering recovers most of that damage (-0.4668 / -0.1797) but still lands worse than simply not
+electing E0M3. Repairing a configuration nobody should ship is not a use case.
 
 ---
 
-## 0b. Why no election rule helps, and why `dominance` settles it
+## 0d. Why the search cannot work: its objective has no sign information
 
-From the sim (`llama-3.1-8b-rules.csv`), per rule, identity -> reordered:
+Under `coclcol` on both models, every weight-space statistic moves the same way:
 
-| rule | MSE cut | harmed blocks | tiles electing E0M3 | lift vs control |
-|---|---|---|---|---|
-| `argmin` | 4.51% -> 6.78% | 21.4% -> 19.9% | 53.4% -> 53.4% | +0.001 |
-| `h1.5` | 3.47% -> 6.16% | 9.6% -> 12.3% | 26.3% -> 36.2% | +0.002 |
-| `h3` | 0.72% -> 3.45% | 1.0% -> 3.8% | 3.3% -> 13.5% | **-0.002** |
-| `h5` | 0.14% -> 2.07% | 0.1% -> 1.4% | 0.4% -> 6.2% | **-0.004** |
-| `dominance` | 0.000% -> **0.001%** | 0.0% -> 0.0% | 0.0% -> **0.0%** | 0.000 |
+| statistic, identity -> reordered | Llama-3.1-8B | Qwen3-4B |
+|---|---|---|
+| MSE cut vs all-E2M1 | 3.47% -> 4.13% | 4.06% -> 4.76% |
+| tiles electing E0M3 | 26.3% -> 30.3% | 29.6% -> 33.8% |
+| harmed blocks | 9.6% -> 11.1% | 10.8% -> 12.4% |
+| `recovered` (search objective) | 0.168 -> 0.201 | 0.197 -> 0.231 |
+| lift over cell-shuffle control | +0.003 | +0.006 |
+| **wikitext** | **+0.0088** | **-0.4668** |
 
-Raising the bar does not escape the problem, it relocates it: at every threshold the search
-manufactures roughly 3x more tiles that just clear it, and multiplies the harmed-block count
-(4x at `h3`, 13x at `h5`) while banking more aggregate MSE. At `h3` and `h5` the reordering is
-actually WORSE than shuffling the tags.
+Identical signatures, opposite outcomes. Two mechanistic stories were proposed and both were
+falsified by these numbers -- "reordering packs losers in with winners" (harm/gain RATIO improves,
+0.92 -> 0.62) and "reordering isolates catastrophic blocks so their tiles fail the election"
+(elections went UP on Qwen3-4B, not down). What survives is the negative statement: **no weight-space
+statistic measured here predicts the sign of the perplexity change.**
 
-`dominance` is the exception that proves the rule, and it is the strongest single result here.
-It elects only when NO block in the tile is harmed -- a hard constraint on tile composition that
-cannot be satisfied by packing losers in with winners. Handed that objective explicitly, the
-co-clustering search moves the MSE cut from 0.000% to **0.001%** and the elected-tile share from
-0.0% to 0.0%. It cannot build even one unanimous 32-cell tile in a thousand.
-
-That is exactly what 55% E0M3-preferring blocks with no exploitable row/column structure predicts:
-32 independently-tagged blocks all agreeing has probability ~0.55^32 ~ 4e-9, and there is no
-structure to beat those odds with. Every apparent MSE gain at looser rules is therefore
-arrangement, not agreement -- and the perplexity column is what arrangement is worth.
+The `lift over control` row is the tell, and it was available before any GPU time was spent. The
+search beats a cell-shuffled copy of its own tag grid by +0.003 to +0.006 -- i.e. it is exploiting
+combinatorial freedom, not weight structure. A change with no structural basis has no reason to
+have a consistent sign, and it does not.
 
 ---
 

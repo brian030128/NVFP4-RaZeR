@@ -61,7 +61,10 @@ export HF_HOME="/tmp/$USER/hf_$SLURM_JOB_ID"
 mkdir -p "$HF_HOME"
 trap 'rm -rf "/tmp/$USER/hf_$SLURM_JOB_ID"' EXIT
 
-OUT_DIR="results/reorder/ppl"
+# run_ppl.py names its result file from the QUANT CONFIG ALONE -- not the model, not the dataset --
+# and exits early if that file already exists. So the output directory has to carry the model and
+# dataset, or a second model silently "completes" by skipping every config.
+OUT_DIR="results/reorder/ppl/${MODEL}__$(echo "$DATASETS" | tr ',' '-')"
 mkdir -p "$OUT_DIR" slurm/logs
 
 echo "=== $MODEL  $TYPE_BLOCK  $DATASETS  start $(date -Iseconds) on $(hostname) ==="

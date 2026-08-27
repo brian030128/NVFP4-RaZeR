@@ -161,6 +161,9 @@ def main():
                          "This is the cheap way to answer whether reordering CAN help at all.")
     ap.add_argument("--no_control", action="store_true",
                     help="Skip the cell-shuffle control (halves the runtime).")
+    ap.add_argument("--axes", type=str, default="both", choices=["both", "rows", "cols"],
+                    help="Which permutations the search may use. MUST match the quant_mix_4_6 "
+                         "mode being compared against: cocl->both, coclcol->cols, coclrow->rows.")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=str, default=None, help="CSV output path.")
     ap.add_argument("--threads", type=int, default=0)
@@ -254,13 +257,13 @@ def main():
                 t1 = time.time()
                 res = search_permutation(gain, bm, bk, args.groupsize, rule, margin,
                                          rounds=args.rounds, swap_samples=args.swap_samples,
-                                         seed=args.seed)
+                                         seed=args.seed, axes=args.axes)
                 ctrl = float("nan")
                 if ctrlgain is not None:
                     ctrl = search_permutation(ctrlgain, bm, bk, args.groupsize, rule, margin,
                                               rounds=args.rounds,
                                               swap_samples=args.swap_samples,
-                                              seed=args.seed)["recovered"]
+                                              seed=args.seed, axes=args.axes)["recovered"]
                 # How the aggregate gain was banked: from homogeneous tiles, or by packing
                 # losers in with winners until the sum clears the bar? Same aggregate, very
                 # different perplexity behaviour -- see reorder.election_stats.

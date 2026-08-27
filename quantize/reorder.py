@@ -357,7 +357,9 @@ def _swap_round(X, lab, num_group: int, rule: str, margin: float, cells_per_tile
 
     # Batched: the delta tensors are (batch, n_other_group, NUM_FEAT), which on a down_proj-sized
     # column pass would be gigabytes in one shot.
-    batch  = max(1, int(2 ** 22 // max(X.shape[1] * X.shape[2], 1)))
+    # 2^19 elements per batch: the rows+columns search on a down_proj-sized grid otherwise
+    # allocates ~32 MB per swap round on top of everything else and can exhaust the job's memory
+    batch  = max(1, int(2 ** 19 // max(X.shape[1] * X.shape[2], 1)))
     deltas = []
     for lo in range(0, i.numel(), batch):
         sl  = slice(lo, min(lo + batch, i.numel()))
