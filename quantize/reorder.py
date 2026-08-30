@@ -662,9 +662,21 @@ def election_stats(gain, rlab, clab, num_rowgroup: int, num_colgroup: int,
     harmed     = cell_elect & (gain < 0)
     harm_mass  = float((-gain)[harmed].to(torch.float64).sum())
 
+    # PURITY: how unbalanced a tile is, which is the thing reordering is supposed to create.
+    # 0.5 = perfectly mixed, 1.0 = every block in the tile agrees. Two versions, because the
+    # election sums MAGNITUDES rather than counting tags:
+    #   count -- fraction of the tile's blocks on the majority side
+    #   mass  -- fraction of the tile's |gain| on the majority side, which is what actually decides
+    _, p_pos, p_neg, cnt, _ = phi.unbind(-1)
+    nb = float(cells_per_tile)
+    purity_count = torch.maximum(cnt, nb - cnt) / nb
+    purity_mass  = torch.maximum(p_pos, p_neg) / (p_pos + p_neg).clamp(min=1e-30)
+
     return dict(
         realized=float(tile_value(phi, rule, margin, cells_per_tile).sum()),
         harmed_share=float(harmed.to(torch.float32).mean()),
         harm_pct_of_mse=(100.0 * harm_mass / e2m1_total) if e2m1_total else float("nan"),
         elected_tile_share=float(elect.to(torch.float32).mean()),
+        purity_count=float(purity_count.mean()),
+        purity_mass=float(purity_mass.mean()),
     )

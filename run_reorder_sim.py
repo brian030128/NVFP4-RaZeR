@@ -258,12 +258,13 @@ def main():
                 res = search_permutation(gain, bm, bk, args.groupsize, rule, margin,
                                          rounds=args.rounds, swap_samples=args.swap_samples,
                                          seed=args.seed, axes=args.axes)
-                ctrl = float("nan")
+                ctrl, ctrl_res = float("nan"), None
                 if ctrlgain is not None:
-                    ctrl = search_permutation(ctrlgain, bm, bk, args.groupsize, rule, margin,
-                                              rounds=args.rounds,
-                                              swap_samples=args.swap_samples,
-                                              seed=args.seed, axes=args.axes)["recovered"]
+                    ctrl_res = search_permutation(ctrlgain, bm, bk, args.groupsize, rule, margin,
+                                                  rounds=args.rounds,
+                                                  swap_samples=args.swap_samples,
+                                                  seed=args.seed, axes=args.axes)
+                    ctrl = ctrl_res["recovered"]
                 # How the aggregate gain was banked: from homogeneous tiles, or by packing
                 # losers in with winners until the sum clears the bar? Same aggregate, very
                 # different perplexity behaviour -- see reorder.election_stats.
@@ -279,6 +280,21 @@ def main():
                 es = lambda lab: election_stats(pad, lab[0], lab[1], nrg, ncg, rule, margin,
                                                 bm * chunks, e2m1_total)
                 st_id, st_se = es(ident_lab), es(found_lab)
+                # purity of the CONTROL's own best partition -- without it, "purity rose" is the
+                # same uncontrolled comparison that made the realized-gain numbers misleading
+                st_ct = None
+                if ctrl_res is not None:
+                    cpad = torch.nn.functional.pad(
+                        ctrlgain, (0, (-Ng) % chunks, 0, (-Mg) % bm)).to(torch.float64)
+                    ct_lab = (_labels_from_order(ctrl_res["row_perm"], bm, cpad.shape[0]),
+                              _labels_from_order(ctrl_res["chunk_perm"], chunks, cpad.shape[1]))
+                    st_ct = election_stats(cpad, ct_lab[0], ct_lab[1], nrg, ncg, rule, margin,
+                                           bm * chunks, e2m1_total)
+                _c = lambda k: (f"{st_ct[k]:.4f}" if st_ct else "n/a")
+                print(f"      {'':>8} {'':>8}   PURITY count {st_id['purity_count']:.4f} -> "
+                      f"{st_se['purity_count']:.4f} (shuffled {_c('purity_count')})   "
+                      f"mass {st_id['purity_mass']:.4f} -> {st_se['purity_mass']:.4f} "
+                      f"(shuffled {_c('purity_mass')})", flush=True)
                 print(f"      {'':>8} {'':>8}   harmed blocks: identity="
                       f"{100 * st_id['harmed_share']:.2f}%  search="
                       f"{100 * st_se['harmed_share']:.2f}%   harm mass: "
@@ -288,6 +304,12 @@ def main():
 
                 rows.append(dict(
                     model=tag, tensor=name, type_block=tb, rule=rspec,
+                    purity_count_id=round(st_id["purity_count"], 5),
+                    purity_count_se=round(st_se["purity_count"], 5),
+                    purity_mass_id=round(st_id["purity_mass"], 5),
+                    purity_mass_se=round(st_se["purity_mass"], 5),
+                    purity_count_ct=round(st_ct["purity_count"], 5) if st_ct else float("nan"),
+                    purity_mass_ct=round(st_ct["purity_mass"], 5) if st_ct else float("nan"),
                     harmed_id=round(100 * st_id["harmed_share"], 4),
                     harmed_se=round(100 * st_se["harmed_share"], 4),
                     harmmass_id=round(st_id["harm_pct_of_mse"], 4),
@@ -356,6 +378,10 @@ def main():
                   f"{avg('lift_vs_control'):9.3f} | {avg('identity_mse_cut'):8.3f}% "
                   f"{avg('search_mse_cut'):8.3f}% {avg('control_mse_cut'):8.3f}% "
                   f"{avg('ceiling_pct_of_mse'):7.3f}%")
+            print(f"{'':>10} {'':>8}   PURITY count {avg('purity_count_id'):.4f} -> "
+                  f"{avg('purity_count_se'):.4f} (shuffled {avg('purity_count_ct'):.4f})   "
+                  f"mass {avg('purity_mass_id'):.4f} -> {avg('purity_mass_se'):.4f} "
+                  f"(shuffled {avg('purity_mass_ct'):.4f})")
             print(f"{'':>10} {'':>8}   harmed blocks {avg('harmed_id'):.2f}% -> "
                   f"{avg('harmed_se'):.2f}%   harm mass {avg('harmmass_id'):.3f}% -> "
                   f"{avg('harmmass_se'):.3f}% of MSE   tiles electing E0M3 "
