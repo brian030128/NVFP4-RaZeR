@@ -148,6 +148,9 @@ def elect_mask(phi, rule: str = "argmin", margin: float = 0.0, cells_per_tile: i
     """
     s, p, n, cnt, sq = phi.unbind(-1)
 
+    if rule in ("purity", "puritycount"):
+        # not an election rule; the purity objectives still need a mask for the Lloyd linearization
+        return s > 0
     if rule == "never":
         return torch.zeros_like(s, dtype=torch.bool)
     if rule == "always":
@@ -170,8 +173,29 @@ def elect_mask(phi, rule: str = "argmin", margin: float = 0.0, cells_per_tile: i
 
 @torch.no_grad()
 def tile_value(phi, rule: str = "argmin", margin: float = 0.0, cells_per_tile: int = 1):
-    """ Loss reduction the tile realizes versus all-E2M1: `elect * total_gain`. """
-    s = phi[..., 0]
+    """
+        Loss reduction the tile realizes versus all-E2M1: `elect * total_gain`.
+
+        EXCEPT for the two "purity" objectives, which score AGREEMENT INSIDE THE TILE instead of the
+        gain it banks. This distinction turned out to matter. Maximizing realized gain rewards any
+        tile whose SUM clears the election bar, so an impure tile with one big positive cell scores
+        as well as a unanimous one -- and measurement shows the search duly converts structure into
+        MORE elections rather than better ones (26.3% -> 36.3% of tiles at h1.5, and 3.3% -> 13.5%
+        at h3), which is why harmed blocks go up even though purity goes up.
+
+        "purity"      -- total mass on the majority side, sum_tiles max(p, n). Since sum(p + n) is
+                         the total |gain| and is invariant under permutation, maximizing this is
+                         exactly maximizing the MASS purity averaged over tiles.
+        "puritycount" -- the same for counts, sum_tiles max(cnt, cells - cnt).
+
+        Both are functions of the additive tile statistics, so the whole search machinery applies
+        unchanged; only the objective differs.
+    """
+    s, p, n, cnt, _ = phi.unbind(-1)
+    if rule == "purity":
+        return torch.maximum(p, n)
+    if rule == "puritycount":
+        return torch.maximum(cnt, float(cells_per_tile) - cnt)
     return torch.where(elect_mask(phi, rule, margin, cells_per_tile), s, torch.zeros_like(s))
 
 

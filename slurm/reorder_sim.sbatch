@@ -27,6 +27,7 @@ RULES=${RULES:-argmin,h1.5}
 PROJ=${PROJ:-q_proj,v_proj,o_proj,up_proj,down_proj}
 TAG=${TAG:-$MODEL}
 AXES=${AXES:-both}
+SEARCH_RULE=${SEARCH_RULE:-}
 
 # --- environment ---
 source /etc/profile.d/lmod.sh 2>/dev/null || true
@@ -63,6 +64,7 @@ echo "=== $MODEL  stride=$STRIDE  start $(date -Iseconds)  on $(hostname) ==="
     --rules "$RULES" \
     --clip "${CLIP:-heade0}" \
     --axes "$AXES" \
+    --search_rule "$SEARCH_RULE" \
     --threads 12 \
     --out "$OUT_DIR/${TAG}.csv" 2>&1 | tee -a "$OUT_DIR/${TAG}.log"
 

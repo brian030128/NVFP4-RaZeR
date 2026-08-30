@@ -164,6 +164,10 @@ def main():
     ap.add_argument("--axes", type=str, default="both", choices=["both", "rows", "cols"],
                     help="Which permutations the search may use. MUST match the quant_mix_4_6 "
                          "mode being compared against: cocl->both, coclcol->cols, coclrow->rows.")
+    ap.add_argument("--search_rule", type=str, default="",
+                    help="Objective the SEARCH maximizes, if different from the evaluation rule. "
+                         "e.g. --search_rule purity --rules h1.5 searches for agreement inside "
+                         "tiles and then scores the result under the deployed election.")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=str, default=None, help="CSV output path.")
     ap.add_argument("--threads", type=int, default=0)
@@ -254,13 +258,19 @@ def main():
             bm, bk = parse_type_block(tb)
             for rspec in args.rules:
                 rule, margin = parse_rule(rspec)
+                # the search may optimize a DIFFERENT objective from the one it is scored under
+                srule, smargin = ((args.search_rule, 0.0) if args.search_rule in
+                                  ("purity", "puritycount") else
+                                  (parse_rule(args.search_rule) if args.search_rule
+                                   else (rule, margin)))
                 t1 = time.time()
-                res = search_permutation(gain, bm, bk, args.groupsize, rule, margin,
+                res = search_permutation(gain, bm, bk, args.groupsize, srule, smargin,
                                          rounds=args.rounds, swap_samples=args.swap_samples,
                                          seed=args.seed, axes=args.axes)
                 ctrl, ctrl_res = float("nan"), None
                 if ctrlgain is not None:
-                    ctrl_res = search_permutation(ctrlgain, bm, bk, args.groupsize, rule, margin,
+                    ctrl_res = search_permutation(ctrlgain, bm, bk, args.groupsize,
+                                                  srule, smargin,
                                                   rounds=args.rounds,
                                                   swap_samples=args.swap_samples,
                                                   seed=args.seed, axes=args.axes)
@@ -290,6 +300,20 @@ def main():
                               _labels_from_order(ctrl_res["chunk_perm"], chunks, cpad.shape[1]))
                     st_ct = election_stats(cpad, ct_lab[0], ct_lab[1], nrg, ncg, rule, margin,
                                            bm * chunks, e2m1_total)
+                # under a different search objective, res["recovered"] is in the SEARCH rule's
+                # units; the deployed number is what election_stats reports under the eval rule
+                # With --search_rule, res["score"]/["baseline"] are in the SEARCH objective's
+                # units (e.g. total majority mass), not realized gain, so every derived column has
+                # to be recomputed from election_stats under the EVALUATION rule -- including the
+                # MSE-cut columns, which were left in purity units in an earlier run.
+                ceil = res["ceiling"]
+                if ceil > 0:
+                    res["baseline"] = st_id["realized"]
+                    res["score"]    = st_se["realized"]
+                    res["baseline_recovered"] = st_id["realized"] / ceil
+                    res["recovered"] = st_se["realized"] / ceil
+                    if st_ct is not None:
+                        ctrl = st_ct["realized"] / ceil
                 _c = lambda k: (f"{st_ct[k]:.4f}" if st_ct else "n/a")
                 print(f"      {'':>8} {'':>8}   PURITY count {st_id['purity_count']:.4f} -> "
                       f"{st_se['purity_count']:.4f} (shuffled {_c('purity_count')})   "
@@ -325,7 +349,8 @@ def main():
                     # "how much does the total MSE go down" actually asks
                     identity_mse_cut=round(100.0 * res["baseline"] / e2m1_total, 4),
                     search_mse_cut=round(100.0 * res["score"] / e2m1_total, 4),
-                    control_mse_cut=round(100.0 * ctrl * res["ceiling"] / e2m1_total, 4),
+                    control_mse_cut=round(100.0 * ctrl * res["ceiling"] / e2m1_total, 4)
+                    if e2m1_total else float("nan"),
                     identity=round(res["baseline_recovered"], 4),
                     search=round(res["recovered"], 4),
                     control=round(ctrl, 4),
