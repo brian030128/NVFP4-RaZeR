@@ -1891,5 +1891,20 @@ def quant_act(act, quant_config: QuantConfig):
         quant_func = quant_nvfp4_razer_e4m3
     else:
         raise ValueError(f"Unsupported Data Type: {a_dtype}")
-    
+
+    # Fixed, calibration-derived channel permutation (see QuantConfig.a_perm). Permute the channel
+    # axis, quantize, permute back -- which in a deployment is not undone at all, the matching
+    # permutation being absorbed into the weight columns of the same axis. Because it moves whole
+    # 16-channel chunks the scale blocks are unchanged, so the weight side is bit-identical and
+    # permuting the activation alone reproduces the real transform exactly.
+    perm = getattr(quant_config, "a_perm", None)
+    if perm is not None:
+        p = perm.get(act.shape[-1])
+        if p is not None:
+            p = p.to(act.device)
+            inv = torch.empty_like(p)
+            inv[p] = torch.arange(p.numel(), device=p.device)
+            out = quant_func(act.index_select(-1, p), n_bits=n_bits, groupsize=a_groupsize)
+            return out.index_select(-1, inv)
+
     return quant_func(act, n_bits=n_bits, groupsize=a_groupsize)
