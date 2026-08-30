@@ -874,6 +874,20 @@ def _quant_e0m3(x, block_scale):
 # that clips both is not evidence that the E2M1-vs-E0M3 decision got any better.
 CLIP_PRESETS = {
     "base":  {"e2m1": (1.0, 1.5),                          "e0m3": (1.0,)},
+    # NO alpha search at all -- the block maximum stays on the top code of each grid, which is
+    # plain NVFP4 plus the E0M3 option and nothing else.
+    #
+    # This exists because alpha widening is NOT universally safe, contrary to how the rest of these
+    # presets are framed. On Qwen3-4B, nvfp4 (alpha=1) scores 13.6584/16.8723 while 4over6 scores
+    # 14.0407/17.0153 -- FourOverSix is +0.38 wikitext WORSE than the unmodified format there,
+    # and headx is +0.33 worse. On Llama-3.1-8B the same two changes are -0.025 and -0.034, i.e.
+    # improvements. The mechanism is the one the selection analysis found: E2M1 is log-spaced and
+    # coarse at the top, so its top codes are what absorb an outlier, and alpha > 1 discards exactly
+    # those. A model with peakier blocks cannot afford that.
+    #
+    # So `a1` isolates the E0M3 election from the alpha search, which every other preset entangles
+    # it with.
+    "a1":    {"e2m1": (1.0,),                              "e0m3": (1.0,)},
     # E0M3 only -- the branch with no free normalization today
     "e0":    {"e2m1": (1.0, 1.5),                          "e0m3": (1.0, 0.9)},
     "e0x":   {"e2m1": (1.0, 1.5),                          "e0m3": (1.0, 0.9, 0.8)},
