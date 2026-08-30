@@ -1283,6 +1283,7 @@ def quant_mix_4_6(
     rotate_size: int=16,
     rotate_min_gain: float=0.0,
     rotate_outlier_max: float=2.1,
+    peak_veto: float=0.0,
     is_act: bool=False,
 ):
     """
@@ -1342,7 +1343,7 @@ def quant_mix_4_6(
     if rotate != "none" and num_col >= rotate_size:
         inner = dict(n_bits=n_bits, groupsize=groupsize, type_block=type_block, metric=metric,
                      importance=importance, elect=elect, margin=margin, clip=clip,
-                     permute=permute, rotate="none", is_act=is_act)
+                     permute=permute, rotate="none", peak_veto=peak_veto, is_act=is_act)
         nchunk = num_col // rotate_size
         rotated = _rotate_chunks(w_fp_new, rotate_size)
         dq_rot  = _rotate_chunks(
@@ -1506,6 +1507,26 @@ def quant_mix_4_6(
     select_e0m3 = _elect_e0m3(
         error_e2m1 - error_e0m3, rule=elect, margin=margin, ref=error_e2m1
     )
+
+    # PEAKEDNESS VETO -- an on-the-fly rule needing no search, no permutation and no calibration.
+    #
+    # Measured on real weights, the E0M3/E2M1 preference is governed by block peakedness: the rank
+    # correlation between the E0M3 gain and block_max/block_rms is -0.59 on both Llama-3.1-8B and
+    # Qwen3-4B, and the E0M3-preferring population averages max/rms 1.98-2.01 against 2.33-2.36 for
+    # E2M1. A 16-sample Gaussian block sits at 2.0, so E0M3 is precisely the "this block has no
+    # outlier" grid -- its uniform spacing suits a flat block, while E2M1's log spacing is coarse at
+    # the top and absorbs an outlier cheaply.
+    #
+    # So refuse E0M3 for a tile whose blocks are collectively peaked. `peak_veto` is the threshold
+    # on the tile's MEAN max/rms; "any block above it" is unusable at a 16x64 activation tile, which
+    # holds 64 scale blocks and would veto almost everything.
+    #
+    # Both statistics are already on hand: block_max is computed for the scale, and the mean square
+    # is one extra reduction over data already in registers.
+    if peak_veto > 0.0:
+        block_rms = w_tiled.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp(min=1e-12)
+        peak      = (block_max / block_rms).mean(dim=1, keepdim=True)      # (n_tile, 1, 1)
+        select_e0m3 = select_e0m3 & (peak <= peak_veto)
 
     w_dq = torch.where(
         select_e0m3,
@@ -1706,6 +1727,7 @@ def parse_mix_4_6_dtype(name: str):
     metric, elect, margin, use_importance, clip = "mse", "argmin", 0.0, False, "base"
     permute, rotate, rotate_size, rotate_min_gain = "none", "none", 16, 0.0
     clip_min_gain, alpha_min_gain, rotate_outlier_max = 0.0, 0.0, 2.1
+    peak_veto = 0.0
 
     def _num(s):
         return s.replace(".", "", 1).isdigit()
@@ -1741,6 +1763,8 @@ def parse_mix_4_6_dtype(name: str):
             rotate, rotate_size = "col", int(part[6:])
         elif part.startswith("rotmin") and part[6:].replace(".", "", 1).isdigit():
             rotate, rotate_min_gain = "col", float(part[6:])
+        elif part.startswith("pv") and _num(part[2:]):
+            peak_veto = float(part[2:])
         elif part == "hess":
             use_importance = True
         elif part == "dom":
@@ -1762,7 +1786,7 @@ def parse_mix_4_6_dtype(name: str):
         else:
             raise ValueError(f'Unrecognized mix_4_6 data type qualifier "{part}" in "{name}".')
     return (metric, elect, margin, use_importance, clip, clip_min_gain, alpha_min_gain,
-            permute, rotate, rotate_size, rotate_min_gain, rotate_outlier_max)
+            permute, rotate, rotate_size, rotate_min_gain, rotate_outlier_max, peak_veto)
 
 
 def quant_weight(model, quant_config: QuantConfig, importance=None):
@@ -1817,11 +1841,11 @@ def quant_weight(model, quant_config: QuantConfig, importance=None):
         quant_func = partial(quant_mixfp4, type_block=w_type_block)
     elif w_dtype.startswith("mix_4_6"):
         (_metric, _elect, _margin, _use_imp, _clip,
-         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g, _rot_o) = parse_mix_4_6_dtype(w_dtype)
+         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g, _rot_o, _pv) = parse_mix_4_6_dtype(w_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=w_type_block,
             metric=_metric, elect=_elect, margin=_margin, clip=_clip, clip_min_gain=_clip_g, alpha_min_gain=_alpha_g, permute=_perm,
-            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g, rotate_outlier_max=_rot_o,
+            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g, rotate_outlier_max=_rot_o, peak_veto=_pv,
         )
     elif (w_dtype == "nvfp4_razer_e3m3"):
         quant_func = partial(quant_nvfp4_razer_e3m3, outlier=w_outlier)
@@ -1881,11 +1905,11 @@ def quant_act(act, quant_config: QuantConfig):
         quant_func = partial(quant_mixfp4, type_block=a_type_block, is_act=True)
     elif a_dtype.startswith("mix_4_6"):
         (_metric, _elect, _margin, _, _clip,
-         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g, _rot_o) = parse_mix_4_6_dtype(a_dtype)
+         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g, _rot_o, _pv) = parse_mix_4_6_dtype(a_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=a_type_block, is_act=True,
             metric=_metric, elect=_elect, margin=_margin, clip=_clip, clip_min_gain=_clip_g, alpha_min_gain=_alpha_g, permute=_perm,
-            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g, rotate_outlier_max=_rot_o,
+            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g, rotate_outlier_max=_rot_o, peak_veto=_pv,
         )
     elif (a_dtype == "nvfp4_razer_e4m3"):
         quant_func = quant_nvfp4_razer_e4m3
