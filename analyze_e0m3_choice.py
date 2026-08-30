@@ -114,8 +114,16 @@ def main():
         ws = w / gs
         impc = imp.float().cpu()
 
-        g_mse = scale_block_gain(ws, args.groupsize, "mse", args.clip)
+        g_mse, e2_mse, _ = scale_block_gain(ws, args.groupsize, "mse", args.clip,
+                                            return_losses=True)
         g_hes = scale_block_gain(ws, args.groupsize, "mse", args.clip, importance=impc)
+
+        # CALIBRATION-FREE candidates for the same job. Plain MSE lets a few high-energy blocks
+        # carry a tile; each of these removes that bias in a different way, using weights only.
+        g_sqnr = scale_block_gain(ws, args.groupsize, "sqnr", args.clip)
+        benergy = ws.reshape(ws.shape[0], -1, args.groupsize).pow(2).sum(dim=-1)
+        g_rel  = g_mse / e2_mse.clamp(min=1e-30)          # relative improvement per block
+        g_norm = g_mse / benergy.clamp(min=1e-30)         # gain per unit block energy
 
         blocks = ws.reshape(ws.shape[0], -1, args.groupsize)
         bmax = blocks.abs().amax(dim=-1)
@@ -145,6 +153,18 @@ def main():
             rho_gain_maxrms=round(spearman(g_mse, maxrms), 4),
             rho_gain_kurt=round(spearman(g_mse, kurt), 4),
             rho_hessgain_imp=round(spearman(g_hes, bimp), 4),
+            # how well each CALIBRATION-FREE criterion reproduces the importance-weighted ranking
+            rho_hess_mse=round(spearman(g_hes, g_mse), 4),
+            rho_hess_sqnr=round(spearman(g_hes, g_sqnr), 4),
+            rho_hess_rel=round(spearman(g_hes, g_rel), 4),
+            rho_hess_norm=round(spearman(g_hes, g_norm), 4),
+            # and how often each agrees with hess on the actual per-block VERDICT
+            agree_mse=round(float(((g_mse > 0) == p_hes).to(torch.float32).mean()), 4),
+            agree_sqnr=round(float(((g_sqnr > 0) == p_hes).to(torch.float32).mean()), 4),
+            agree_rel=round(float(((g_rel > 0) == p_hes).to(torch.float32).mean()), 4),
+            # tile election share under each calibration-free criterion, vs hess's 0.176
+            tile_elect_sqnr=round(tile_elect_share(g_sqnr, bm, chunks, args.rule, args.margin), 4),
+            tile_elect_rel=round(tile_elect_share(g_rel, bm, chunks, args.rule, args.margin), 4),
         )
         rows.append(rec)
         print(f"{short:>30} {rec['e0m3_share_mse']:10.3f} {rec['e0m3_share_hess']:7.3f} | "
@@ -171,6 +191,19 @@ def main():
     print(f"  Spearman rho(gain, kurtosis)  {a('rho_gain_kurt'):+.3f}")
     print(f"  Spearman rho(hess gain, block importance) {a('rho_hessgain_imp'):+.3f}")
 
+    print(f"\n=== can a CALIBRATION-FREE criterion stand in for hess? ===")
+    print(f"{'criterion':>12} {'rho vs hess':>12} {'verdict agree':>14} {'tiles elected':>14}")
+    print(f"{'hess':>12} {1.0:12.3f} {1.0:14.3f} {a('tile_elect_hess'):14.3f}   <- target")
+    print(f"{'mse':>12} {a('rho_hess_mse'):12.3f} {a('agree_mse'):14.3f} "
+          f"{a('tile_elect_mse'):14.3f}")
+    print(f"{'sqnr':>12} {a('rho_hess_sqnr'):12.3f} {a('agree_sqnr'):14.3f} "
+          f"{a('tile_elect_sqnr'):14.3f}")
+    print(f"{'relgain':>12} {a('rho_hess_rel'):12.3f} {a('agree_rel'):14.3f} "
+          f"{a('tile_elect_rel'):14.3f}")
+    print(f"{'gain/energy':>12} {a('rho_hess_norm'):12.3f} {'-':>14} {'-':>14}")
+    print("\nA criterion that beats `mse` on rho AND lands near hess's tile-election share is a")
+    print("calibration-free candidate; one that matches mse is just mse in different units.")
+
     if args.out and rows:
         os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
         with open(args.out, "w", newline="") as f:
@@ -182,3 +215,20 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ----------------------------------------------------------------------------------------------
+# Appended: can a CALIBRATION-FREE criterion reproduce what `hess` does?
+#
+# `hess` needs E[x_j^2]. CLAUDE.md already rejected the two obvious weight-only proxies for it
+# (preceding RMSNorm gamma^2 flips sign on the MLP projections; column energy ||W_:,j||^2 has no
+# consistent sign). So the route is not to predict importance, but to remove the bias that made
+# plain MSE wrong: summed squared error lets a few HIGH-ENERGY blocks carry a whole tile, and those
+# are exactly the peaked, outlier-bearing blocks that the analysis above shows prefer E2M1.
+#
+# Three calibration-free candidates, all already in the quantizer:
+#   sqnr      -- per-block error normalized by that block's own signal energy
+#   relgain   -- gain_b / loss_E2M1(b), the relative improvement
+#   logenergy -- MSE gain divided by block energy, a cruder version of the same idea
+#
+# The question is which of them ranks blocks the way the importance-weighted gain does.
