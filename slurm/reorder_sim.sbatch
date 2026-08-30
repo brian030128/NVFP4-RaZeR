@@ -28,6 +28,8 @@ PROJ=${PROJ:-q_proj,v_proj,o_proj,up_proj,down_proj}
 TAG=${TAG:-$MODEL}
 AXES=${AXES:-both}
 SEARCH_RULE=${SEARCH_RULE:-}
+ROUNDS=${ROUNDS:-8}
+SWAPS=${SWAPS:-40000}
 
 # --- environment ---
 source /etc/profile.d/lmod.sh 2>/dev/null || true
@@ -65,6 +67,8 @@ echo "=== $MODEL  stride=$STRIDE  start $(date -Iseconds)  on $(hostname) ==="
     --clip "${CLIP:-heade0}" \
     --axes "$AXES" \
     --search_rule "$SEARCH_RULE" \
+    --rounds "$ROUNDS" \
+    --swap_samples "$SWAPS" \
     --threads 12 \
     --out "$OUT_DIR/${TAG}.csv" 2>&1 | tee -a "$OUT_DIR/${TAG}.log"
 
