@@ -1,8 +1,11 @@
 # MixFP4: what helps, what doesn't, and what it costs
 
-All numbers are W4A16 weight-only perplexity at seq 2048, type block **8x64** (the smallest
-hardware-realizable weight tile, one `n8 x k64` MMA B-operand), unless stated otherwise.
-Five models. Both wikitext and c4.
+Perplexity at seq 2048, type block **8x64** for weights (the smallest hardware-realizable weight
+tile, one `n8 x k64` MMA B-operand). Five models, wikitext and c4.
+
+**Sections 1-11 are W4A16 (weight-only).** Section 1a gives the W4A4 results, which are the
+deployment-relevant ones and where several conclusions differ. W4A4 activations are pinned at
+`nvfp4_4over6` throughout so that only the weight side varies.
 
 ---
 
@@ -41,6 +44,77 @@ field that already exists.
 
 ---
 
+## 1a. W4A4 (prefill) — activations fixed at `nvfp4_4over6`
+
+The section that matters for deployment. Only the WEIGHT configuration varies; activations are
+`nvfp4_4over6` in every row so the comparison is like for like.
+
+Note `quant_act` never receives `importance` -- the `use_importance` field is discarded in its
+dispatch -- so **calibration applies to weights only**. A `hess` qualifier on an activation dtype is
+a silent no-op.
+
+### Llama-3.1-8B
+
+| weight config | wikitext / c4 | vs `4over6` | vs `nvfp4` |
+|---|---|---|---|
+| `nvfp4` (both operands plain) | 6.9454 / 9.9339 | +0.0699 / +0.1077 | — |
+| `nvfp4_4over6` (both) | 6.8755 / 9.8262 | — | -0.0699 / -0.1077 |
+| `base_hess_e2m1` (importance-alpha, **no type block**) | 6.8323 / 9.7791 | **-0.0432 / -0.0471** | -0.1131 / -0.1548 |
+| `heade0_hess_m1` | 6.8084 / 9.7569 | **-0.0671 / -0.0693** | -0.1369 / -0.1770 |
+| `heade0_hess_coclcol_m1` | 6.8133 / 9.7518 | -0.0623 / -0.0743 | -0.1321 / -0.1821 |
+
+Two differences from the W4A16 picture:
+
+* **The weight-side alpha gain survives activation quantization unchanged**: -0.0432 / -0.0471 in
+  W4A4 against -0.0419 / -0.0391 in W4A16.
+* **The type block is worth about twice as much here.** It adds -0.0239 on top of importance-alpha
+  (W4A4) against -0.011 (W4A16). So §1's ranking -- "the scale search dominates, the type block is a
+  small increment" -- weakens under W4A4: the type block roughly doubles in relative value.
+* Reordering is mixed and inside the noise floor of §0: worse on wikitext (-0.0623 vs -0.0671),
+  better on c4.
+
+### Qwen3-4B
+
+Same inversion as W4A16 -- plain `nvfp4` on both operands is the best configuration, and every
+added mechanism costs.
+
+| weight config | wikitext / c4 | vs `4over6` | vs `nvfp4` |
+|---|---|---|---|
+| `nvfp4` (both plain) | **13.9488 / 17.2751** | -0.3202 / -0.0409 | — |
+| `nvfp4_4over6` (both) | 14.2691 / 17.3160 | — | +0.3202 / +0.0409 |
+| `base_hess_e2m1` | 14.4448 / 17.3682 | +0.1757 / +0.0522 | +0.4960 / +0.0931 |
+| `heade0_hess_m1` | 14.8122 / 17.5409 | +0.5431 / +0.2249 | +0.8634 / +0.2659 |
+| `heade0_hess_coclcol_m1` | 14.8634 / 17.5491 | +0.5944 / +0.2331 | +0.9146 / +0.2740 |
+
+`4over6` costs +0.3202 wikitext here, closely matching the +0.3823 it costs in W4A16, so the
+alpha-widening defect is a property of the weights and is not changed by quantizing activations.
+
+### Not yet measured in W4A4
+
+* **alpha = 1 weight configs** (`clipa1_hess_h10`, `_v0.7`, `_m1`, `_h5`). These are the only
+  configurations that reached parity with `nvfp4` in W4A16 on Qwen3-4B, so they are the ones that
+  matter there. Queued.
+* **Qwen3-8B** and the second-wave weight ladder (`h1.5` MSE, `hessa`, `hesst`) on both models.
+* W4A4 runs are far slower than W4A16 because `quant_act` executes on every forward pass; one
+  7-config sweep took over 3.5 hours, and a 2-hour `dev` allocation timed out.
+
+### One W4A4 measurement on the ACTIVATION type block
+
+From a separate sweep with weights fixed at `mix_4_6_clipheade0_h1.5@8x64`, varying only the
+activation dtype at a 16x64 tile (the A-operand `m16 x k64`):
+
+| activations | wikitext |
+|---|---|
+| `nvfp4_4over6` | 6.8499 |
+| `mix_4_6_clipheade0_e2m1` (type block, never elects) | 6.8455 |
+| `mix_4_6_clipheade0_h1.5` | **6.8358** |
+
+The activation type block is worth **-0.0141** with no calibration, no reordering and no search --
+decided per tile at runtime. A peakedness veto (`pv<tau>`) on top was worse at every threshold
+tried, because the error-based election already encodes peakedness (rho = -0.59, §8).
+
+---
+
 ## 2. Baselines
 
 | model | `nvfp4` (alpha=1) | `nvfp4_4over6` |
@@ -73,7 +147,18 @@ Delta against `nvfp4_4over6`, wikitext / c4:
 | Qwen3-4B | `a1_hess_h10` | -0.380 / -0.137 |
 
 Calibrated MixFP4 beats `4over6` on all five models. But on Qwen3-4B the right reference is
-`nvfp4`, and against that its best is **+0.003 / +0.005** — parity, not a win.
+`nvfp4`, and against that no single configuration wins on both datasets:
+
+| config | wikitext | c4 |
+|---|---|---|
+| `a1_hess_h10` | +0.0028 | +0.0049 |
+| `a1_hess_v0.7` | +0.0097 | **-0.0271** |
+| `a1_hess_m1` | +0.3370 | **-0.0259** |
+
+`a1_hess_h10` is indistinguishable from `nvfp4` -- both deltas sit inside the +-0.0044 noise of §0.
+`a1_hess_v0.7` is a genuine c4 win (-0.0271) traded against a small wikitext loss (+0.0097, which is
+above the noise floor and so real). Both require freezing alpha at 1 AND an extreme election margin;
+every default configuration on this model is far behind.
 
 ---
 
