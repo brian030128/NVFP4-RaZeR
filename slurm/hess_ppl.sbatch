@@ -69,12 +69,12 @@ mkdir -p "$OUT_DIR" slurm/logs
 echo "=== $MODEL  $TB  $DATASETS  calib=$CALIB  $(date -Iseconds) on $(hostname) ==="
 echo "configs: $CONFIGS"
 
-"$PYTHON" run_ppl_sweep.py \
+"$PYTHON" run_ppl_sweep.py --calib_source "${CALIB_SRC:-wikitext}" \
     --model_name "$MODEL" \
     --datasets "$DATASETS" \
     --sweep w4a16 \
     --configs "$CONFIGS" \
     --calib_batches "$CALIB" \
-    --output "$OUT_DIR/${MODEL}.json" 2>&1 | tee -a "$OUT_DIR/${MODEL}.log"
+    --output "$OUT_DIR/${MODEL}${CALIB_TAG:-}.json" 2>&1 | tee -a "$OUT_DIR/${MODEL}.log"
 
 echo "=== done $(date -Iseconds) ==="

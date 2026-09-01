@@ -1298,6 +1298,8 @@ def quant_mix_4_6(
     rotate_min_gain: float=0.0,
     rotate_outlier_max: float=2.1,
     peak_veto: float=0.0,
+    imp_alpha: bool=True,
+    imp_elect: bool=True,
     is_act: bool=False,
 ):
     """
@@ -1357,7 +1359,8 @@ def quant_mix_4_6(
     if rotate != "none" and num_col >= rotate_size:
         inner = dict(n_bits=n_bits, groupsize=groupsize, type_block=type_block, metric=metric,
                      importance=importance, elect=elect, margin=margin, clip=clip,
-                     permute=permute, rotate="none", peak_veto=peak_veto, is_act=is_act)
+                     permute=permute, rotate="none", peak_veto=peak_veto,
+                     imp_alpha=imp_alpha, imp_elect=imp_elect, is_act=is_act)
         nchunk = num_col // rotate_size
         rotated = _rotate_chunks(w_fp_new, rotate_size)
         dq_rot  = _rotate_chunks(
@@ -1471,28 +1474,42 @@ def quant_mix_4_6(
     # while lowering the very error it selects on, and its MSE gains there were only 3-5% -- squarely
     # in the small-gain regime where weight error and layer output error decouple. Requiring a large
     # gain is the same fix that turned rotation from +0.095 into a small win.
+    # Importance can be applied to the two decisions INDEPENDENTLY. `hess` weights one loss that
+    # drives both the alpha search and the type election, but measurement shows the two effects have
+    # different signs on the same model: on Qwen3-4B, importance-weighting the alpha choice costs
+    # +0.29 wikitext while importance-weighting the type election gains -1.05. So `imp_alpha` and
+    # `imp_elect` select which decision sees it.
+    #
+    # `sel` is the loss the alpha search minimizes; `out` is the loss handed to the election. When
+    # the two scopes differ they are computed from the same dequantized candidate, so the alpha
+    # picked and the error reported for it stay consistent.
+    imp_a = imp_tiled if imp_alpha else None
+    imp_e = imp_tiled if imp_elect else None
+
     def _best_over_alphas(quant_fn, grid_max, alphas):
         def search(alpha_list):
-            best_dq, best_err = None, None
+            best_dq, best_err, best_out = None, None, None
             for alpha in alpha_list:
                 block_scale = (block_max * (alpha / grid_max)).clamp(
                     max=FP8_SCALE_MAX,
                     min=FP8_SCALE_MIN
                 ).to(torch.float8_e4m3fn).to(w_tiled.dtype)
                 dq  = quant_fn(w_tiled, block_scale)
-                err = _selection_loss(w_tiled, dq, metric, imp_tiled)
+                err = _selection_loss(w_tiled, dq, metric, imp_a)
+                out = err if imp_a is imp_e else _selection_loss(w_tiled, dq, metric, imp_e)
 
                 if best_dq is None:
-                    best_dq, best_err = dq, err
+                    best_dq, best_err, best_out = dq, err, out
                 else:
                     better   = err < best_err
                     best_dq  = torch.where(better, dq, best_dq)
+                    best_out = torch.where(better, out, best_out)
                     best_err = torch.where(better, err, best_err)
-            return best_dq, best_err
+            return best_dq, best_err, best_out
 
         safe     = [a for a in alphas if a >= 1.0] or [1.0]
         clipping = [a for a in alphas if a < 1.0]
-        dq, err  = search(safe)
+        dq, err, out = search(safe)
 
         # `alpha_min_gain` applies the decisive-margin principle to the SCALE SEARCH ITSELF, which
         # is otherwise the last plain argmin left in this quantizer -- exactly the pattern that
@@ -1500,16 +1517,17 @@ def quant_mix_4_6(
         # is taken only when it beats alpha = 1 (plain NVFP4, the block maximum on the top code) by
         # at least this fraction. alpha_min_gain = 0 is the ordinary argmin search.
         if alpha_min_gain > 0.0 and len(safe) > 1:
-            dq_1, err_1 = search([1.0])
+            dq_1, err_1, out_1 = search([1.0])
             take = err < err_1 * (1.0 - alpha_min_gain)
-            dq, err = torch.where(take, dq, dq_1), torch.where(take, err, err_1)
+            dq, err, out = (torch.where(take, dq, dq_1), torch.where(take, err, err_1),
+                            torch.where(take, out, out_1))
 
         if not clipping:
-            return dq, err
+            return dq, out
 
-        dq_c, err_c = search(clipping)
-        take        = err_c < err * (1.0 - clip_min_gain)
-        return torch.where(take, dq_c, dq), torch.where(take, err_c, err)
+        dq_c, err_c, out_c = search(clipping)
+        take = err_c < err * (1.0 - clip_min_gain)
+        return torch.where(take, dq_c, dq), torch.where(take, out_c, out)
 
     alphas = CLIP_PRESETS[clip]
     w_dq_e2m1, error_e2m1 = _best_over_alphas(_quant_e2m1, E2M1_MAX, alphas["e2m1"])
@@ -1742,6 +1760,7 @@ def parse_mix_4_6_dtype(name: str):
     permute, rotate, rotate_size, rotate_min_gain = "none", "none", 16, 0.0
     clip_min_gain, alpha_min_gain, rotate_outlier_max = 0.0, 0.0, 2.1
     peak_veto = 0.0
+    imp_alpha, imp_elect = True, True
 
     def _num(s):
         return s.replace(".", "", 1).isdigit()
@@ -1781,6 +1800,12 @@ def parse_mix_4_6_dtype(name: str):
             peak_veto = float(part[2:])
         elif part == "hess":
             use_importance = True
+        elif part == "hesst":
+            # importance on the TYPE election only; alpha still chosen by unweighted error
+            use_importance, imp_alpha, imp_elect = True, False, True
+        elif part == "hessa":
+            # importance on the ALPHA search only; the election still uses unweighted error
+            use_importance, imp_alpha, imp_elect = True, True, False
         elif part == "dom":
             elect = "dominance"
         elif part == "e2m1":
@@ -1800,7 +1825,8 @@ def parse_mix_4_6_dtype(name: str):
         else:
             raise ValueError(f'Unrecognized mix_4_6 data type qualifier "{part}" in "{name}".')
     return (metric, elect, margin, use_importance, clip, clip_min_gain, alpha_min_gain,
-            permute, rotate, rotate_size, rotate_min_gain, rotate_outlier_max, peak_veto)
+            permute, rotate, rotate_size, rotate_min_gain, rotate_outlier_max, peak_veto,
+            imp_alpha, imp_elect)
 
 
 def quant_weight(model, quant_config: QuantConfig, importance=None):
@@ -1855,11 +1881,11 @@ def quant_weight(model, quant_config: QuantConfig, importance=None):
         quant_func = partial(quant_mixfp4, type_block=w_type_block)
     elif w_dtype.startswith("mix_4_6"):
         (_metric, _elect, _margin, _use_imp, _clip,
-         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g, _rot_o, _pv) = parse_mix_4_6_dtype(w_dtype)
+         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g, _rot_o, _pv, _ia, _ie) = parse_mix_4_6_dtype(w_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=w_type_block,
             metric=_metric, elect=_elect, margin=_margin, clip=_clip, clip_min_gain=_clip_g, alpha_min_gain=_alpha_g, permute=_perm,
-            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g, rotate_outlier_max=_rot_o, peak_veto=_pv,
+            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g, rotate_outlier_max=_rot_o, peak_veto=_pv, imp_alpha=_ia, imp_elect=_ie,
         )
     elif (w_dtype == "nvfp4_razer_e3m3"):
         quant_func = partial(quant_nvfp4_razer_e3m3, outlier=w_outlier)
@@ -1919,11 +1945,11 @@ def quant_act(act, quant_config: QuantConfig):
         quant_func = partial(quant_mixfp4, type_block=a_type_block, is_act=True)
     elif a_dtype.startswith("mix_4_6"):
         (_metric, _elect, _margin, _, _clip,
-         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g, _rot_o, _pv) = parse_mix_4_6_dtype(a_dtype)
+         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g, _rot_o, _pv, _ia, _ie) = parse_mix_4_6_dtype(a_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=a_type_block, is_act=True,
             metric=_metric, elect=_elect, margin=_margin, clip=_clip, clip_min_gain=_clip_g, alpha_min_gain=_alpha_g, permute=_perm,
-            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g, rotate_outlier_max=_rot_o, peak_veto=_pv,
+            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g, rotate_outlier_max=_rot_o, peak_veto=_pv, imp_alpha=_ia, imp_elect=_ie,
         )
     elif (a_dtype == "nvfp4_razer_e4m3"):
         quant_func = quant_nvfp4_razer_e4m3
