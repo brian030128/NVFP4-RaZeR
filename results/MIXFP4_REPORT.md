@@ -73,10 +73,23 @@ Two differences from the W4A16 picture:
 * Reordering is mixed and inside the noise floor of §0: worse on wikitext (-0.0623 vs -0.0671),
   better on c4.
 
+### Qwen3-8B
+
+| weight config | wikitext / c4 | vs `4over6` |
+|---|---|---|
+| `nvfp4` (both plain) | 10.0654 / 13.7727 | +0.0311 / +0.0156 |
+| `nvfp4_4over6` (both) | 10.0342 / 13.7571 | — |
+| `base_hess_e2m1` (importance-alpha, no type block) | 9.9719 / 13.7244 | -0.0623 / -0.0327 |
+| `heade0_hess_m1` | 9.9918 / 13.7151 | -0.0424 / -0.0420 |
+| **`heade0_hess_coclcol_m1`** | **9.9634 / 13.6740** | **-0.0709 / -0.0831** |
+
+Reordering adds **-0.0285 / -0.0411** on top of `heade0_hess_m1` here -- far more than on
+Llama-3.1-8B, and well clear of the noise floor.
+
 ### Qwen3-4B
 
-Same inversion as W4A16 -- plain `nvfp4` on both operands is the best configuration, and every
-added mechanism costs.
+With the `heade0` presets, the same inversion as W4A16 -- plain `nvfp4` on both operands beats every
+added mechanism.
 
 | weight config | wikitext / c4 | vs `4over6` | vs `nvfp4` |
 |---|---|---|---|
@@ -89,12 +102,32 @@ added mechanism costs.
 `4over6` costs +0.3202 wikitext here, closely matching the +0.3823 it costs in W4A16, so the
 alpha-widening defect is a property of the weights and is not changed by quantizing activations.
 
+### Qwen3-4B with alpha = 1 -- MixFP4 BEATS nvfp4 here
+
+The `heade0` rows above use a wide alpha search, which is itself the defect on this model. Freezing
+alpha at 1 and electing with a strict rule, activations still `nvfp4_4over6`:
+
+| weight config | wikitext / c4 | vs `nvfp4` weights |
+|---|---|---|
+| `nvfp4` weights | 13.9101 / 17.2208 | — |
+| `a1_e2m1` | 13.9101 / 17.2208 | 0.0000 / 0.0000 (validation) |
+| **`a1_hess_h10`** | **13.8931 / 17.2172** | **-0.0170 / -0.0036** |
+| `a1_hess_v0.7` | 13.9129 / 17.1849 | +0.0028 / **-0.0359** |
+
+**`a1_hess_h10` beats plain NVFP4 on both datasets**, where the identical configuration was at
+parity in W4A16 (+0.0028 / +0.0049). The wikitext gain is ~4x the noise floor of §0 and is real;
+the c4 gain is inside it.
+
+This is the same effect seen on Llama-3.1-8B -- the type block is worth more once activations are
+quantized -- and here it is enough to move Qwen3-4B from parity to a genuine win. So the answer to
+"does MixFP4 ever beat NVFP4 on Qwen3-4B" is **yes, in W4A4, given alpha = 1 and a strict
+election**; in W4A16 the best available was parity.
+
 ### Not yet measured in W4A4
 
-* **alpha = 1 weight configs** (`clipa1_hess_h10`, `_v0.7`, `_m1`, `_h5`). These are the only
-  configurations that reached parity with `nvfp4` in W4A16 on Qwen3-4B, so they are the ones that
-  matter there. Queued.
-* **Qwen3-8B** and the second-wave weight ladder (`h1.5` MSE, `hessa`, `hesst`) on both models.
+* The second-wave weight ladder (`h1.5` MSE, `hessa` alpha-only, `hesst` type-only) that would give
+  the alpha-vs-type decomposition of §4 under W4A4 rather than W4A16. Queued; one attempt died on a
+  node with no visible GPU.
 * W4A4 runs are far slower than W4A16 because `quant_act` executes on every forward pass; one
   7-config sweep took over 3.5 hours, and a 2-hour `dev` allocation timed out.
 
