@@ -40,12 +40,12 @@ CALIB=${CALIB:-4}
 #   hess_h1.5      -- same election, importance-weighted criterion
 #   hess_coclcol.. -- + reordering, with the grid the election actually uses
 CONFIGS=${CONFIGS:-"nvfp4_4over6,\
-mix_4_6_clipheadx_dom@${TB},\
-mix_4_6_clipheadx_h1.5@${TB},\
-mix_4_6_clipheadx_hess_h1.5@${TB},\
-mix_4_6_clipheadx_hess_m1@${TB},\
-mix_4_6_clipheadx_hess_coclcol_h1.5@${TB},\
-mix_4_6_clipheadx_hess_coclcol_m1@${TB}"}
+mix_4_6_clipa1_dom@${TB},\
+mix_4_6_clipa1_h1.5@${TB},\
+mix_4_6_clipa1_hess_h1.5@${TB},\
+mix_4_6_clipa1_hess_m1@${TB},\
+mix_4_6_clipa1_hess_coclcol_h1.5@${TB},\
+mix_4_6_clipa1_hess_coclcol_m1@${TB}"}
 
 export PATH="$HOME/.local/bin:$PATH"
 PYTHON=${PYTHON:-/home/u4320956/beam_engine-v3/.venv/bin/python}

@@ -149,8 +149,8 @@ def main():
     ap.add_argument("--max_tensors", type=int, default=1000)
     ap.add_argument("--type_blocks", type=lambda s: s.split(","), default=DEFAULT_TYPE_BLOCKS)
     ap.add_argument("--rules", type=lambda s: s.split(","), default=DEFAULT_RULES)
-    ap.add_argument("--clip", type=str, default="headx",
-                    help="Clip preset for the tag grid. `headx` is the configuration CLAUDE.md "
+    ap.add_argument("--clip", type=str, default="a1",
+                    help="Clip preset for the tag grid. `a1` is the configuration CLAUDE.md "
                          "recommends when the E0M3 branch is used at all.")
     ap.add_argument("--metric", type=str, default="mse")
     ap.add_argument("--groupsize", type=int, default=16)

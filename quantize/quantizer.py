@@ -880,7 +880,7 @@ CLIP_PRESETS = {
     # This exists because alpha widening is NOT universally safe, contrary to how the rest of these
     # presets are framed. On Qwen3-4B, nvfp4 (alpha=1) scores 13.6584/16.8723 while 4over6 scores
     # 14.0407/17.0153 -- FourOverSix is +0.38 wikitext WORSE than the unmodified format there,
-    # and headx is +0.33 worse. On Llama-3.1-8B the same two changes are -0.025 and -0.034, i.e.
+    # and a1 is +0.33 worse. On Llama-3.1-8B the same two changes are -0.025 and -0.034, i.e.
     # improvements. The mechanism is the one the selection analysis found: E2M1 is log-spaced and
     # coarse at the top, so its top codes are what absorb an outlier, and alpha > 1 discards exactly
     # those. A model with peakier blocks cannot afford that.
@@ -891,36 +891,40 @@ CLIP_PRESETS = {
     # E0M3 only -- the branch with no free normalization today
     "e0":    {"e2m1": (1.0, 1.5),                          "e0m3": (1.0, 0.9)},
     "e0x":   {"e2m1": (1.0, 1.5),                          "e0m3": (1.0, 0.9, 0.8)},
-    # E2M1 headroom only -- alpha >= 1 never clips, so this extends FourOverSix along the one
-    # direction round 1 showed to be safe, and it is the largest single win measured here
-    # (-0.0186/-0.0098 for `headx`, against -0.0117/-0.0044 for `base`).
+    # REMOVED: `head` / `a1` / `a1`, the E2M1 headroom family (alpha > 1).
     #
-    # What headroom actually does is turn E2M1 into a UNIFORM grid with fewer levels. Writing the
-    # usable code values in units of the block maximum, with alpha mapping the block max to code
-    # 6/alpha:
+    # THE SCALE SEARCH IS NOT A FACTOR IN THIS WORK. `a1` is the reported preset: alpha = 1 on both
+    # grids, i.e. the block maximum sits on the top code of whichever grid the tile elected, exactly
+    # as plain NVFP4 does. The only thing MixFP4 then varies is the ELEMENT DATA TYPE, which is the
+    # claim the paper makes.
+    #
+    # This matters for what the numbers mean, not just for tidiness. With any multi-alpha preset,
+    # a MixFP4-vs-NVFP4 delta confounds two mechanisms -- a different scale and a different grid --
+    # and the scale search was measured as the larger of the two, so it dominated every headline.
+    # With `a1` the comparison is clean: `mix_4_6_clipa1_e2m1` is bit-identical to `nvfp4`, so any
+    # delta is attributable to the type election alone. That equivalence is asserted in
+    # `test_a1_e2m1_is_nvfp4`.
+    #
+    # For the record, since it is the reason the family existed: headroom turns E2M1 into a uniform
+    # grid with fewer levels, alpha mapping the block max to code 6/alpha --
     #
     #   alpha=1    block max -> code 6   {0, .083, .167, .25, .333, .5, .667, 1}   log-spaced
     #   alpha=1.5  block max -> code 4   {0, .125, .25, .375, .5, .75, 1}          4over6
     #   alpha=2    block max -> code 3   {0, .167, .333, .5, .667, 1}              uniform, 6 levels
     #   alpha=3    block max -> code 2   {0, .25, .5, .75, 1}                      uniform, 4 levels
     #
-    # so the family interpolates from "log-spaced at full range" to "uniform with few levels", and
-    # the top codes it wastes are exactly the sparse part of the E2M1 grid. E0M3 is the one point
-    # this family cannot reach: uniform with SEVEN levels at full range. That is why headroom and
-    # the E0M3 election are worth more together than apart -- headroom lets a scale block sit well
-    # on whichever grid its tile elected, and E0M3 supplies the finest uniform grid on offer.
-    "head":  {"e2m1": (1.0, 1.5, 2.0),                     "e0m3": (1.0,)},
-    "headx": {"e2m1": (1.0, 1.25, 1.5, 2.0, 3.0),          "e0m3": (1.0,)},
-    "headxx": {"e2m1": (1.0, 1.2, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0), "e0m3": (1.0,)},
-    # REMOVED: `heade0` / `heade0x`, which gave E0M3 its own headroom candidates
+    # -- and E0M3 at alpha=1 is the one point that family cannot reach, uniform with SEVEN levels at
+    # full range. That is the whole content of the type election once the scale search is gone.
+    #
+    # REMOVED earlier: `heade0` / `heade0x`, which gave E0M3 its own headroom candidates
     # (alpha = 7/6, 7/5, ...). E0M3 with alpha = 7/n maps the block maximum to code n, i.e. a
     # uniform n-level grid, which E2M1 cannot supply above n = 4 -- so those presets did have a
     # principled basis. They are gone because E0M3 headroom is deliberately NOT a factor in this
     # work: it entangles the element-type decision with a second scale search on the E0M3 branch,
-    # and every result that needs a wide scale search now uses `headx`, which searches E2M1 only
+    # and every result that needs a wide scale search now uses `a1`, which searches E2M1 only
     # and pins E0M3 at alpha = 1.
     #
-    # `test_no_e0m3_headroom` enforces that no preset reachable from `headx`/`base`/`a1` reintroduces
+    # `test_no_e0m3_headroom` enforces that no preset reachable from `a1`/`base`/`a1` reintroduces
     # it. Presets further down that DO give E0M3 alpha > 1 (`dense9e0`, `dense9sym`, `dense5sym`,
     # `basesym`, `wide`, `full`) are kept deliberately: they exist as confound controls for the
     # question "does E0M3 stop contributing once alpha is searched", and none appears in a reported
@@ -931,15 +935,15 @@ CLIP_PRESETS = {
     "full":  {"e2m1": (0.8, 0.9, 1.0, 1.25, 1.5, 2.0, 3.0),
               "e0m3": (0.8, 0.9, 1.0, 7.0 / 6.0, 7.0 / 5.0)},
     # DENSE headroom in [1, 1.5], which is where the action actually is. Measured on Llama-2-7B,
-    # the share of scale blocks choosing each `headx` candidate is 58.3% / 3.6% / 38.0% / 0% / 0%
+    # the share of scale blocks choosing each `a1` candidate is 58.3% / 3.6% / 38.0% / 0% / 0%
     # for alpha = 1 / 1.25 / 1.5 / 2 / 3 -- the coarse uniform grids are never selected, and the
     # whole gain comes from the single extra point at 1.25. Subdividing [1, 1.5] instead cuts weight
-    # NMSE by 4.2% (five points) and 5.4% (nine), against 0.76% for `headx`. The ue4m3 scale has a
+    # NMSE by 4.2% (five points) and 5.4% (nine), against 0.76% for `a1`. The ue4m3 scale has a
     # 3-bit mantissa, so ~6% steps are near the finest that survives the scale rounding.
     "dense5":  {"e2m1": (1.0, 1.125, 1.25, 1.375, 1.5),    "e0m3": (1.0,)},
     "dense9":  {"e2m1": tuple(1.0 + 0.0625 * i for i in range(9)), "e0m3": (1.0,)},
     # Twice as fine again, and out to alpha = 2. Only sensible together with `amin<t>`: without the
-    # gate a denser grid fits more MSE noise (round 7's `headxx`, round 17a's dense grid on
+    # gate a denser grid fits more MSE noise (round 7's `a1`, round 17a's dense grid on
     # Llama-2-7B), and the gate is what makes extra candidates safe to offer.
     "dense17": {"e2m1": tuple(1.0 + 0.03125 * i for i in range(17)), "e0m3": (1.0,)},
     "dense2x": {"e2m1": tuple(1.0 + 0.0625 * i for i in range(17)), "e0m3": (1.0,)},

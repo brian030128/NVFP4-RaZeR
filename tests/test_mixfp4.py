@@ -507,7 +507,7 @@ def test_nover6_matches_the_measured_preset():
         with the type-block machinery removed. It must be bit-identical to the general path with the
         preset its default alphas come from and the E0M3 branch switched off -- otherwise the
         standalone function is a different format from the one the perplexity numbers were measured
-        on. The preset moved from `headx` to `dense9` when the dense grid won, and this test is what
+        on. The preset moved from `a1` to `dense9` when the dense grid won, and this test is what
         catches the default and the preset drifting apart.
     """
     from quantize.quantizer import CLIP_PRESETS, NOVER6_ALPHAS
@@ -614,7 +614,9 @@ def test_alpha_min_gain_gates_the_scale_search():
         ordinary argmin search untouched.
     """
     x = _outlier_tensor()
-    for preset in ("base", "headx", "dense9"):
+    # These must be MULTI-alpha presets -- `alpha_min_gain` gates a search, so a single-candidate
+    # preset like the reported `a1` cannot exercise it and would make the test vacuous.
+    for preset in ("base", "dense5", "dense9"):
         gated = quant_mix_4_6(x, groupsize=16, type_block="1x16",
                               clip=preset, elect="never", alpha_min_gain=1e9)
         only1 = quant_mix_4_6(x, groupsize=16, type_block="1x16",
@@ -1027,20 +1029,29 @@ def test_dtype_name_parsing():
     print(f"ok  {len(cases)} data type names parse, and unknown qualifiers are rejected")
 
 
-def test_no_e0m3_headroom():
+REPORTED_CLIP = "a1"          # the ONLY preset a reported configuration may use
+
+
+def test_no_scale_search():
     """
-        E0M3 headroom is deliberately NOT a factor in this work.
+        The scale search is deliberately NOT a factor in this work.
 
-        `heade0` / `heade0x` gave the E0M3 branch its own alpha candidates (7/6, 7/5, ...), which
-        entangles the element-type decision with a second scale search on that branch. They are
-        removed; `headx` is the wide-search preset, and it searches E2M1 only.
+        Reported configurations use `a1`: alpha = 1 on BOTH grids, so the block maximum sits on the
+        top code of whichever grid the tile elected -- exactly what plain NVFP4 does. The only thing
+        MixFP4 varies is then the element data type, which is the claim being made.
 
-        This test exists so the removal cannot be quietly undone -- a reintroduced preset, or an
-        e0m3 tuple that grows an entry, fails here rather than in a table six weeks later.
+        Removed for this reason:
+          `head` / `headx` / `headxx`   E2M1 headroom, alpha > 1
+          `heade0` / `heade0x`          the same on the E0M3 branch (alpha = 7/6, 7/5)
+
+        This test exists so the removal cannot be quietly undone. Presets that still search a scale
+        (`base`, the `dense*` family, the clipping family) are kept as controls and historical
+        record; the test asserts only that `a1` itself performs no search, which is what makes the
+        MixFP4-vs-NVFP4 comparison attributable to the type election alone.
     """
     from quantize.quantizer import CLIP_PRESETS, parse_mix_4_6_dtype
 
-    for gone in ("heade0", "heade0x"):
+    for gone in ("head", "headx", "headxx", "heade0", "heade0x"):
         assert gone not in CLIP_PRESETS, f'"{gone}" is back in CLIP_PRESETS'
         try:
             parse_mix_4_6_dtype(f"mix_4_6_clip{gone}_h1.5")
@@ -1049,21 +1060,34 @@ def test_no_e0m3_headroom():
         else:
             raise AssertionError(f'"clip{gone}" still parses')
 
-    # every preset a reported configuration can reach must pin E0M3 at alpha = 1
-    reported = ("a1", "base", "head", "headx", "headxx",
-                "dense5", "dense9", "dense17", "dense2x")
-    for name in reported:
-        assert CLIP_PRESETS[name]["e0m3"] == (1.0,), \
-            f'{name} gives E0M3 headroom {CLIP_PRESETS[name]["e0m3"]}; it must be (1.0,)'
+    preset = CLIP_PRESETS[REPORTED_CLIP]
+    assert preset == {"e2m1": (1.0,), "e0m3": (1.0,)}, \
+        f'the reported preset "{REPORTED_CLIP}" must do no scale search, got {preset}'
+    print(f'ok  no scale search: head*/heade0* gone, "{REPORTED_CLIP}" is alpha=1 on both grids')
 
-    # The confound-control presets keep theirs on purpose (they exist to test "does E0M3 stop
-    # contributing once alpha is searched"). Assert only that they stay OUT of the reported set,
-    # so this test documents the boundary rather than forbidding them outright.
-    controls = ("dense9e0", "dense9sym", "dense5sym", "basesym", "wide", "full")
-    for name in controls:
-        assert name in CLIP_PRESETS and name not in reported
-    print(f"ok  E0M3 headroom removed: heade0/heade0x gone, {len(reported)} reported presets "
-          f"pin E0M3 at alpha=1, {len(controls)} controls kept out of the reported set")
+
+def test_a1_e2m1_is_nvfp4():
+    """
+        The equivalence the whole comparison rests on.
+
+        With alpha = 1 and the election disabled, MixFP4 has no freedom left: every block takes the
+        E2M1 grid with the block maximum on the top code, which IS plain NVFP4. So any delta between
+        `mix_4_6_clipa1_<rule>` and `nvfp4` is attributable to the type election and nothing else.
+
+        If this ever fails, every reported delta is confounded.
+    """
+    from quantize.quantizer import quant_nvfp4
+
+    torch.manual_seed(0)
+    for shape in [(512, 512), (128, 4096), (2, 64, 512)]:
+        x = torch.randn(*shape).to(torch.bfloat16)
+        a = quant_mix_4_6(x, 4, 16, type_block=(8, 64), clip=REPORTED_CLIP, elect="never")
+        b = quant_nvfp4(x, 4, 16)
+        assert torch.equal(a, b), \
+            f"clip={REPORTED_CLIP} + elect=never diverges from nvfp4 at {shape}: " \
+            f"max |d| {(a.float() - b.float()).abs().max().item():.3e}"
+    print(f'ok  mix_4_6(clip={REPORTED_CLIP}, elect=never) == nvfp4 exactly -- '
+          f"deltas isolate the type election")
 
 
 if __name__ == "__main__":

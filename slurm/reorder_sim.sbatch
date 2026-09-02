@@ -64,7 +64,7 @@ echo "=== $MODEL  stride=$STRIDE  start $(date -Iseconds)  on $(hostname) ==="
     --projections "$PROJ" \
     --type_blocks "$TYPE_BLOCKS" \
     --rules "$RULES" \
-    --clip "${CLIP:-headx}" \
+    --clip "${CLIP:-a1}" \
     --axes "$AXES" \
     --search_rule "$SEARCH_RULE" \
     --rounds "$ROUNDS" \

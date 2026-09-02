@@ -47,7 +47,7 @@ def main():
     ap.add_argument("--model_name", type=str, default="llama-3.1-8b-local")
     ap.add_argument("--layer_stride", type=int, default=8)
     ap.add_argument("--seq_len", type=int, default=2048)
-    ap.add_argument("--clip", type=str, default="headx")
+    ap.add_argument("--clip", type=str, default="a1")
     ap.add_argument("--rule", type=str, default="harm")
     ap.add_argument("--margin", type=float, default=1.5)
     args = ap.parse_args()

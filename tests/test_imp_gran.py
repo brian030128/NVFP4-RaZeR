@@ -60,10 +60,10 @@ def main():
 
     for elect in ("_h1.5", "_m1", "_argmin", "_dom", "_v0.7"):
         e = "" if elect == "_argmin" else elect
-        plain = run("_clipheadx" + e, w, imp)
-        g64   = run("_clipheadx_hess_impg64" + e, w, imp)
-        g16   = run("_clipheadx_hess_impg16" + e, w, imp)
-        hess  = run("_clipheadx_hess" + e, w, imp)
+        plain = run("_clipa1" + e, w, imp)
+        g64   = run("_clipa1_hess_impg64" + e, w, imp)
+        g16   = run("_clipa1_hess_impg16" + e, w, imp)
+        hess  = run("_clipa1_hess" + e, w, imp)
 
         same64 = torch.equal(plain, g64)
         d16    = (g16.float() - plain.float()).abs().max().item()
@@ -75,14 +75,18 @@ def main():
             print(f"           FAIL: per-tile importance changed {n} elements -- "
                   f"an election rule is NOT scale-invariant")
             ok = False
-        if dh == 0.0:
+        # `dom` is exempt: dominance requires that NO scale block in the tile is harmed, which at
+        # 8x64 essentially never holds, so it degenerates to all-E2M1 whatever the criterion --
+        # `test_dominance_is_plain_e2m1` asserts that separately. Every other rule must actually
+        # move under importance, or importance is not reaching the loss at all.
+        if dh == 0.0 and elect != "_dom":
             print("           FAIL: full hess is a no-op too; importance is not reaching the loss")
             ok = False
 
     # claim 2: with the election off, a per-scale-block constant cancels in the alpha search
-    plain_e = run("_clipheadx_e2m1", w, imp)
-    g16_e   = run("_clipheadx_hess_impg16_e2m1", w, imp)
-    hess_e  = run("_clipheadx_hess_e2m1", w, imp)
+    plain_e = run("_clipa1_e2m1", w, imp)
+    g16_e   = run("_clipa1_hess_impg16_e2m1", w, imp)
+    hess_e  = run("_clipa1_hess_e2m1", w, imp)
     same = torch.equal(plain_e, g16_e)
     print(f"\n   e2m1 (election off)  impg16==plain: {same}   "
           f"|hess-plain|max {(hess_e.float()-plain_e.float()).abs().max().item():.3e}")
@@ -92,8 +96,8 @@ def main():
 
     # and with the election on, impg16 must actually differ from plain -- otherwise the whole
     # variant is vacuous and any perplexity difference would be noise
-    if (run("_clipheadx_hess_impg16_h1.5", w, imp).float()
-            - run("_clipheadx_h1.5", w, imp).float()).abs().max().item() == 0.0:
+    if (run("_clipa1_hess_impg16_h1.5", w, imp).float()
+            - run("_clipa1_h1.5", w, imp).float()).abs().max().item() == 0.0:
         print("           FAIL: impg16 with election on is identical to plain -- vacuous variant")
         ok = False
 
@@ -110,13 +114,15 @@ def test_alpha_tiebreak():
         `sum_j (c * d_j^2)` and `c * sum_j d_j^2` are not the same float. So a per-tile constant
         rescales the loss only up to rounding, and the alpha search's `err < best_err` can flip on a
         near-tie. With one candidate alpha (`clipa1`) there is no comparison to flip, so equality is
-        exact; with five (`clipheadx`) it is exact only up to tie-breaking.
+        exact; with five (`clipa1`) it is exact only up to tie-breaking.
 
         This matters because it sets the NOISE FLOOR for the whole impg comparison: any difference
         this mechanism can produce is not a real effect.
     """
     w, imp = _w(m=512, k=1024).to(torch.bfloat16).float(), _imp(k=1024)
-    for clip, alphas in (("a1", 1), ("headx", "many")):
+    # `a1` is the reported preset and has ONE alpha; `dense9` is kept as a control and has nine.
+    # The contrast is the point: with one candidate there is no comparison to break.
+    for clip, alphas in (("a1", 1), ("dense9", "many")):
         plain = run(f"_clip{clip}_m1", w, imp)
         g64   = run(f"_clip{clip}_hess_impg64_m1", w, imp)
         n = int((plain != g64).sum())

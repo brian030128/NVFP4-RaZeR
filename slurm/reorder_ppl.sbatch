@@ -12,13 +12,13 @@
 #
 # Does the reordering's weight-MSE reduction reach PERPLEXITY?
 #
-# Four W4A16 points at the 8x64 weight type block, all with the `headx` clip preset so that the
+# Four W4A16 points at the 8x64 weight type block, all with the `a1` clip preset so that the
 # ONLY difference between rows 2-4 is the reordering:
 #
 #   nvfp4_4over6                     -- the E2M1-only reference
-#   mix_4_6_clipheadx_h1.5          -- the current best realizable rule, unpermuted
-#   mix_4_6_clipheadx_coclcol_h1.5  -- + column-chunk reordering (free per layer for down_proj)
-#   mix_4_6_clipheadx_cocl_h1.5     -- + rows and columns (upper bound, ALGORITHM.md §7)
+#   mix_4_6_clipa1_h1.5          -- the current best realizable rule, unpermuted
+#   mix_4_6_clipa1_coclcol_h1.5  -- + column-chunk reordering (free per layer for down_proj)
+#   mix_4_6_clipa1_cocl_h1.5     -- + rows and columns (upper bound, ALGORITHM.md §7)
 #
 # The co-clustering search runs per weight tensor inside quant_weight, so the quantization pass
 # takes ~1 h for the permuted configurations. Budget accordingly.
@@ -80,9 +80,9 @@ run () {
 }
 
 # CONFIGS can override the list, e.g. to rerun a single failed point:
-#   CONFIGS=mix_4_6_clipheadx_cocl_h1.5 sbatch slurm/reorder_ppl.sbatch
+#   CONFIGS=mix_4_6_clipa1_cocl_h1.5 sbatch slurm/reorder_ppl.sbatch
 # run_ppl.py skips a config whose output file already exists, so a rerun is cheap and idempotent.
-CONFIGS=${CONFIGS:-nvfp4_4over6 mix_4_6_clipheadx_h1.5 mix_4_6_clipheadx_coclcol_h1.5 mix_4_6_clipheadx_cocl_h1.5}
+CONFIGS=${CONFIGS:-nvfp4_4over6 mix_4_6_clipa1_h1.5 mix_4_6_clipa1_coclcol_h1.5 mix_4_6_clipa1_cocl_h1.5}
 for cfg in $CONFIGS; do
     run "$cfg"
 done

@@ -49,7 +49,7 @@ run () {  # $1 = extra flags, for the with/without permutation pair
 # A4 baseline first (nvfp4_4over6 activations, no type block), then MixFP4 activations with and
 # without the channel permutation. The pair is what isolates the permutation's contribution.
 "$PYTHON" run_actperm_ppl.py --model_name "$MODEL" \
-    --w_dtype mix_4_6_clipheadx_h1.5 --a_dtype nvfp4_4over6 \
+    --w_dtype mix_4_6_clipa1_h1.5 --a_dtype nvfp4_4over6 \
     --w_type_block "$WTB" --a_type_block "$ATB" --output "$OUT" 2>&1 | tee -a "$LOG"
 run ""
 run "--act_perm"

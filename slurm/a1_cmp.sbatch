@@ -22,7 +22,7 @@
 #   nvfp4          alpha = 1 exactly, block max on the top code -- the unmodified format
 #   nvfp4_4over6   alpha in {1, 1.5}
 #   nvfp4_nover6   the wider alpha family without any type block
-#   ..._dom        the headx alpha set, E0M3 never elected
+#   ..._dom        the a1 alpha set, E0M3 never elected
 #
 #   sbatch slurm/baseline_cmp.sbatch qwen3-4b
 

@@ -42,10 +42,10 @@ CALIB=${CALIB:-4}
 CONFIGS=${CONFIGS:-"nvfp4,\
 nvfp4_4over6,\
 mix_4_6_clipbase_hess_e2m1/nvfp4_4over6@${TB},\
-mix_4_6_clipheadx_hess_m1/nvfp4_4over6@${TB},\
-mix_4_6_clipheadx_hess_coclcol_m1/nvfp4_4over6@${TB},\
-mix_4_6_clipheadx_hess_m1@${TB},\
-mix_4_6_clipheadx_hess_coclcol_m1@${TB}"}
+mix_4_6_clipa1_hess_m1/nvfp4_4over6@${TB},\
+mix_4_6_clipa1_hess_coclcol_m1/nvfp4_4over6@${TB},\
+mix_4_6_clipa1_hess_m1@${TB},\
+mix_4_6_clipa1_hess_coclcol_m1@${TB}"}
 
 export PATH="$HOME/.local/bin:$PATH"
 PYTHON=${PYTHON:-/home/u4320956/beam_engine-v3/.venv/bin/python}

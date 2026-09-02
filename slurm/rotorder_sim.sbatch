@@ -24,7 +24,7 @@ MODEL=${1:-}
 STRIDE=${2:-8}
 ROTS=${ROTS:-16,64,128}
 MIN_GAIN=${MIN_GAIN:-0.1}
-CLIP=${CLIP:-headx}
+CLIP=${CLIP:-a1}
 TAG=${TAG:-${MODEL:-synthetic}}
 
 export PATH="$HOME/.local/bin:$PATH"
