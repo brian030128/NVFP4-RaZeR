@@ -50,7 +50,7 @@ def main():
                     default=["q_proj", "o_proj", "up_proj", "down_proj"])
     ap.add_argument("--max_tokens", type=int, default=2048,
                     help="tokens kept per layer for the decomposition")
-    ap.add_argument("--clip", type=str, default="heade0")
+    ap.add_argument("--clip", type=str, default="headx")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=str, default=None)
     args = ap.parse_args()

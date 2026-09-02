@@ -231,7 +231,7 @@ def spread_order(w, stat: str = "rms", groupsize: int = 16, importance=None):
 
 
 @torch.no_grad()
-def rotation_split_error(w_scaled, cols=None, groupsize: int = 16, clip: str = "heade0",
+def rotation_split_error(w_scaled, cols=None, groupsize: int = 16, clip: str = "headx",
                          metric: str = "mse", rotate_size: int = 16, min_gain: float = 0.0):
     """
         Per-column-chunk rotation, evaluated exactly, for a given column order.

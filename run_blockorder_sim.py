@@ -83,7 +83,7 @@ def main():
                     default=["q_proj", "v_proj", "o_proj", "up_proj", "down_proj"])
     ap.add_argument("--max_tensors", type=int, default=1000)
     ap.add_argument("--groupsize", type=int, default=16)
-    ap.add_argument("--clip", type=str, default="heade0")
+    ap.add_argument("--clip", type=str, default="headx")
     ap.add_argument("--metric", type=str, default="mse")
     ap.add_argument("--stats", type=lambda s: s.split(","), default=["rms", "max"])
     ap.add_argument("--refine_rounds", type=int, default=6)

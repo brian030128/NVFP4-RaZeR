@@ -22,7 +22,7 @@ set -uo pipefail
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
 MODEL=${1:-llama-3.1-8b}
-CLIP=${CLIP:-heade0}
+CLIP=${CLIP:-headx}
 
 export PATH="$HOME/.local/bin:$PATH"
 PYTHON=${PYTHON:-/home/u4320956/DiRotQ/.venv/bin/python}

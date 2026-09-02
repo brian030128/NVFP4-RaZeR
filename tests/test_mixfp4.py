@@ -1027,6 +1027,45 @@ def test_dtype_name_parsing():
     print(f"ok  {len(cases)} data type names parse, and unknown qualifiers are rejected")
 
 
+def test_no_e0m3_headroom():
+    """
+        E0M3 headroom is deliberately NOT a factor in this work.
+
+        `heade0` / `heade0x` gave the E0M3 branch its own alpha candidates (7/6, 7/5, ...), which
+        entangles the element-type decision with a second scale search on that branch. They are
+        removed; `headx` is the wide-search preset, and it searches E2M1 only.
+
+        This test exists so the removal cannot be quietly undone -- a reintroduced preset, or an
+        e0m3 tuple that grows an entry, fails here rather than in a table six weeks later.
+    """
+    from quantize.quantizer import CLIP_PRESETS, parse_mix_4_6_dtype
+
+    for gone in ("heade0", "heade0x"):
+        assert gone not in CLIP_PRESETS, f'"{gone}" is back in CLIP_PRESETS'
+        try:
+            parse_mix_4_6_dtype(f"mix_4_6_clip{gone}_h1.5")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f'"clip{gone}" still parses')
+
+    # every preset a reported configuration can reach must pin E0M3 at alpha = 1
+    reported = ("a1", "base", "head", "headx", "headxx",
+                "dense5", "dense9", "dense17", "dense2x")
+    for name in reported:
+        assert CLIP_PRESETS[name]["e0m3"] == (1.0,), \
+            f'{name} gives E0M3 headroom {CLIP_PRESETS[name]["e0m3"]}; it must be (1.0,)'
+
+    # The confound-control presets keep theirs on purpose (they exist to test "does E0M3 stop
+    # contributing once alpha is searched"). Assert only that they stay OUT of the reported set,
+    # so this test documents the boundary rather than forbidding them outright.
+    controls = ("dense9e0", "dense9sym", "dense5sym", "basesym", "wide", "full")
+    for name in controls:
+        assert name in CLIP_PRESETS and name not in reported
+    print(f"ok  E0M3 headroom removed: heade0/heade0x gone, {len(reported)} reported presets "
+          f"pin E0M3 at alpha=1, {len(controls)} controls kept out of the reported set")
+
+
 if __name__ == "__main__":
     torch.manual_seed(0)
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]

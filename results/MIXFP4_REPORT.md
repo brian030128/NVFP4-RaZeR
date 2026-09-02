@@ -7,6 +7,28 @@ tile, one `n8 x k64` MMA B-operand). Five models, wikitext and c4.
 deployment-relevant ones and where several conclusions differ. W4A4 activations are pinned at
 `nvfp4_4over6` throughout so that only the weight side varies.
 
+> ### Scope change: E0M3 headroom is out
+>
+> **`heade0` / `heade0x` have been removed from `CLIP_PRESETS`.** Those presets gave the E0M3
+> branch its own scale candidates (`alpha` = 7/6, 7/5), which entangles the element-type decision
+> with a second scale search on that branch. That is not a factor this work claims, so it is gone
+> from the code, not merely unused: `test_no_e0m3_headroom` fails if it returns.
+>
+> **`headx` is now the wide-search preset** -- the same E2M1 candidates `{1, 1.25, 1.5, 2, 3}`, with
+> E0M3 pinned at `alpha = 1`. Every `clipheade0_*` configuration has been re-measured as
+> `clipheadx_*`, and the tables below report the `headx` numbers.
+>
+> What this costs, measured rather than assumed: on Llama-3.1-8B W4A4 the E0M3 headroom was worth
+> about **-0.009 / -0.011** (§1a). On Qwen3-8B it was worth nothing. It is a real but small effect,
+> and removing it does not change any qualitative conclusion in this report.
+>
+> Unaffected: every result built on `a1`, `base` or `headx` -- which includes the headline Qwen3-4B
+> win (§1a) and the whole of §1b -- because none of those presets ever gave E0M3 headroom.
+>
+> Kept deliberately: `dense9e0`, `dense9sym`, `dense5sym`, `basesym`, `wide` and `full` still give
+> E0M3 `alpha > 1`. They exist as confound controls for "does E0M3 stop contributing once alpha is
+> searched", and none appears in a reported result. Do not promote one into a headline row.
+
 ---
 
 ## 0. Read this first — measurement noise

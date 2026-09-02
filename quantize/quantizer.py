@@ -912,16 +912,19 @@ CLIP_PRESETS = {
     "head":  {"e2m1": (1.0, 1.5, 2.0),                     "e0m3": (1.0,)},
     "headx": {"e2m1": (1.0, 1.25, 1.5, 2.0, 3.0),          "e0m3": (1.0,)},
     "headxx": {"e2m1": (1.0, 1.2, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0), "e0m3": (1.0,)},
-    # Headroom on E0M3 as well, and this is where the family becomes principled: E0M3 with
-    # alpha = 7/n maps the block maximum to code n, giving a UNIFORM n-LEVEL grid, for any n <= 7.
-    # E2M1 cannot do that above n = 4 -- its codes are {0,.5,1,1.5,2,3,4,6}, uniform only up to
-    # code 2 -- so E0M3 plus headroom is the efficient way to reach uniform grids of 5, 6 and 7
-    # levels, and E2M1 plus headroom supplies the log-spaced options and the coarse uniform ones.
-    # Together they span the whole useful range of block quantizers at zero metadata cost.
-    "heade0": {"e2m1": (1.0, 1.25, 1.5, 2.0, 3.0),
-               "e0m3": (1.0, 7.0 / 6.0, 7.0 / 5.0)},
-    "heade0x": {"e2m1": (1.0, 1.25, 1.5, 2.0, 3.0),
-                "e0m3": (1.0, 7.0 / 6.0, 7.0 / 5.0, 7.0 / 4.0, 7.0 / 3.0)},
+    # REMOVED: `heade0` / `heade0x`, which gave E0M3 its own headroom candidates
+    # (alpha = 7/6, 7/5, ...). E0M3 with alpha = 7/n maps the block maximum to code n, i.e. a
+    # uniform n-level grid, which E2M1 cannot supply above n = 4 -- so those presets did have a
+    # principled basis. They are gone because E0M3 headroom is deliberately NOT a factor in this
+    # work: it entangles the element-type decision with a second scale search on the E0M3 branch,
+    # and every result that needs a wide scale search now uses `headx`, which searches E2M1 only
+    # and pins E0M3 at alpha = 1.
+    #
+    # `test_no_e0m3_headroom` enforces that no preset reachable from `headx`/`base`/`a1` reintroduces
+    # it. Presets further down that DO give E0M3 alpha > 1 (`dense9e0`, `dense9sym`, `dense5sym`,
+    # `basesym`, `wide`, `full`) are kept deliberately: they exist as confound controls for the
+    # question "does E0M3 stop contributing once alpha is searched", and none appears in a reported
+    # result. Do not promote one into a headline configuration.
     # Headroom on both grids PLUS clipping candidates. Only usable with `clipmin<t>`: the clipping
     # alphas are gated behind a minimum gain, which is what makes them safe (round 7 measures
     # clipbothx + clipmin0.15 at the best c4 of the study, against a loss for ungated clipping).

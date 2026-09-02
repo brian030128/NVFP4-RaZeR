@@ -50,7 +50,7 @@ def test_gain_grid_matches_row_preference():
     """ The tag grid summed over a row must be exactly `row_preference`. """
     torch.manual_seed(1)
     w = torch.randn(37, 128).float()
-    for clip in ("base", "heade0"):
+    for clip in ("base", "headx"):
         g    = scale_block_gain(w, 16, "mse", clip)
         want = row_preference(w, 16, "mse", clip)
         assert torch.allclose(g.sum(dim=1).float(), want.float(), atol=1e-5), clip
@@ -151,11 +151,11 @@ def test_permuted_weights_reproduce_gain():
     """
     torch.manual_seed(6)
     w    = torch.randn(64, 256).float() * torch.rand(64, 1)
-    gain = scale_block_gain(w, 16, "mse", "heade0")
+    gain = scale_block_gain(w, 16, "mse", "headx")
     res  = search_permutation(gain, 8, 64, rule="harm", margin=1.5, seed=0)
 
     cols = expand_chunk_perm(res["chunk_perm"], 16)
-    g2   = scale_block_gain(w[res["row_perm"]][:, cols], 16, "mse", "heade0")
+    g2   = scale_block_gain(w[res["row_perm"]][:, cols], 16, "mse", "headx")
     g_ref = gain[res["row_perm"]][:, res["chunk_perm"]]
     assert torch.allclose(g2, g_ref, atol=1e-9), "chunk permutation changed the tag grid"
     print("  [ok] 16-column chunk permutation leaves the tag grid invariant")
@@ -175,7 +175,7 @@ def test_quantizer_permute_modes():
 
     torch.manual_seed(7)
     w = (torch.randn(256, 512) * torch.rand(256, 1)).bfloat16()
-    kw = dict(groupsize=16, type_block=(8, 64), clip="heade0", elect="harm", margin=1.5)
+    kw = dict(groupsize=16, type_block=(8, 64), clip="headx", elect="harm", margin=1.5)
 
     for name, want in [("mix_4_6_cocl_h1.5", "cocluster"),
                        ("mix_4_6_coclcol_h1.5", "colchunk"),
@@ -194,7 +194,7 @@ def test_quantizer_permute_modes():
 
     # round-trip: permute by hand, quantize unpermuted, undo -> must match `colchunk` exactly
     gscale = (w.float().abs().amax() / (6.0 * 448.0)).clamp(min=torch.finfo(torch.float32).tiny)
-    gain   = scale_block_gain(w.float() / gscale, 16, "mse", "heade0")
+    gain   = scale_block_gain(w.float() / gscale, 16, "mse", "headx")
     found  = search_permutation(gain, 8, 64, 16, rule="harm", margin=1.5, axes="cols")
     cols   = expand_chunk_perm(found["chunk_perm"], 16)
     manual = quant_mix_4_6(w[:, cols], **kw, permute="none")

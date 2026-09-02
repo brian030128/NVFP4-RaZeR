@@ -38,8 +38,8 @@ def main():
     ap.add_argument("--model_name", default="llama-3.1-8b-local")
     ap.add_argument("--max_layers", type=int, default=4)
     ap.add_argument("--type_block", default="8x64")
-    ap.add_argument("--base", default="mix_4_6_clipheade0_m1")
-    ap.add_argument("--gran", default="mix_4_6_clipheade0_hess_impg64_m1")
+    ap.add_argument("--base", default="mix_4_6_clipheadx_m1")
+    ap.add_argument("--gran", default="mix_4_6_clipheadx_hess_impg64_m1")
     args = ap.parse_args()
 
     path = json.load(open("model2path.json"))[args.model_name]

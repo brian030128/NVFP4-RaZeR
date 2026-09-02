@@ -64,7 +64,7 @@ def main():
     ap.add_argument("--projections", type=lambda s: s.split(","),
                     default=["q_proj", "v_proj", "o_proj", "up_proj", "down_proj"])
     ap.add_argument("--groupsize", type=int, default=16)
-    ap.add_argument("--clip", type=str, default="heade0")
+    ap.add_argument("--clip", type=str, default="headx")
     ap.add_argument("--type_block", type=str, default="8x64")
     ap.add_argument("--rule", type=str, default="harm")
     ap.add_argument("--margin", type=float, default=1.5)

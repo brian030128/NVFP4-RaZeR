@@ -49,7 +49,7 @@ def main():
     ap.add_argument("--nsamples", type=int, default=2)
     ap.add_argument("--seq_len", type=int, default=2048)
     ap.add_argument("--max_tokens", type=int, default=2048)
-    ap.add_argument("--clip", type=str, default="heade0")
+    ap.add_argument("--clip", type=str, default="headx")
     ap.add_argument("--type_blocks", type=lambda s: s.split(","), default=["16x64", "8x64"])
     ap.add_argument("--rule", type=str, default="harm")
     ap.add_argument("--margin", type=float, default=1.5)

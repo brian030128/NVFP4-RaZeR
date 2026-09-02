@@ -256,8 +256,18 @@ the sparse top of the grid. `alpha < 1` is clipping, which saturates the block m
 rejected it at +0.006 to +0.033 wikitext. Five candidates is where the search saturates -- eight
 (`headxx`) is worse.
 
-**Part 2 -- the E0M3 type block is a model-dependent extra.** On Llama-3.1-8B, adding E0M3 headroom
-(`heade0`, E0M3 alphas `{1, 7/6, 7/5}`) and electing with `h1.5` is worth a further **-0.018
+**Part 2 -- the E0M3 type block is a model-dependent extra.**
+
+> **`heade0` / `heade0x` have been REMOVED from `CLIP_PRESETS`.** E0M3 headroom is no longer a
+> factor in this work: giving the E0M3 branch its own alpha candidates entangles the element-type
+> decision with a second scale search on that branch, which is not something the paper wants to
+> claim. **`headx` is the wide-search preset** -- the same E2M1 alphas `{1, 1.25, 1.5, 2, 3}`, with
+> E0M3 pinned at `alpha = 1`. `test_no_e0m3_headroom` enforces this. The paragraph below is kept as
+> the historical record of what `heade0` measured; do not treat it as a recommendation, and see
+> `results/MIXFP4_REPORT.md` for the `headx` replacements.
+
+On Llama-3.1-8B, adding E0M3 headroom
+(`heade0`, E0M3 alphas `{1, 7/6, 7/5}`) and electing with `h1.5` was worth a further **-0.018
 wikitext**, reaching -0.0265 / -0.0081 at 8x64. On Llama-2-7B the identical configuration is
 **+0.0165 / +0.0061**, a loss. E0M3 with `alpha = 7/n` is exactly a uniform *n*-level grid, which is
 the one thing E2M1 cannot supply above n=4, so when it helps it helps for a clear reason -- but

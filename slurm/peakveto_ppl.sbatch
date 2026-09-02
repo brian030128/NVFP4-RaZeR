@@ -30,7 +30,7 @@ cd "${SLURM_SUBMIT_DIR:-$PWD}"
 MODEL=${1:-llama-3.1-8b-local}
 ATB=${ATB:-16x64}
 WTB=${WTB:-8x64}
-W=${W:-mix_4_6_clipheade0_h1.5}
+W=${W:-mix_4_6_clipheadx_h1.5}
 DS=${DS:-wikitext}
 
 export PATH="$HOME/.local/bin:$PATH"
@@ -59,12 +59,12 @@ run () {
 
 # A4 references: no type block at all, then the type block with no veto.
 run nvfp4_4over6
-run mix_4_6_clipheade0_e2m1        # activations forced to E2M1 -- the "never elect" floor
-run mix_4_6_clipheade0_h1.5        # the type block, unvetoed
+run mix_4_6_clipheadx_e2m1        # activations forced to E2M1 -- the "never elect" floor
+run mix_4_6_clipheadx_h1.5        # the type block, unvetoed
 
 # The veto sweep. A Gaussian 16-block sits at max/rms 2.0, so thresholds bracket that.
 for tau in ${TAUS:-2.0 2.1 2.2 2.4 2.8}; do
-    run "mix_4_6_clipheade0_pv${tau}_h1.5"
+    run "mix_4_6_clipheadx_pv${tau}_h1.5"
 done
 
 echo "=== done $(date -Iseconds) ===" | tee -a "$LOG"
