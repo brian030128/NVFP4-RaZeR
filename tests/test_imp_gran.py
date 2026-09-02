@@ -97,9 +97,35 @@ def main():
         print("           FAIL: impg16 with election on is identical to plain -- vacuous variant")
         ok = False
 
+    print()
+    ok = test_alpha_tiebreak() and ok
+
     print("\nALL OK" if ok else "\nFAILURES ABOVE")
     return 0 if ok else 1
 
+def test_alpha_tiebreak():
+    """
+        Why impg64 is bit-exact under a single-alpha preset but NOT under a multi-alpha one.
+
+        `sum_j (c * d_j^2)` and `c * sum_j d_j^2` are not the same float. So a per-tile constant
+        rescales the loss only up to rounding, and the alpha search's `err < best_err` can flip on a
+        near-tie. With one candidate alpha (`clipa1`) there is no comparison to flip, so equality is
+        exact; with five (`clipheade0`) it is exact only up to tie-breaking.
+
+        This matters because it sets the NOISE FLOOR for the whole impg comparison: any difference
+        this mechanism can produce is not a real effect.
+    """
+    w, imp = _w(m=512, k=1024).to(torch.bfloat16).float(), _imp(k=1024)
+    for clip, alphas in (("a1", 1), ("heade0", "many")):
+        plain = run(f"_clip{clip}_m1", w, imp)
+        g64   = run(f"_clip{clip}_hess_impg64_m1", w, imp)
+        n = int((plain != g64).sum())
+        print(f"   clip={clip:<8} ({alphas} alpha) impg64 vs plain: {n} of {plain.numel()} "
+              f"elements differ  ({100*n/plain.numel():.4f}%)")
+        if clip == "a1" and n:
+            print("           FAIL: single-alpha preset must be bit-exact")
+            return False
+    return True
 
 if __name__ == "__main__":
     raise SystemExit(main())
