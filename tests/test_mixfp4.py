@@ -994,9 +994,30 @@ def test_dtype_name_parsing():
         "mix_4_6_v0.6":           ("mse",    "vote",      0.6,  False, "base", 0.0, 0.0, "none", "none", 16, 0.0, 2.1),
         "mix_4_6_hess_dom":       ("mse",    "dominance", 0.0,  True,  "base", 0.0, 0.0, "none", "none", 16, 0.0, 2.1),
     }
+    # Compare only the fields each case enumerates. This function grows a new trailing field every
+    # time a knob is added (peak_veto, imp_alpha/imp_elect, imp_gran ...), and a full-tuple compare
+    # turns every such addition into a spurious failure here -- which is exactly what happened.
+    # Fields beyond the prefix get their own explicit cases below.
     for name, want in cases.items():
         got = parse_mix_4_6_dtype(name)
-        assert got == want, f"{name}: got {got}, want {want}"
+        assert got[:len(want)] == want, f"{name}: got {got[:len(want)]}, want {want}"
+
+    # the trailing knobs, checked by name so they cannot silently drift
+    fields = ("metric", "elect", "margin", "use_importance", "clip", "clip_min_gain",
+              "alpha_min_gain", "permute", "rotate", "rotate_size", "rotate_min_gain",
+              "rotate_outlier_max", "peak_veto", "imp_alpha", "imp_elect", "imp_gran")
+    def field(name, key):
+        got = parse_mix_4_6_dtype(name)
+        assert len(got) == len(fields), \
+            f"parse_mix_4_6_dtype returns {len(got)} fields, this test knows {len(fields)}"
+        return got[fields.index(key)]
+    assert field("mix_4_6", "imp_gran") == 0
+    assert field("mix_4_6_hess_impg16_h1.5", "imp_gran") == 16
+    assert field("mix_4_6_hess_impg64_h1.5", "imp_gran") == 64
+    assert field("mix_4_6_hess_impg16_h1.5", "elect") == "harm"
+    assert field("mix_4_6_hess_impg16_h1.5", "use_importance") is True
+    assert field("mix_4_6_hesst", "imp_alpha") is False
+    assert field("mix_4_6_hessa", "imp_elect") is False
     for bad in ("mix_4_6_zzz", "mix_4_6_clipnope", "mix_4_6_m"):
         try:
             parse_mix_4_6_dtype(bad)

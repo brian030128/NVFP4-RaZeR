@@ -1300,6 +1300,7 @@ def quant_mix_4_6(
     peak_veto: float=0.0,
     imp_alpha: bool=True,
     imp_elect: bool=True,
+    imp_gran: int=0,
     is_act: bool=False,
 ):
     """
@@ -1360,7 +1361,8 @@ def quant_mix_4_6(
         inner = dict(n_bits=n_bits, groupsize=groupsize, type_block=type_block, metric=metric,
                      importance=importance, elect=elect, margin=margin, clip=clip,
                      permute=permute, rotate="none", peak_veto=peak_veto,
-                     imp_alpha=imp_alpha, imp_elect=imp_elect, is_act=is_act)
+                     imp_alpha=imp_alpha, imp_elect=imp_elect, imp_gran=imp_gran,
+                     is_act=is_act)
         nchunk = num_col // rotate_size
         rotated = _rotate_chunks(w_fp_new, rotate_size)
         dq_rot  = _rotate_chunks(
@@ -1465,6 +1467,31 @@ def quant_mix_4_6(
         imp_tiled, _ = _tile_type_blocks(
             imp.expand(w_fp_new.shape[0], -1), block_m, block_k, groupsize
         )
+        if imp_gran:
+            # Coarsen the importance along K: replace each element's own E[x_j^2] by the mean over
+            # a run of `imp_gran` consecutive channels. This asks how much of `hess` comes from the
+            # per-element detail as opposed to the coarse envelope.
+            #
+            # Two values are meaningful, and the second is a control with a PROVABLE answer:
+            #   imp_gran == groupsize -- one weight per 1x16 scale block. The alpha search compares
+            #     candidates within a block, so a per-block constant cancels there and this leaves
+            #     ONLY the election weighted -- but weighted by the block-mean, not per element.
+            #   imp_gran == block_k   -- one weight per type block. Every election rule in
+            #     `_elect_e0m3` is scale-invariant (argmin/harm/vote compare quantities that are
+            #     homogeneous of the same degree, margin is a ratio of degree-1 quantities), and the
+            #     alpha search is too, so a per-tile constant is an EXACT no-op: it must reproduce
+            #     the unweighted run bit for bit. That makes it a validation point, not a proposal.
+            assert block_k % imp_gran == 0, \
+                f'imp_gran {imp_gran} must divide the type-block K dimension {block_k}.'
+            n_tile = imp_tiled.shape[0]
+            # (tile, block, gs) is row-major over (row_in_tile, k_chunk), so flattening the last two
+            # axes back to a contiguous K run of length block_k is exact.
+            flat = imp_tiled.reshape(n_tile, block_m, block_k)
+            flat = flat.reshape(n_tile, block_m, block_k // imp_gran, imp_gran)
+            flat = flat.mean(dim=-1, keepdim=True).expand(-1, -1, -1, imp_gran)
+            imp_tiled = flat.reshape(n_tile, block_m, block_k).reshape(
+                n_tile, block_m * block_k // groupsize, groupsize
+            ).contiguous()
 
     ####### Per-scale-block search over the clip ratio, once per grid #######
     # `clip_min_gain` splits the candidates into the SAFE ones (alpha >= 1, which never clip and only
@@ -1753,7 +1780,7 @@ def parse_mix_4_6_dtype(name: str):
                               scale search itself, the last plain argmin in this quantizer.
 
         Returns (metric, elect, margin, use_importance, clip, clip_min_gain, alpha_min_gain,
-                 permute, rotate, rotate_size, rotate_min_gain).
+                 permute, rotate, rotate_size, rotate_min_gain, ..., imp_gran).
     """
     assert name.startswith("mix_4_6"), name
     metric, elect, margin, use_importance, clip = "mse", "argmin", 0.0, False, "base"
@@ -1761,6 +1788,7 @@ def parse_mix_4_6_dtype(name: str):
     clip_min_gain, alpha_min_gain, rotate_outlier_max = 0.0, 0.0, 2.1
     peak_veto = 0.0
     imp_alpha, imp_elect = True, True
+    imp_gran = 0
 
     def _num(s):
         return s.replace(".", "", 1).isdigit()
@@ -1798,6 +1826,9 @@ def parse_mix_4_6_dtype(name: str):
             rotate, rotate_min_gain = "col", float(part[6:])
         elif part.startswith("pv") and _num(part[2:]):
             peak_veto = float(part[2:])
+        elif part.startswith("impg") and part[4:].isdigit():
+            # coarsen the importance along K to runs of N channels; impg<block_k> is an exact no-op
+            imp_gran = int(part[4:])
         elif part == "hess":
             use_importance = True
         elif part == "hesst":
@@ -1826,7 +1857,7 @@ def parse_mix_4_6_dtype(name: str):
             raise ValueError(f'Unrecognized mix_4_6 data type qualifier "{part}" in "{name}".')
     return (metric, elect, margin, use_importance, clip, clip_min_gain, alpha_min_gain,
             permute, rotate, rotate_size, rotate_min_gain, rotate_outlier_max, peak_veto,
-            imp_alpha, imp_elect)
+            imp_alpha, imp_elect, imp_gran)
 
 
 def quant_weight(model, quant_config: QuantConfig, importance=None):
@@ -1881,11 +1912,11 @@ def quant_weight(model, quant_config: QuantConfig, importance=None):
         quant_func = partial(quant_mixfp4, type_block=w_type_block)
     elif w_dtype.startswith("mix_4_6"):
         (_metric, _elect, _margin, _use_imp, _clip,
-         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g, _rot_o, _pv, _ia, _ie) = parse_mix_4_6_dtype(w_dtype)
+         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g, _rot_o, _pv, _ia, _ie, _ig) = parse_mix_4_6_dtype(w_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=w_type_block,
             metric=_metric, elect=_elect, margin=_margin, clip=_clip, clip_min_gain=_clip_g, alpha_min_gain=_alpha_g, permute=_perm,
-            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g, rotate_outlier_max=_rot_o, peak_veto=_pv, imp_alpha=_ia, imp_elect=_ie,
+            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g, rotate_outlier_max=_rot_o, peak_veto=_pv, imp_alpha=_ia, imp_elect=_ie, imp_gran=_ig,
         )
     elif (w_dtype == "nvfp4_razer_e3m3"):
         quant_func = partial(quant_nvfp4_razer_e3m3, outlier=w_outlier)
@@ -1945,11 +1976,11 @@ def quant_act(act, quant_config: QuantConfig):
         quant_func = partial(quant_mixfp4, type_block=a_type_block, is_act=True)
     elif a_dtype.startswith("mix_4_6"):
         (_metric, _elect, _margin, _, _clip,
-         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g, _rot_o, _pv, _ia, _ie) = parse_mix_4_6_dtype(a_dtype)
+         _clip_g, _alpha_g, _perm, _rot, _rot_n, _rot_g, _rot_o, _pv, _ia, _ie, _ig) = parse_mix_4_6_dtype(a_dtype)
         quant_func = partial(
             quant_mix_4_6, type_block=a_type_block, is_act=True,
             metric=_metric, elect=_elect, margin=_margin, clip=_clip, clip_min_gain=_clip_g, alpha_min_gain=_alpha_g, permute=_perm,
-            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g, rotate_outlier_max=_rot_o, peak_veto=_pv, imp_alpha=_ia, imp_elect=_ie,
+            rotate=_rot, rotate_size=_rot_n, rotate_min_gain=_rot_g, rotate_outlier_max=_rot_o, peak_veto=_pv, imp_alpha=_ia, imp_elect=_ie, imp_gran=_ig,
         )
     elif (a_dtype == "nvfp4_razer_e4m3"):
         quant_func = quant_nvfp4_razer_e4m3
