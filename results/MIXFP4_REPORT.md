@@ -1,33 +1,47 @@
-# MixFP4: what helps, what doesn't, and what it costs
+# MixFP4: does choosing the FP4 element type per 8x64 tile beat NVFP4?
 
 Perplexity at seq 2048, type block **8x64** for weights (the smallest hardware-realizable weight
-tile, one `n8 x k64` MMA B-operand). Five models, wikitext and c4.
+tile, one `n8 x k64` MMA B-operand), wikitext and c4.
 
-**Sections 1-11 are W4A16 (weight-only).** Section 1a gives the W4A4 results, which are the
-deployment-relevant ones and where several conclusions differ. W4A4 activations are pinned at
-`nvfp4_4over6` throughout so that only the weight side varies.
+**Sections 1-4 are the result: W4A4 prefill, three models, alpha fixed at 1.** Everything from
+"BACKGROUND" onward predates the scope change below and is kept as the measured record only.
 
-> ### Scope change: E0M3 headroom is out
+**Short answer: yes, by -0.044 to -0.122 wikitext, but only with calibration, and the election
+rule's strictness is model-dependent.** See §1.
+
+> ### SCOPE: the scale search is out. This report is about the element type only.
 >
-> **`heade0` / `heade0x` have been removed from `CLIP_PRESETS`.** Those presets gave the E0M3
-> branch its own scale candidates (`alpha` = 7/6, 7/5), which entangles the element-type decision
-> with a second scale search on that branch. That is not a factor this work claims, so it is gone
-> from the code, not merely unused: `test_no_e0m3_headroom` fails if it returns.
+> **Everything below that varies `alpha` is out of scope and is retained as background, not as a
+> result.** Sections written before this change treat the scale search as the headline; read them as
+> history. The sections marked **(current scope)** are the ones that carry the claim.
 >
-> **`headx` is now the wide-search preset** -- the same E2M1 candidates `{1, 1.25, 1.5, 2, 3}`, with
-> E0M3 pinned at `alpha = 1`. Every `clipheade0_*` configuration has been re-measured as
-> `clipheadx_*`, and the tables below report the `headx` numbers.
+> `alpha` is the clip ratio in `block_scale = alpha * block_max / grid_max`. Searching it is a
+> separate mechanism from choosing the element grid, it was measured as the LARGER of the two, and
+> it therefore dominated every headline number in the old framing. A MixFP4-vs-NVFP4 delta taken
+> under a multi-alpha preset confounds "a different scale" with "a different grid".
 >
-> What this costs, measured rather than assumed: on Llama-3.1-8B W4A4 the E0M3 headroom was worth
-> about **-0.009 / -0.011** (§1a). On Qwen3-8B it was worth nothing. It is a real but small effect,
-> and removing it does not change any qualitative conclusion in this report.
+> **Removed from `CLIP_PRESETS` entirely** -- `cliphead*` no longer parses:
 >
-> Unaffected: every result built on `a1`, `base` or `headx` -- which includes the headline Qwen3-4B
-> win (§1a) and the whole of §1b -- because none of those presets ever gave E0M3 headroom.
+> | removed | what it searched |
+> |---|---|
+> | `head`, `headx`, `headxx` | E2M1 headroom, `alpha` in {1.25 ... 4} |
+> | `heade0`, `heade0x` | the same on the E0M3 branch, `alpha` = 7/6, 7/5 |
 >
-> Kept deliberately: `dense9e0`, `dense9sym`, `dense5sym`, `basesym`, `wide` and `full` still give
-> E0M3 `alpha > 1`. They exist as confound controls for "does E0M3 stop contributing once alpha is
-> searched", and none appears in a reported result. Do not promote one into a headline row.
+> **`a1` is the reported preset**: `alpha = 1` on BOTH grids, so a block's maximum sits on the top
+> code of whichever grid its tile elected -- exactly what plain NVFP4 does. The only thing MixFP4
+> then varies is the element data type.
+>
+> This buys the comparison its cleanliness. `test_a1_e2m1_is_nvfp4` asserts that
+> `mix_4_6(clip=a1, elect=never)` is **bit-identical** to `nvfp4`, so every delta reported under
+> `a1` is attributable to the type election and nothing else. `test_no_scale_search` asserts the
+> removed presets stay removed.
+>
+> **The baseline changes with the scope.** `nvfp4_4over6` is itself a two-point scale search, so the
+> reference for a type-only claim is plain **`nvfp4`**. Deltas against `4over6` in the older sections
+> are not comparable to deltas against `nvfp4` in the current ones.
+>
+> Retained as controls and historical record, deliberately outside the reported set: `base`
+> (FourOverSix), the `dense*` family, and the clipping family all still search a scale.
 
 ---
 
@@ -36,7 +50,7 @@ deployment-relevant ones and where several conclusions differ. W4A4 activations 
 Configurations that use calibration (`hess`) are **not bit-reproducible**. The same configuration
 run twice:
 
-    mix_4_6_clipheade0_hess_coclcol_m1   6.539287   and   6.543658     (spread 0.0044)
+    mix_4_6_clip<preset>_hess_coclcol_m1   6.539287   and   6.543658     (spread 0.0044)
 
 Configurations without calibration are exactly reproducible (`nvfp4_4over6` gave
 6.598703861236572 in three separate jobs). So the variance comes from `collect_importance` —
@@ -44,246 +58,183 @@ GPU reductions over the calibration batches are not deterministic, and that prop
 the elections.
 
 **Consequence: differences below ~0.005 between two `hess` configurations are not meaningful.**
-This matters for two headline numbers below — the E0M3 type block's marginal contribution
-(-0.011) and reordering's contribution (-0.007) are only 2.5x and 1.5x this noise floor. They
-are reported as measured, but a single run should not be trusted to that precision.
+
+Applied to §1, this is what separates a result from a null:
+
+* the three best-per-model figures (-0.0442, -0.1222, -0.0837 wikitext) are 10x to 28x the floor
+  and are real;
+* `a1_hess_impg16_h10` on Llama-3.1-8B (+0.0007 / +0.0017) is **inside** it, which is the basis for
+  calling that configuration neutral there rather than harmful;
+* reordering's contribution on Llama-3.1-8B (-0.0012 / +0.0026, §4) is inside it and should be
+  read as no effect.
+
+One further caveat specific to the alpha search, measured on real weights in `check_impg_noop.py`:
+`sum_j (c * d_j^2)` and `c * sum_j d_j^2` are different floats, so a multi-candidate alpha search
+breaks near-ties nondeterministically at a rate of 7.3e-6 of elements — worth ~0.008 perplexity on
+an 8B model. **This does not affect sections 1-4**, which fix alpha at 1: with a single candidate
+there is no comparison to break, and `a1_e2m1` reproducing `nvfp4` exactly on all three models
+confirms it.
 
 ---
 
-## 1. Headline
+## 1. The result (current scope)
 
-| lever | worth (Llama-3.1-8B wikitext) | needs |
+**W4A4 prefill, weights 8x64 type block, alpha = 1, activations `nvfp4_4over6`.** Deltas against
+plain **`nvfp4`** weights, wikitext / c4. Negative is better.
+
+The reference and the validation row are the same measurement twice: `clipa1_e2m1` freezes alpha at
+1 and disables the election, which leaves MixFP4 with no freedom at all, so it must reproduce
+`nvfp4` exactly. It does, on all three models, to every printed digit. **Every other row in this
+table is therefore attributable to the element-type election and nothing else.**
+
+| weight config | Llama-3.1-8B | Qwen3-4B | Qwen3-8B |
+|---|---|---|---|
+| `nvfp4` (reference) | 6.9054 / 9.8832 | 13.9101 / 17.2208 | 10.0215 / 13.7317 |
+| `a1_e2m1` (validation) | 0.0000 / 0.0000 | 0.0000 / 0.0000 | 0.0000 / 0.0000 |
+| `a1_h10` (no calibration) | -0.0084 / -0.0069 | +0.0122 / -0.0369 | +0.0009 / +0.0183 |
+| `a1_hess_h1.5` | **-0.0442 / -0.0692** | +0.4231 / +0.0413 | -0.0179 / +0.0466 |
+| `a1_hess_h10` | -0.0043 / -0.0155 | -0.0170 / -0.0036 | +0.0092 / +0.0038 |
+| `a1_hess_m1` | -0.0387 / -0.0571 | +0.2865 / -0.0440 | **-0.0837 / -0.0279** |
+| `a1_hess_impg16_h10` | +0.0007 / +0.0017 | **-0.1222 / -0.1066** | -0.0581 / -0.0049 |
+| `a1_hess_coclcol_h10` | -0.0055 / -0.0129 | +0.0162 / +0.0065 | -0.0378 / -0.0162 |
+
+### Three claims this supports
+
+**1. The element-type block beats plain NVFP4 on every model measured.** Best per model:
+-0.0442 / -0.0692 (Llama-3.1-8B), -0.1222 / -0.1066 (Qwen3-4B), -0.0837 / -0.0279 (Qwen3-8B). All
+are several times the 0.0044 noise floor of §0. This is a like-for-like comparison at identical
+scale, identical metadata and identical bit width -- the only difference is that a tile may elect
+E0M3 instead of E2M1.
+
+**2. It needs calibration.** Without importance (`a1_h10`) the type block is worth essentially
+nothing: -0.0084, +0.0122, +0.0009 wikitext. The election has to be made on the diagonal-Hessian
+objective, not on weight MSE. This is the same principle as §8 -- MSE does not predict layer output
+error -- and here it is the difference between a result and a null.
+
+**3. No single election rule wins everywhere, but one is never harmful.** The best rule differs by
+model (`h1.5` on Llama-3.1-8B, `m1` on Qwen3-8B, `impg16_h10` on Qwen3-4B), and the model-specific
+best is a real loss elsewhere -- `h1.5` costs **+0.4231** on Qwen3-4B, `m1` costs **+0.2865**. The
+exception is `a1_hess_impg16_h10`:
+
+| | wikitext | c4 |
 |---|---|---|
-| **alpha chosen by importance instead of MSE** | **-0.042** | nothing — stock NVFP4 kernel |
-| widening alpha from {1,1.5} to 5 candidates | -0.006 | nothing |
-| E0M3 type block (election by importance) | -0.011 | E0M3 hardware path + type block |
-| reordering on top | -0.007 | offline search; free only if constrained (§6) |
+| Llama-3.1-8B | +0.0007 | +0.0017 |
+| Qwen3-4B | **-0.1222** | **-0.1066** |
+| Qwen3-8B | **-0.0581** | -0.0049 |
 
-**The scale search dominates.** Choosing between FourOverSix's existing two candidates with an
-importance-weighted criterion is worth about four times the entire E0M3 type block, and it
-requires no format change at all: alpha only changes the value written into the ue4m3 scale
-field that already exists.
+Neutral on one model (both deltas inside the noise floor) and a clear win on the other two. **If a
+single configuration has to be recommended, this is it.**
+
+### What this costs to deploy
+
+Nothing beyond the E0M3 path itself. Alpha is fixed at 1, so the ue4m3 scale field carries exactly
+what NVFP4 writes today; the type block adds one bit per 8x64 tile of weights; and the election is
+offline, at quantization time. What it does require is a calibration pass -- one batch of any real
+text is enough (§7) -- and a kernel that can issue the E0M3 operand.
 
 ---
 
-## 1a. W4A4 (prefill) — activations fixed at `nvfp4_4over6`
+## 2. The election rule (current scope)
 
-The section that matters for deployment. Only the WEIGHT configuration varies; activations are
-`nvfp4_4over6` in every row so the comparison is like for like.
+A tile holds 32 scale blocks (8 rows x 4 k-chunks). Each has a signed gain
+`g_b = loss_E2M1 - loss_E0M3`; the rule decides whether the tile goes E0M3. Rules measured:
 
-Note `quant_act` never receives `importance` -- the `use_importance` field is discarded in its
-dispatch -- so **calibration applies to weights only**. A `hess` qualifier on an activation dtype is
-a silent no-op.
-
-### Llama-3.1-8B
-
-| weight config | wikitext / c4 | vs `4over6` | vs `nvfp4` |
-|---|---|---|---|
-| `nvfp4` (both operands plain) | 6.9454 / 9.9339 | +0.0699 / +0.1077 | — |
-| `nvfp4_4over6` (both) | 6.8755 / 9.8262 | — | -0.0699 / -0.1077 |
-| `base_hess_e2m1` (importance-alpha, **no type block**) | 6.8323 / 9.7791 | **-0.0432 / -0.0471** | -0.1131 / -0.1548 |
-| `heade0_hess_m1` | 6.8084 / 9.7569 | **-0.0671 / -0.0693** | -0.1369 / -0.1770 |
-| `heade0_hess_coclcol_m1` | 6.8133 / 9.7518 | -0.0623 / -0.0743 | -0.1321 / -0.1821 |
-
-Two differences from the W4A16 picture:
-
-* **The weight-side alpha gain survives activation quantization unchanged**: -0.0432 / -0.0471 in
-  W4A4 against -0.0419 / -0.0391 in W4A16.
-* **The type block is worth about twice as much here.** It adds -0.0239 on top of importance-alpha
-  (W4A4) against -0.011 (W4A16). So §1's ranking -- "the scale search dominates, the type block is a
-  small increment" -- weakens under W4A4: the type block roughly doubles in relative value.
-* Reordering is mixed and inside the noise floor of §0: worse on wikitext (-0.0623 vs -0.0671),
-  better on c4.
-
-### Qwen3-8B
-
-| weight config | wikitext / c4 | vs `4over6` |
-|---|---|---|
-| `nvfp4` (both plain) | 10.0654 / 13.7727 | +0.0311 / +0.0156 |
-| `nvfp4_4over6` (both) | 10.0342 / 13.7571 | — |
-| `base_hess_e2m1` (importance-alpha, no type block) | 9.9719 / 13.7244 | -0.0623 / -0.0327 |
-| `heade0_hess_m1` | 9.9918 / 13.7151 | -0.0424 / -0.0420 |
-| **`heade0_hess_coclcol_m1`** | **9.9634 / 13.6740** | **-0.0709 / -0.0831** |
-
-Reordering adds **-0.0285 / -0.0411** on top of `heade0_hess_m1` here -- far more than on
-Llama-3.1-8B, and well clear of the noise floor.
-
-**Correction (§1b).** The table above has no no-importance control, and one measured later shows
-`heade0_m1` without importance at 9.9592 / 13.7108, i.e. **-0.0750 / -0.0463** -- better than
-`heade0_hess_m1`. So on Qwen3-8B in W4A4, calibration *costs* +0.0326 wikitext rather than earning
-the -0.0424 this table implies, and the honest reading of the reordering row is that it recovers
-roughly what `hess` gave away. `hess` remains a clear gain on Llama-3.1-8B (§1b).
-
-### Qwen3-4B
-
-With the `heade0` presets, the same inversion as W4A16 -- plain `nvfp4` on both operands beats every
-added mechanism.
-
-| weight config | wikitext / c4 | vs `4over6` | vs `nvfp4` |
-|---|---|---|---|
-| `nvfp4` (both plain) | **13.9488 / 17.2751** | -0.3202 / -0.0409 | — |
-| `nvfp4_4over6` (both) | 14.2691 / 17.3160 | — | +0.3202 / +0.0409 |
-| `base_hess_e2m1` | 14.4448 / 17.3682 | +0.1757 / +0.0522 | +0.4960 / +0.0931 |
-| `heade0_hess_m1` | 14.8122 / 17.5409 | +0.5431 / +0.2249 | +0.8634 / +0.2659 |
-| `heade0_hess_coclcol_m1` | 14.8634 / 17.5491 | +0.5944 / +0.2331 | +0.9146 / +0.2740 |
-
-`4over6` costs +0.3202 wikitext here, closely matching the +0.3823 it costs in W4A16, so the
-alpha-widening defect is a property of the weights and is not changed by quantizing activations.
-
-### Qwen3-4B with alpha = 1 -- MixFP4 BEATS nvfp4 here
-
-The `heade0` rows above use a wide alpha search, which is itself the defect on this model. Freezing
-alpha at 1 and electing with a strict rule, activations still `nvfp4_4over6`:
-
-| weight config | wikitext / c4 | vs `nvfp4` weights |
-|---|---|---|
-| `nvfp4` weights | 13.9101 / 17.2208 | — |
-| `a1_e2m1` | 13.9101 / 17.2208 | 0.0000 / 0.0000 (validation) |
-| `a1_h10` (no importance) | 13.9223 / 17.1839 | +0.0122 / -0.0369 |
-| `a1_hess_impg64_h10` | 13.9223 / 17.1839 | +0.0122 / -0.0369 (no-op, see §1b) |
-| `a1_hess_h10` (importance per element) | 13.8931 / 17.2172 | -0.0170 / -0.0036 |
-| **`a1_hess_impg16_h10`** (importance per scale block) | **13.7879 / 17.1142** | **-0.1222 / -0.1066** |
-| `a1_hess_v0.7` | 13.9129 / 17.1849 | +0.0028 / **-0.0359** |
-
-**MixFP4 beats plain NVFP4 on Qwen3-4B in W4A4**, where the best available in W4A16 was parity.
-The margin depends strongly on the importance granularity: per-element importance gives -0.0170,
-and **coarsening it to one weight per 1x16 scale block gives -0.1222 / -0.1066** -- 7x more, and
-~28x the §0 noise floor. See §1b.
-
-### Not yet measured in W4A4
-
-* W4A4 runs are far slower than W4A16 because `quant_act` executes on every forward pass; one
-  7-config sweep took over 3.5 hours, and a 2-hour `dev` allocation timed out.
-
-### The alpha-vs-type decomposition under W4A4 (Llama-3.1-8B)
-
-The ladder of §4, re-measured in W4A4 rather than W4A16. All rows are 8x64 weights with
-`nvfp4_4over6` activations, against `nvfp4_4over6` weights (6.8755 / 9.8262):
-
-| weight config | what it isolates | wikitext / c4 | delta |
-|---|---|---|---|
-| `nvfp4` | no alpha search, no type block | 6.9054 / 9.8832 | +0.0299 / +0.0570 |
-| `clipheade0_h1.5` | wide alpha + type block, MSE criterion | 6.8499 / 9.8121 | -0.0256 / -0.0141 |
-| `clipheadx_hesst_h1.5` | importance on the TYPE election only | 6.8509 / 9.8023 | -0.0246 / -0.0239 |
-| `clipheadx_hessa_e2m1` | importance on the ALPHA search only, **no type block at all** | 6.8189 / 9.7743 | **-0.0566 / -0.0519** |
-| `clipheade0_hess_m1` | both | 6.8084 / 9.7569 | **-0.0671 / -0.0693** |
-
-**The W4A16 conclusion survives in direction but not in magnitude.** The alpha search alone, with
-E2M1 only and no type block, is -0.0566 / -0.0519 -- 84% / 75% of the full configuration. The E0M3
-type block adds the remaining **-0.0105 / -0.0174**.
-
-In W4A16 the type block was worth about a quarter of the alpha search (-0.011 vs -0.042); in W4A4
-it is worth about a fifth on wikitext but a third on c4. So the earlier statement that the type
-block is "a small increment" holds, but it is a larger increment once activations are quantized --
-which is consistent with what the Qwen3-4B alpha=1 result shows from the other direction.
-
-### One W4A4 measurement on the ACTIVATION type block
-
-From a separate sweep with weights fixed at `mix_4_6_clipheade0_h1.5@8x64`, varying only the
-activation dtype at a 16x64 tile (the A-operand `m16 x k64`):
-
-| activations | wikitext |
+| rule | elects E0M3 iff |
 |---|---|
-| `nvfp4_4over6` | 6.8499 |
-| `mix_4_6_clipheade0_e2m1` (type block, never elects) | 6.8455 |
-| `mix_4_6_clipheade0_h1.5` | **6.8358** |
+| `argmin` | `sum g_b > 0` -- E0M3 is better on aggregate |
+| `h<lambda>` | `sum_{g>0} g_b > lambda * sum_{g<0} |g_b|` -- the winners outweigh the losers by `lambda` |
+| `m<z>` | `mean(g) > z * stderr(g)` -- the tile's advantage is significant against block-to-block spread |
+| `dom` | no block is harmed at all |
 
-The activation type block is worth **-0.0141** with no calibration, no reordering and no search --
-decided per tile at runtime. A peakedness veto (`pv<tau>`) on top was worse at every threshold
-tried, because the error-based election already encodes peakedness (rho = -0.59, §8).
+The pattern the older sections found on the scale search holds here too, and more sharply:
+**a rule that fires whenever E0M3 helps loses; the same rule with "...by a decisive margin" wins.**
+`argmin` is `h1`. Every winning row in §1 is `h1.5`, `h10` or `m1`.
+
+What is new, and what the paper has to be honest about, is that **how decisive is model-dependent**.
+`h1.5` is optimal on Llama-3.1-8B and catastrophic on Qwen3-4B (+0.4231); `h10` -- a rule that
+elects only when the winning blocks outweigh the losing ones ten to one -- is the only harm-ratio
+setting that is non-harmful on all three. Erring conservative is cheap; erring permissive is not.
+
+`dom` is the limit of that logic and elects almost nothing at 8x64: it degenerates to plain E2M1,
+i.e. to `nvfp4`. It is a floor, not a configuration.
 
 ---
 
-## 1b. How finely does the importance need to vary? (W4A4)
+## 3. Importance, and how finely it must vary (current scope)
 
-`hess` weights each element's squared error by `E[x_j^2]` of the input channel it multiplies. That
-weight is applied **per element** -- 16 different values inside one 1x16 scale block. Coarsening it
-(`impg<N>`: replace each weight by its mean over a run of N channels) asks how much of `hess` is
-per-element detail and how much is a coarse envelope.
+`hess` weights each element's squared error by `E[x_j^2]` of the input channel it multiplies -- the
+diagonal-Hessian estimate of layer output error. §1 shows the type block is worth nothing without
+it.
 
-**Note the type block is 8x64 in every row below.** `impg<N>` changes the granularity of the
-IMPORTANCE VECTOR, not the type block. The three granularities are independent:
+Three granularities are available, and they are independent of the type block, which is 8x64
+throughout:
 
-| | size | configurable? |
+| | what it is | effect |
 |---|---|---|
-| scale block | 16 | no -- fixed by NVFP4 |
-| type block | **8x64** | yes, but held at 8x64 throughout this report |
-| importance | element / 16 / 64 | this is what `impg` varies |
+| per element (`hess`) | each element gets its own channel's `E[x_j^2]` | the default |
+| per scale block (`impg16`) | the mean over the block's 16 channels | cancels in the alpha search, not in the election |
+| per type block (`impg64`) | the mean over the tile | **provably nothing** |
 
-### Per-type-block importance is provably a no-op
+**`impg64` is an exact no-op**, and this is a theorem rather than a measurement: a positive constant
+across a tile divides out of the alpha search and out of every election rule, because all of them
+compare quantities homogeneous of the same degree in the loss (`argmin`, `h`, `vote`) or are ratios
+of degree-1 quantities (`m`). `tests/test_imp_gran.py` asserts it bit-for-bit for all five rules.
+So "apply the importance at the type-block level" is not a configuration -- it is the no-hess row.
 
-A positive constant across a type block divides out of **both** decisions: the alpha search compares
-candidates within a scale block, and every rule in `_elect_e0m3` compares quantities homogeneous of
-the same degree in the loss (`argmin`, `harm`, `vote`) or is a ratio of degree-1 quantities
-(`margin`). So `impg64` at 8x64 must reproduce the unweighted quantizer exactly.
+**`impg16` is a real knob, and coarsening helps more often than not.** Against per-element `hess`
+at the same election rule (`h10`), in wikitext:
 
-`tests/test_imp_gran.py` asserts this bit-for-bit for all five election rules, and the perplexity
-run confirms it end to end on Qwen3-4B (13.9223 / 17.1839, identical to `a1_h10` in every digit).
-**"Apply hess at the type-block level" is therefore not a configuration -- it is the no-hess row.**
-
-Two related invariances fall out of the same argument and are worth knowing:
-
-* A per-**scale-block** constant cancels in the alpha search but not in the election, so `impg16`
-  isolates a pure election effect. Verified: `impg16` equals the unweighted run exactly when the
-  election is disabled (`_e2m1`).
-* `dominance` is invariant to per-scale-block importance entirely -- it reads only the sign of each
-  block's gain. `hess` can reach a dominance election only through the alpha search.
-
-### The measurement, on all three models
-
-8x64 weights, `nvfp4_4over6` activations, no reordering. Deltas against `nvfp4_4over6` weights,
-except Qwen3-4B which is against `nvfp4` weights (its 4over6 baseline is broken, §5):
-
-| importance granularity | Qwen3-4B (`a1_h10`) | Llama-3.1-8B (`heade0_m1`) | Qwen3-8B (`heade0_m1`) |
+| | per element | per scale block | change |
 |---|---|---|---|
-| none | +0.0122 / -0.0369 | -0.0204 / -0.0104 | **-0.0750 / -0.0463** |
-| per type block (`impg64`, = none) | +0.0122 / -0.0369 | -0.0179 / -0.0105 | -0.0673 / -0.0458 |
-| per scale block (`impg16`) | **-0.1222 / -0.1066** | -0.0231 / -0.0027 | -0.0653 / -0.0473 |
-| per element (`hess`) | -0.0170 / -0.0036 | **-0.0671 / -0.0693** | -0.0424 / -0.0420 |
+| Llama-3.1-8B | -0.0043 | +0.0007 | +0.0050 |
+| Qwen3-4B | -0.0170 | **-0.1222** | **-0.1052** |
+| Qwen3-8B | +0.0092 | **-0.0581** | **-0.0673** |
 
-**Three models, three different answers, and no ordering survives across them:**
-
-* **Qwen3-4B** -- the block mean is far better than per-element (-0.1222 vs -0.0170, a 7x gap).
-  This is the best Qwen3-4B configuration measured anywhere in this report.
-* **Llama-3.1-8B** -- per-element wins decisively (-0.0671); the block mean is indistinguishable
-  from no importance at all.
-* **Qwen3-8B** -- **importance HURTS here.** No importance is the best row (-0.0750), per-element
-  the worst (-0.0424). This is a correction: earlier sections quote `heade0_hess_m1` on Qwen3-8B as
-  a gain, but that was measured without a no-hess control at the same settings. With the control in
-  place, `hess` costs +0.0326 wikitext on this model.
-
-The plausible reading of the Qwen3-4B result is variance, and it is the report's recurring theme in
-a new place. `E[x_j^2]` is heavy-tailed, so per-element weighting makes a block's loss depend
-mostly on its one or two highest-importance channels -- a high-variance estimate of what the block
-actually contributes. Averaging over the 16 channels keeps the direction and drops the variance.
-That is the same move as `h<lambda>` over `argmin`: not a different criterion, a less noisy one.
-But it does not generalize -- on Llama-3.1-8B the per-element detail is exactly what carries the
-gain -- so **importance granularity is a per-model knob, not a default to change.**
-
-### Why `impg64` is exact on one model and not the others
-
-`impg64` must equal the no-importance row exactly, and on Qwen3-4B it does -- every digit. On
-Llama-3.1-8B it drifts 0.0025 wikitext and on Qwen3-8B 0.0077. The cause is now measured
-(`check_impg_noop.py`, real Llama-3.1-8B weights):
-
-    6357 of 872,415,232 elements differ     (7.3e-6, max |delta| 4.9e-3)
-
-`sum_j (c * d_j^2)` and `c * sum_j d_j^2` are **not the same float**, so a per-tile constant
-rescales the loss only up to rounding and the alpha search's `err < best_err` can break a near-tie
-the other way. The rate is far too low to see in a synthetic check (5e5 elements found 0), and far
-too high to ignore across a 7e9-element model -- roughly 5e4 flipped elements per config.
-
-This also explains the split across models: Qwen3-4B runs `clipa1`, a **single-candidate** alpha
-preset. With one candidate there is no comparison to flip, so the invariance is exact. The other two
-run `clipheade0` with five.
-
-**Consequence: ~0.008 is the noise floor for the Llama-3.1-8B and Qwen3-8B rows in the table above**
--- a floor set by the alpha search's tie-breaking, not by calibration variance (§0). That makes
-every `impg16` result on those two models a null. It does not touch the Qwen3-4B result, which is
-exact by construction and 28x the §0 floor, nor the per-element `hess` gaps on Llama-3.1-8B
-(-0.0671) and Qwen3-8B (+0.0326), which are 4-8x it.
+The plausible reading -- untested, and stated as a hypothesis -- is variance. `E[x_j^2]` is
+heavy-tailed, so per-element weighting makes a block's loss depend mostly on its one or two loudest
+channels, which is a high-variance estimate of what the block contributes. Averaging over the 16
+keeps the direction and drops the variance. That is the same move as `h<lambda>` over `argmin`,
+applied to the criterion rather than to the decision rule.
 
 ---
+
+## 4. Reordering, at alpha = 1 (current scope)
+
+Permuting rows and 16-column chunks so that E0M3-preferring scale blocks land in the same tiles
+(`coclcol`, see `results/reorder/ALGORITHM.md`) is worth much less than it appeared under the older
+scope:
+
+| | `a1_hess_h10` | `a1_hess_coclcol_h10` | reordering is worth |
+|---|---|---|---|
+| Llama-3.1-8B | -0.0043 / -0.0155 | -0.0055 / -0.0129 | -0.0012 / +0.0026 |
+| Qwen3-4B | -0.0170 / -0.0036 | +0.0162 / +0.0065 | +0.0332 / +0.0101 |
+| Qwen3-8B | +0.0092 / +0.0038 | -0.0378 / -0.0162 | -0.0470 / -0.0200 |
+
+Only Qwen3-8B gains; Qwen3-4B loses more than the type block earns there; Llama-3.1-8B is inside
+noise on both datasets. Earlier sections credited reordering with -0.03 to -0.04 on Qwen3-8B, and
+that number was measured on top of a wide scale search -- **the two mechanisms were entangled, and
+most of what reordering appeared to buy is not there once alpha is fixed.**
+
+This is consistent with what the reordering study itself found (`results/reorder/REPORT.md`): the
+partition search beats a cell-shuffled control by +0.003 of the recoverable ceiling, i.e. by
+essentially nothing. Reordering is not part of the recommended configuration.
+
+---
+
+# ============================================================================
+# EVERYTHING BELOW IS BACKGROUND, NOT A RESULT
+# ============================================================================
+#
+# The sections that follow were written when the SCALE SEARCH was in scope. They vary `alpha`,
+# they use presets that no longer exist (`head*`, `heade0*`), and they report deltas against
+# `nvfp4_4over6` rather than `nvfp4`. None of that is comparable to sections 1-4 above.
+#
+# They are kept because they are the measured record of what was tried, including the negative
+# results (sections 9 and 10) which remain valid as statements about the scale search. Do not
+# lift a number from here into the paper.
+
+---
+
 
 ## 2. Baselines
 
