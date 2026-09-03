@@ -335,7 +335,93 @@ It still does not survive. On c4 the same rule *helps* Llama-3.2-1B-Instruct (**
 dataset, not the model. A pattern this clean, that reproduces on **two** held-out models, and is
 still an artifact, is worth keeping in the report as a caution about how little n = 6 buys.
 
-### What to do instead
+### Two stronger attempts, and why both fail
+
+The screen above used aggregate statistics with a 1-NN predictor, which is a weak use of the data.
+Two better routes were tried. Both fail, and between them they explain the null rather than merely
+restating it.
+
+#### Route 1 -- measure the objective instead of predicting it
+
+`lambda` exists to compensate for the election optimizing only the DIAGONAL of `S`. Calibration data
+is already collected, so rather than guess which `lambda` repairs the surrogate, evaluate the exact
+quantity the election is supposed to minimize and take the argmin:
+
+    E(rule) = sum_layers tr(dW S dW^T) / tr(W S W^T)
+
+with the **full** `S`, and with the importance driving the election taken from calibration batches A
+while the `S` grading it comes from held-out batches B (`analyze_rule_selection.py`). This is the
+GPTQ/OBQ objective, measured rather than approximated.
+
+**It ranks the rules identically on all six models, and the ranking is wrong:**
+
+| rule | relative layer output error vs `e2m1` | perplexity argmin? |
+|---|---|---|
+| `hess_h1.5` | **-13.4% to -16.5%** (argmin on every model) | only 3 of 6 |
+| `hess_m1` | -9.7% to -14.3% | 1 of 6 |
+| `hess_h10` | -0.7% to -2.1% | 1 of 6 |
+| `hess_impg16_h10` | -0.3% to -0.4% | 1 of 6 |
+| `e2m1` | 0.0% | — |
+
+On Qwen3-4B `h1.5` lowers the true layer output error by **14.65%** and raises wikitext by
+**+0.4231**. That is not a small disagreement; it is the objective pointing hard in the wrong
+direction.
+
+**Why it cannot discriminate.** The ranking is exactly the permissiveness ordering, on every model:
+`h1.5` elects 31-56% of tiles, `m1` fewer, `h10` about 0.3%, `e2m1` none. Every election is *chosen*
+to reduce this very quantity, so a more permissive rule lowers it close to by construction. Measuring
+the objective more exactly does not help, because the objective is not the thing that ranks rules --
+it mostly counts how many tiles were flipped.
+
+This subsumes the null above and explains it. No statistic predicts the right rule because **the
+local objective itself does not**. It also re-reads the report's recurring "decisive margin"
+principle: the margin is not repairing a noisy estimate of the objective, it is compensating for the
+objective being wrong.
+
+Two limitations, both testable and both unexamined: the error is measured per layer on **clean**
+activations, so error compounding across layers is not captured, and in W4A4 the real input is itself
+quantized, so any interaction between element type and activation quantization is invisible here.
+
+#### Route 2 -- a rate-calibrated rule, so the constant is universal
+
+`h<lambda>` is not comparable across models: at `lambda = 1.5` **56%** of Qwen3-4B's tiles elect E0M3
+against **31%** of Llama-3.1-8B's, so `lambda` describes strictness only relative to a model's gain
+distribution -- and that distribution is what varies. `rate<f>` elects the top `f` fraction of tiles
+by the same evidence, making the elected fraction identical by construction, so `f` should be one
+global constant. (`test_rate_rule_is_model_independent` confirms the invariance: `rate<f>` elects ~f
+on two deliberately different distributions where `h1.5` elects 18% and 98%.)
+
+Measured, wikitext / c4 against `nvfp4`:
+
+| | Llama-3.1-8B | Qwen3-4B | Qwen3-8B |
+|---|---|---|---|
+| `rate0.005` | -0.0082 / -0.0119 | **-0.0298 / -0.0121** | +0.0250 / +0.0180 |
+| `rate0.02` | -0.0100 / -0.0036 | +0.0189 / -0.0169 | +0.0047 / +0.0318 |
+| `rate0.05` | -0.0196 / -0.0107 | +0.0598 / +0.0076 | **-0.0427 / +0.0054** |
+| `rate0.15` | **-0.0249 / -0.0308** | +0.0544 / -0.0741 | -0.0212 / +0.0194 |
+
+**The optimal rate is model-dependent over a 30x range** -- 0.15 for Llama-3.1-8B, 0.005 for
+Qwen3-4B, 0.05 for Qwen3-8B -- and no single rate is non-harmful on all three. Re-parameterizing the
+threshold as a rate relocates the problem instead of removing it: the models genuinely want to elect
+different fractions, so there was never a universal constant to find.
+
+This failure mode was stated in advance of the measurement, which is the only reason it counts for
+anything. `rate` is also simply worse than the existing recommendation: mean wikitext over these
+three models is -0.0043 at its best rate against **-0.0599** for `hess_impg16_h10`.
+
+#### Bottom line
+
+Neither the best statistic, nor the exact objective, nor a re-parameterization that removes the
+model dependence by construction, beats picking one rule and keeping it. Use
+`mix_4_6_clipa1_hess_impg16_h10` and pay the roughly **0.031** wikitext gap to a per-model oracle.
+
+The one route not yet tried, and the only one these results leave open, is to stop scoring rules by a
+local weight-space objective altogether and score them end to end -- a few hundred tokens of
+perplexity per candidate rule at quantization time. That is a small evaluation, not a prediction, and
+Route 1 is the argument that nothing cheaper will do.
+
+
+### What to do instead (superseded by the bottom line above)
 
 Use one rule everywhere and choose it by worst case, not by mean:
 
