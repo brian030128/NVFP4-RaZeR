@@ -3,12 +3,12 @@
 Perplexity at seq 2048, type block **8x64** for weights (the smallest hardware-realizable weight
 tile, one `n8 x k64` MMA B-operand), wikitext and c4.
 
-**Sections 1-5 are the result: W4A4 prefill, five models, alpha fixed at 1.** Everything from
+**Sections 1-5 are the result: W4A4 prefill, six models, alpha fixed at 1.** Everything from
 "BACKGROUND" onward predates the scope change below and is kept as the measured record only.
 
-**Short answer: yes, by -0.041 to -0.122 wikitext on every model measured, but only with
+**Short answer: yes, by -0.032 to -0.122 wikitext on every model measured, but only with
 calibration.** The election rule's strictness is model-dependent and (§5) could not be predicted
-from any of seven cheap statistics, so the recommendation is a single fixed rule chosen by worst
+from any of seven cheap statistics, so the recommendation is the fixed rule with the smallest worst
 case: `mix_4_6_clipa1_hess_impg16_h10` at an 8x64 type block. See §1.
 
 > ### SCOPE: the scale search is out. This report is about the element type only.
@@ -82,7 +82,7 @@ confirms it.
 ## 1. The result (current scope)
 
 **W4A4 prefill, weights 8x64 type block, alpha = 1, activations `nvfp4_4over6`.** Deltas against
-plain **`nvfp4`** weights. Negative is better. Five models, two model families, 1B to 8B.
+plain **`nvfp4`** weights. Negative is better. Six models, two model families, 1B to 14B.
 
 The reference and the validation row are the same measurement twice: `a1_e2m1` freezes alpha at 1
 and disables the election, leaving MixFP4 no freedom at all, so it must reproduce `nvfp4` exactly.
@@ -90,7 +90,8 @@ It does, on every model, to every printed digit. **Every other number below is t
 attributable to the element-type election and nothing else.**
 
 `nvfp4` reference (wikitext / c4): Llama-3.1-8B 6.9054 / 9.8832 · Llama-3.1-8B-Ins 7.8566 / 11.2850 ·
-Llama-3.2-1B-Ins 15.4130 / 21.6146 · Qwen3-4B 13.9101 / 17.2208 · Qwen3-8B 10.0215 / 13.7317.
+Llama-3.2-1B-Ins 15.4130 / 21.6146 · Qwen3-4B 13.9101 / 17.2208 · Qwen3-8B 10.0215 / 13.7317 ·
+Qwen3-14B 8.9166 / 12.3908.
 
 ### wikitext
 
@@ -101,6 +102,7 @@ Llama-3.2-1B-Ins 15.4130 / 21.6146 · Qwen3-4B 13.9101 / 17.2208 · Qwen3-8B 10.
 | Llama-3.2-1B-Ins | 0.0000 | -0.0200 | +0.0938 | **-0.0409** | -0.0205 | -0.0164 |
 | Qwen3-4B | 0.0000 | +0.0123 | +0.4231 | -0.0170 | +0.2865 | **-0.1222** |
 | Qwen3-8B | 0.0000 | +0.0009 | -0.0179 | +0.0093 | **-0.0837** | -0.0581 |
+| Qwen3-14B | 0.0000 | +0.0023 | **-0.0317** | +0.0492 | -0.0217 | +0.0113 |
 
 ### c4
 
@@ -111,11 +113,13 @@ Llama-3.2-1B-Ins 15.4130 / 21.6146 · Qwen3-4B 13.9101 / 17.2208 · Qwen3-8B 10.
 | Llama-3.2-1B-Ins | 0.0000 | -0.0452 | -0.1420 | -0.1177 | **-0.2551** | -0.0559 |
 | Qwen3-4B | 0.0000 | -0.0369 | +0.0413 | -0.0036 | -0.0440 | **-0.1066** |
 | Qwen3-8B | 0.0000 | +0.0183 | +0.0466 | +0.0038 | **-0.0279** | -0.0049 |
+| Qwen3-14B | 0.0000 | -0.0037 | **-0.0777** | +0.0181 | -0.0209 | -0.0112 |
 
 ### Three claims this supports
 
 **1. The element-type block beats plain NVFP4 on every model measured.** Best per model, wikitext:
--0.0442, -0.0587, -0.0409, -0.1222, -0.0837. All are 10x to 28x the 0.0044 noise floor of §0. This
+-0.0442, -0.0587, -0.0409, -0.1222, -0.0837, -0.0317. All are 7x to 28x the 0.0044 noise floor of
+§0. This
 is like-for-like at identical scale, identical metadata and identical bit width -- the only
 difference is that a tile may elect E0M3 instead of E2M1.
 
@@ -124,24 +128,30 @@ wikitext, and on Qwen3-4B it is *positive* (+0.0123). With importance the same m
 -0.12. The election has to be made on the diagonal-Hessian objective rather than on weight MSE,
 which is the same principle as §8 and here is the difference between a result and a null.
 
-**3. No single election rule wins everywhere, but one is never harmful.** The best rule differs by
-model *and* by dataset -- `h1.5`, `h10`, `m1` and `impg16_h10` each win somewhere -- and a
-model-specific optimum is a real loss elsewhere: `h1.5` costs **+0.4231** on Qwen3-4B, `m1` costs
-**+0.2865**. Summarised over the five models:
+**3. No single election rule wins everywhere; pick the one with the smallest worst case.** The best
+rule differs by model *and* by dataset -- `h1.5`, `h10`, `m1` and `impg16_h10` each win somewhere --
+and a model-specific optimum is a real loss elsewhere: `h1.5` costs **+0.4231** on Qwen3-4B, `m1`
+costs **+0.2865**. Summarised over the six models:
 
 | rule | wikitext mean / worst | c4 mean / worst |
 |---|---|---|
-| **`hess_impg16_h10`** | **-0.0412 / +0.0006** | **-0.0312 / +0.0098** |
-| `hess_h10` | -0.0126 / +0.0093 | -0.0251 / +0.0074 |
-| `hess_m1` | +0.0224 / **+0.2865** | -0.0781 / -0.0062 |
-| `hess_h1.5` | +0.0792 / **+0.4231** | -0.0277 / +0.0466 |
+| **`hess_impg16_h10`** | **-0.0324 / +0.0113** | **-0.0279 / +0.0098** |
+| `hess_h10` | -0.0023 / +0.0492 | -0.0179 / +0.0181 |
+| `hess_m1` | +0.0151 / **+0.2865** | -0.0686 / -0.0062 |
+| `hess_h1.5` | +0.0607 / **+0.4231** | -0.0361 / +0.0466 |
 
-`m1` has the best c4 mean and a catastrophic wikitext worst case. **`hess_impg16_h10` is the only
-rule whose worst case is inside the noise floor on both datasets**, and it is the recommendation.
+`m1` has much the best c4 mean and a catastrophic wikitext worst case. `hess_impg16_h10` has the
+best wikitext mean and by far the smallest worst case on both datasets, and it is the
+recommendation.
+
+**Correction: it is not "never harmful".** With five models that claim held (worst case +0.0006).
+The sixth, Qwen3-14B, costs **+0.0113** wikitext -- 2.6x the noise floor, so a real if small loss.
+The recommendation stands on worst-case grounds, +0.0113 against +0.0492 for `h10` and +0.2865 for
+`m1`, but it is a smallest-harm choice, not a free one.
 
 §5 shows this cannot currently be improved by predicting the rule per model: across seven candidate
-statistics, no predictor beat this fixed choice. The cost of that is the gap to a per-model oracle,
-about **0.029** wikitext.
+statistics, no predictor beat this fixed choice on either dataset. The cost of that is the gap to a
+per-model oracle, about **0.031** wikitext and **0.024** c4.
 
 ### What this costs to deploy
 
@@ -246,7 +256,7 @@ differs per model and the wrong choice is expensive (`h1.5` is best on Llama-3.1
 **+0.4231** wikitext on Qwen3-4B). A deployable method cannot sweep four rules per model, so the
 question is whether a cheap statistic picks the rule.
 
-**Measured across five models, two datasets and seven candidate statistics: it does not.** Nothing
+**Measured across six models, two datasets and seven candidate statistics: it does not.** Nothing
 here beat simply using one fixed rule everywhere. This section is the negative result and the
 evidence for it, because it is the reason §1 recommends a fixed configuration rather than a
 selection procedure.
@@ -278,33 +288,39 @@ batches):
 | Llama-3.2-1B-Ins | **+0.0938** | 5.879 | 0.0770 | 182 | 0.328 | 0.522 | 0.285 |
 | Qwen3-4B | **+0.4231** | 3.445 | 0.0548 | 827 | 0.562 | 0.782 | 0.146 |
 | Qwen3-8B | -0.0179 | 3.251 | 0.0453 | 1068 | 0.352 | 0.545 | 0.328 |
+| Qwen3-14B | -0.0317 | 4.998 | 0.0498 | 509 | 0.399 | 0.602 | 0.320 |
 
-No column separates the two harmful rows from the three helpful ones. `elect@1.5` comes closest and
-still fails: 0.328 where `h1.5` hurts, 0.352 where it helps.
+No column separates the two harmful rows from the four helpful ones. `elect@1.5` comes closest and
+still fails: 0.328 where `h1.5` hurts, 0.352 and 0.399 where it helps. `offdiag_spec` is worse than
+useless -- its two extreme values, 5.879 and 3.251, sit on opposite sides of the harmful/helpful
+split from what the certificate predicts.
 
 ### Why the rank correlations must not be believed
 
-Several correlations look excellent -- `coherence` has **rho = -1.00** against the `h10` delta, and
-`elect_1.5` and `marginality` reach **+0.90** against `h1.5`. At n = 5 there are only 120 orderings,
-seven statistics were tried against four rules on two datasets, and a |rho| of 0.9 arises constantly
-from noise under that much searching.
+Several correlations look excellent -- at n = 5, `coherence` reached **rho = -1.00** against the
+`h10` delta and `elect_1.5` and `marginality` reached **+0.90** against `h1.5`. With only 120
+orderings of five things, seven statistics tried against four rules on two datasets, a |rho| of 0.9
+arises constantly from noise under that much searching.
 
 So the correlation is treated as a screen, never as the result. The result is **leave-one-out**: for
 each model, choose the rule using only the other four, and report the perplexity actually paid.
 Against two baselines -- `oracle`, the unreachable per-model best, and `fixed`, the best single rule
 used everywhere:
 
+Over all six models:
+
 | | wikitext mean | wikitext worst | c4 mean |
 |---|---|---|---|
-| oracle (unreachable) | -0.0699 | — | -0.0948 |
-| **fixed** (`impg16_h10` / `m1`) | **-0.0412** | **+0.0006** | **-0.0781** |
-| best predictor, leave-one-out | +0.0438 | +0.2865 | -0.0597 |
-| worst predictor, leave-one-out | +0.0846 | +0.4231 | -0.0055 |
+| oracle (unreachable) | -0.0636 | — | -0.0920 |
+| **fixed** (`impg16_h10` / `m1`) | **-0.0324** | **+0.0113** | **-0.0685** |
+| best predictor, leave-one-out | +0.0313 | +0.2865 | -0.0589 |
+| worst predictor, leave-one-out | +0.0669 | +0.4231 | -0.0175 |
 
-**Every predictor is worse than the fixed rule, on both datasets.** On wikitext all seven have a
-*positive* mean, i.e. a model that used them would be worse than plain NVFP4, while the fixed rule
-delivers -0.0412. `coherence`, the statistic with the perfect rho, has the second-worst
-leave-one-out score of all seven. That contrast is the entire point of reporting leave-one-out.
+**Every predictor is worse than the fixed rule, on both datasets and at both n = 5 and n = 6.** On
+wikitext all seven have a *positive* mean, i.e. a model that used them would be worse than plain
+NVFP4, while the fixed rule delivers -0.0324. `coherence`, the statistic that had the perfect rho at
+n = 5, is among the worst two by leave-one-out. That contrast is the entire point of reporting
+leave-one-out rather than rho.
 
 ### The pattern that looked real and was not
 
@@ -312,10 +328,12 @@ Ranked by size, the wikitext data separates perfectly: `h1.5` helps all three 8B
 the 1B and 4B ones, across two model families. That prediction was stated in advance and
 **confirmed** on the held-out Llama-3.1-8B-Instruct (-0.0587).
 
+A second held-out model, Qwen3-14B, also came out as predicted (-0.0317).
+
 It still does not survive. On c4 the same rule *helps* Llama-3.2-1B-Instruct (**-0.1420**) and
 *hurts* Qwen3-8B (**+0.0466**) -- the split reverses with the evaluation set, so it was tracking the
-dataset, not the model. A pattern that clean, that reproduces on a held-out model, and that is still
-an artifact, is worth keeping in the report as a caution.
+dataset, not the model. A pattern this clean, that reproduces on **two** held-out models, and is
+still an artifact, is worth keeping in the report as a caution about how little n = 6 buys.
 
 ### What to do instead
 
@@ -323,13 +341,14 @@ Use one rule everywhere and choose it by worst case, not by mean:
 
 | rule | wikitext mean / worst | c4 mean / worst |
 |---|---|---|
-| **`hess_impg16_h10`** | **-0.0412 / +0.0006** | **-0.0312 / +0.0098** |
-| `hess_h10` | -0.0126 / +0.0093 | -0.0251 / +0.0074 |
-| `hess_m1` | +0.0224 / **+0.2865** | -0.0781 / -0.0062 |
+| **`hess_impg16_h10`** | **-0.0324 / +0.0113** | **-0.0279 / +0.0098** |
+| `hess_h10` | -0.0023 / +0.0492 | -0.0179 / +0.0181 |
+| `hess_m1` | +0.0151 / **+0.2865** | -0.0686 / -0.0062 |
 
-`m1` has the best c4 mean and a catastrophic wikitext worst case on Qwen3-4B. `impg16_h10` is the
-only rule whose worst case is inside the noise floor on both datasets, which is why §1 recommends
-it. The cost of having no predictor is the gap to the oracle: about **0.029** wikitext.
+`m1` has much the best c4 mean and a catastrophic wikitext worst case on Qwen3-4B. `impg16_h10` has
+the smallest worst case on both datasets by a factor of four, which is why §1 recommends it -- though
+see the correction there: at six models it is no longer harmless, costing +0.0113 on Qwen3-14B. The
+cost of having no predictor is the gap to the oracle: about **0.031** wikitext, **0.024** c4.
 
 ---
 
