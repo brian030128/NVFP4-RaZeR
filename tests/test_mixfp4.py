@@ -1032,6 +1032,49 @@ def test_dtype_name_parsing():
 REPORTED_CLIP = "a1"          # the ONLY preset a reported configuration may use
 
 
+def test_rate_rule_is_model_independent():
+    """
+        `rate<f>` elects a FRACTION of tiles rather than everything past a threshold.
+
+        The point of the rule is that `h<lambda>` is not comparable across models: at lambda = 1.5,
+        56% of Qwen3-4B's tiles elect E0M3 against 31% of Llama-3.1-8B's, so the same lambda is a
+        different intervention on each. Ranking makes the elected fraction the SAME by construction,
+        whatever the gain distribution looks like.
+
+        That invariance is what this test checks, on two tensors with deliberately different gain
+        distributions: the elected share must track `f` on both, while `h<lambda>` must NOT.
+    """
+    from quantize.quantizer import _elect_e0m3
+
+    torch.manual_seed(0)
+
+    def elected_share(gain, rule, margin):
+        return float(_elect_e0m3(gain, rule=rule, margin=margin).float().mean())
+
+    # two distributions: one centred near zero, one strongly shifted towards E0M3
+    balanced = torch.randn(4000, 32, 1)
+    shifted  = torch.randn(4000, 32, 1) + 0.55
+
+    for f in (0.05, 0.25, 0.5):
+        for tag, g in (("balanced", balanced), ("shifted", shifted)):
+            share = elected_share(g, "rate", f)
+            assert abs(share - f) < 0.02, \
+                f"rate{f} elected {share:.3f} of {tag} tiles, expected ~{f}"
+
+    # the contrast: a fixed harm threshold gives very different shares on the two distributions
+    hb = elected_share(balanced, "harm", 1.5)
+    hs = elected_share(shifted, "harm", 1.5)
+    assert abs(hs - hb) > 0.10, \
+        f"h1.5 gave {hb:.3f} and {hs:.3f} -- the two distributions are not different enough " \
+        f"for this test to mean anything"
+
+    # endpoints
+    assert elected_share(balanced, "rate", 0.0) == 0.0
+    assert elected_share(balanced, "rate", 1.0) == elected_share(balanced, "argmin", 0.0)
+    print(f"ok  rate<f> elects ~f of tiles on both distributions; h1.5 gives "
+          f"{hb:.2f} vs {hs:.2f}")
+
+
 def test_no_scale_search():
     """
         The scale search is deliberately NOT a factor in this work.

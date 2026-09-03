@@ -1082,7 +1082,7 @@ def _selection_loss(x, x_dq, metric: str, weight=None, eps: float=1e-30):
 
 
 ELECT_RULES = ("argmin", "dominance", "margin", "never", "always",
-               "vote", "harm", "relmargin", "tol")
+               "vote", "harm", "relmargin", "tol", "rate")
 
 
 @torch.no_grad()
@@ -1190,6 +1190,38 @@ def _elect_e0m3(gain, rule: str="argmin", margin: float=0.0, ref=None, eps: floa
     elif rule == "vote":
         share = (gain > 0).flatten(start_dim=1).to(gain.dtype).mean(dim=-1)
         elect = (share > margin) & (total > 0)
+    elif rule == "rate":
+        # RATE-CALIBRATED: elect the `margin` fraction of tiles with the strongest evidence, instead
+        # of every tile clearing a fixed threshold.
+        #
+        # This exists because `h<lambda>` fails for a measurable reason. The same lambda is a wildly
+        # different intervention on different models: at lambda = 1.5, 56% of Qwen3-4B's tiles elect
+        # E0M3 but only 31% of Llama-3.1-8B's (results/lambda/*.json). So lambda does not describe
+        # "how strict am I", it describes "how strict am I RELATIVE to this model's gain
+        # distribution" -- and that distribution is exactly what varies. Qwen3-4B is then destroyed
+        # by h1.5 (+0.4231 wikitext) because that rule is flipping the majority of its tiles.
+        #
+        # Ranking removes the model-dependence by construction: whatever the gain distribution looks
+        # like, the same FRACTION of tiles elects. `margin` is a rate in [0, 1] and is intended to be
+        # one global constant, not a per-model knob -- which is the thing §5 could not obtain by
+        # prediction.
+        #
+        # Tiles are ranked by the harm ratio won/lost, the same evidence `harm` thresholds, so this
+        # is `harm` with a per-tensor adaptive lambda rather than a different criterion.
+        won   = gain.clamp(min=0).sum(dim=(-1, -2))
+        lost  = (-gain).clamp(min=0).sum(dim=(-1, -2))
+        score = won / lost.clamp(min=eps)
+        n     = score.numel()
+        k     = int(n * float(margin))
+        if k <= 0:
+            elect = torch.zeros_like(total, dtype=torch.bool)
+        elif k >= n:
+            elect = total > 0
+        else:
+            # kth largest score; ties broken by taking >= so the elected set can exceed k slightly
+            thresh = torch.topk(score, k, largest=True).values[-1]
+            # never elect a tile E0M3 is actually worse on -- the rate is a budget, not a quota
+            elect  = (score >= thresh) & (total > 0)
     else:
         raise ValueError(f"Unsupported election rule \"{rule}\". Expected one of {ELECT_RULES}.")
 
@@ -1854,6 +1886,8 @@ def parse_mix_4_6_dtype(name: str):
             elect, margin = "relmargin", float(part[2:])
         elif part.startswith("tol") and _num(part[3:]):
             elect, margin = "tol", float(part[3:])
+        elif part.startswith("rate") and _num(part[4:]):
+            elect, margin = "rate", float(part[4:])
         elif part.startswith("h") and _num(part[1:]):
             elect, margin = "harm", float(part[1:])
         elif part.startswith("v") and _num(part[1:]):
