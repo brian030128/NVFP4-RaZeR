@@ -1,12 +1,53 @@
 # MixFP4: does choosing the FP4 element type per 8x64 tile beat NVFP4?
 
+**Beyond FourOverSix:** [New findings](task_sensitivity_four_over_six/FINDINGS.md)
+preserve FourOverSix scaling and calibrate complementary 8x64 type changes.
+Qwen3.8-27B WikiText PPL improves from 7.289580 to 6.973420/6.935030 on two
+fresh seeds, with 226/327 switched tiles. C4 differences from FourOverSix are
+inconclusive. This uses the same fit/backtracking/validation rule, without
+target-specific threshold tuning. See the
+[protocol](task_sensitivity_four_over_six/PROTOCOL.md) and
+[precise guarantee limits](task_sensitivity_four_over_six/GUARANTEE.md).
+The alpha=1-only comparisons below remain historical results for a different
+E2M1 scaling baseline.
+
+**Qwen3.8-27B target:** [Native hybrid-model results](task_sensitivity_qwen38/REPORT.md)
+repeat the frozen fit/validation rule on two seeds. Only 69/62 tiles switch;
+WikiText PPL falls from 7.5552 to 7.1331/7.1569 (5.6%/5.3%). C4 changes are
+inconclusive. No reordering or target-specific threshold tuning is used.
+This extends the evidence to a seventh model and a hybrid recurrent-attention
+architecture, while exposing the limit of transferring WikiText forecasts to
+another domain. See the target protocol for exact quantization boundaries and
+the corrected NVFP4 saturation baseline.
+Target weight-MSE selection also improves WikiText (7.1545 PPL), statistically
+indistinguishably from the sparse maps, but switches 43.49 million tiles.
+The sparse method's demonstrated advantage here is identifying a tiny set
+with similar accuracy, not a proven accuracy win over MSE. See
+[target findings](task_sensitivity_qwen38/FINDINGS.md).
+
+**New task-sensitive calibration study (2026-09-06):**
+[Measured results](task_sensitivity/REPORT.md) and
+[method](task_sensitivity/METHOD.md). A frozen sparse task-gradient rule
+improved WikiText perplexity by 0.079–1.086 in its first six-model panel,
+at 8x64 and alpha=1 without reordering. A second Llama calibration seed
+regressed; separate small-set validation predicted the failure. Thus the
+negative results below concern the tested local-statistic/reconstruction
+predictors, not impossibility of task-aware calibration. New comparisons use
+paired cache-disabled W4A4 prefill baselines and C4 64 windows; do not mix
+their absolute perplexities with historical settings below.
+
+The follow-up uses fitting loss to calibrate a discrete trust step. It
+corrects both 64-sequence Llama failures, then improves WikiText on a third
+seed of both Qwen and Llama with unchanged constants. C4 on the third Llama
+seed is inconclusive (+0.0045 PPL), so this is not a cross-domain guarantee.
+
 Perplexity at seq 2048, type block **8x64** for weights (the smallest hardware-realizable weight
 tile, one `n8 x k64` MMA B-operand), wikitext and c4.
 
-**Sections 1-5 are the result: W4A4 prefill, six models, alpha fixed at 1.** Everything from
+**Sections 1-5 document the earlier local-error election study: W4A4 prefill, six models, alpha fixed at 1.** Everything from
 "BACKGROUND" onward predates the scope change below and is kept as the measured record only.
 
-**Short answer: yes, by -0.032 to -0.122 wikitext on every model measured, but only with
+**Earlier study: yes, by -0.032 to -0.122 wikitext on every model measured, but only with
 calibration.** The election rule's strictness is model-dependent and (§5) could not be predicted
 from any of seven cheap statistics, so the recommendation is the fixed rule with the smallest worst
 case: `mix_4_6_clipa1_hess_impg16_h10` at an 8x64 type block. See §1.
@@ -249,7 +290,11 @@ essentially nothing. Reordering is not part of the recommended configuration.
 
 ---
 
-## 5. Can the rule be predicted instead of swept? No. (current scope)
+## 5. The tested local statistics did not predict the rule (current scope)
+
+The newer [task-sensitive study](task_sensitivity/REPORT.md) tests downstream
+loss gradients and independent validation. This section's negative result
+does not cover that procedure.
 
 §1 leaves one thing open: the type block beats NVFP4 on every model, but the strictness that wins
 differs per model and the wrong choice is expensive (`h1.5` is best on Llama-3.1-8B and costs
@@ -415,10 +460,12 @@ Neither the best statistic, nor the exact objective, nor a re-parameterization t
 model dependence by construction, beats picking one rule and keeping it. Use
 `mix_4_6_clipa1_hess_impg16_h10` and pay the roughly **0.031** wikitext gap to a per-model oracle.
 
-The one route not yet tried, and the only one these results leave open, is to stop scoring rules by a
-local weight-space objective altogether and score them end to end -- a few hundred tokens of
-perplexity per candidate rule at quantization time. That is a small evaluation, not a prediction, and
-Route 1 is the argument that nothing cheaper will do.
+At the time of these experiments, end-to-end calibration evaluation of each
+candidate rule remained untested. The failures above do not establish that
+nothing cheaper can work. The subsequent [task-sensitive study](task_sensitivity/REPORT.md)
+uses one backward per calibration sequence to score all tiles, proposes a
+sparse map, and validates that map separately. It finds larger gains and
+also exposes seed-dependent failures; its validation gate is essential.
 
 
 ### What to do instead (superseded by the bottom line above)

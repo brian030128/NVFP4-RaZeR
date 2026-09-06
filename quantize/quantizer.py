@@ -452,7 +452,9 @@ def quant_nvfp4(w_fp, n_bits: int=4, groupsize: Optional[int]=None):
     private_exp   = private_exp.clamp(min=0)
     w_m           = w_scaled / (2**private_exp) * (2**FP4_MAN_BITS)
     w_m           = torch.sign(w_m) * torch.floor(torch.abs(w_m) + 0.5)
-    w_q           = w_m * (2**private_exp) / (2**FP4_MAN_BITS)
+    # Subnormal E4M3 block scales can round down far enough that the normalized
+    # maximum exceeds the E2M1 saturation threshold. Code 8 is not legal FP4.
+    w_q           = (w_m * (2**private_exp) / (2**FP4_MAN_BITS)).clamp(min=-FP4_MAX, max=FP4_MAX)
     w_dq          = w_q * block_scale_q * global_scale
 
     return w_dq.view(orig_shape).to(torch.bfloat16)

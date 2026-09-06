@@ -2,18 +2,62 @@
 
 Guidance for working in this repository.
 
+**Beyond FourOverSix (2026-09-06):** Read
+`results/task_sensitivity_four_over_six/FINDINGS.md`, `PROTOCOL.md`, and
+`GUARANTEE.md`. Preserving canonical FourOverSix E2M1 scaling and recalibrating
+8x64 E0M3 switches gives Qwen3.8-27B WikiText 7.289580 -> 6.973420/6.935030
+on two fresh seeds (226/327 tiles). C4 differences from FourOverSix remain
+inconclusive. The reference bank includes earlier sparse maps and alpha=1
+weight-MSE selection; it does not cover every reordering/rotation preset.
+The completed four-model transfer panel also passes validation and improves
+WikiText over FourOverSix on every model; C4 improves on three and is
+inconclusive on base Llama. Full paired results are in that directory's REPORT.md.
+Scores are baseline-conditional; probe ablations show nonadditive effects.
+FourOverSix maps explicitly record `baseline_weight_dtype`; do not replay
+them as ordinary alpha=1 NVFP4 maps. Unconditional fixed-map gain retention
+over all input/label distributions is impossible; conditional bounded-loss
+certification has explicit assumptions that current two-SE checks do not meet.
+
+**Qwen3.8-27B target (2026-09-06):** See
+`results/task_sensitivity_qwen38/REPORT.md` and its `PROTOCOL.md`.
+The frozen 64-window fit rule plus independent validation selects 69/62 legal
+8x64 tiles on two seeds: WikiText 7.5552 -> 7.1331/7.1569 PPL; C4 changes are
+inconclusive. Native BF16 is 7.0506/8.8579 (WikiText/C4). Use native
+Transformers 5.16.1 Qwen3.5-family code, not the older Qwen3 copies; text
+linear weights/inputs are quantized, recurrent/conv/norm/vision/head are not.
+The target exposed an NVFP4 saturation bug (illegal magnitude code 8 after an
+FP8 subnormal scale rounded down); `quant_nvfp4` now clamps to [-6, 6], with
+a full-matrix and synthetic regression. Native maps require
+`probe_qwen38.apply_native_type_map` on pristine weights and the pinned revision.
+Target controls: weight-MSE selection reaches WikiText 7.1545 with 43.49 million
+switches, statistically indistinguishable from the sparse maps; random 69-tile
+selection is inconclusive. Do not claim calibration beats MSE in target accuracy.
+Read `results/task_sensitivity_qwen38/FINDINGS.md` for the forecast/domain limits.
+
+**2026-09-06 MixFP4 update:** Read `results/task_sensitivity/REPORT.md` and
+`results/task_sensitivity/METHOD.md` for task-loss calibration at weight type
+tile 8x64, alpha=1, W4A4. A fixed sparse gradient rule improves the first
+six-model panel, but a Llama seed repeat regresses; independent validation
+is necessary. More calibration alone fails; fit-loss backtracking corrects
+both 64-sequence Llama failures and repeats on a third seed of Qwen/Llama.
+The third Llama seed improves WikiText but is inconclusive on C4. Earlier
+`headx` recommendations below are historical scale
+search results, outside the current type-only scope; those presets were
+removed. Do not infer impossibility of task-aware prediction from the old
+failure of local reconstruction statistics.
+
 **Read `../CLAUDE.md` (i.e. `/home/u4320956/CLAUDE.md`) first.** It sets the cluster-wide rules that
 override defaults everywhere on this machine — most importantly that all heavy compute (including
 CPU-only work) must go through `sbatch`/`srun` rather than the login node, where the HuggingFace
-cache belongs, which account/partitions to use, and the `uv` workflow. Nothing here needs GPUs (see
-below), but if a task in this repo ever does grow into something GPU- or CPU-heavy, follow that file
-for how to submit it as a job.
+cache belongs, which account/partitions to use, and the `uv` workflow. All heavy simulation,
+calibration, model evaluation, and testing must follow that file's job-submission rules.
 
 ## Repository overview
 
 RaZeR is a research codebase for **simulated (fake) 4-bit LLM quantization**. Nothing here needs
 FP4 hardware: every format is emulated in FP32/BF16 and the result is written back into the model's
-BF16 weights or activations. All quantizers therefore run on the CPU.
+BF16 weights or activations. Tensor quantizers can run on CPU or CUDA; the task-sensitive study
+uses CUDA on allocated H100s. Fake quantization does not exempt CPU work from Slurm.
 
 - `quantize/quantizer.py` — every fake quantizer (`quant_mxfp4`, `quant_nvfp4`, `quant_nvif4`,
   `quant_mixfp4`, the RaZeR variants, ...) plus the two dispatch functions `quant_weight` (walks the
