@@ -1,0 +1,66 @@
+{
+  "model": "llama-3.1-8b-local",
+  "model_commit": "d04e592bb4f6aa9cfee91e2e20afa771667e1d4b",
+  "rule": "teacher_mixed",
+  "weight_type_block": [
+    8,
+    64
+  ],
+  "scale_block": 16,
+  "default": "E2M1",
+  "fit_sha256": "a5d2974086a86f78fbf543ec2cc94e2c2845f48252ef07883f3bf687aa86067b",
+  "modules": {
+    "model.layers.1.mlp.down_proj": {
+      "tile_grid_shape": [
+        512,
+        224
+      ],
+      "e0m3_flat_indices": [
+        8101,
+        15493,
+        21989,
+        27589,
+        28933,
+        33189,
+        38789,
+        41925,
+        43717,
+        46405,
+        58501,
+        61189,
+        63429,
+        64549,
+        71717,
+        82245,
+        90309,
+        100165,
+        107557,
+        113381,
+        113605
+      ]
+    },
+    "model.layers.0.self_attn.v_proj": {
+      "tile_grid_shape": [
+        128,
+        64
+      ],
+      "e0m3_flat_indices": [
+        7337,
+        7340,
+        7721,
+        7724,
+        7913
+      ]
+    }
+  },
+  "baseline_weight_dtype": "nvfp4_4over6",
+  "e2m1_alphas": [
+    1.0,
+    1.5
+  ],
+  "e0m3_alpha": 1.0,
+  "scope": "all_linear_except_head",
+  "activation_dtype": "nvfp4_4over6",
+  "native_transformers": "5.16.1",
+  "fit_objective": "teacher_kl"
+}
