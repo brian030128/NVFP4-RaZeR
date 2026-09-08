@@ -1,0 +1,2317 @@
+{
+  "status": "complete",
+  "scope": "synthetic mechanism only",
+  "torch_version": "2.9.0+cu128",
+  "python_version": "3.11.11",
+  "slurm_job_id": "331501",
+  "source_sha256": {
+    "quantize/spectral_selector.py": "078b92fe9ba2f4d8ec84c20cbcabd45e735ca48da4ccc840693a93742897eec0",
+    "quantize/quantizer.py": "afc0a6d74834cb9f7f43b7f591f27072ba9f0a1fe20ccbc3142b9ae718e7e673",
+    "run_spectral_mechanism.py": "24d8e89d6c4c44ef7545122b722eac50802a0bde40779cdcaefa18893298acf2",
+    "results/spectral_selection/PROTOCOL.md": "420134101340a1d1f91ea671de268876dc0e363dfe67cbedd84867a10ec37f5a"
+  },
+  "cases": [
+    {
+      "seed": 101,
+      "family": "gaussian",
+      "shape": [
+        32,
+        128
+      ],
+      "weight_sha256": "e236a8258055391ad9a0935584d6fe6824bc33dbf557095aec073ebd7e92a9f5",
+      "solver": {
+        "objective_history": [
+          2.035792503218196,
+          1.969005354297164,
+          1.9156200090013409,
+          1.856339464054278,
+          1.7804221044954587,
+          1.733632759677342
+        ],
+        "changed_indices": [
+          7,
+          3,
+          5,
+          4,
+          2
+        ],
+        "objective_evaluations": 49,
+        "stop_reason": "coordinate_stationary"
+      },
+      "policies": {
+        "four_over_six": {
+          "spectral_squared": 2.035792503218196,
+          "frobenius_squared": 30.50511227250172,
+          "stable_rank": 14.984391692315898,
+          "isotropic_output_error": 0.23832118962891968,
+          "random_rank4_output_error": 0.22274399678034837,
+          "coordinate_shift_output_error": 0.2228150141381775,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "6de480d4b3684218931d3298961e037d0c81f219f9aeb26f7bcab44d71f32a99"
+        },
+        "all_e0m3": {
+          "spectral_squared": 2.1341027648339135,
+          "frobenius_squared": 30.082068783045543,
+          "stable_rank": 14.095885764613907,
+          "isotropic_output_error": 0.2350161623675433,
+          "random_rank4_output_error": 0.26043373078584875,
+          "coordinate_shift_output_error": 0.22896883608336793,
+          "selected_tiles": 8,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "19f24d266413f649e7fd67b97046a4e2e7c7fd2ecd3da28c8188784b5e948964"
+        },
+        "weight_mse": {
+          "spectral_squared": 1.7804221044954587,
+          "frobenius_squared": 28.9760118544109,
+          "stable_rank": 16.27479898235829,
+          "isotropic_output_error": 0.22637509261258515,
+          "random_rank4_output_error": 0.22543193544065704,
+          "coordinate_shift_output_error": 0.22565505625243532,
+          "selected_tiles": 4,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              0,
+              1
+            ]
+          ],
+          "quantized_sha256": "71afcfc679b22e9d4f25646343fb65133cff73436a59889dbd3eabc1195732c5"
+        },
+        "spectral": {
+          "spectral_squared": 1.733632759677342,
+          "frobenius_squared": 29.051804643870128,
+          "stable_rank": 16.757761689550186,
+          "isotropic_output_error": 0.22696722378023537,
+          "random_rank4_output_error": 0.21121458125569578,
+          "coordinate_shift_output_error": 0.2290018570565735,
+          "selected_tiles": 5,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              0,
+              1
+            ]
+          ],
+          "quantized_sha256": "a00b7100e4c289d6efa95c52ad9b6b6d5823e16041a79a705e78d59741ad641f"
+        },
+        "random_count_matched": {
+          "spectral_squared": 2.0160227364184955,
+          "frobenius_squared": 30.652874571085704,
+          "stable_rank": 15.204627416822266,
+          "isotropic_output_error": 0.23947558258660706,
+          "random_rank4_output_error": 0.23750731737383285,
+          "coordinate_shift_output_error": 0.22574875475402223,
+          "selected_tiles": 5,
+          "mask": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "quantized_sha256": "fe7bbd81f32ea641f17525745a3a1e66e044db05d9425c61e57cdee10d263423"
+        },
+        "exhaustive_spectral_oracle": {
+          "spectral_squared": 1.733632759677342,
+          "frobenius_squared": 29.051804643870128,
+          "stable_rank": 16.757761689550186,
+          "isotropic_output_error": 0.22696722378023537,
+          "random_rank4_output_error": 0.21121458125569578,
+          "coordinate_shift_output_error": 0.2290018570565735,
+          "selected_tiles": 5,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              0,
+              1
+            ]
+          ],
+          "quantized_sha256": "a00b7100e4c289d6efa95c52ad9b6b6d5823e16041a79a705e78d59741ad641f"
+        }
+      },
+      "solver_relative_oracle_gap": 0.0
+    },
+    {
+      "seed": 101,
+      "family": "heavy_tail",
+      "shape": [
+        32,
+        128
+      ],
+      "weight_sha256": "265823136f3d29825dabe5e61e73391230912718bf7cf922ba2d43dd74161871",
+      "solver": {
+        "objective_history": [
+          36.250258329007025,
+          36.153005132889504
+        ],
+        "changed_indices": [
+          3
+        ],
+        "objective_evaluations": 17,
+        "stop_reason": "coordinate_stationary"
+      },
+      "policies": {
+        "four_over_six": {
+          "spectral_squared": 36.250258329007025,
+          "frobenius_squared": 456.7628152485122,
+          "stable_rank": 12.600263730617778,
+          "isotropic_output_error": 3.5684594941290015,
+          "random_rank4_output_error": 3.2997780182264735,
+          "coordinate_shift_output_error": 2.594730888027698,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "622e942154d3ebe412a9ac73c3fba16e86b912284c755f6519614f3cce6d25ed"
+        },
+        "all_e0m3": {
+          "spectral_squared": 84.37293450769509,
+          "frobenius_squared": 867.8378903980483,
+          "stable_rank": 10.285737902347092,
+          "isotropic_output_error": 6.779983518734753,
+          "random_rank4_output_error": 6.622453056870887,
+          "coordinate_shift_output_error": 6.680611644405872,
+          "selected_tiles": 8,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "9c34043f9da7c22a18e8e34b460e0fcfe53b617c2dde8730b9910d9cb3e15f88"
+        },
+        "weight_mse": {
+          "spectral_squared": 36.250258329007025,
+          "frobenius_squared": 456.7628152485122,
+          "stable_rank": 12.600263730617778,
+          "isotropic_output_error": 3.5684594941290015,
+          "random_rank4_output_error": 3.2997780182264735,
+          "coordinate_shift_output_error": 2.594730888027698,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "622e942154d3ebe412a9ac73c3fba16e86b912284c755f6519614f3cce6d25ed"
+        },
+        "spectral": {
+          "spectral_squared": 36.153005132889504,
+          "frobenius_squared": 506.5007608051528,
+          "stable_rank": 14.009921414371538,
+          "isotropic_output_error": 3.9570371937902564,
+          "random_rank4_output_error": 3.2171419034099036,
+          "coordinate_shift_output_error": 2.8482213360257447,
+          "selected_tiles": 1,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "0cfa7e575173d1d280f7c81a6e5dd5c75bce390da029c622c68bd776c08edc06"
+        },
+        "random_count_matched": {
+          "spectral_squared": 37.05312596845122,
+          "frobenius_squared": 499.39322448923485,
+          "stable_rank": 13.47776230578877,
+          "isotropic_output_error": 3.9015095663221473,
+          "random_rank4_output_error": 3.6518399813774653,
+          "coordinate_shift_output_error": 2.945192847866565,
+          "selected_tiles": 1,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "bfc3ba9118c62fd5510ba5768edb5bfc7a47c72404fc0869c28881d98323a95d"
+        },
+        "exhaustive_spectral_oracle": {
+          "spectral_squared": 36.153005132889504,
+          "frobenius_squared": 506.5007608051528,
+          "stable_rank": 14.009921414371538,
+          "isotropic_output_error": 3.9570371937902564,
+          "random_rank4_output_error": 3.2171419034099036,
+          "coordinate_shift_output_error": 2.8482213360257447,
+          "selected_tiles": 1,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "0cfa7e575173d1d280f7c81a6e5dd5c75bce390da029c622c68bd776c08edc06"
+        }
+      },
+      "solver_relative_oracle_gap": 0.0
+    },
+    {
+      "seed": 101,
+      "family": "column_outliers",
+      "shape": [
+        32,
+        128
+      ],
+      "weight_sha256": "c58063632692a1574345005b5117f64d590de8fe7ae6006ee8967d173a876d94",
+      "solver": {
+        "objective_history": [
+          25.36398641932004
+        ],
+        "changed_indices": [],
+        "objective_evaluations": 9,
+        "stop_reason": "coordinate_stationary"
+      },
+      "policies": {
+        "four_over_six": {
+          "spectral_squared": 25.36398641932004,
+          "frobenius_squared": 323.71815948117364,
+          "stable_rank": 12.762905409639938,
+          "isotropic_output_error": 2.529048120946669,
+          "random_rank4_output_error": 2.464180539703965,
+          "coordinate_shift_output_error": 3.096126466989517,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "a7721801aac5bb013e5a127742daa50880408b68e792386fe3fd183c356b5cf9"
+        },
+        "all_e0m3": {
+          "spectral_squared": 59.130981923759606,
+          "frobenius_squared": 748.7237346612274,
+          "stable_rank": 12.66212246613108,
+          "isotropic_output_error": 5.849404177040839,
+          "random_rank4_output_error": 6.80266739565766,
+          "coordinate_shift_output_error": 2.8807007372379303,
+          "selected_tiles": 8,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "da5a63759c73674d64621fb8ae3ea976b8edb5d2b4ce11c2b60c4ee47c7e625b"
+        },
+        "weight_mse": {
+          "spectral_squared": 25.36398641932004,
+          "frobenius_squared": 323.71815948117364,
+          "stable_rank": 12.762905409639938,
+          "isotropic_output_error": 2.529048120946669,
+          "random_rank4_output_error": 2.464180539703965,
+          "coordinate_shift_output_error": 3.096126466989517,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "a7721801aac5bb013e5a127742daa50880408b68e792386fe3fd183c356b5cf9"
+        },
+        "spectral": {
+          "spectral_squared": 25.36398641932004,
+          "frobenius_squared": 323.71815948117364,
+          "stable_rank": 12.762905409639938,
+          "isotropic_output_error": 2.529048120946669,
+          "random_rank4_output_error": 2.464180539703965,
+          "coordinate_shift_output_error": 3.096126466989517,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "a7721801aac5bb013e5a127742daa50880408b68e792386fe3fd183c356b5cf9"
+        },
+        "random_count_matched": {
+          "spectral_squared": 25.36398641932004,
+          "frobenius_squared": 323.71815948117364,
+          "stable_rank": 12.762905409639938,
+          "isotropic_output_error": 2.529048120946669,
+          "random_rank4_output_error": 2.464180539703965,
+          "coordinate_shift_output_error": 3.096126466989517,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "a7721801aac5bb013e5a127742daa50880408b68e792386fe3fd183c356b5cf9"
+        },
+        "exhaustive_spectral_oracle": {
+          "spectral_squared": 25.36398641932004,
+          "frobenius_squared": 323.71815948117364,
+          "stable_rank": 12.762905409639938,
+          "isotropic_output_error": 2.529048120946669,
+          "random_rank4_output_error": 2.464180539703965,
+          "coordinate_shift_output_error": 3.096126466989517,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "a7721801aac5bb013e5a127742daa50880408b68e792386fe3fd183c356b5cf9"
+        }
+      },
+      "solver_relative_oracle_gap": 0.0
+    },
+    {
+      "seed": 101,
+      "family": "row_correlated",
+      "shape": [
+        32,
+        128
+      ],
+      "weight_sha256": "2db0c418d31f8bffa864a1dd8820b9933c8e73959f3c0f08e7048fd96c6dcf0e",
+      "solver": {
+        "objective_history": [
+          9.084156220538674,
+          8.603412263777882
+        ],
+        "changed_indices": [
+          0
+        ],
+        "objective_evaluations": 17,
+        "stop_reason": "coordinate_stationary"
+      },
+      "policies": {
+        "four_over_six": {
+          "spectral_squared": 9.084156220538674,
+          "frobenius_squared": 135.84008751506917,
+          "stable_rank": 14.95351733471335,
+          "isotropic_output_error": 1.061250683711478,
+          "random_rank4_output_error": 1.1576397393521893,
+          "coordinate_shift_output_error": 0.8473021169193089,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "29e54f33f7d7373569c1aa41852a4a35290ab48b10af0a5b38d45eb81292b39a"
+        },
+        "all_e0m3": {
+          "spectral_squared": 9.263536855471385,
+          "frobenius_squared": 138.24037323589437,
+          "stable_rank": 14.923066145545103,
+          "isotropic_output_error": 1.0800029159054247,
+          "random_rank4_output_error": 0.9999091532621962,
+          "coordinate_shift_output_error": 1.066430248785764,
+          "selected_tiles": 8,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "cec0ca7fa7805b3efcf76b5b8ba535563a7b27b1df065aae5cca4b2aa7159c87"
+        },
+        "weight_mse": {
+          "spectral_squared": 8.994692142071672,
+          "frobenius_squared": 126.54506073589437,
+          "stable_rank": 14.068859582641402,
+          "isotropic_output_error": 0.9886332869991747,
+          "random_rank4_output_error": 0.926325773625215,
+          "coordinate_shift_output_error": 0.8113466878421605,
+          "selected_tiles": 4,
+          "mask": [
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "quantized_sha256": "4a0d914ef65a1782d15bc6207153a636606f2f6fa9e81821692849e3d2856bab"
+        },
+        "spectral": {
+          "spectral_squared": 8.603412263777882,
+          "frobenius_squared": 133.07944832439534,
+          "stable_rank": 15.468217056700507,
+          "isotropic_output_error": 1.0396831900343386,
+          "random_rank4_output_error": 1.088904480458992,
+          "coordinate_shift_output_error": 0.8699390073306859,
+          "selected_tiles": 1,
+          "mask": [
+            [
+              1,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "c9261ae1590cafdb2d52fe9a09833e3fe8ac85e745f1264c28dc6d0897730b37"
+        },
+        "random_count_matched": {
+          "spectral_squared": 9.57334370253258,
+          "frobenius_squared": 139.7430950223934,
+          "stable_rank": 14.597104142978285,
+          "isotropic_output_error": 1.0917429298624484,
+          "random_rank4_output_error": 1.1507211403833024,
+          "coordinate_shift_output_error": 0.8587490697391331,
+          "selected_tiles": 1,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "7a44f952579e2d6e06b9ccedf516cf8567110ce9ddb70ed1daa97967d317576d"
+        },
+        "exhaustive_spectral_oracle": {
+          "spectral_squared": 8.207200677081877,
+          "frobenius_squared": 131.48905716533773,
+          "stable_rank": 16.02118217146964,
+          "isotropic_output_error": 1.027258259104201,
+          "random_rank4_output_error": 0.9447550630027699,
+          "coordinate_shift_output_error": 0.9614316602237523,
+          "selected_tiles": 5,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "208019f6c4d932f66907de66d8a2bbdf8d96273b6c91829d00ceb5248f3203ea"
+        }
+      },
+      "solver_relative_oracle_gap": 0.04827609343127226
+    },
+    {
+      "seed": 102,
+      "family": "gaussian",
+      "shape": [
+        32,
+        128
+      ],
+      "weight_sha256": "06ca2b2b03c54b96a74b352198b14b945dc548ba6f17c2d0c41c5085a16d5073",
+      "solver": {
+        "objective_history": [
+          2.01842099091564,
+          1.9233518476505334,
+          1.8672815974000467,
+          1.8042915752385325,
+          1.7574425136890783
+        ],
+        "changed_indices": [
+          7,
+          0,
+          4,
+          2
+        ],
+        "objective_evaluations": 41,
+        "stop_reason": "coordinate_stationary"
+      },
+      "policies": {
+        "four_over_six": {
+          "spectral_squared": 2.01842099091564,
+          "frobenius_squared": 29.676413450363043,
+          "stable_rank": 14.70278677437881,
+          "isotropic_output_error": 0.23184698008096127,
+          "random_rank4_output_error": 0.24350505670938608,
+          "coordinate_shift_output_error": 0.22599622812595044,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "b9dfa68617098acac2ecc74296ae301997f4b9d858f37da7ed62e58e3b5deef5"
+        },
+        "all_e0m3": {
+          "spectral_squared": 1.808108145519599,
+          "frobenius_squared": 28.497958812835577,
+          "stable_rank": 15.761202604751317,
+          "isotropic_output_error": 0.22264030322527795,
+          "random_rank4_output_error": 0.17869787876670784,
+          "coordinate_shift_output_error": 0.1973541399511305,
+          "selected_tiles": 8,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "b9ad8bd01ee06e8107dabe4c902ea33b0e79e96fe0d932bf390cd4db9da5d967"
+        },
+        "weight_mse": {
+          "spectral_squared": 1.8723640060844728,
+          "frobenius_squared": 28.132841739776495,
+          "stable_rank": 15.025305789021488,
+          "isotropic_output_error": 0.21978782609200387,
+          "random_rank4_output_error": 0.16605058182556848,
+          "coordinate_shift_output_error": 0.18255371060695325,
+          "selected_tiles": 7,
+          "mask": [
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "f85536fe8e0300b381b70962655ed3fbfbe354981d7c99565f94de4f3dbb3963"
+        },
+        "spectral": {
+          "spectral_squared": 1.7574425136890783,
+          "frobenius_squared": 28.308901701095465,
+          "stable_rank": 16.108010066099833,
+          "isotropic_output_error": 0.22116329453980832,
+          "random_rank4_output_error": 0.18281367661434916,
+          "coordinate_shift_output_error": 0.19024023619022046,
+          "selected_tiles": 4,
+          "mask": [
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              0,
+              1
+            ]
+          ],
+          "quantized_sha256": "0b9552e555f802b4404e7c47f0c04c71531373684edab226035e262ac4b3fe89"
+        },
+        "random_count_matched": {
+          "spectral_squared": 1.8617365951644063,
+          "frobenius_squared": 28.990939769866827,
+          "stable_rank": 15.571987919862904,
+          "isotropic_output_error": 0.2264917169520846,
+          "random_rank4_output_error": 0.23842554752383532,
+          "coordinate_shift_output_error": 0.21990093794192944,
+          "selected_tiles": 4,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "6977b17395876fd2d9aa1e99814fd02794011a3fc16ec1f6c839d177fe92d095"
+        },
+        "exhaustive_spectral_oracle": {
+          "spectral_squared": 1.7574425136890783,
+          "frobenius_squared": 28.308901701095465,
+          "stable_rank": 16.108010066099833,
+          "isotropic_output_error": 0.22116329453980832,
+          "random_rank4_output_error": 0.18281367661434916,
+          "coordinate_shift_output_error": 0.19024023619022046,
+          "selected_tiles": 4,
+          "mask": [
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              0,
+              1
+            ]
+          ],
+          "quantized_sha256": "0b9552e555f802b4404e7c47f0c04c71531373684edab226035e262ac4b3fe89"
+        }
+      },
+      "solver_relative_oracle_gap": 0.0
+    },
+    {
+      "seed": 102,
+      "family": "heavy_tail",
+      "shape": [
+        32,
+        128
+      ],
+      "weight_sha256": "5440fed357384a74521d3e263735a0babad2d877e3860b46ae520ba1139b626e",
+      "solver": {
+        "objective_history": [
+          40.820577326734806
+        ],
+        "changed_indices": [],
+        "objective_evaluations": 9,
+        "stop_reason": "coordinate_stationary"
+      },
+      "policies": {
+        "four_over_six": {
+          "spectral_squared": 40.820577326734806,
+          "frobenius_squared": 484.23094871017224,
+          "stable_rank": 11.862422837244702,
+          "isotropic_output_error": 3.7830542867982206,
+          "random_rank4_output_error": 4.073457935404913,
+          "coordinate_shift_output_error": 4.316265968147491,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "9ec8bf36a8e53c7834419350c9cc0836acc7227b8aec07b6ce464316e86c0cd2"
+        },
+        "all_e0m3": {
+          "spectral_squared": 76.86357766787758,
+          "frobenius_squared": 864.2815201518226,
+          "stable_rank": 11.244357163367098,
+          "isotropic_output_error": 6.752199376186114,
+          "random_rank4_output_error": 8.121714773760917,
+          "coordinate_shift_output_error": 6.258458522621368,
+          "selected_tiles": 8,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "2bc8229163baf7ece9b55f63740e4a3fe4ba3550df02acaa959abf247f075f3a"
+        },
+        "weight_mse": {
+          "spectral_squared": 40.820577326734806,
+          "frobenius_squared": 484.23094871017224,
+          "stable_rank": 11.862422837244702,
+          "isotropic_output_error": 3.7830542867982206,
+          "random_rank4_output_error": 4.073457935404913,
+          "coordinate_shift_output_error": 4.316265968147491,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "9ec8bf36a8e53c7834419350c9cc0836acc7227b8aec07b6ce464316e86c0cd2"
+        },
+        "spectral": {
+          "spectral_squared": 40.820577326734806,
+          "frobenius_squared": 484.23094871017224,
+          "stable_rank": 11.862422837244702,
+          "isotropic_output_error": 3.7830542867982206,
+          "random_rank4_output_error": 4.073457935404913,
+          "coordinate_shift_output_error": 4.316265968147491,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "9ec8bf36a8e53c7834419350c9cc0836acc7227b8aec07b6ce464316e86c0cd2"
+        },
+        "random_count_matched": {
+          "spectral_squared": 40.820577326734806,
+          "frobenius_squared": 484.23094871017224,
+          "stable_rank": 11.862422837244702,
+          "isotropic_output_error": 3.7830542867982206,
+          "random_rank4_output_error": 4.073457935404913,
+          "coordinate_shift_output_error": 4.316265968147491,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "9ec8bf36a8e53c7834419350c9cc0836acc7227b8aec07b6ce464316e86c0cd2"
+        },
+        "exhaustive_spectral_oracle": {
+          "spectral_squared": 40.820577326734806,
+          "frobenius_squared": 484.23094871017224,
+          "stable_rank": 11.862422837244702,
+          "isotropic_output_error": 3.7830542867982206,
+          "random_rank4_output_error": 4.073457935404913,
+          "coordinate_shift_output_error": 4.316265968147491,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "9ec8bf36a8e53c7834419350c9cc0836acc7227b8aec07b6ce464316e86c0cd2"
+        }
+      },
+      "solver_relative_oracle_gap": 0.0
+    },
+    {
+      "seed": 102,
+      "family": "column_outliers",
+      "shape": [
+        32,
+        128
+      ],
+      "weight_sha256": "a22afb487aaa28f09a5eced6cd29acd5206275df527760bc948da46cd33bce0d",
+      "solver": {
+        "objective_history": [
+          34.38310095890724
+        ],
+        "changed_indices": [],
+        "objective_evaluations": 9,
+        "stop_reason": "coordinate_stationary"
+      },
+      "policies": {
+        "four_over_six": {
+          "spectral_squared": 34.38310095890724,
+          "frobenius_squared": 341.04087701656886,
+          "stable_rank": 9.918851630752032,
+          "isotropic_output_error": 2.664381851691944,
+          "random_rank4_output_error": 2.66485178964216,
+          "coordinate_shift_output_error": 3.246516378596425,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "3da87334b560bcb2d261e1e329b18d577d1ec4d2bf86381dee34545be1fd0c55"
+        },
+        "all_e0m3": {
+          "spectral_squared": 65.3391333426324,
+          "frobenius_squared": 787.9540456853158,
+          "stable_rank": 12.059450521838993,
+          "isotropic_output_error": 6.15589098191653,
+          "random_rank4_output_error": 6.3647561767201255,
+          "coordinate_shift_output_error": 2.7958833295851946,
+          "selected_tiles": 8,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "3c1748c7da76c7bbf2394273452f987be8406d085ef70c63664c929aefaae1a6"
+        },
+        "weight_mse": {
+          "spectral_squared": 34.38310095890724,
+          "frobenius_squared": 341.04087701656886,
+          "stable_rank": 9.918851630752032,
+          "isotropic_output_error": 2.664381851691944,
+          "random_rank4_output_error": 2.66485178964216,
+          "coordinate_shift_output_error": 3.246516378596425,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "3da87334b560bcb2d261e1e329b18d577d1ec4d2bf86381dee34545be1fd0c55"
+        },
+        "spectral": {
+          "spectral_squared": 34.38310095890724,
+          "frobenius_squared": 341.04087701656886,
+          "stable_rank": 9.918851630752032,
+          "isotropic_output_error": 2.664381851691944,
+          "random_rank4_output_error": 2.66485178964216,
+          "coordinate_shift_output_error": 3.246516378596425,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "3da87334b560bcb2d261e1e329b18d577d1ec4d2bf86381dee34545be1fd0c55"
+        },
+        "random_count_matched": {
+          "spectral_squared": 34.38310095890724,
+          "frobenius_squared": 341.04087701656886,
+          "stable_rank": 9.918851630752032,
+          "isotropic_output_error": 2.664381851691944,
+          "random_rank4_output_error": 2.66485178964216,
+          "coordinate_shift_output_error": 3.246516378596425,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "3da87334b560bcb2d261e1e329b18d577d1ec4d2bf86381dee34545be1fd0c55"
+        },
+        "exhaustive_spectral_oracle": {
+          "spectral_squared": 34.38310095890724,
+          "frobenius_squared": 341.04087701656886,
+          "stable_rank": 9.918851630752032,
+          "isotropic_output_error": 2.664381851691944,
+          "random_rank4_output_error": 2.66485178964216,
+          "coordinate_shift_output_error": 3.246516378596425,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "3da87334b560bcb2d261e1e329b18d577d1ec4d2bf86381dee34545be1fd0c55"
+        }
+      },
+      "solver_relative_oracle_gap": 0.0
+    },
+    {
+      "seed": 102,
+      "family": "row_correlated",
+      "shape": [
+        32,
+        128
+      ],
+      "weight_sha256": "8ae527bbb2f3fb90aa20014b2ef16fce19a704bf25e6f3e3e18781f562fe646e",
+      "solver": {
+        "objective_history": [
+          16.592309843121836,
+          13.506605301301772,
+          12.994696758841734
+        ],
+        "changed_indices": [
+          2,
+          6
+        ],
+        "objective_evaluations": 25,
+        "stop_reason": "coordinate_stationary"
+      },
+      "policies": {
+        "four_over_six": {
+          "spectral_squared": 16.592309843121836,
+          "frobenius_squared": 164.99599585273836,
+          "stable_rank": 9.944124562086555,
+          "isotropic_output_error": 1.2890312175995184,
+          "random_rank4_output_error": 1.1747275891789115,
+          "coordinate_shift_output_error": 1.3557457718998194,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "9a4b3b12a545391ab9761f4b573935eb60ec728546cb9bdde0d1772b1fd10fce"
+        },
+        "all_e0m3": {
+          "spectral_squared": 16.010032405303715,
+          "frobenius_squared": 194.87883887031649,
+          "stable_rank": 12.1722950920298,
+          "isotropic_output_error": 1.5224909286743475,
+          "random_rank4_output_error": 1.1897921092044845,
+          "coordinate_shift_output_error": 1.5526265893131495,
+          "selected_tiles": 8,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "65acf8c651de85dd156c99ef2baf62bac2855e596f200a3d01f853880a830c93"
+        },
+        "weight_mse": {
+          "spectral_squared": 16.592309843121836,
+          "frobenius_squared": 164.99599585273836,
+          "stable_rank": 9.944124562086555,
+          "isotropic_output_error": 1.2890312175995184,
+          "random_rank4_output_error": 1.1747275891789115,
+          "coordinate_shift_output_error": 1.3557457718998194,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "9a4b3b12a545391ab9761f4b573935eb60ec728546cb9bdde0d1772b1fd10fce"
+        },
+        "spectral": {
+          "spectral_squared": 12.994696758841734,
+          "frobenius_squared": 175.73239264228914,
+          "stable_rank": 13.523393112095432,
+          "isotropic_output_error": 1.372909317517884,
+          "random_rank4_output_error": 1.1823542684629211,
+          "coordinate_shift_output_error": 1.228117922320962,
+          "selected_tiles": 2,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "quantized_sha256": "1b76db6eb0ab989bd9dca02d2ea316532e2b92ad54694117ccd89178f82854af"
+        },
+        "random_count_matched": {
+          "spectral_squared": 15.913216399126965,
+          "frobenius_squared": 170.84771857002352,
+          "stable_rank": 10.736215375000908,
+          "isotropic_output_error": 1.3347478013283087,
+          "random_rank4_output_error": 1.142538072974722,
+          "coordinate_shift_output_error": 1.4853400979191065,
+          "selected_tiles": 2,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "41624d168f764d8128c5e78756e90d212a5648096232b364a6f408bce2f0c352"
+        },
+        "exhaustive_spectral_oracle": {
+          "spectral_squared": 12.994696758841734,
+          "frobenius_squared": 175.73239264228914,
+          "stable_rank": 13.523393112095432,
+          "isotropic_output_error": 1.372909317517884,
+          "random_rank4_output_error": 1.1823542684629211,
+          "coordinate_shift_output_error": 1.228117922320962,
+          "selected_tiles": 2,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "quantized_sha256": "1b76db6eb0ab989bd9dca02d2ea316532e2b92ad54694117ccd89178f82854af"
+        }
+      },
+      "solver_relative_oracle_gap": 0.0
+    },
+    {
+      "seed": 103,
+      "family": "gaussian",
+      "shape": [
+        32,
+        128
+      ],
+      "weight_sha256": "bb3f1e3e589e4f9f1748aa1b6f9482c1a41f193977a3e9474df799e2accc8f0d",
+      "solver": {
+        "objective_history": [
+          2.4650666697259265,
+          2.0588980386610105,
+          2.0556911301706204,
+          2.036938534276484,
+          1.9339305408987806
+        ],
+        "changed_indices": [
+          3,
+          5,
+          7,
+          2
+        ],
+        "objective_evaluations": 41,
+        "stop_reason": "coordinate_stationary"
+      },
+      "policies": {
+        "four_over_six": {
+          "spectral_squared": 2.4650666697259265,
+          "frobenius_squared": 31.572329733869992,
+          "stable_rank": 12.807900947109191,
+          "isotropic_output_error": 0.24665882604585931,
+          "random_rank4_output_error": 0.23261568712332975,
+          "coordinate_shift_output_error": 0.23512012921855785,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "203586dc422bcf81d75bf1a81103ea53f42b18415232a6c35a4a6882791bf28e"
+        },
+        "all_e0m3": {
+          "spectral_squared": 1.8841325089735053,
+          "frobenius_squared": 29.905061457655393,
+          "stable_rank": 15.872058528382368,
+          "isotropic_output_error": 0.23363329263793275,
+          "random_rank4_output_error": 0.22715265709938903,
+          "coordinate_shift_output_error": 0.23388917409465648,
+          "selected_tiles": 8,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "7c4589c40efa06ad162cefcd0510d12e6ad0538b5a9f14115ce95acd41855f28"
+        },
+        "weight_mse": {
+          "spectral_squared": 2.066222638244998,
+          "frobenius_squared": 28.805021021864377,
+          "stable_rank": 13.940908636220684,
+          "isotropic_output_error": 0.22503922673331545,
+          "random_rank4_output_error": 0.21198549092015304,
+          "coordinate_shift_output_error": 0.21794934236095287,
+          "selected_tiles": 5,
+          "mask": [
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "quantized_sha256": "2bbdef55067ced9934cb06852c432a492d72705c5ff949794881ebaf6ee469b0"
+        },
+        "spectral": {
+          "spectral_squared": 1.9339305408987806,
+          "frobenius_squared": 30.83237955381628,
+          "stable_rank": 15.942857771658723,
+          "isotropic_output_error": 0.2408779652641897,
+          "random_rank4_output_error": 0.21061441687878862,
+          "coordinate_shift_output_error": 0.21415669881389476,
+          "selected_tiles": 4,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              1
+            ]
+          ],
+          "quantized_sha256": "2079ffcf1726b687db5d5e883bfd19e2d6cf07a3a97c60abb778d10e00666770"
+        },
+        "random_count_matched": {
+          "spectral_squared": 2.1458173749917715,
+          "frobenius_squared": 30.67197677900549,
+          "stable_rank": 14.293843053220272,
+          "isotropic_output_error": 0.2396248185859804,
+          "random_rank4_output_error": 0.23149710590505285,
+          "coordinate_shift_output_error": 0.22992176972911693,
+          "selected_tiles": 4,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "3eab7f1790fe042f6d0a58cd0b0a3b3cbb014afa5e2d7a5bb95c0a44465dbc8f"
+        },
+        "exhaustive_spectral_oracle": {
+          "spectral_squared": 1.8841325089735053,
+          "frobenius_squared": 29.905061457655393,
+          "stable_rank": 15.872058528382368,
+          "isotropic_output_error": 0.23363329263793275,
+          "random_rank4_output_error": 0.22715265709938903,
+          "coordinate_shift_output_error": 0.23388917409465648,
+          "selected_tiles": 8,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "7c4589c40efa06ad162cefcd0510d12e6ad0538b5a9f14115ce95acd41855f28"
+        }
+      },
+      "solver_relative_oracle_gap": 0.0264302174545068
+    },
+    {
+      "seed": 103,
+      "family": "heavy_tail",
+      "shape": [
+        32,
+        128
+      ],
+      "weight_sha256": "40260e65ebc171b15e10597131959b998eea1e8d62b3ddfc0840d811ef902a71",
+      "solver": {
+        "objective_history": [
+          37.293973863245334
+        ],
+        "changed_indices": [],
+        "objective_evaluations": 9,
+        "stop_reason": "coordinate_stationary"
+      },
+      "policies": {
+        "four_over_six": {
+          "spectral_squared": 37.293973863245334,
+          "frobenius_squared": 474.8318243694084,
+          "stable_rank": 12.732132706227203,
+          "isotropic_output_error": 3.7096236278860033,
+          "random_rank4_output_error": 4.5158162068599825,
+          "coordinate_shift_output_error": 3.101079191575991,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "391e7cbf5984d2211b8e417d473c2a10cfadf92e9a68e2bfd1383f7615e801a7"
+        },
+        "all_e0m3": {
+          "spectral_squared": 62.35154790644265,
+          "frobenius_squared": 834.2948609065788,
+          "stable_rank": 13.38049958532582,
+          "isotropic_output_error": 6.517928600832647,
+          "random_rank4_output_error": 6.322052561317336,
+          "coordinate_shift_output_error": 7.022016252885805,
+          "selected_tiles": 8,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "34a89982acea3b158c4ca3627dc458268b84fb97ab0e2380502ff32f1e0ba13e"
+        },
+        "weight_mse": {
+          "spectral_squared": 37.293973863245334,
+          "frobenius_squared": 474.8318243694084,
+          "stable_rank": 12.732132706227203,
+          "isotropic_output_error": 3.7096236278860033,
+          "random_rank4_output_error": 4.5158162068599825,
+          "coordinate_shift_output_error": 3.101079191575991,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "391e7cbf5984d2211b8e417d473c2a10cfadf92e9a68e2bfd1383f7615e801a7"
+        },
+        "spectral": {
+          "spectral_squared": 37.293973863245334,
+          "frobenius_squared": 474.8318243694084,
+          "stable_rank": 12.732132706227203,
+          "isotropic_output_error": 3.7096236278860033,
+          "random_rank4_output_error": 4.5158162068599825,
+          "coordinate_shift_output_error": 3.101079191575991,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "391e7cbf5984d2211b8e417d473c2a10cfadf92e9a68e2bfd1383f7615e801a7"
+        },
+        "random_count_matched": {
+          "spectral_squared": 37.293973863245334,
+          "frobenius_squared": 474.8318243694084,
+          "stable_rank": 12.732132706227203,
+          "isotropic_output_error": 3.7096236278860033,
+          "random_rank4_output_error": 4.5158162068599825,
+          "coordinate_shift_output_error": 3.101079191575991,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "391e7cbf5984d2211b8e417d473c2a10cfadf92e9a68e2bfd1383f7615e801a7"
+        },
+        "exhaustive_spectral_oracle": {
+          "spectral_squared": 37.293973863245334,
+          "frobenius_squared": 474.8318243694084,
+          "stable_rank": 12.732132706227203,
+          "isotropic_output_error": 3.7096236278860033,
+          "random_rank4_output_error": 4.5158162068599825,
+          "coordinate_shift_output_error": 3.101079191575991,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "391e7cbf5984d2211b8e417d473c2a10cfadf92e9a68e2bfd1383f7615e801a7"
+        }
+      },
+      "solver_relative_oracle_gap": 0.0
+    },
+    {
+      "seed": 103,
+      "family": "column_outliers",
+      "shape": [
+        32,
+        128
+      ],
+      "weight_sha256": "8971a8b3e6776c5d3198acaf892192a26a97739836dc95e86438d80586313e93",
+      "solver": {
+        "objective_history": [
+          35.24452840435266
+        ],
+        "changed_indices": [],
+        "objective_evaluations": 9,
+        "stop_reason": "coordinate_stationary"
+      },
+      "policies": {
+        "four_over_six": {
+          "spectral_squared": 35.24452840435266,
+          "frobenius_squared": 321.93270957574714,
+          "stable_rank": 9.13426066827408,
+          "isotropic_output_error": 2.5150992935605245,
+          "random_rank4_output_error": 2.9249171723553316,
+          "coordinate_shift_output_error": 3.073060482740402,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "e6ab2ad0cd942027aab18fb8545c4eb2dda06adb668251d243533da02c5fa8ae"
+        },
+        "all_e0m3": {
+          "spectral_squared": 77.8763004091089,
+          "frobenius_squared": 802.1517952691065,
+          "stable_rank": 10.300332592266823,
+          "isotropic_output_error": 6.266810900539895,
+          "random_rank4_output_error": 6.439287117094585,
+          "coordinate_shift_output_error": 3.4620189368724823,
+          "selected_tiles": 8,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "879519fe9223a39bd2bb971dc1ad527aff65fe8ff519f08fe1e7e8a0aa447b95"
+        },
+        "weight_mse": {
+          "spectral_squared": 35.24452840435266,
+          "frobenius_squared": 321.93270957574714,
+          "stable_rank": 9.13426066827408,
+          "isotropic_output_error": 2.5150992935605245,
+          "random_rank4_output_error": 2.9249171723553316,
+          "coordinate_shift_output_error": 3.073060482740402,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "e6ab2ad0cd942027aab18fb8545c4eb2dda06adb668251d243533da02c5fa8ae"
+        },
+        "spectral": {
+          "spectral_squared": 35.24452840435266,
+          "frobenius_squared": 321.93270957574714,
+          "stable_rank": 9.13426066827408,
+          "isotropic_output_error": 2.5150992935605245,
+          "random_rank4_output_error": 2.9249171723553316,
+          "coordinate_shift_output_error": 3.073060482740402,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "e6ab2ad0cd942027aab18fb8545c4eb2dda06adb668251d243533da02c5fa8ae"
+        },
+        "random_count_matched": {
+          "spectral_squared": 35.24452840435266,
+          "frobenius_squared": 321.93270957574714,
+          "stable_rank": 9.13426066827408,
+          "isotropic_output_error": 2.5150992935605245,
+          "random_rank4_output_error": 2.9249171723553316,
+          "coordinate_shift_output_error": 3.073060482740402,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "e6ab2ad0cd942027aab18fb8545c4eb2dda06adb668251d243533da02c5fa8ae"
+        },
+        "exhaustive_spectral_oracle": {
+          "spectral_squared": 35.24452840435266,
+          "frobenius_squared": 321.93270957574714,
+          "stable_rank": 9.13426066827408,
+          "isotropic_output_error": 2.5150992935605245,
+          "random_rank4_output_error": 2.9249171723553316,
+          "coordinate_shift_output_error": 3.073060482740402,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "e6ab2ad0cd942027aab18fb8545c4eb2dda06adb668251d243533da02c5fa8ae"
+        }
+      },
+      "solver_relative_oracle_gap": 0.0
+    },
+    {
+      "seed": 103,
+      "family": "row_correlated",
+      "shape": [
+        32,
+        128
+      ],
+      "weight_sha256": "32eddeda6c1b5299bcce57ec49c3a3767d99359724603866404ac156a8fbaffb",
+      "solver": {
+        "objective_history": [
+          12.61264614620616,
+          11.647080860479786,
+          10.900155165553675
+        ],
+        "changed_indices": [
+          5,
+          4
+        ],
+        "objective_evaluations": 25,
+        "stop_reason": "coordinate_stationary"
+      },
+      "policies": {
+        "four_over_six": {
+          "spectral_squared": 12.61264614620616,
+          "frobenius_squared": 169.9697408487757,
+          "stable_rank": 13.476136480678324,
+          "isotropic_output_error": 1.3278886003810602,
+          "random_rank4_output_error": 1.4458601415432408,
+          "coordinate_shift_output_error": 1.3527410807680837,
+          "selected_tiles": 0,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "ef03d17472f59331c482daa89b6cedada6cf80aea911ac100bcce5abfb91ecc3"
+        },
+        "all_e0m3": {
+          "spectral_squared": 13.28932334250752,
+          "frobenius_squared": 176.2511482050379,
+          "stable_rank": 13.262612675039453,
+          "isotropic_output_error": 1.3769620953518587,
+          "random_rank4_output_error": 1.1200047493340979,
+          "coordinate_shift_output_error": 1.2209308924746267,
+          "selected_tiles": 8,
+          "mask": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "quantized_sha256": "3f6e97744031454695899876240dd2662c0bc7ed6033282286770c985373cc8e"
+        },
+        "weight_mse": {
+          "spectral_squared": 12.200105686124209,
+          "frobenius_squared": 158.73974702858527,
+          "stable_rank": 13.011341959859244,
+          "isotropic_output_error": 1.2401542736608224,
+          "random_rank4_output_error": 1.1505715894149704,
+          "coordinate_shift_output_error": 1.2240179362368337,
+          "selected_tiles": 4,
+          "mask": [
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              1
+            ]
+          ],
+          "quantized_sha256": "57458048e214fa52321d0b3c3f1f126c3e5a4d2b7fe37142eac0adf917d758ba"
+        },
+        "spectral": {
+          "spectral_squared": 10.900155165553675,
+          "frobenius_squared": 167.72478387856086,
+          "stable_rank": 15.387375806226997,
+          "isotropic_output_error": 1.3103498740512567,
+          "random_rank4_output_error": 1.3745163316148385,
+          "coordinate_shift_output_error": 1.3987882914614431,
+          "selected_tiles": 2,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "4ee261568191ffcf3f9bc88bbc782cf0ae8ed70c3a2ff9e51d89ff5e0a6fa267"
+        },
+        "random_count_matched": {
+          "spectral_squared": 11.90920014665161,
+          "frobenius_squared": 172.02870367073615,
+          "stable_rank": 14.445025824769914,
+          "isotropic_output_error": 1.3439742474276262,
+          "random_rank4_output_error": 1.362998112461073,
+          "coordinate_shift_output_error": 1.3796919169497244,
+          "selected_tiles": 2,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "1626339ed8287fa5d6163bdb67da820f9a174621d7101d4fe89ff6cdf0f490ac"
+        },
+        "exhaustive_spectral_oracle": {
+          "spectral_squared": 10.882928688231864,
+          "frobenius_squared": 166.34146688484748,
+          "stable_rank": 15.284623436402647,
+          "isotropic_output_error": 1.299542710037871,
+          "random_rank4_output_error": 1.4033505165798825,
+          "coordinate_shift_output_error": 1.3499544444155447,
+          "selected_tiles": 3,
+          "mask": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "quantized_sha256": "0c2af1f628d67680a9f203095573eb17538e4327bd5f9a4e33e0a481852597ac"
+        }
+      },
+      "solver_relative_oracle_gap": 0.0015828898465941599
+    }
+  ],
+  "elapsed_seconds": 0.6406219005584717
+}

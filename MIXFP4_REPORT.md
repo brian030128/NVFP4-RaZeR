@@ -2,7 +2,86 @@
 
 **Motivation, method, experiments, and limitations**
 
-September 7, 2026 · Experimental code and results: commit `5dc17ea`
+Updated September 8, 2026 · Original report: commit `5dc17ea`; subsequent studies are in the workspace.
+
+## Current result: a frozen rule across seven models
+
+With causal per-token activation factors, the unchanged rule now improves
+**21/21** matched FourOverSix perplexity comparisons across seven models,
+from OPT350M to Llama8B, on literature, science and government text.
+Twenty gains have supporting descriptive paired2SE intervals; none has
+supported harm. It also beats weight-MSE election in21/21 point comparisons.
+The [consolidated result](results/transfer_rule/REPORT.md) separates the
+initial confirmation, causal replay and4B/8B size extension, and preserves
+the unsuccessful comparator criterion described below.
+
+One shared scoring pass on a fixed192-sequence pool supports a simple tile
+rule: estimate each8x64 switch's next-token-loss and teacher-KL derivatives,
+require both to favor the switch after a common2SE filter, and take at most256
+tiles. All models use the same recipe. There is no candidate-loss backtracking,
+per-domain configuration election, or separate calibration per configuration.
+The [method](results/pooled_confirmation/METHOD.md) gives the equations and
+states the approximation and fixed-constant assumptions explicitly.
+
+The frozen confirmation covers five model families and three previously
+uninspected data families: literature, scientific articles and government
+reports. Pythia1.4B and OLMo1B are new model families relative to development;
+the other three models' primary maps replay exactly. The same map is used for
+every domain of each model. The method improves **15/15 comparisons over
+FourOverSix**, with all15 paired descriptive2SE intervals supporting gains,
+and beats weight-MSE election in15/15. Raw losses, source/data hashes, controls
+and fitting audits are in the
+[confirmation report](results/pooled_confirmation/REPORT_332349.md).
+
+The complete prespecified screen nevertheless **fails** its stronger C4-only
+comparison:8/15 point wins, versus the required9. At equal calibration-token
+count, mixing sources improves only6/15 point estimates, with two supported
+gains and two supported harms. The evidence supports transfer of the frozen
+procedure; it does not establish that source diversity is the cause or is
+uniformly preferable. No criterion has been relaxed after seeing these results.
+
+This remains a calibrated procedure, not a weight-only universal theorem or
+a novelty claim for gradient selection. The original confirmation used
+window-wide activation factors. The subsequent
+[causal audit](results/causal_replay/REPORT_332374.md) retained improvements
+in15/15 comparisons with per-token factors,14 supported, and passed its
+declared retention/prefix-independence screen. It reused the same frozen maps
+and inputs, without recalibration. The
+[4B/8B extension](results/pooled_scale/REPORT_332389.md) then passed its
+size-transfer screen with6/6 supported gains and the same256-tile cap.
+
+Changing future tokens changed earlier logits under the older window-wide
+factor in all five models tested under both conventions. The per-token
+version produced bitwise-identical prefix logits for both baseline and
+selected maps in all seven models. Per-token factors change the activation
+representation; this is not claimed as a free native-kernel modification.
+All results simulate W4A4 nonhead linear operations. Native FP4-kernel speed,
+generation accuracy and multi-pool seed replication are not measured.
+
+## Earlier report and exploratory research record
+
+**Research continuation (September 7; subsequent workspace experiments):**
+The calibration/backtracking method below does not resolve the request for a
+strong, transferable tile-selection rule. Six additional fixed-method studies
+test conditional compensation, asymmetric compensation, calibration-free
+activation election, interacting weight tiles, teacher-Fisher sensitivity, and
+complete tile branches with columnwise GPTQ compensation.
+Their protocols, unsuccessful cases, and paired results are collected in
+[the continuation report](results/format_directions/REPORT.md). The
+[method analysis](results/format_directions/METHOD_AND_EVIDENCE.md) separates
+what each objective guarantees from what must generalize empirically. These
+experiments are exploratory and do not establish a paper-ready universal rule.
+The [findings](results/format_directions/FINDINGS.md) summarize why all six
+screens failed; the final panel improves seven of nine comparisons over
+FourOverSix but has two supported math regressions.
+
+**September 8 continuation:** Additional fixed-method studies and a replay of
+failed maps on their original fitting examples are recorded in the
+[continuation log](results/format_directions/CONTINUATION_20260908.md).
+The replay identifies failure of the actual fitting objective, before domain
+transfer, for the large curvature-selected maps. Current-model binary updates
+and subsequent shared-score methods were tested under frozen recipes. The
+validated transfer results and their claim limits are summarized above.
 
 MixFP4 gives a quantizer an additional choice: represent a block with E2M1 or
 E0M3 while keeping its element width at four bits. The difficult part is choosing
@@ -10,7 +89,7 @@ where that flexibility helps the model. A format that reconstructs a weight
 block more accurately need not improve the predictions of an already quantized
 network. A selection that improves WikiText need not improve another domain.
 
-Our strongest tested approach is **task-gradient selection on C4, followed by
+The earlier approach used **task-gradient selection on C4, followed by
 actual-loss backtracking and independent validation**. The same algorithm
 produced accepted maps on three models, with two calibration seeds for the
 27B target. It reduced perplexity by at least **0.01 in 15 of 16 evaluated
