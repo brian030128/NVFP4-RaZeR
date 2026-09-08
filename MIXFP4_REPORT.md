@@ -9,28 +9,28 @@ Updated September 8, 2026 · Original report: commit `5dc17ea`; subsequent studi
 
 Each cell is **FourOverSix baseline PPL → pooled-map PPL**; lower is better. The pooled map uses all 192 calibration sequences with the common CE/KL two-SE rule and 256-tile cap (`pooled192`, named `all_pooled` in the initial study). These tables cover its held-out/reference-text evaluations across all eight models and all seven dataset families evaluated. Other selection methods and calibration fitting losses are not included in the dataset averages.
 
-**Mean PPL** is the unweighted arithmetic mean of the available dataset PPLs in that row, computed separately for baseline and pooled map from unrounded values. It is a descriptive dataset average, not pooled-corpus perplexity or a statistical significance test. **—** means not evaluated and is excluded from the mean. Different dataset coverage and model tokenizers limit comparisons between rows; the 27B mean below covers C4 only.
+**Mean PPL** is the unweighted arithmetic mean of the available dataset PPLs in that row, computed separately for baseline and pooled map from unrounded values. It is a descriptive dataset average, not pooled-corpus perplexity or a statistical significance test. **—** means not evaluated and is excluded from the mean. Different dataset coverage and model tokenizers limit comparisons between rows; the 27B mean below covers C4 and WikiText-2 only. Qwen3-4B and Llama-3.1-8B have five evaluated datasets; the other five models have four.
 
 ### Current causal evaluation
 
-All policies use per-token activation factors. C4 has 256 validation documents per model; literature (PG19), science (arXiv articles), and government (GovReport reports) each have 64 test documents per model. Each document contributes a 512-token crop. The same frozen map serves all available domains of a model.
+All policies use per-token activation factors. C4 has 256 validation documents per model; literature (PG19), science (arXiv articles), and government (GovReport reports) each have 64 test documents per model. Each document contributes a 512-token crop. Causal WikiText-2 uses all nonoverlapping512-token windows of the concatenated raw test split, omitting only the final incomplete window. The same frozen map serves all available domains of a model.
 
-| Model | C4 | PG19 / literature | arXiv / science | GovReport / government | Mean PPL |
-|---|---:|---:|---:|---:|---:|
-| OPT-350M | 26.7439 → 26.4696 | 26.7803 → 26.3180 | 39.9885 → 38.9790 | 19.3052 → 19.0420 | 28.2045 → 27.7021 |
-| Qwen3-0.6B | 37.9007 → 34.7924 | 42.2868 → 38.2347 | 22.9779 → 21.3853 | 20.9650 → 19.2934 | 31.0326 → 28.4265 |
-| Llama-3.2-1B-Instruct | 24.8986 → 24.1244 | 27.4281 → 26.1702 | 22.9979 → 22.1912 | 15.9390 → 15.4375 | 22.8159 → 21.9808 |
-| OLMo-1B | 14.9844 → 14.8830 | 18.3616 → 18.2721 | 21.5055 → 21.1115 | 12.1762 → 12.0859 | 16.7569 → 16.5881 |
-| Pythia-1.4B | 20.4712 → 20.1627 | 17.3559 → 17.0860 | 19.7099 → 19.4682 | 14.1871 → 13.9786 | 17.9310 → 17.6739 |
-| Qwen3-4B | 21.9282 → 20.9027 | 21.7798 → 20.5380 | 13.6565 → 13.0184 | 12.7575 → 12.0811 | 17.5305 → 16.6350 |
-| Llama-3.1-8B | 11.6001 → 11.5099 | 11.6750 → 11.5913 | 10.8050 → 10.7011 | 8.2520 → 8.1814 | 10.5830 → 10.4959 |
-| Qwen3.8-27B | 12.6450 → 12.6353 | — | — | — | 12.6450 → 12.6353 |
+| Model | C4 | WikiText-2 | PG19 / literature | arXiv / science | GovReport / government | Mean PPL |
+|---|---:|---:|---:|---:|---:|---:|
+| OPT-350M | 26.7439 → 26.4696 | — | 26.7803 → 26.3180 | 39.9885 → 38.9790 | 19.3052 → 19.0420 | 28.2045 → 27.7021 |
+| Qwen3-0.6B | 37.9007 → 34.7924 | — | 42.2868 → 38.2347 | 22.9779 → 21.3853 | 20.9650 → 19.2934 | 31.0326 → 28.4265 |
+| Llama-3.2-1B-Instruct | 24.8986 → 24.1244 | — | 27.4281 → 26.1702 | 22.9979 → 22.1912 | 15.9390 → 15.4375 | 22.8159 → 21.9808 |
+| OLMo-1B | 14.9844 → 14.8830 | — | 18.3616 → 18.2721 | 21.5055 → 21.1115 | 12.1762 → 12.0859 | 16.7569 → 16.5881 |
+| Pythia-1.4B | 20.4712 → 20.1627 | — | 17.3559 → 17.0860 | 19.7099 → 19.4682 | 14.1871 → 13.9786 | 17.9310 → 17.6739 |
+| Qwen3-4B | 21.9282 → 20.9027 | 19.4149 → 17.5212 | 21.7798 → 20.5380 | 13.6565 → 13.0184 | 12.7575 → 12.0811 | 17.9074 → 16.8123 |
+| Llama-3.1-8B | 11.6001 → 11.5099 | 9.0929 → 9.0113 | 11.6750 → 11.5913 | 10.8050 → 10.7011 | 8.2520 → 8.1814 | 10.2850 → 10.1990 |
+| Qwen3.8-27B | 12.6450 → 12.6353 | 9.0409 → 8.9971 | — | — | — | 10.8429 → 10.8162 |
 
-The 27B C4 difference is inconclusive (paired ΔNLL −0.000764 ±0.001538, descriptive two-SE); its small point gain must not be presented as a supported improvement. OLMo-1B literature is also inconclusive. The other 27 causal comparisons have supporting descriptive paired two-SE intervals. [Transfer results](results/transfer_rule/REPORT.md), [seven-model C4 results](results/c4_frozen/REPORT_332781.md), [27B C4 result](results/pooled_qwen27b/model_332840/REPORT.md).
+The 27B C4 difference is inconclusive (paired ΔNLL −0.000764 ±0.001538, descriptive two-SE); its small point gain must not be presented as a supported improvement. OLMo-1B literature is also inconclusive. Of the preceding 29 causal comparisons excluding WikiText-2, 27 have supporting descriptive paired two-SE intervals. The three added WikiText-2 comparisons have 3 supported gains and 0 supported harms under descriptive two-SE intervals; adjacent WikiText windows may share articles, so these intervals do not account for article dependence. [Transfer results](results/transfer_rule/REPORT.md), [seven-model C4 results](results/c4_frozen/REPORT_332781.md), [27B C4 result](results/pooled_qwen27b/model_332840/REPORT.md), [causal WikiText-2 results](results/wiki_frozen/REPORT_332974_332976.md).
 
 ### Earlier development evaluations: window-wide activation factors
 
-These are the original three pooled maps, replayed unchanged in subsequent confirmation. WikiText-2 uses 32 held-out 512-token windows; GSM8K and MBPP use 32 held-out reference-text examples each, truncated to at most 512 tokens. Their reported PPL is exp(mean example NLL); math and code scores are not answer accuracy or pass@k. The other five models were not evaluated on these datasets with the pooled rule.
+These are the original three pooled maps, replayed unchanged in subsequent confirmation. WikiText-2 uses 32 held-out 512-token windows; GSM8K and MBPP use 32 held-out reference-text examples each, truncated to at most 512 tokens. Their reported PPL is exp(mean example NLL); math and code scores are not answer accuracy or pass@k. These historical runs cover only the three models below; the causal WikiText-2 runs for three larger models are in the current table. GSM8K and MBPP were not evaluated for the other five models with this pooled rule.
 
 **Historical only:** window-wide activation factors can depend on future tokens. These numbers are retained for completeness and are not causal-likelihood evidence. Their averages are kept separate from the causal table.
 
@@ -152,7 +152,7 @@ Held-out C4 PPL changes from **12.644977 to 12.635323**, a reduction of only
 **0.009654**. Paired ΔNLL is **-0.000764 ±0.001538** (descriptive two-SE),
 which includes zero. This is below the earlier 0.01-PPL practical reference
 threshold and is not a supported improvement. The seven-model gains above
-therefore do not establish meaningful improvement on this 27B target.
+therefore do not establish meaningful C4 improvement on this 27B target.
 
 C4-only64 reaches 12.630390, mixed64 reaches 12.627442, and weight-MSE reaches
 12.671271. None of these controls is used to replace the primary pooled map.

@@ -255,3 +255,31 @@ The [eight-model C4 comparison](../pooled_qwen27b/C4_COMPARISON_332840.md)
 reports this limit alongside the seven earlier supported gains. The independent
 JSON-report audit recomputes all eight calibration/test hash intersections;
 C4-only64 is a subset of the192 excluded calibration documents in each model.
+
+## Current causal WikiText-2 on Qwen4B, Llama8B and Qwen27B
+
+User-requested jobs332974 (Qwen4B/Llama8B) and332976 (Qwen3.8-27B) replay the
+original pooled192 maps and all three saved controls without calibration or
+map selection. The pinned WikiText-2 raw test split is concatenated with two
+newlines and divided into nonoverlapping512-token windows; only the final
+incomplete window is omitted. All511 next-token labels are scored per window.
+The counts are584,564 and580 windows, respectively. Source weights, quantizer
+sources and saved map hashes match the C4 records. Exact prefix independence
+passes for baseline and pooled192. No nonempty WikiText row hash matches any
+of the192 calibration document hashes per model; this is not a near-duplicate
+or pretraining-data audit.
+
+FourOverSix -> pooled192 PPL: Qwen3-4B19.414897 ->17.521211, Llama3.1-8B
+9.092934 ->9.011329, Qwen3.8-27B9.040908 ->8.997140. All three have supporting
+descriptive paired two-SE intervals, and pooled192 beats every saved control
+in point PPL on each model. The27B paired NLL change is-0.004853 ±0.001499.
+Its earlier inconclusive C4 change remains unchanged; the WikiText result is
+not evidence of a supported C4 gain. Adjacent test windows can share articles,
+so the reported window-level intervals do not account for that dependence.
+
+[Full results and controls](../wiki_frozen/REPORT_332974_332976.md) follow the
+[frozen evaluation protocol](../wiki_frozen/PROTOCOL.md). Summary job332978
+validates the raw losses, token accounting and integrity checks, then adds a
+separate WikiText-2 column to the current causal table in MIXFP4_REPORT.md.
+Per-model dataset means include only evaluated causal datasets; the historical
+window-scaled tables remain separate.

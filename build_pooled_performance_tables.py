@@ -28,7 +28,7 @@ def pair(report, policy, domain, path, stage):
     evaluation = report['evaluation']
     base = evaluation['four_over_six']
     selected = evaluation[policy]
-    if domain != 'c4':
+    if 'ppl' not in base:
         base, selected = base[domain], selected[domain]
     b, p = base['ppl'], selected['ppl']
     assert math.isfinite(b) and math.isfinite(p) and b > 0 and p > 0
@@ -73,6 +73,13 @@ def main():
                 else f'results/c4_frozen/model_332781_{model}/report.json')
         row['c4'] = pair(read(path), 'pooled192', 'c4', path, 'causal')
         causal[model] = row
+    wiki_path = 'results/wiki_frozen/summary_332974_332976.json'
+    wiki_summary = json.loads((ROOT / wiki_path).read_text())
+    assert wiki_summary['models'] == 3
+    for path in wiki_summary['source_reports']:
+        r = read(path)
+        assert r['model'] in ('qwen4b', 'llama8b', 'qwen27b')
+        causal[r['model']]['wiki'] = pair(r, 'pooled192', 'wiki', path, 'causal')
     development = {}
     for model in ('opt350m', 'qwen06b', 'llama1b'):
         path = f'results/consensus_format/model_332332_{model}/report.json'
@@ -85,8 +92,8 @@ def main():
         r = read(path)
         confirmation[model] = {d: pair(r, 'pooled192', d, path, 'confirmation_window')
                               for d in ('literature', 'science', 'government')}
-    assert len(manifest) == 29 + 9 + 15
-    assert set(causal['qwen27b']) == {'c4'}
+    assert len(manifest) == 32 + 9 + 15
+    assert set(causal['qwen27b']) == {'c4', 'wiki'}
     lines = [START, '## Pooled calibration: all evaluated models and datasets', '',
              'Each cell is **FourOverSix baseline PPL → pooled-map PPL**; lower is better. '
              'The pooled map uses all 192 calibration sequences with the common CE/KL two-SE '
@@ -99,29 +106,37 @@ def main():
              'It is a descriptive dataset average, not pooled-corpus perplexity or a statistical '
              'significance test. **—** means not evaluated and is excluded from the mean. '
              'Different dataset coverage and model tokenizers limit comparisons between rows; '
-             'the 27B mean below covers C4 only.', '',
+             'the 27B mean below covers C4 and WikiText-2 only. Qwen3-4B and Llama-3.1-8B '
+             'have five evaluated datasets; the other five models have four.', '',
              '### Current causal evaluation', '',
              'All policies use per-token activation factors. C4 has 256 validation documents '
              'per model; literature (PG19), science (arXiv articles), and government (GovReport '
              'reports) each have 64 test documents per model. Each document contributes a '
-             '512-token crop. The same frozen map serves all available domains of a model.', '']
-    domains = [('c4', 'C4'), ('literature', 'PG19 / literature'),
+             '512-token crop. Causal WikiText-2 uses all nonoverlapping512-token windows of the '
+             'concatenated raw test split, omitting only the final incomplete window. '
+             'The same frozen map serves all available domains of a model.', '']
+    domains = [('c4', 'C4'), ('wiki', 'WikiText-2'), ('literature', 'PG19 / literature'),
                ('science', 'arXiv / science'), ('government', 'GovReport / government')]
     lines += table(causal, domains)
     lines += ['', 'The 27B C4 difference is inconclusive (paired ΔNLL −0.000764 ±0.001538, '
               'descriptive two-SE); its small point gain must not be presented as a supported '
-              'improvement. OLMo-1B literature is also inconclusive. The other 27 causal '
-              'comparisons have supporting descriptive paired two-SE intervals. '
+              'improvement. OLMo-1B literature is also inconclusive. Of the preceding 29 causal '
+              'comparisons excluding WikiText-2, 27 have supporting descriptive paired two-SE intervals. '
+              f'The three added WikiText-2 comparisons have {wiki_summary["supported_gains"]} supported '
+              f'gains and {wiki_summary["supported_harms"]} supported harms under descriptive two-SE intervals; '
+              'adjacent WikiText windows may share articles, so these intervals do not account for article dependence. '
               '[Transfer results](results/transfer_rule/REPORT.md), '
               '[seven-model C4 results](results/c4_frozen/REPORT_332781.md), '
-              '[27B C4 result](results/pooled_qwen27b/model_332840/REPORT.md).', '',
+              '[27B C4 result](results/pooled_qwen27b/model_332840/REPORT.md), '
+              '[causal WikiText-2 results](results/wiki_frozen/REPORT_332974_332976.md).', '',
               '### Earlier development evaluations: window-wide activation factors', '',
               'These are the original three pooled maps, replayed unchanged in subsequent '
               'confirmation. WikiText-2 uses 32 held-out 512-token windows; GSM8K and MBPP use '
               '32 held-out reference-text examples each, truncated to at most 512 tokens. '
               'Their reported PPL is exp(mean example NLL); math and code scores are not '
-              'answer accuracy or pass@k. The other five models were not evaluated on these '
-              'datasets with the pooled rule.', '',
+              'answer accuracy or pass@k. These historical runs cover only the three models below; '
+              'the causal WikiText-2 runs for three larger models are in the current table. '
+              'GSM8K and MBPP were not evaluated for the other five models with this pooled rule.', '',
               '**Historical only:** window-wide activation factors can depend on future tokens. '
               'These numbers are retained for completeness and are not causal-likelihood evidence. '
               'Their averages are kept separate from the causal table.', '']
@@ -134,7 +149,7 @@ def main():
               'the causal table. They are shown to preserve every evaluation setting, and must '
               'not be counted again as independent confirmation. The full prespecified '
               'confirmation screen failed its C4-only comparison despite the baseline gains.', '']
-    lines += table(confirmation, domains[1:])
+    lines += table(confirmation, domains[2:])
     lines += ['', '[Original confirmation](results/pooled_confirmation/REPORT_332349.md). '
               'No window-wide confirmation run was performed for Qwen3-4B, Llama-3.1-8B, or '
               'Qwen3.8-27B under this pooled protocol.', '',
@@ -155,9 +170,9 @@ def main():
         text = text.replace(anchor, replacement + '\n\n' + anchor, 1)
     target.write_text(text)
     artifact = dict(averaging='Unweighted arithmetic mean of available per-dataset PPL values, separately for baseline and pooled map',
-                    causal_cells=29, development_window_cells=9, confirmation_window_cells=15, cells=manifest)
+                    causal_cells=32, development_window_cells=9, confirmation_window_cells=15, cells=manifest)
     (ROOT / 'results/transfer_rule/pooled_performance_tables.json').write_text(json.dumps(artifact, indent=2) + '\n')
-    print('Inserted 29 causal, 9 development-window and 15 confirmation-window cells with per-model dataset means.')
+    print('Inserted 32 causal, 9 development-window and 15 confirmation-window cells with per-model dataset means.')
 
 
 if __name__ == '__main__': main()
