@@ -1,10 +1,15 @@
 """Combine only the matched causal evaluations; keep study boundaries explicit."""
+import argparse
 import json
 from pathlib import Path
 from run_conditional_model import paired
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--c4-job', type=int)
+    ap.add_argument('--qwen27b-job', type=int)
+    args = ap.parse_args()
     root = Path('results/transfer_rule'); root.mkdir(parents=True, exist_ok=True)
     small = ('llama1b', 'opt350m', 'qwen06b', 'pythia14b', 'olmo1b')
     paths = [Path(f'results/causal_replay/model_332374_{m}/report.json') for m in small]
@@ -27,6 +32,22 @@ def main():
              causal_audit_passes=json.loads(Path('results/causal_replay/summary_332374.json').read_text())['passes_causal_audit'],
              scale_transfer_passes=json.loads(Path('results/pooled_scale/summary_332389.json').read_text())['passes_scale_transfer'])
     s['source_reports'] = [str(p) for p in paths]
+    c4 = None
+    if args.c4_job is not None:
+        c4_path = Path(f'results/c4_frozen/summary_{args.c4_job}.json')
+        c4 = json.loads(c4_path.read_text())
+        assert c4['models'] == 7
+        s['heldout_c4_followup'] = dict(summary_path=str(c4_path), **c4)
+    qwen27b = None
+    if args.qwen27b_job is not None:
+        target_path = Path(f'results/pooled_qwen27b/model_{args.qwen27b_job}/report.json')
+        qwen27b = json.loads(target_path.read_text())
+        assert qwen27b['status'] == 'complete'
+        contrast = qwen27b['contrasts']['four_over_six']
+        s['qwen27b_c4_followup'] = dict(source_report=str(target_path),
+            selected_tiles=qwen27b['selected_tiles']['pooled192'],
+            supported_gain=contrast['mean_nll'] + contrast['two_se'] < 0,
+            gain_at_least_0p01_ppl=contrast['ppl_delta'] <= -.01, **contrast)
     (root/'summary.json').write_text(json.dumps(s, indent=2)+'\n')
     lines = ['# A fixed FP4 tile rule with measured transfer', '',
              f'The unchanged procedure improves **{s["gains"]}/{s["cells"]}** matched causal perplexity comparisons '
@@ -56,6 +77,45 @@ def main():
     for r, d, c in cells:
         b = c['four_over_six']; e = r['evaluation']
         lines.append(f'| {r["model"]} / {d} | {e["four_over_six"][d]["ppl"]:.6f} | {e["pooled192"][d]["ppl"]:.6f} | {b["ppl_delta"]:+.6f} | {b["mean_nll"]:+.6f} ±{b["two_se"]:.6f} |')
+    if c4 is not None:
+        lines += ['', '## Held-out C4 follow-up', '',
+                  f'The same frozen maps improve {c4["point_gains"]}/7 C4 comparisons, '
+                  f'with {c4["supported_gains"]} descriptive paired two-SE supported gains '
+                  f'and {c4["supported_harms"]} supported harms. '
+                  'Each model uses 256 distinct validation documents with 512-token crops, '
+                  'excluding exact calibration document hashes. All policies use causal '
+                  'per-token activation factors. No map is recalibrated or selected. '
+                  'C4 is a calibration source, so these seven measurements are held-out '
+                  'within-source evaluation, separate from the 21 transfer comparisons above.', '',
+                  '| Model | FourOverSix C4 PPL | Selected C4 PPL | ΔPPL | ΔNLL ±2SE |',
+                  '|---|---:|---:|---:|---:|']
+        for path in c4['source_reports']:
+            r = json.loads(Path(path).read_text())
+            assert r['status'] == 'complete'
+            e = r['evaluation']; b = r['contrasts']['four_over_six']
+            lines.append(f'| {r["model"]} | {e["four_over_six"]["ppl"]:.6f} | '
+                         f'{e["pooled192"]["ppl"]:.6f} | {b["ppl_delta"]:+.6f} | '
+                         f'{b["mean_nll"]:+.6f} ±{b["two_se"]:.6f} |')
+        lines += ['', f'[Full C4 report and fixed controls](../c4_frozen/REPORT_{args.c4_job}.md). '
+                  f'Pooled192 beats C4-only selection in {c4["beats_c4_only"]}/7 point comparisons. '
+                  'This does not change the earlier failed source-diversity screen.']
+    if qwen27b is not None:
+        c = qwen27b['contrasts']['four_over_six']
+        e = qwen27b['evaluation']
+        lines += ['', '## Qwen3.8-27B C4 extension', '',
+                  'This separately measured target uses the same 192 calibration sequences per recipe, '
+                  'CE/KL two-SE rule and 256-tile cap, with native Transformers 5.16.1 hybrid text support. '
+                  'Evaluation uses 256 held-out C4 validation documents and causal per-token activation factors. '
+                  'No loss backtracking or test-based map selection is used.', '',
+                  f'FourOverSix C4 PPL is {e["four_over_six"]["ppl"]:.6f}; selected PPL is '
+                  f'{e["pooled192"]["ppl"]:.6f}, ΔPPL {c["ppl_delta"]:+.6f}. '
+                  f'Paired ΔNLL is {c["mean_nll"]:+.6f} ±{c["two_se"]:.6f} (descriptive 2SE). '
+                  f'Supported gain: {s["qwen27b_c4_followup"]["supported_gain"]}; '
+                  f'gain of at least 0.01 PPL: {s["qwen27b_c4_followup"]["gain_at_least_0p01_ppl"]}. '
+                  'This result limits the seven-model evidence above: the current rule does not '
+                  'establish a meaningful supported C4 gain on the 27B target.', '',
+                  f'[Full 27B controls](../pooled_qwen27b/model_{args.qwen27b_job}/REPORT.md) · '
+                  f'[Eight-model C4 comparison and overlap audit](../pooled_qwen27b/C4_COMPARISON_{args.qwen27b_job}.md).']
     lines += ['', '## What the experiments establish', '',
               'The initial confirmation used five model families and three data families not inspected during method development; '
               'Pythia and OLMo supplied two new architecture families. '

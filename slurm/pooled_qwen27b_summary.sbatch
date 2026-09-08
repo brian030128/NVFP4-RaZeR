@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --account=MST114554
 #SBATCH --partition=dev
-#SBATCH --job-name=transfer_rule_summary
+#SBATCH --job-name=pooled_qwen27b_summary
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
@@ -12,4 +12,6 @@
 #SBATCH --error=slurm/logs/%x_%j.err
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?}"
-/home/u4320956/beam_engine-v3/.venv/bin/python summarize_transfer_rule.py "$@"
+export PYTHONPATH="$PWD:${PYTHONPATH:-}"
+export OMP_NUM_THREADS=2 MKL_NUM_THREADS=2
+/home/u4320956/beam_engine-v3/.venv/bin/python summarize_pooled_qwen27b.py --job "${1:?job ID required}"

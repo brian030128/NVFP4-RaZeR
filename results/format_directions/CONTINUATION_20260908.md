@@ -204,3 +204,54 @@ evaluations are not counted again as independent evidence. This supports a
 common calibrated procedure with no candidate-loss search. It is not a
 weight-only universal theorem, a new-invention claim for gradient ranking,
 a seed-replication result, or a demonstrated native FP4 kernel.
+
+## Held-out C4 measurement of the same seven frozen maps
+
+User-requested follow-up job332781 evaluates the original pooled192 maps and
+all saved controls on 256 C4 validation documents per model, each a seeded
+512-token crop. Dataset revision, validation shard and crop seed were fixed
+in the [protocol](../c4_frozen/PROTOCOL.md) before submission. There is no
+recalibration, gradient scoring, map election, acceptance gate or backtracking.
+Source weights match the original hashes; saved map files remain unchanged.
+Evaluation document hashes exclude all 192 calibration documents per model.
+All seven models pass exact causal prefix independence for baseline and map.
+
+Pooled192 improves C4 PPL on7/7 models, with7 supporting descriptive paired
+2SE intervals and no supported harm. It beats weight-MSE on7/7 and C4-only
+selection on4/7. This is held-out within-source evaluation because C4 is a
+calibration source, separate from the21 transfer-domain comparisons. It does
+not change the failed earlier source-diversity criterion. Full controls,
+paired losses and provenance are in the [report](../c4_frozen/REPORT_332781.md).
+
+All seven array tasks completed with exit0. Job332787 passed sampling tests
+(calibration exclusion, duplicate handling, length filtering, seeded replay,
+and incomplete-input failure) and the result consistency checks. Job332790
+updated the consolidated report, preserving the separate study counts.
+
+## Qwen3.8-27B extension: inconclusive baseline gain
+
+The user requested the 27B target after the seven-model C4 evaluation. The
+[protocol](../pooled_qwen27b/PROTOCOL.md) fixes the same 192-sequence pool
+recipe, CE/KL two-SE score, 256-tile cap and causal held-out C4 evaluation.
+The native hybrid text architecture uses pinned Transformers5.16.1. Normal
+queue attempt332828 was cancelled while pending at a QOS limit. Attempt332829
+passed setup checks but used slow pageable candidate transfers; it was stopped
+before map election or held-out evaluation. Its runner snapshot is retained.
+Retry332840 changes memory placement only (pinned CPU buffers and up to12GiB
+of exact FP32 candidate differences cached per GPU); scoring dropped from
+about25 to7 seconds per sequence. All192 paired CE/KL score rows were completed
+in1350 seconds; the same fixed rule selects256 tiles. Scores and maps are saved.
+
+The held-out C4 result is **inconclusive**: FourOverSix12.644977 -> pooled192
+12.635323 (ΔPPL-0.009654), paired ΔNLL-0.000764 ±0.001538. This is below the
+preceding0.01-PPL practical reference and the interval includes zero. It does
+not support a meaningful 27B gain. C4-only64 gives12.630390, mixed64 gives
+12.627442, weight-MSE gives12.671271. The primary map is not replaced by a
+control or retuned after evaluation. All five policies use the same256 C4
+validation documents and causal activation factors; zero exact calibration
+hash overlap and exact baseline/selected prefix independence are verified.
+
+The [eight-model C4 comparison](../pooled_qwen27b/C4_COMPARISON_332840.md)
+reports this limit alongside the seven earlier supported gains. The independent
+JSON-report audit recomputes all eight calibration/test hash intersections;
+C4-only64 is a subset of the192 excluded calibration documents in each model.

@@ -4,6 +4,61 @@
 
 Updated September 8, 2026 · Original report: commit `5dc17ea`; subsequent studies are in the workspace.
 
+<!-- BEGIN POOLED PERFORMANCE TABLES -->
+## Pooled calibration: all evaluated models and datasets
+
+Each cell is **FourOverSix baseline PPL → pooled-map PPL**; lower is better. The pooled map uses all 192 calibration sequences with the common CE/KL two-SE rule and 256-tile cap (`pooled192`, named `all_pooled` in the initial study). These tables cover its held-out/reference-text evaluations across all eight models and all seven dataset families evaluated. Other selection methods and calibration fitting losses are not included in the dataset averages.
+
+**Mean PPL** is the unweighted arithmetic mean of the available dataset PPLs in that row, computed separately for baseline and pooled map from unrounded values. It is a descriptive dataset average, not pooled-corpus perplexity or a statistical significance test. **—** means not evaluated and is excluded from the mean. Different dataset coverage and model tokenizers limit comparisons between rows; the 27B mean below covers C4 only.
+
+### Current causal evaluation
+
+All policies use per-token activation factors. C4 has 256 validation documents per model; literature (PG19), science (arXiv articles), and government (GovReport reports) each have 64 test documents per model. Each document contributes a 512-token crop. The same frozen map serves all available domains of a model.
+
+| Model | C4 | PG19 / literature | arXiv / science | GovReport / government | Mean PPL |
+|---|---:|---:|---:|---:|---:|
+| OPT-350M | 26.7439 → 26.4696 | 26.7803 → 26.3180 | 39.9885 → 38.9790 | 19.3052 → 19.0420 | 28.2045 → 27.7021 |
+| Qwen3-0.6B | 37.9007 → 34.7924 | 42.2868 → 38.2347 | 22.9779 → 21.3853 | 20.9650 → 19.2934 | 31.0326 → 28.4265 |
+| Llama-3.2-1B-Instruct | 24.8986 → 24.1244 | 27.4281 → 26.1702 | 22.9979 → 22.1912 | 15.9390 → 15.4375 | 22.8159 → 21.9808 |
+| OLMo-1B | 14.9844 → 14.8830 | 18.3616 → 18.2721 | 21.5055 → 21.1115 | 12.1762 → 12.0859 | 16.7569 → 16.5881 |
+| Pythia-1.4B | 20.4712 → 20.1627 | 17.3559 → 17.0860 | 19.7099 → 19.4682 | 14.1871 → 13.9786 | 17.9310 → 17.6739 |
+| Qwen3-4B | 21.9282 → 20.9027 | 21.7798 → 20.5380 | 13.6565 → 13.0184 | 12.7575 → 12.0811 | 17.5305 → 16.6350 |
+| Llama-3.1-8B | 11.6001 → 11.5099 | 11.6750 → 11.5913 | 10.8050 → 10.7011 | 8.2520 → 8.1814 | 10.5830 → 10.4959 |
+| Qwen3.8-27B | 12.6450 → 12.6353 | — | — | — | 12.6450 → 12.6353 |
+
+The 27B C4 difference is inconclusive (paired ΔNLL −0.000764 ±0.001538, descriptive two-SE); its small point gain must not be presented as a supported improvement. OLMo-1B literature is also inconclusive. The other 27 causal comparisons have supporting descriptive paired two-SE intervals. [Transfer results](results/transfer_rule/REPORT.md), [seven-model C4 results](results/c4_frozen/REPORT_332781.md), [27B C4 result](results/pooled_qwen27b/model_332840/REPORT.md).
+
+### Earlier development evaluations: window-wide activation factors
+
+These are the original three pooled maps, replayed unchanged in subsequent confirmation. WikiText-2 uses 32 held-out 512-token windows; GSM8K and MBPP use 32 held-out reference-text examples each, truncated to at most 512 tokens. Their reported PPL is exp(mean example NLL); math and code scores are not answer accuracy or pass@k. The other five models were not evaluated on these datasets with the pooled rule.
+
+**Historical only:** window-wide activation factors can depend on future tokens. These numbers are retained for completeness and are not causal-likelihood evidence. Their averages are kept separate from the causal table.
+
+| Model | WikiText-2 | GSM8K reference text | MBPP reference text | Mean PPL |
+|---|---:|---:|---:|---:|
+| OPT-350M | 37.8453 → 37.1308 | 19.1657 → 19.1168 | 29.7292 → 28.7015 | 28.9134 → 28.3164 |
+| Qwen3-0.6B | 39.4416 → 34.5269 | 5.9890 → 5.6115 | 11.4359 → 10.4532 | 18.9555 → 16.8639 |
+| Llama-3.2-1B-Instruct | 21.0039 → 20.3201 | 5.0743 → 4.9452 | 9.6906 → 9.5024 | 11.9229 → 11.5892 |
+
+[Development study](results/consensus_format/REPORT_332332.md). The all-source pooled map was a secondary control; it does not rescue the failed leave-source-out consensus screen.
+
+### Original confirmation: window-wide activation factors
+
+These five-model measurements used the same maps and inputs later replayed in the causal table. They are shown to preserve every evaluation setting, and must not be counted again as independent confirmation. The full prespecified confirmation screen failed its C4-only comparison despite the baseline gains.
+
+| Model | PG19 / literature | arXiv / science | GovReport / government | Mean PPL |
+|---|---:|---:|---:|---:|
+| OPT-350M | 26.8110 → 26.3857 | 39.9208 → 38.9119 | 19.3680 → 19.0120 | 28.6999 → 28.1032 |
+| Qwen3-0.6B | 42.4125 → 38.1521 | 22.9353 → 21.3439 | 20.9340 → 19.3883 | 28.7606 → 26.2947 |
+| Llama-3.2-1B-Instruct | 27.5652 → 26.3203 | 23.0250 → 22.1103 | 15.9851 → 15.4686 | 22.1917 → 21.2997 |
+| OLMo-1B | 18.3940 → 18.2765 | 21.7249 → 20.9924 | 12.1758 → 12.0902 | 17.4315 → 17.1197 |
+| Pythia-1.4B | 18.9405 → 18.5658 | 21.5648 → 20.9412 | 15.4993 → 15.1421 | 18.6682 → 18.2164 |
+
+[Original confirmation](results/pooled_confirmation/REPORT_332349.md). No window-wide confirmation run was performed for Qwen3-4B, Llama-3.1-8B, or Qwen3.8-27B under this pooled protocol.
+
+Source values and per-cell report paths: [table data](results/transfer_rule/pooled_performance_tables.json). Reproduce with `build_pooled_performance_tables.py` via `slurm/pooled_performance_tables.sbatch`.
+<!-- END POOLED PERFORMANCE TABLES -->
+
 ## Current result: a frozen rule across seven models
 
 With causal per-token activation factors, the unchanged rule now improves
@@ -57,6 +112,55 @@ selected maps in all seven models. Per-token factors change the activation
 representation; this is not claimed as a free native-kernel modification.
 All results simulate W4A4 nonhead linear operations. Native FP4-kernel speed,
 generation accuracy and multi-pool seed replication are not measured.
+
+## Held-out C4 evaluation of the frozen maps
+
+The unchanged maps improve held-out C4 PPL on **7/7 models**, all seven with
+supporting descriptive paired two-SE intervals. They beat weight-MSE on 7/7
+and C4-only selection on 4/7 point comparisons.
+
+| Model | FourOverSix C4 PPL | Selected C4 PPL | ΔPPL |
+|---|---:|---:|---:|
+| OPT-350M | 26.743945 | 26.469613 | -0.274332 |
+| Qwen3-0.6B | 37.900671 | 34.792433 | -3.108238 |
+| Llama-3.2-1B-Instruct | 24.898634 | 24.124422 | -0.774213 |
+| OLMo-1B | 14.984432 | 14.883008 | -0.101424 |
+| Pythia-1.4B | 20.471159 | 20.162666 | -0.308493 |
+| Qwen3-4B | 21.928243 | 20.902742 | -1.025501 |
+| Llama-3.1-8B | 11.600109 | 11.509863 | -0.090246 |
+
+The [C4 follow-up](results/c4_frozen/REPORT_332781.md) evaluates the same seven
+saved maps on 256 distinct validation documents per model, with one seeded
+512-token crop per document. Exact text hashes exclude all 192 calibration
+documents for each model. Model revisions, source linear weights and map-file
+hashes are verified; no calibration, gradient scoring, map selection or
+backtracking is performed. All policies use the causal per-token activation
+convention. The report includes FourOverSix, pooled192, C4-only64, mixed64 and
+weight-MSE PPL, raw paired document losses, and descriptive two-SE intervals.
+
+C4 is a calibration source. This is held-out within-source evaluation,
+separate from the 21 literature/science/government transfer comparisons.
+The `C4-64` control means a map selected earlier using 64 C4 training sequences;
+it does not mean that its evaluation examples are calibration examples.
+
+## Qwen3.8-27B: the same rule gives an inconclusive C4 gain
+
+The [27B extension](results/pooled_qwen27b/model_332840/REPORT.md) retains the
+same 192-sequence calibration recipe, CE/KL two-SE score and 256-tile cap.
+It uses the pinned native hybrid text architecture with Transformers 5.16.1.
+Held-out C4 PPL changes from **12.644977 to 12.635323**, a reduction of only
+**0.009654**. Paired ΔNLL is **-0.000764 ±0.001538** (descriptive two-SE),
+which includes zero. This is below the earlier 0.01-PPL practical reference
+threshold and is not a supported improvement. The seven-model gains above
+therefore do not establish meaningful improvement on this 27B target.
+
+C4-only64 reaches 12.630390, mixed64 reaches 12.627442, and weight-MSE reaches
+12.671271. None of these controls is used to replace the primary pooled map.
+All policies use the same 256 held-out documents and causal activation factors.
+Exact calibration/test text-hash overlap is zero; baseline and selected prefix
+independence checks pass. The [eight-model comparison and independent overlap
+audit](results/pooled_qwen27b/C4_COMPARISON_332840.md) preserve this inconclusive
+target result separately from the preceding seven-model confirmation.
 
 ## Earlier report and exploratory research record
 

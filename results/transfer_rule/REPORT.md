@@ -41,6 +41,30 @@ The rule is the exact top-k solution of an additive surrogate. It is not an exac
 | llama8b / science | 10.804980 | 10.701076 | -0.103904 | -0.009663 ±0.004517 |
 | llama8b / government | 8.251998 | 8.181400 | -0.070598 | -0.008592 ±0.003871 |
 
+## Held-out C4 follow-up
+
+The same frozen maps improve 7/7 C4 comparisons, with 7 descriptive paired two-SE supported gains and 0 supported harms. Each model uses 256 distinct validation documents with 512-token crops, excluding exact calibration document hashes. All policies use causal per-token activation factors. No map is recalibrated or selected. C4 is a calibration source, so these seven measurements are held-out within-source evaluation, separate from the 21 transfer comparisons above.
+
+| Model | FourOverSix C4 PPL | Selected C4 PPL | ΔPPL | ΔNLL ±2SE |
+|---|---:|---:|---:|---:|
+| opt350m | 26.743945 | 26.469613 | -0.274332 | -0.010311 ±0.002727 |
+| qwen06b | 37.900671 | 34.792433 | -3.108238 | -0.085569 ±0.005095 |
+| llama1b | 24.898634 | 24.124422 | -0.774213 | -0.031588 ±0.002935 |
+| olmo1b | 14.984432 | 14.883008 | -0.101424 | -0.006792 ±0.002574 |
+| pythia14b | 20.471159 | 20.162666 | -0.308493 | -0.015184 ±0.003167 |
+| qwen4b | 21.928243 | 20.902742 | -1.025501 | -0.047895 ±0.003392 |
+| llama8b | 11.600109 | 11.509863 | -0.090246 | -0.007810 ±0.002113 |
+
+[Full C4 report and fixed controls](../c4_frozen/REPORT_332781.md). Pooled192 beats C4-only selection in 4/7 point comparisons. This does not change the earlier failed source-diversity screen.
+
+## Qwen3.8-27B C4 extension
+
+This separately measured target uses the same 192 calibration sequences per recipe, CE/KL two-SE rule and 256-tile cap, with native Transformers 5.16.1 hybrid text support. Evaluation uses 256 held-out C4 validation documents and causal per-token activation factors. No loss backtracking or test-based map selection is used.
+
+FourOverSix C4 PPL is 12.644977; selected PPL is 12.635323, ΔPPL -0.009654. Paired ΔNLL is -0.000764 ±0.001538 (descriptive 2SE). Supported gain: False; gain of at least 0.01 PPL: False. This result limits the seven-model evidence above: the current rule does not establish a meaningful supported C4 gain on the 27B target.
+
+[Full 27B controls](../pooled_qwen27b/model_332840/REPORT.md) · [Eight-model C4 comparison and overlap audit](../pooled_qwen27b/C4_COMPARISON_332840.md).
+
 ## What the experiments establish
 
 The initial confirmation used five model families and three data families not inspected during method development; Pythia and OLMo supplied two new architecture families. A subsequent causal audit replayed the exact same maps and inputs. The4B/8B follow-up tested larger models on these now-inspected data families. The21 rows above combine the15 causal replays and6 size-transfer results. They do not count the earlier window-scaling evaluations again as independent evidence.
@@ -82,6 +106,37 @@ This supports a transferable calibrated procedure, not a universal weight-only r
     "results/causal_replay/model_332374_olmo1b/report.json",
     "results/pooled_scale/model_332389_qwen4b/report.json",
     "results/pooled_scale/model_332389_llama8b/report.json"
-  ]
+  ],
+  "heldout_c4_followup": {
+    "summary_path": "results/c4_frozen/summary_332781.json",
+    "models": 7,
+    "documents_per_model": 256,
+    "tokens_per_document": 512,
+    "point_gains": 7,
+    "gains_at_least_0p01_ppl": 7,
+    "supported_gains": 7,
+    "supported_harms": 0,
+    "beats_c4_only": 4,
+    "beats_weight_mse": 7,
+    "exact_prefix_independence_models": 7,
+    "source_reports": [
+      "results/c4_frozen/model_332781_opt350m/report.json",
+      "results/c4_frozen/model_332781_qwen06b/report.json",
+      "results/c4_frozen/model_332781_llama1b/report.json",
+      "results/c4_frozen/model_332781_olmo1b/report.json",
+      "results/c4_frozen/model_332781_pythia14b/report.json",
+      "results/c4_frozen/model_332781_qwen4b/report.json",
+      "results/c4_frozen/model_332781_llama8b/report.json"
+    ]
+  },
+  "qwen27b_c4_followup": {
+    "source_report": "results/pooled_qwen27b/model_332840/report.json",
+    "selected_tiles": 256,
+    "supported_gain": false,
+    "gain_at_least_0p01_ppl": false,
+    "mean_nll": -0.0007637564558535814,
+    "two_se": 0.00153823923543746,
+    "ppl_delta": -0.009653996049848956
+  }
 }
 ```
