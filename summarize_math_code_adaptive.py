@@ -142,10 +142,13 @@ def main():
                     calibration_sequences=s.get('calibration_sequences',0),reused=v['origin']['reused'],report=str(path)))
     with (out/'cells.csv').open('w') as stream:
         writer=csv.DictWriter(stream,fieldnames=list(cells[0]),lineterminator='\n'); writer.writeheader(); writer.writerows(cells)
-    lines=['## Math/code-only calibration: adaptive E0M3 count','',
+    lines=['## Math/code-only calibration: adaptive E0M3 count (W4A4, 512-token evaluation)','',
         'Calibration uses **OpenWebMath and CodeParrot only**. Neither C4 nor WikiText supplies calibration '
         'examples, gradients, or count-selection feedback. All measurements below evaluate the frozen maps '
-        'only on **WikiText-2 test and held-out C4**. No seed replication or best-setting election is performed.','',
+        'only on **WikiText-2 test and held-out C4**. No seed replication or best-setting election is performed. '
+        '**Baseline means FourOverSix W4A4 with per-token activation factors and 512-token evaluation windows.** '
+        'These are not reproduced RaZeR Table 3 values: the released evaluator uses 2048-token windows '
+        'and tensor-wide activation factors, and its C4 sampling differs.','',
         'One shared 128-sequence causal scoring pass per model supplies all ten source/sample-count settings. '
         'The adaptive method minimizes a directional-benefit plus estimated-curvature penalty over all '
         'negative-score prefixes, including zero switches. It has **no count cap**. The fixed-256 comparison '
@@ -249,6 +252,11 @@ def main():
         f'[Post hoc curvature audit]({out.as_posix()}/CURVATURE_AUDIT.md)','']
     if args.update_report:
         path=Path('MIXFP4_REPORT.md'); text=path.read_text(); block=START+'\n'+'\n'.join(compact)+'\n'+END
+        if '<!-- FIXED256_PAPER_EVAL_START -->' in text:
+            block=(START+'\n**Historical 512-token adaptive study:** '
+                   f'[Full tables and diagnostics]({out.as_posix()}/REPORT.md). '
+                   'Its adaptive counts, fixed-256 controls, and weight-MSE controls use a different '
+                   'evaluation protocol and are not part of the aligned benchmark above.\n'+END)
         if START in text:
             assert text.count(START)==text.count(END)==1
             text=text[:text.index(START)]+block+text[text.index(END)+len(END):]

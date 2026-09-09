@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --account=MST114554
-#SBATCH --partition=dev
+#SBATCH --account=gov113008
+#SBATCH --partition=taide
 #SBATCH --job-name=math_code_calibrate_27b
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

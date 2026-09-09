@@ -1,6 +1,6 @@
-## Math/code-only calibration: adaptive E0M3 count
+## Math/code-only calibration: adaptive E0M3 count (W4A4, 512-token evaluation)
 
-Calibration uses **OpenWebMath and CodeParrot only**. Neither C4 nor WikiText supplies calibration examples, gradients, or count-selection feedback. All measurements below evaluate the frozen maps only on **WikiText-2 test and held-out C4**. No seed replication or best-setting election is performed.
+Calibration uses **OpenWebMath and CodeParrot only**. Neither C4 nor WikiText supplies calibration examples, gradients, or count-selection feedback. All measurements below evaluate the frozen maps only on **WikiText-2 test and held-out C4**. No seed replication or best-setting election is performed. **Baseline means FourOverSix W4A4 with per-token activation factors and 512-token evaluation windows.** These are not reproduced RaZeR Table 3 values: the released evaluator uses 2048-token windows and tensor-wide activation factors, and its C4 sampling differs.
 
 **Result: this adaptive rule is not a competitive replacement for fixed-256.** It selected 0–8 blocks and achieved lower PPL than fixed-256 in only 1/60 paired model/setting/dataset comparisons. Fixed-256 improved point PPL over FourOverSix in 57/60 cells; 48 had baseline-relative ΔNLL + 2SE < 0 and 0 had ΔNLL − 2SE > 0. These correlated-cell counts are descriptive, not independent replications. The post hoc curvature audit documents conservatism in the interaction penalty; it does not establish that a less conservative selector would generalize. The study supports a negative finding for this particular adaptive surrogate, not an impossibility claim about adaptive selection.
 

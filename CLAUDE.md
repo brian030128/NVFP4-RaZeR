@@ -2,6 +2,14 @@
 
 Guidance for working in this repository.
 
+**Cluster account — user instruction (2026-09-09):** Submit future jobs with
+`--account=gov113008`; do not use `MST114554`. Use partition `taide` for H100
+or `taide_h200` for H200. When reusing an older job script, override its
+account and partition at submission if its directives still use the old
+account. Existing completed experiment records retain their original job
+provenance. All compute still goes through Slurm and HF caches stay on the
+worker's job-specific `/tmp` directory.
+
 **Beyond FourOverSix (2026-09-06):** Read
 `results/task_sensitivity_four_over_six/FINDINGS.md`, `PROTOCOL.md`, and
 `GUARANTEE.md`. Preserving canonical FourOverSix E2M1 scaling and recalibrating

@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --account=MST114554
-#SBATCH --partition=dev
+#SBATCH --account=gov113008
+#SBATCH --partition=taide
 #SBATCH --job-name=math_code_eval
 #SBATCH --array=0-1%2
 #SBATCH --nodes=1

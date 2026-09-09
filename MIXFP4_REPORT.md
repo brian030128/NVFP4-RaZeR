@@ -2,7 +2,11 @@
 
 **Motivation, method, experiments, and limitations**
 
-Updated September 8, 2026 · Original report: commit `5dc17ea`; subsequent studies are in the workspace.
+<!-- FIXED256_CURRENT_POINTER -->
+**Paper-protocol fixed-256 results (2048 tokens):** [matched WikiText/C4 measurements](results/fixed256_paper_eval/job_335428/REPORT.md). The Math/code-only section below contains these results; other 512-token tables are historical.
+
+
+Updated September 9, 2026 · Original report: commit `5dc17ea`; subsequent studies are in the workspace.
 
 <!-- BEGIN POOLED PERFORMANCE TABLES -->
 ## Pooled calibration: all evaluated models and datasets
@@ -59,120 +63,170 @@ These five-model measurements used the same maps and inputs later replayed in th
 Source values and per-cell report paths: [table data](results/transfer_rule/pooled_performance_tables.json). Reproduce with `build_pooled_performance_tables.py` via `slurm/pooled_performance_tables.sbatch`.
 <!-- END POOLED PERFORMANCE TABLES -->
 
-<!-- MATH_CODE_ADAPTIVE_START -->
-## Math/code-only calibration: adaptive E0M3 count
+<!-- FIXED256_PAPER_EVAL_START -->
+## Math/code-only calibration: fixed-256 W4A4, aligned 2048-token benchmark
 
-Calibration uses **OpenWebMath and CodeParrot only**. Neither C4 nor WikiText supplies calibration examples, gradients, or count-selection feedback. All measurements below evaluate the frozen maps only on **WikiText-2 test and held-out C4**. No seed replication or best-setting election is performed.
+Calibration uses **OpenWebMath and CodeParrot only; neither WikiText nor C4 is used for calibration**. One 128-sequence causal scoring pass per model (64 math + 64 code, 512 tokens each) supplies the ten frozen source/sample-count settings below. The numeric suffix denotes the total calibration sequence count; math_code settings use equal numbers from each source.
 
-**Result: this adaptive rule is not a competitive replacement for fixed-256.** It selected 0–8 blocks and achieved lower PPL than fixed-256 in only 1/60 paired model/setting/dataset comparisons. Fixed-256 improved point PPL over FourOverSix in 57/60 cells; 48 had baseline-relative ΔNLL + 2SE < 0 and 0 had ΔNLL − 2SE > 0. These correlated-cell counts are descriptive, not independent replications. The post hoc curvature audit documents conservatism in the interaction penalty; it does not establish that a less conservative selector would generalize. The study supports a negative finding for this particular adaptive surrogate, not an impossibility claim about adaptive selection.
+This evaluation replays all ten frozen math/code-only fixed-256 maps for each of three models. **No adaptive maps, weight-MSE controls, recalibration, or best-setting selection are included.** The same map is used for both datasets. All maps contain exactly **256 E0M3 type blocks** of 8×64 weights; all other targeted weights use FourOverSix E2M1.
 
-[Frozen protocol and selection equations](results/math_code_adaptive/PROTOCOL.md).
+**Evaluation:** WikiText-2 raw test text concatenated with double newlines, nonoverlapping 2048-token windows; C4 validation shard 00000, 256 seed-0 random 2048-token crops using the released sampling rule. As in the release, WikiText uses a fresh cache per window and C4 disables it; no cache is carried between windows. Incomplete WikiText tails are omitted. PPL uses the released float32 NLL aggregation. WikiText and C4 token hashes match the released-code reproduction exactly for Llama-3.1-8B and Qwen3-4B.
 
-One shared 128-sequence causal scoring pass per model supplies all ten source/sample-count settings. The adaptive method minimizes a directional-benefit plus estimated-curvature penalty over all negative-score prefixes, including zero switches. It has **no count cap**. The fixed-256 comparison uses the same fresh causal CE/KL derivatives and math/code subsets; it is not the older C4-containing pooled map.
+**W4A4 definition:** tensor-wide FourOverSix activation factors, 16-element scale blocks, BF16 simulation, SDPA attention, and unquantized KV cache. Every targeted linear input is quantized, including Qwen o_proj. The small-model baseline is checked against the corrected repository wrapper. Qwen3.8-27B uses native Transformers 5.16.1 text-linear modules; its vision, convolution, recurrent state operations, normalization, and LM head are outside that linear quantization scope. It has no corresponding RaZeR Table 3 entry.
 
-Counts are **8x64 E0M3 type blocks**, each containing 512 weights and 32 distinct 16-element scale blocks. Each average is the unweighted arithmetic mean of the two displayed dataset PPLs. PPL is computed from per-token loss over identical scored windows within each model.
+**Alignment means matching the evaluation protocol, not reproducing every published Table 3 value.** Baselines below are freshly measured with matching inputs and quantization scope. In particular, quantizing Qwen o_proj corrects an omission in the archived release. All improvements reported here are relative to **FourOverSix**, not NVFP4.
 
-| Model | Baseline Wiki PPL | Baseline C4 PPL | Baseline average | Weight-MSE E0M3 blocks | Weight-MSE Wiki PPL | Weight-MSE C4 PPL | Weight-MSE average |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Qwen3-4B | 19.414897 | 21.928243 | 20.671570 | 3,407,142 | 20.108009 | 22.082958 | 21.095483 |
-| Llama-3.1-8B | 9.092934 | 11.600109 | 10.346521 | 6,652,753 | 9.088662 | 11.635797 | 10.362229 |
-| Qwen3.8-27B | 9.040908 | 12.644977 | 10.842943 | 22,696,327 | 9.026329 | 12.671271 | 10.848800 |
+The older 512-token tables remain historical measurements under different context, C4 sampling, and per-token activation scales. These new tensor-wide factors can depend on future tokens, as in the paper-style simulation; these results are not a causal deployment claim. Maps were originally fitted with causal 512-token math/code calibration and are transferred here unchanged.
+
+ΔPPL = fixed-256 PPL minus matched FourOverSix PPL; **negative is better**. Average is the unweighted arithmetic mean of the separate Wiki/C4 PPL values.
 
 ### Qwen3-4B
 
-| Calibration | Sequences | Adaptive E0M3 blocks | Adaptive Wiki PPL | Adaptive C4 PPL | Adaptive average | Fixed E0M3 blocks | Fixed Wiki PPL | Fixed C4 PPL | Fixed average |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| math16 | 16 | 0 | 19.414897 | 21.928243 | 20.671570 | 256 | 18.507500 | 21.410291 | 19.958896 |
-| math32 | 32 | 1 | 19.397059 | 21.909817 | 20.653438 | 256 | 18.129010 | 21.190370 | 19.659690 |
-| math64 | 64 | 1 | 19.397059 | 21.909817 | 20.653438 | 256 | 18.020614 | 21.119963 | 19.570288 |
-| code16 | 16 | 0 | 19.414897 | 21.928243 | 20.671570 | 256 | 17.368412 | 21.024071 | 19.196241 |
-| code32 | 32 | 0 | 19.414897 | 21.928243 | 20.671570 | 256 | 17.249606 | 20.939862 | 19.094734 |
-| code64 | 64 | 1 | 19.397059 | 21.909817 | 20.653438 | 256 | 17.115535 | 20.854547 | 18.985041 |
-| math_code16 | 16 | 0 | 19.414897 | 21.928243 | 20.671570 | 256 | 17.919890 | 21.140365 | 19.530127 |
-| math_code32 | 32 | 0 | 19.414897 | 21.928243 | 20.671570 | 256 | 17.453015 | 20.996466 | 19.224740 |
-| math_code64 | 64 | 1 | 19.397059 | 21.909817 | 20.653438 | 256 | 17.436687 | 20.991402 | 19.214044 |
-| math_code128 | 128 | 1 | 19.397059 | 21.909817 | 20.653438 | 256 | 17.426627 | 20.940578 | 19.183602 |
-
-**Fixed-256 ΔPPL versus FourOverSix:** method PPL minus baseline PPL, in absolute PPL units. Negative is better; positive is a regression. All settings select 256 E0M3 type blocks. Average ΔPPL compares the arithmetic means of Wiki/C4 PPL.
-
-| Calibration | Fixed-256 Wiki ΔPPL | Fixed-256 C4 ΔPPL | Fixed-256 average ΔPPL |
-|---|---:|---:|---:|
-| math16 | -0.907396 | -0.517952 | -0.712674 |
-| math32 | -1.285887 | -0.737873 | -1.011880 |
-| math64 | -1.394283 | -0.808280 | -1.101281 |
-| code16 | -2.046484 | -0.904172 | -1.475328 |
-| code32 | -2.165290 | -0.988381 | -1.576836 |
-| code64 | -2.299361 | -1.073696 | -1.686528 |
-| math_code16 | -1.495006 | -0.787878 | -1.141442 |
-| math_code32 | -1.961882 | -0.931777 | -1.446829 |
-| math_code64 | -1.978209 | -0.936841 | -1.457525 |
-| math_code128 | -1.988270 | -0.987665 | -1.487968 |
+| Calibration | E0M3 blocks | Wiki PPL | C4 PPL | Average | Δ Wiki | Δ C4 | Δ average |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| FourOverSix baseline | 0 | 14.269062 | 17.326633 | 15.797848 | +0.000000 | +0.000000 | +0.000000 |
+| math16 | 256 | 13.707123 | 16.965935 | 15.336529 | -0.561939 | -0.360699 | -0.461319 |
+| math32 | 256 | 13.470236 | 16.790638 | 15.130437 | -0.798826 | -0.535995 | -0.667411 |
+| math64 | 256 | 13.379006 | 16.736881 | 15.057944 | -0.890056 | -0.589752 | -0.739904 |
+| code16 | 256 | 12.995038 | 16.632469 | 14.813754 | -1.274024 | -0.694164 | -0.984094 |
+| code32 | 256 | 12.868947 | 16.563389 | 14.716168 | -1.400115 | -0.763245 | -1.081680 |
+| code64 | 256 | 12.862923 | 16.527679 | 14.695301 | -1.406139 | -0.798954 | -1.102547 |
+| math_code16 | 256 | 13.289850 | 16.754166 | 15.022008 | -0.979212 | -0.572468 | -0.775840 |
+| math_code32 | 256 | 13.090026 | 16.662802 | 14.876414 | -1.179036 | -0.663832 | -0.921434 |
+| math_code64 | 256 | 13.061725 | 16.623228 | 14.842476 | -1.207337 | -0.703405 | -0.955371 |
+| math_code128 | 256 | 13.040957 | 16.615953 | 14.828455 | -1.228105 | -0.710680 | -0.969392 |
 
 ### Llama-3.1-8B
 
-| Calibration | Sequences | Adaptive E0M3 blocks | Adaptive Wiki PPL | Adaptive C4 PPL | Adaptive average | Fixed E0M3 blocks | Fixed Wiki PPL | Fixed C4 PPL | Fixed average |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| math16 | 16 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.055346 | 11.555850 | 10.305598 |
-| math32 | 32 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.042277 | 11.525782 | 10.284030 |
-| math64 | 64 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.030872 | 11.526124 | 10.278498 |
-| code16 | 16 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.052092 | 11.540401 | 10.296247 |
-| code32 | 32 | 2 | 9.088794 | 11.587583 | 10.338189 | 256 | 9.038428 | 11.538297 | 10.288363 |
-| code64 | 64 | 2 | 9.088794 | 11.587583 | 10.338189 | 256 | 9.043249 | 11.553241 | 10.298245 |
-| math_code16 | 16 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.049960 | 11.545661 | 10.297810 |
-| math_code32 | 32 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.049170 | 11.544846 | 10.297008 |
-| math_code64 | 64 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.028759 | 11.539653 | 10.284206 |
-| math_code128 | 128 | 2 | 9.088794 | 11.587583 | 10.338189 | 256 | 9.028599 | 11.513102 | 10.270851 |
-
-**Fixed-256 ΔPPL versus FourOverSix:** method PPL minus baseline PPL, in absolute PPL units. Negative is better; positive is a regression. All settings select 256 E0M3 type blocks. Average ΔPPL compares the arithmetic means of Wiki/C4 PPL.
-
-| Calibration | Fixed-256 Wiki ΔPPL | Fixed-256 C4 ΔPPL | Fixed-256 average ΔPPL |
-|---|---:|---:|---:|
-| math16 | -0.037588 | -0.044259 | -0.040923 |
-| math32 | -0.050657 | -0.074326 | -0.062491 |
-| math64 | -0.062062 | -0.073985 | -0.068023 |
-| code16 | -0.040842 | -0.059707 | -0.050274 |
-| code32 | -0.054506 | -0.061811 | -0.058159 |
-| code64 | -0.049685 | -0.046868 | -0.048277 |
-| math_code16 | -0.042974 | -0.054447 | -0.048711 |
-| math_code32 | -0.043764 | -0.055262 | -0.049513 |
-| math_code64 | -0.064175 | -0.060456 | -0.062315 |
-| math_code128 | -0.064335 | -0.087006 | -0.075671 |
+| Calibration | E0M3 blocks | Wiki PPL | C4 PPL | Average | Δ Wiki | Δ C4 | Δ average |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| FourOverSix baseline | 0 | 6.875525 | 9.823733 | 8.349629 | +0.000000 | +0.000000 | +0.000000 |
+| math16 | 256 | 6.864338 | 9.798604 | 8.331471 | -0.011187 | -0.025129 | -0.018158 |
+| math32 | 256 | 6.859864 | 9.786333 | 8.323098 | -0.015661 | -0.037400 | -0.026531 |
+| math64 | 256 | 6.847213 | 9.784532 | 8.315872 | -0.028311 | -0.039202 | -0.033756 |
+| code16 | 256 | 6.858930 | 9.795424 | 8.327177 | -0.016595 | -0.028309 | -0.022452 |
+| code32 | 256 | 6.855278 | 9.784207 | 8.319743 | -0.020246 | -0.039526 | -0.029886 |
+| code64 | 256 | 6.846576 | 9.785232 | 8.315904 | -0.028948 | -0.038502 | -0.033725 |
+| math_code16 | 256 | 6.870324 | 9.808887 | 8.339605 | -0.005200 | -0.014847 | -0.010024 |
+| math_code32 | 256 | 6.859400 | 9.785341 | 8.322371 | -0.016125 | -0.038392 | -0.027258 |
+| math_code64 | 256 | 6.854017 | 9.782113 | 8.318065 | -0.021507 | -0.041620 | -0.031564 |
+| math_code128 | 256 | 6.848383 | 9.764387 | 8.306385 | -0.027142 | -0.059346 | -0.043244 |
 
 ### Qwen3.8-27B
 
-| Calibration | Sequences | Adaptive E0M3 blocks | Adaptive Wiki PPL | Adaptive C4 PPL | Adaptive average | Fixed E0M3 blocks | Fixed Wiki PPL | Fixed C4 PPL | Fixed average |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| math16 | 16 | 2 | 9.041333 | 12.660161 | 10.850747 | 256 | 9.026444 | 12.630066 | 10.828255 |
-| math32 | 32 | 2 | 9.040871 | 12.646751 | 10.843811 | 256 | 9.032305 | 12.649907 | 10.841106 |
-| math64 | 64 | 4 | 9.039517 | 12.650800 | 10.845158 | 256 | 9.012561 | 12.632059 | 10.822310 |
-| code16 | 16 | 5 | 9.043073 | 12.653983 | 10.848528 | 256 | 9.020848 | 12.650864 | 10.835856 |
-| code32 | 32 | 8 | 9.047084 | 12.649668 | 10.848376 | 256 | 9.008592 | 12.645944 | 10.827268 |
-| code64 | 64 | 5 | 9.030592 | 12.640839 | 10.835715 | 256 | 9.017231 | 12.639964 | 10.828597 |
-| math_code16 | 16 | 2 | 9.048039 | 12.650519 | 10.849279 | 256 | 9.032979 | 12.644239 | 10.838609 |
-| math_code32 | 32 | 2 | 9.040062 | 12.647666 | 10.843864 | 256 | 9.006973 | 12.643467 | 10.825220 |
-| math_code64 | 64 | 6 | 9.038289 | 12.650116 | 10.844203 | 256 | 9.013104 | 12.643789 | 10.828447 |
-| math_code128 | 128 | 1 | 9.042556 | 12.650176 | 10.846366 | 256 | 9.005556 | 12.635394 | 10.820475 |
+| Calibration | E0M3 blocks | Wiki PPL | C4 PPL | Average | Δ Wiki | Δ C4 | Δ average |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| FourOverSix baseline | 0 | 7.287076 | 10.188365 | 8.737721 | +0.000000 | +0.000000 | +0.000000 |
+| math16 | 256 | 7.308025 | 10.178003 | 8.743014 | +0.020948 | -0.010362 | +0.005293 |
+| math32 | 256 | 7.304955 | 10.178423 | 8.741689 | +0.017879 | -0.009942 | +0.003968 |
+| math64 | 256 | 7.290631 | 10.165107 | 8.727869 | +0.003555 | -0.023258 | -0.009852 |
+| code16 | 256 | 7.270402 | 10.183651 | 8.727027 | -0.016674 | -0.004714 | -0.010694 |
+| code32 | 256 | 7.296406 | 10.175853 | 8.736130 | +0.009330 | -0.012512 | -0.001591 |
+| code64 | 256 | 7.286375 | 10.170633 | 8.728504 | -0.000701 | -0.017732 | -0.009217 |
+| math_code16 | 256 | 7.302811 | 10.188348 | 8.745579 | +0.015734 | -0.000017 | +0.007859 |
+| math_code32 | 256 | 7.271716 | 10.181243 | 8.726480 | -0.015360 | -0.007122 | -0.011241 |
+| math_code64 | 256 | 7.269203 | 10.174075 | 8.721639 | -0.017874 | -0.014290 | -0.016082 |
+| math_code128 | 256 | 7.292438 | 10.167717 | 8.730077 | +0.005361 | -0.020648 | -0.007643 |
 
-**Fixed-256 ΔPPL versus FourOverSix:** method PPL minus baseline PPL, in absolute PPL units. Negative is better; positive is a regression. All settings select 256 E0M3 type blocks. Average ΔPPL compares the arithmetic means of Wiki/C4 PPL.
+Fixed-256 improves point PPL in **54/60** matched model/setting/dataset cells. Qwen3-4B and Llama-3.1-8B improve in all 20 cells each; Qwen3.8-27B improves in 14/20, with six WikiText regressions and ten C4 improvements. These settings share calibration data and evaluation windows; this count is descriptive, not a count of independent confirmations. Per-window losses and paired NLL diagnostics are retained in the machine-readable summary; intervals do not account for WikiText article dependence or calibration-draw variability.
 
-| Calibration | Fixed-256 Wiki ΔPPL | Fixed-256 C4 ΔPPL | Fixed-256 average ΔPPL |
-|---|---:|---:|---:|
-| math16 | -0.014464 | -0.014911 | -0.014688 |
-| math32 | -0.008604 | +0.004930 | -0.001837 |
-| math64 | -0.028348 | -0.012919 | -0.020633 |
-| code16 | -0.020060 | +0.005886 | -0.007087 |
-| code32 | -0.032317 | +0.000967 | -0.015675 |
-| code64 | -0.023678 | -0.005013 | -0.014345 |
-| math_code16 | -0.007929 | -0.000738 | -0.004334 |
-| math_code32 | -0.033935 | -0.001510 | -0.017722 |
-| math_code64 | -0.027805 | -0.001188 | -0.014496 |
-| math_code128 | -0.035352 | -0.009584 | -0.022468 |
+Execution jobs: 335407, 335428; consolidated results: `job_335428`. Each job uses `gov113008/taide_h200`, an eight-H200 allocation, and independent one-GPU Slurm steps. Cache-only repairs reuse C4 after exact identity checks and retain the pre-fix reports. Every dataset comparison uses identical inputs and activation quantization scope within its model.
 
-The curvature inequality is exact for the estimated PSD matrix, but its sampled GGN diagonal and straight-through derivatives do not bound the true finite-switch network loss. This is an adaptive surrogate method, not a universal guarantee or a claim of methodological novelty. Two-SE intervals describe evaluation-window variation; they do not adjust for multiple comparisons, WikiText article dependence, or unmeasured calibration-draw variability. Both target families were previously inspected. Source exclusion is not a near-duplicate or pretraining-overlap audit.
+[Full results](results/fixed256_paper_eval/job_335428/REPORT.md) · [Protocol](results/fixed256_paper_eval/PROTOCOL.md).
 
-[Full adaptive study and paired results](results/math_code_adaptive/summary_333786_333788/REPORT.md) · [All separate-dataset values](results/math_code_adaptive/summary_333786_333788/cells.csv) · [Selection overlap](results/math_code_adaptive/summary_333786_333788/selection_overlap.json) · [Sensitivity figure](results/math_code_adaptive/summary_333786_333788/sensitivity.pdf) · [Post hoc curvature audit](results/math_code_adaptive/summary_333786_333788/CURVATURE_AUDIT.md)
+<!-- FIXED256_PAPER_EVAL_END -->
 
+<!-- MATH_CODE_ADAPTIVE_START -->
+**Historical 512-token adaptive study:** [Full tables and diagnostics](results/math_code_adaptive/summary_333786_333788/REPORT.md). Its adaptive counts, fixed-256 controls, and weight-MSE controls use a different evaluation protocol and are not part of the aligned benchmark above.
 <!-- MATH_CODE_ADAPTIVE_END -->
+
+<!-- BASELINE_PROTOCOL_AUDIT_START -->
+## Baseline audit against RaZeR Table 3
+
+The historical math/code-only study used **512-token evaluation windows**. A separate baseline-only audit at **2048 tokens**, with the released C4 sampling procedure and tensor-wide activation factors, gives the values below. No calibration or E0M3 map selection occurs in this audit. The unquantized baselines match the paper to its displayed precision; shorter context accounts for most of the large gap in the original study.
+
+| Model | W4A4 method | Paper Wiki PPL | Audit Wiki PPL | Paper C4 PPL | Audit C4 PPL |
+|---|---|---:|---:|---:|---:|
+| Qwen3-4B | NVFP4 | 13.88 | 13.981052 | 17.21 | 17.281944 |
+| Qwen3-4B | FourOverSix | 13.88 | 14.213994 | 17.21 | 17.299487 |
+| Llama-3.1-8B | NVFP4 | 6.95 | 6.939384 | 9.94 | 9.929869 |
+| Llama-3.1-8B | FourOverSix | 6.88 | 6.879243 | 9.83 | 9.823488 |
+
+The Qwen wrapper formerly computed quantized attention-output activations but passed the unquantized tensor into o_proj; repository commit abab3c6 fixed this on 2026-06-17. A separate historical-behavior diagnostic leaves only those projection inputs unquantized at the same 2048-token context. Its results are:
+
+| Qwen3-4B historical behavior | Wiki PPL | C4 PPL |
+|---|---:|---:|
+| NVFP4 | 13.948580 | 17.222591 |
+| FourOverSix | 14.137439 | 17.286469 |
+
+The corrected full-W4A4 measurements remain the appropriate baseline for methods quantizing all these inputs. Residual differences from the paper remain visible above; a historical-behavior match does not independently establish the exact code that generated the published table. **This baseline-only audit did not re-evaluate E0M3 maps. The subsequent Math/code-only fixed-256 benchmark above reports their aligned 2048-token results.**
+
+[Full matched-context audit and validation](results/baseline_protocol_audit/REPORT.md) · [RaZeR Table 3](https://arxiv.org/html/2501.04052v2#S4.T3).
+
+<!-- BASELINE_PROTOCOL_AUDIT_END -->
+
+<!-- RELEASED_REPRODUCTION_START -->
+## Direct reproduction with the February RaZeR release
+
+The archived released evaluator at commit `e230099` was run directly for 14 cases (28 separate WikiText-2/C4 cells). **15/28 cells match Table 3 at its published two-decimal precision.** No calibration or parameter search was used. The evaluator uses 2048-token windows, seed 0, 256 sampled C4 windows, and its original float32 PPL aggregation.
+
+Signed Δ is reproduced PPL minus published PPL; negative means lower perplexity. A displayed-precision match is not a claim of bitwise agreement with unpublished author outputs.
+
+| Model | Method | Paper Wiki | Reproduced Wiki | Δ Wiki | Paper C4 | Reproduced C4 | Δ C4 | Matches |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| llama-3.1-8b | BF16 (paper: FP16) | 6.24 | 6.240087 | +0.000087 | 8.96 | 8.958212 | -0.001788 | wikitext, c4 |
+| llama-3.1-8b | NVFP4 W4A4 | 6.95 | 6.941772 | -0.008228 | 9.94 | 9.940895 | +0.000895 | c4 |
+| llama-3.1-8b | FourOverSix W4A4 | 6.88 | 6.875525 | -0.004475 | 9.83 | 9.823733 | -0.006267 | wikitext |
+| llama-3.1-8b | RaZeR W4A4 | 6.74 | 6.744553 | +0.004553 | 9.63 | 9.630655 | +0.000655 | wikitext, c4 |
+| llama-3.1-8b | NVFP4 W4A16 | 6.63 | 6.625925 | -0.004075 | 9.48 | 9.480332 | +0.000332 | wikitext, c4 |
+| llama-3.1-8b | FourOverSix W4A16 | 6.60 | 6.598704 | -0.001296 | 9.42 | 9.423216 | +0.003216 | wikitext, c4 |
+| llama-3.1-8b | RaZeR W4A16 | 6.50 | 6.500746 | +0.000746 | 9.29 | 9.292561 | +0.002561 | wikitext, c4 |
+| qwen3-4b | BF16 (paper: FP16) | 13.66 | 13.662473 | +0.002473 | 16.65 | 16.643564 | -0.006436 | wikitext |
+| qwen3-4b | NVFP4 W4A4 | 13.88 | 13.935143 | +0.055143 | 17.21 | 17.209829 | -0.000171 | c4 |
+| qwen3-4b | FourOverSix W4A4 | 13.88 | 14.201942 | +0.321942 | 17.21 | 17.280434 | +0.070434 | none |
+| qwen3-4b | RaZeR W4A4 | 13.82 | 14.104443 | +0.284443 | 17.11 | 17.260754 | +0.150754 | none |
+| qwen3-4b | NVFP4 W4A16 | 13.83 | 13.631868 | -0.198132 | 16.85 | 16.851393 | +0.001393 | c4 |
+| qwen3-4b | FourOverSix W4A16 | 13.83 | 14.040705 | +0.210705 | 16.85 | 17.015335 | +0.165335 | none |
+| qwen3-4b | RaZeR W4A16 | 13.83 | 13.969723 | +0.139723 | 16.85 | 17.033857 | +0.183857 | none |
+
+Execution: job `335302`, account `gov113008`; NVIDIA H200. Independent one-GPU Slurm steps share one eight-GPU allocation. Python 3.10.18, Torch 2.7.1+cu126, Transformers 4.57.3, datasets 4.4.1; recorded attention backend(s): `sdpa`. All policies within each model passed exact input-token-hash equality checks; recorded losses reproduce the original evaluator’s PPL exactly.
+
+**Historical behavior and limits.** The archived Qwen wrapper leaves `o_proj` inputs unquantized, despite calculating a quantized copy. Its W4A4 labels therefore describe the release’s command-line setting, with this omission; they must not replace a corrected full-W4A4 baseline without disclosure. The original NVFP4 midpoint lookup also differs from the current arithmetic quantizer. The first January evaluator could load author-local cached C4 tokens; those tokens are unavailable, and the February release always regenerates seed-0 windows. The released environment omits a Torch version, so exact environment reconstruction is not established. These are reproduction limits, not explanations proven to account for every residual.
+
+This audit does not change or validate the existing 512-token E0M3 calibration gains at 2048 tokens.
+
+[Published Table 3](https://arxiv.org/html/2501.04052v2#S4.T3).
+
+### Fixed environment diagnostic
+
+Both complete attempts are retained. The second uses Python 3.10.18, the released core package pins, and Torch 2.7.1/CUDA 12.6 inferred from the listed Triton/CUDA dependencies. The first uses Python 3.11/Torch 2.9. This does not establish the authors’ exact environment.
+
+All input windows match exactly between attempts. Maximum absolute PPL change: **0.000004**. Δ below is second environment minus first; every case is shown.
+
+| Case | Δ Wiki | Δ C4 | Changed weight matrices |
+|---|---:|---:|---:|
+| llama-3.1-8b_bf16 | +0.000000 | +0.000000 | 0/224 |
+| llama-3.1-8b_nvfp4_w4a4 | +0.000000 | +0.000000 | 0/224 |
+| llama-3.1-8b_four_over_six_w4a4 | +0.000000 | +0.000000 | 0/224 |
+| llama-3.1-8b_razer_w4a4 | +0.000000 | +0.000000 | 0/224 |
+| llama-3.1-8b_nvfp4_w4a16 | +0.000000 | +0.000000 | 0/224 |
+| llama-3.1-8b_four_over_six_w4a16 | +0.000000 | +0.000002 | 0/224 |
+| llama-3.1-8b_razer_w4a16 | +0.000000 | +0.000000 | 0/224 |
+| qwen3-4b_bf16 | +0.000000 | +0.000004 | 0/252 |
+| qwen3-4b_nvfp4_w4a4 | +0.000000 | +0.000000 | 0/252 |
+| qwen3-4b_four_over_six_w4a4 | +0.000000 | -0.000004 | 0/252 |
+| qwen3-4b_razer_w4a4 | +0.000000 | +0.000000 | 0/252 |
+| qwen3-4b_nvfp4_w4a16 | -0.000003 | +0.000004 | 0/252 |
+| qwen3-4b_four_over_six_w4a16 | +0.000000 | +0.000000 | 0/252 |
+| qwen3-4b_razer_w4a16 | +0.000000 | +0.000000 | 0/252 |
+
+Qwen3-4B NVFP4 weight-only WikiText is listed as **13.63 in Table 1** and **13.83 in Table 3**. The primary table above keeps the Table 3 target. This internal difference is documented separately rather than changing the reproduction target.
+
+[Full reproduction record](results/released_reproduction/job_335302/REPORT.md) · [Protocol](results/released_reproduction/PROTOCOL.md).
+
+<!-- RELEASED_REPRODUCTION_END -->
+
+
 
 
 ## Current result: a frozen rule across seven models
