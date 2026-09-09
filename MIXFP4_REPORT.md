@@ -59,6 +59,77 @@ These five-model measurements used the same maps and inputs later replayed in th
 Source values and per-cell report paths: [table data](results/transfer_rule/pooled_performance_tables.json). Reproduce with `build_pooled_performance_tables.py` via `slurm/pooled_performance_tables.sbatch`.
 <!-- END POOLED PERFORMANCE TABLES -->
 
+<!-- MATH_CODE_ADAPTIVE_START -->
+## Math/code-only calibration: adaptive E0M3 count
+
+Calibration uses **OpenWebMath and CodeParrot only**. Neither C4 nor WikiText supplies calibration examples, gradients, or count-selection feedback. All measurements below evaluate the frozen maps only on **WikiText-2 test and held-out C4**. No seed replication or best-setting election is performed.
+
+**Result: this adaptive rule is not a competitive replacement for fixed-256.** It selected 0–8 blocks and achieved lower PPL than fixed-256 in only 1/60 paired model/setting/dataset comparisons. Fixed-256 improved point PPL over FourOverSix in 57/60 cells; 48 had baseline-relative ΔNLL + 2SE < 0 and 0 had ΔNLL − 2SE > 0. These correlated-cell counts are descriptive, not independent replications. The post hoc curvature audit documents conservatism in the interaction penalty; it does not establish that a less conservative selector would generalize. The study supports a negative finding for this particular adaptive surrogate, not an impossibility claim about adaptive selection.
+
+[Frozen protocol and selection equations](results/math_code_adaptive/PROTOCOL.md).
+
+One shared 128-sequence causal scoring pass per model supplies all ten source/sample-count settings. The adaptive method minimizes a directional-benefit plus estimated-curvature penalty over all negative-score prefixes, including zero switches. It has **no count cap**. The fixed-256 comparison uses the same fresh causal CE/KL derivatives and math/code subsets; it is not the older C4-containing pooled map.
+
+Counts are **8x64 E0M3 type blocks**, each containing 512 weights and 32 distinct 16-element scale blocks. Each average is the unweighted arithmetic mean of the two displayed dataset PPLs. PPL is computed from per-token loss over identical scored windows within each model.
+
+| Model | Baseline Wiki PPL | Baseline C4 PPL | Baseline average | Weight-MSE E0M3 blocks | Weight-MSE Wiki PPL | Weight-MSE C4 PPL | Weight-MSE average |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Qwen3-4B | 19.414897 | 21.928243 | 20.671570 | 3,407,142 | 20.108009 | 22.082958 | 21.095483 |
+| Llama-3.1-8B | 9.092934 | 11.600109 | 10.346521 | 6,652,753 | 9.088662 | 11.635797 | 10.362229 |
+| Qwen3.8-27B | 9.040908 | 12.644977 | 10.842943 | 22,696,327 | 9.026329 | 12.671271 | 10.848800 |
+
+### Qwen3-4B
+
+| Calibration | Sequences | Adaptive E0M3 blocks | Adaptive Wiki PPL | Adaptive C4 PPL | Adaptive average | Fixed E0M3 blocks | Fixed Wiki PPL | Fixed C4 PPL | Fixed average |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| math16 | 16 | 0 | 19.414897 | 21.928243 | 20.671570 | 256 | 18.507500 | 21.410291 | 19.958896 |
+| math32 | 32 | 1 | 19.397059 | 21.909817 | 20.653438 | 256 | 18.129010 | 21.190370 | 19.659690 |
+| math64 | 64 | 1 | 19.397059 | 21.909817 | 20.653438 | 256 | 18.020614 | 21.119963 | 19.570288 |
+| code16 | 16 | 0 | 19.414897 | 21.928243 | 20.671570 | 256 | 17.368412 | 21.024071 | 19.196241 |
+| code32 | 32 | 0 | 19.414897 | 21.928243 | 20.671570 | 256 | 17.249606 | 20.939862 | 19.094734 |
+| code64 | 64 | 1 | 19.397059 | 21.909817 | 20.653438 | 256 | 17.115535 | 20.854547 | 18.985041 |
+| math_code16 | 16 | 0 | 19.414897 | 21.928243 | 20.671570 | 256 | 17.919890 | 21.140365 | 19.530127 |
+| math_code32 | 32 | 0 | 19.414897 | 21.928243 | 20.671570 | 256 | 17.453015 | 20.996466 | 19.224740 |
+| math_code64 | 64 | 1 | 19.397059 | 21.909817 | 20.653438 | 256 | 17.436687 | 20.991402 | 19.214044 |
+| math_code128 | 128 | 1 | 19.397059 | 21.909817 | 20.653438 | 256 | 17.426627 | 20.940578 | 19.183602 |
+
+### Llama-3.1-8B
+
+| Calibration | Sequences | Adaptive E0M3 blocks | Adaptive Wiki PPL | Adaptive C4 PPL | Adaptive average | Fixed E0M3 blocks | Fixed Wiki PPL | Fixed C4 PPL | Fixed average |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| math16 | 16 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.055346 | 11.555850 | 10.305598 |
+| math32 | 32 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.042277 | 11.525782 | 10.284030 |
+| math64 | 64 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.030872 | 11.526124 | 10.278498 |
+| code16 | 16 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.052092 | 11.540401 | 10.296247 |
+| code32 | 32 | 2 | 9.088794 | 11.587583 | 10.338189 | 256 | 9.038428 | 11.538297 | 10.288363 |
+| code64 | 64 | 2 | 9.088794 | 11.587583 | 10.338189 | 256 | 9.043249 | 11.553241 | 10.298245 |
+| math_code16 | 16 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.049960 | 11.545661 | 10.297810 |
+| math_code32 | 32 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.049170 | 11.544846 | 10.297008 |
+| math_code64 | 64 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.028759 | 11.539653 | 10.284206 |
+| math_code128 | 128 | 2 | 9.088794 | 11.587583 | 10.338189 | 256 | 9.028599 | 11.513102 | 10.270851 |
+
+### Qwen3.8-27B
+
+| Calibration | Sequences | Adaptive E0M3 blocks | Adaptive Wiki PPL | Adaptive C4 PPL | Adaptive average | Fixed E0M3 blocks | Fixed Wiki PPL | Fixed C4 PPL | Fixed average |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| math16 | 16 | 2 | 9.041333 | 12.660161 | 10.850747 | 256 | 9.026444 | 12.630066 | 10.828255 |
+| math32 | 32 | 2 | 9.040871 | 12.646751 | 10.843811 | 256 | 9.032305 | 12.649907 | 10.841106 |
+| math64 | 64 | 4 | 9.039517 | 12.650800 | 10.845158 | 256 | 9.012561 | 12.632059 | 10.822310 |
+| code16 | 16 | 5 | 9.043073 | 12.653983 | 10.848528 | 256 | 9.020848 | 12.650864 | 10.835856 |
+| code32 | 32 | 8 | 9.047084 | 12.649668 | 10.848376 | 256 | 9.008592 | 12.645944 | 10.827268 |
+| code64 | 64 | 5 | 9.030592 | 12.640839 | 10.835715 | 256 | 9.017231 | 12.639964 | 10.828597 |
+| math_code16 | 16 | 2 | 9.048039 | 12.650519 | 10.849279 | 256 | 9.032979 | 12.644239 | 10.838609 |
+| math_code32 | 32 | 2 | 9.040062 | 12.647666 | 10.843864 | 256 | 9.006973 | 12.643467 | 10.825220 |
+| math_code64 | 64 | 6 | 9.038289 | 12.650116 | 10.844203 | 256 | 9.013104 | 12.643789 | 10.828447 |
+| math_code128 | 128 | 1 | 9.042556 | 12.650176 | 10.846366 | 256 | 9.005556 | 12.635394 | 10.820475 |
+
+The curvature inequality is exact for the estimated PSD matrix, but its sampled GGN diagonal and straight-through derivatives do not bound the true finite-switch network loss. This is an adaptive surrogate method, not a universal guarantee or a claim of methodological novelty. Two-SE intervals describe evaluation-window variation; they do not adjust for multiple comparisons, WikiText article dependence, or unmeasured calibration-draw variability. Both target families were previously inspected. Source exclusion is not a near-duplicate or pretraining-overlap audit.
+
+[Full adaptive study and paired results](results/math_code_adaptive/summary_333786_333788/REPORT.md) · [All separate-dataset values](results/math_code_adaptive/summary_333786_333788/cells.csv) · [Selection overlap](results/math_code_adaptive/summary_333786_333788/selection_overlap.json) · [Sensitivity figure](results/math_code_adaptive/summary_333786_333788/sensitivity.pdf) · [Post hoc curvature audit](results/math_code_adaptive/summary_333786_333788/CURVATURE_AUDIT.md)
+
+<!-- MATH_CODE_ADAPTIVE_END -->
+
+
 ## Current result: a frozen rule across seven models
 
 With causal per-token activation factors, the unchanged rule now improves
