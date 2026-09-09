@@ -62,8 +62,8 @@ Scope: 252 text linear matrices, 7,096,320 type blocks of 8x64, 3,633,315,840 we
 
 Movement relative to the unquantized BF16 reference:
 
-- wikitext: FourOverSix sits +0.606589 above BF16; MixFP4 moves 1.228105 toward it (202.5% of the gap). MixFP4 lands **below** the BF16 reference here, so this share exceeds 100%; perplexity below an unquantized reference is a known effect on this model and is not evidence of a better model.
-- c4: FourOverSix sits +0.683073 above BF16; MixFP4 moves 0.710680 toward it (104.0% of the gap). MixFP4 lands **below** the BF16 reference here, so this share exceeds 100%; perplexity below an unquantized reference is a known effect on this model and is not evidence of a better model.
+- wikitext: FourOverSix sits +0.606589 above BF16; MixFP4 moves 1.228105 toward it (202.5% of the gap). MixFP4 lands **below** the BF16 reference here, so this share exceeds 100%. Zero-shot accuracy shows this is not a better model than BF16; see "Perplexity below BF16 is not a quality claim".
+- c4: FourOverSix sits +0.683073 above BF16; MixFP4 moves 0.710680 toward it (104.0% of the gap). MixFP4 lands **below** the BF16 reference here, so this share exceeds 100%. Zero-shot accuracy shows this is not a better model than BF16; see "Perplexity below BF16 is not a quality claim".
 
 <!-- FIXED256_PAPER_EVAL_START -->
 ## 2. Math/code-only calibration: fixed-256 W4A4, aligned 2048-token benchmark
@@ -224,7 +224,31 @@ Qwen3-4B NVFP4 weight-only WikiText is listed as **13.63 in Table 1** and **13.8
 
 <!-- RELEASED_REPRODUCTION_END -->
 
-## 5. Two deliberate differences from the released code
+## 5. Perplexity below BF16 is not a quality claim
+
+On Qwen3-4B, MixFP4 perplexity falls below the unquantized BF16 reference. Perplexity
+cannot settle that on its own: a model that becomes less overconfident scores better on
+next-token loss without predicting better. The same frozen policies were therefore
+evaluated zero-shot on multiple choice, where a smoothing artefact should not help.
+BF16 restores pristine weights and removes activation quantization; every other row uses
+the paper-aligned W4A4 path.
+
+| Policy | WikiText-2 PPL | arc_easy | arc_challenge | hellaswag | openbookqa | boolq | winogrande | mean acc |
+|---|---|---|---|---|---|---|---|---|
+| BF16 reference | 13.662473 | 0.7816 | 0.5358 | 0.6846 | 0.4020 | 0.8495 | 0.6519 | 0.6509 |
+| FourOverSix W4A4 | 14.269062 | 0.7462 | 0.4906 | 0.6616 | 0.3940 | 0.8358 | 0.6212 | 0.6249 |
+| MixFP4 256 tiles | 13.040957 | 0.7563 | 0.4881 | 0.6652 | 0.3880 | 0.8330 | 0.6409 | 0.6286 |
+| MixFP4 65,536 tiles | 10.864750 | 0.7778 | 0.5043 | 0.6725 | 0.4060 | 0.8453 | 0.6314 | 0.6395 |
+
+**Two conclusions, and they point in different directions.**
+
+Accuracy corroborates the method among the quantized policies: FourOverSix 0.6249 to 0.6286 at 256 tiles to 0.6395 at 65,536, the same ordering perplexity gives, with the larger map ahead on 5/6 tasks. Quantization costs 0.0260 mean accuracy against BF16; the 256-tile map recovers 14.2% of that and the larger map 56.2%.
+
+Accuracy does **not** support beating BF16. The best quantized policy remains 0.0114 below the unquantized model, while its perplexity is 2.797723 better. Perplexity is therefore not a reliable absolute quality measure against BF16 on this model, and no claim in this report rests on the below-BF16 perplexities. Comparisons against the matched FourOverSix baseline are unaffected.
+
+Tasks are 0-shot via lm_eval 0.4.5. Skipped for dataset-loading reasons unrelated to the model: piqa.
+
+## 6. Two deliberate differences from the released code
 
 Both make our baselines harder to beat, not easier.
 
@@ -247,7 +271,7 @@ and not asserted; the released values are recorded as a comparison in each
 report. The FourOverSix path is unchanged since the release and keeps a hard
 exact-equality assertion.
 
-## 6. The format
+## 7. The format
 
 MixFP4 is NVFP4 plus a second, coarser block granularity that selects the FP4
 element data type. The FP32 per-tensor global scale, the E4M3 block scale and
@@ -272,7 +296,7 @@ cannot subdivide its operand tile, so for weights in operand B the smallest
 realizable type block is `n8 x k64`. All results here use exactly that 8x64
 weight tile, with alpha fixed at 1 on the E0M3 branch.
 
-## 7. Why a weight-error election is insufficient
+## 8. Why a weight-error election is insufficient
 
 The natural selector compares the squared weight error of the two candidates
 per tile and takes the smaller. It measures how well a candidate approximates
@@ -296,7 +320,7 @@ FourOverSix, the E0M3 alternative is fixed at alpha 1, and the experiment
 changes only the tile's element type. No rotation, permutation, scale search or
 weight training is added.
 
-## 8. The selection method
+## 9. The selection method
 
 Form the canonical FourOverSix Q0 and the E0M3-alpha1 Q1 once, so each 8x64
 tile j has a fixed difference D_j. At the unchanged FourOverSix W4A4 student,
@@ -323,7 +347,7 @@ or per destination dataset.
 Calibration uses OpenWebMath and CodeParrot only. Neither evaluation corpus
 contributes gradients or any selection feedback.
 
-## 9. Limits
+## 10. Limits
 
 - Simulated W4A4 on text linear weights and their inputs. No KV-cache
   quantization, generation accuracy, or native FP4 kernel throughput is
@@ -341,7 +365,7 @@ contributes gradients or any selection feedback.
 - Gradient selection, distillation and sparse optimization are established
   tools. Their use here is not by itself a novelty claim.
 
-## 10. Records not included in this report
+## 11. Records not included in this report
 
 These studies use protocols other than the aligned 2048-token one and are
 excluded from the tables above. Their records are retained.

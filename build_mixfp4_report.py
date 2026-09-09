@@ -53,6 +53,48 @@ def scope(report):
     return tiles, weights
 
 
+def accuracy_section(path, ppl):
+    """Zero-shot corroboration for the model whose perplexity falls below BF16."""
+    r = json.loads((path / 'report.json').read_text())
+    assert r['status'] == 'complete'
+    a, tasks = r['accuracy'], r['tasks_evaluated']
+    order = ['bf16', 'four_over_six', 'n256', 'n65536']
+    label = {'bf16': 'BF16 reference', 'four_over_six': 'FourOverSix W4A4',
+             'n256': 'MixFP4 256 tiles', 'n65536': 'MixFP4 65,536 tiles'}
+    base, top = a['four_over_six']['mean'], a['bf16']['mean']
+    gap = top - base
+    L = ['## Perplexity below BF16 is not a quality claim', '',
+         'On Qwen3-4B, MixFP4 perplexity falls below the unquantized BF16 reference. Perplexity',
+         'cannot settle that on its own: a model that becomes less overconfident scores better on',
+         'next-token loss without predicting better. The same frozen policies were therefore',
+         'evaluated zero-shot on multiple choice, where a smoothing artefact should not help.',
+         'BF16 restores pristine weights and removes activation quantization; every other row uses',
+         'the paper-aligned W4A4 path.', '',
+         '| Policy | WikiText-2 PPL | ' + ' | '.join(tasks) + ' | mean acc |',
+         '|---' * (len(tasks) + 3) + '|']
+    for p in order:
+        L.append(f'| {label[p]} | {ppl[p]:.6f} | ' +
+                 ' | '.join(f'{a[p][t]["value"]:.4f}' for t in tasks) + f' | {a[p]["mean"]:.4f} |')
+    L += ['', '**Two conclusions, and they point in different directions.**', '',
+          f'Accuracy corroborates the method among the quantized policies: FourOverSix '
+          f'{base:.4f} to {a["n256"]["mean"]:.4f} at 256 tiles to {a["n65536"]["mean"]:.4f} at '
+          f'65,536, the same ordering perplexity gives, with the larger map ahead on '
+          f'{sum(1 for t in tasks if a["n65536"][t]["value"] > a["n256"][t]["value"])}/{len(tasks)} '
+          f'tasks. Quantization costs {gap:.4f} mean accuracy against BF16; the 256-tile map '
+          f'recovers {100 * (a["n256"]["mean"] - base) / gap:.1f}% of that and the larger map '
+          f'{100 * (a["n65536"]["mean"] - base) / gap:.1f}%.', '',
+          f'Accuracy does **not** support beating BF16. The best quantized policy remains '
+          f'{a["bf16"]["mean"] - a["n65536"]["mean"]:.4f} below the unquantized model, while its '
+          f'perplexity is {ppl["bf16"] - ppl["n65536"]:.6f} better. Perplexity is therefore not a '
+          f'reliable absolute quality measure against BF16 on this model, and no claim in this '
+          f'report rests on the below-BF16 perplexities. Comparisons against the matched '
+          f'FourOverSix baseline are unaffected.', '',
+          f'Tasks are 0-shot via lm_eval {r["lm_eval_version"]}.' +
+          (f' Skipped for dataset-loading reasons unrelated to the model: '
+           f'{", ".join(sorted(r["tasks_skipped"]))}.' if r.get('tasks_skipped') else ''), '']
+    return '\n'.join(L)
+
+
 def panel(root):
     L = ['## 1. Paper-aligned W4A4 result', '',
          'Baselines are NVFP4 and NVFP4 FourOverSix. The method is MixFP4: the same FourOverSix',
@@ -97,9 +139,9 @@ def panel(root):
             note = (f'- {key}: FourOverSix sits {gap:+.6f} above BF16; MixFP4 moves '
                     f'{got:.6f} toward it ({100 * got / gap:.1f}% of the gap)')
             if mx[key] < bf16[key]:
-                note += (f'. MixFP4 lands **below** the BF16 reference here, so this share '
-                         f'exceeds 100%; perplexity below an unquantized reference is a known '
-                         f'effect on this model and is not evidence of a better model')
+                note += ('. MixFP4 lands **below** the BF16 reference here, so this share '
+                         'exceeds 100%. Zero-shot accuracy shows this is not a better model '
+                         'than BF16; see "Perplexity below BF16 is not a quality claim"')
             L.append(note + '.')
         L.append('')
         if 'released_comparison' in nv_r:
@@ -117,10 +159,19 @@ def panel(root):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--job', required=True)
+    ap.add_argument('--zeroshot', default='results/zeroshot_check/job_336108/qwen4b')
     ap.add_argument('--report', default='MIXFP4_REPORT.md')
     args = ap.parse_args()
     root = Path(f'results/paper_baseline/job_{args.job}')
     old = Path(args.report).read_text()
+    _, qwen_ppl, _ = evaluated(root / 'qwen4b_fixed256_math_code128')
+    _, qwen_fos, _ = evaluated(root / 'qwen4b_four_over_six')
+    _, qwen_bf16 = released('qwen3-4b', 'bf16')
+    adaptive = json.loads(Path('results/adaptive_paper/job_335993/qwen4b/report.json').read_text())
+    accuracy = accuracy_section(Path(args.zeroshot), {
+        'bf16': qwen_bf16['wikitext'], 'four_over_six': qwen_fos['wikitext'],
+        'n256': qwen_ppl['wikitext'],
+        'n65536': adaptive['evaluation']['n65536']['wiki']['ppl']})
 
     fixed = block(old, 'FIXED256_PAPER_EVAL_START', 'FIXED256_PAPER_EVAL_END')
     audit = block(old, 'BASELINE_PROTOCOL_AUDIT_START', 'BASELINE_PROTOCOL_AUDIT_END')
@@ -145,6 +196,7 @@ final section.
 
 {repro}
 
+{accuracy}
 ## 3. Two deliberate differences from the released code
 
 Both make our baselines harder to beat, not easier.
