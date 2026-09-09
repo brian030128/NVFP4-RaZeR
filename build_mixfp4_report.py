@@ -9,6 +9,7 @@ results/ and are listed as historical pointers.
 import argparse
 import json
 import math
+import re
 from pathlib import Path
 
 REPRO = Path('results/released_reproduction/job_335297')
@@ -44,6 +45,14 @@ def evaluated(path):
             {'wikitext': r['evaluation']['wiki']['ppl'], 'c4': r['evaluation']['c4']['ppl']}, r)
 
 
+def scope(report):
+    """Total 8x64 type blocks and weights in the quantized scope."""
+    prior = json.loads((Path(report['case']['calibration']) / 'report.json').read_text())
+    tiles = sum((v['shape'][0] // 8) * (v['shape'][1] // 64) for v in prior['matrices'].values())
+    weights = sum(v['shape'][0] * v['shape'][1] for v in prior['matrices'].values())
+    return tiles, weights
+
+
 def panel(root):
     L = ['## 1. Paper-aligned W4A4 result', '',
          'Baselines are NVFP4 and NVFP4 FourOverSix. The method is MixFP4: the same FourOverSix',
@@ -57,12 +66,20 @@ def panel(root):
         mx_l, mx, mx_r = evaluated(root / f'{model}_fixed256_{PRIMARY}')
         assert nv_r['selected_e0m3_blocks'] == 0 and fo_r['selected_e0m3_blocks'] == 0
         assert mx_r['selected_e0m3_blocks'] == 256
+        tiles, weights = scope(mx_r)
+        pct = 100 * 256 / tiles
         L += [f'### {label}', '',
-              '| Policy | E0M3 blocks | WikiText-2 | C4 |', '|---|---:|---:|---:|',
-              f"| BF16 reference | — | {bf16['wikitext']:.6f} | {bf16['c4']:.6f} |",
-              f"| NVFP4 W4A4 | 0 | {nv['wikitext']:.6f} | {nv['c4']:.6f} |",
-              f"| NVFP4 FourOverSix W4A4 | 0 | {fo['wikitext']:.6f} | {fo['c4']:.6f} |",
-              f"| **MixFP4, ours** | 256 | **{mx['wikitext']:.6f}** | **{mx['c4']:.6f}** |", '',
+              f'Scope: {len(mx_r["quantized_weight_sha256"]):,} text linear matrices, '
+              f'{tiles:,} type blocks of 8x64, {weights:,} weights. MixFP4 switches '
+              f'**256 blocks = {pct:.6f}% of type blocks** ({256 * 512:,} weights, '
+              f'about 1 block in {round(tiles / 256):,}).', '',
+              '| Policy | E0M3 blocks | % of type blocks | WikiText-2 | C4 |',
+              '|---|---:|---:|---:|---:|',
+              f"| BF16 reference | — | — | {bf16['wikitext']:.6f} | {bf16['c4']:.6f} |",
+              f"| NVFP4 W4A4 | 0 | 0 | {nv['wikitext']:.6f} | {nv['c4']:.6f} |",
+              f"| NVFP4 FourOverSix W4A4 | 0 | 0 | {fo['wikitext']:.6f} | {fo['c4']:.6f} |",
+              f"| **MixFP4, ours** | 256 | {pct:.6f}% | **{mx['wikitext']:.6f}** | "
+              f"**{mx['c4']:.6f}** |", '',
               '| Comparison | Wiki ΔPPL | Wiki ΔNLL ±2SE | C4 ΔPPL | C4 ΔNLL ±2SE |',
               '|---|---:|---:|---:|---:|']
         for name, al, ap, bl, bp in (('MixFP4 − FourOverSix', mx_l, mx, fo_l, fo),
@@ -73,18 +90,24 @@ def panel(root):
                 m, se = paired(al[dom], bl[dom])
                 cells.append(f'{ap[key] - bp[key]:+.6f} | {m:+.6f} ±{se:.6f}')
             L.append(f'| {name} | ' + ' | '.join(cells) + ' |')
-        L += ['', 'Share of the FourOverSix-to-BF16 gap that 256 switched tiles close:', '']
+        L += ['', 'Movement relative to the unquantized BF16 reference:', '']
         for dom, key in (('wiki', 'wikitext'), ('c4', 'c4')):
             gap = fo[key] - bf16[key]
             got = fo[key] - mx[key]
-            L.append(f'- {key}: FourOverSix sits {gap:+.6f} above BF16; MixFP4 recovers '
-                     f'{got:.6f}, or {100 * got / gap:.1f}% of it.')
+            note = (f'- {key}: FourOverSix sits {gap:+.6f} above BF16; MixFP4 moves '
+                    f'{got:.6f} toward it ({100 * got / gap:.1f}% of the gap)')
+            if mx[key] < bf16[key]:
+                note += (f'. MixFP4 lands **below** the BF16 reference here, so this share '
+                         f'exceeds 100%; perplexity below an unquantized reference is a known '
+                         f'effect on this model and is not evidence of a better model')
+            L.append(note + '.')
         L.append('')
         if 'released_comparison' in nv_r:
             c = nv_r['released_comparison']
             L += [f'Against the archived released NVFP4 run: WikiText {c["wiki_released"]:.6f} '
                   f'({c["wiki_delta"]:+.6f}), C4 {c["c4_released"]:.6f} ({c["c4_delta"]:+.6f}). '
-                  'See section 3 for why these differ.', '']
+                  'See "Two deliberate differences from the released code" for why these '
+                  'differ.', '']
         if fo_r.get('released_baseline_exact'):
             L += ['The FourOverSix row reproduces the archived released run exactly, asserted at '
                   'run time.', '']
@@ -110,8 +133,8 @@ WikiText-2 raw test is read as 141 full nonoverlapping windows; C4 is 256 seed-0
 crops from validation shard 00000. Activation factors are tensor-wide, attention
 is SDPA, WikiText is cached per window and C4 uncached, and perplexity uses the
 released float32 aggregation. Non-aligned 512-token studies have been removed
-from this report; their records remain under `results/` and are listed in
-section 8.
+from this report; their records remain under `results/` and are listed in the
+final section.
 
 [Paper-aligned panel](results/paper_baseline/REPORT.md) (job {args.job}).
 
@@ -255,8 +278,17 @@ excluded from the tables above. Their records are retained.
 - [Earlier format exploration](results/MIXFP4_REPORT.md) and
   [decision-rule rounds](results/DECIDE_SUMMARY.md).
 """
-    Path(args.report).write_text(head)
-    print(f'wrote {args.report}: {len(head.splitlines())} lines')
+    # Number the top-level sections sequentially; the carried blocks arrive unnumbered
+    # and the authored ones carry provisional numbers, so strip and renumber uniformly.
+    lines, n = [], 0
+    for line in head.split('\n'):
+        if line.startswith('## ') and not line.startswith('###'):
+            n += 1
+            title = re.sub(r'^## (?:\d+\.\s*)?', '', line)
+            line = f'## {n}. {title}'
+        lines.append(line)
+    Path(args.report).write_text('\n'.join(lines))
+    print(f'wrote {args.report}: {len(lines)} lines, {n} sections')
 
 
 if __name__ == '__main__':

@@ -97,12 +97,17 @@ def main():
                 m, se = paired(a_l[dom], b_l[dom])
                 cells.append(f'{a_p[key] - b_p[key]:+.6f} | {m:+.6f} ±{se:.6f}')
             L.append(f'| {name} | ' + ' | '.join(cells) + ' |')
-        L += ['', 'Recovered share of the BF16 gap that FourOverSix leaves open:', '']
+        L += ['', 'Movement relative to the unquantized BF16 reference:', '']
         for dom, key in (('wiki', 'wikitext'), ('c4', 'c4')):
             gap = fos_ppl[key] - bf16_ppl[key]
             got = fos_ppl[key] - mix_ppl[key]
-            L.append(f'- {key}: FourOverSix is {gap:+.6f} above BF16; MixFP4 closes '
-                     f'{got:.6f} of it ({100 * got / gap:.1f}%).')
+            note = (f'- {key}: FourOverSix is {gap:+.6f} above BF16; MixFP4 moves '
+                    f'{got:.6f} toward it ({100 * got / gap:.1f}% of the gap)')
+            if mix_ppl[key] < bf16_ppl[key]:
+                note += ('. MixFP4 lands **below** the BF16 reference here, so the share '
+                         'exceeds 100%; a quantized perplexity below an unquantized one is a '
+                         'known effect on this model and is not evidence of a better model')
+            L.append(note + '.')
         L.append('')
 
         L += [f'### {label}: all ten frozen calibration settings', '',

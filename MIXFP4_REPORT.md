@@ -1,70 +1,72 @@
-# Making MixFP4 Work Across Domains
+# MixFP4 with task-calibrated type selection
 
-**Motivation, method, experiments, and limitations**
+Every result in this report uses the released 2048-token evaluation protocol.
+WikiText-2 raw test is read as 141 full nonoverlapping windows; C4 is 256 seed-0
+crops from validation shard 00000. Activation factors are tensor-wide, attention
+is SDPA, WikiText is cached per window and C4 uncached, and perplexity uses the
+released float32 aggregation. Non-aligned 512-token studies have been removed
+from this report; their records remain under `results/` and are listed in the
+final section.
 
-<!-- FIXED256_CURRENT_POINTER -->
-**Paper-protocol fixed-256 results (2048 tokens):** [matched WikiText/C4 measurements](results/fixed256_paper_eval/job_335428/REPORT.md). The Math/code-only section below contains these results; other 512-token tables are historical.
+[Paper-aligned panel](results/paper_baseline/REPORT.md) (job 335962).
 
+## 1. Paper-aligned W4A4 result
 
-Updated September 9, 2026 · Original report: commit `5dc17ea`; subsequent studies are in the workspace.
+Baselines are NVFP4 and NVFP4 FourOverSix. The method is MixFP4: the same FourOverSix
+E2M1 weights with 256 8x64 tiles switched to E0M3, elected by our CE/KL task-gradient
+calibration on OpenWebMath and CodeParrot only. WikiText-2 and C4 supply no calibration
+data, no gradients and no selection feedback, so both are held out for every row.
 
-<!-- BEGIN POOLED PERFORMANCE TABLES -->
-## Pooled calibration: all evaluated models and datasets
+### Llama-3.1-8B
 
-Each cell is **FourOverSix baseline PPL → pooled-map PPL**; lower is better. The pooled map uses all 192 calibration sequences with the common CE/KL two-SE rule and 256-tile cap (`pooled192`, named `all_pooled` in the initial study). These tables cover its held-out/reference-text evaluations across all eight models and all seven dataset families evaluated. Other selection methods and calibration fitting losses are not included in the dataset averages.
+Scope: 224 text linear matrices, 13,631,488 type blocks of 8x64, 6,979,321,856 weights. MixFP4 switches **256 blocks = 0.001878% of type blocks** (131,072 weights, about 1 block in 53,248).
 
-**Mean PPL** is the unweighted arithmetic mean of the available dataset PPLs in that row, computed separately for baseline and pooled map from unrounded values. It is a descriptive dataset average, not pooled-corpus perplexity or a statistical significance test. **—** means not evaluated and is excluded from the mean. Different dataset coverage and model tokenizers limit comparisons between rows; the 27B mean below covers C4 and WikiText-2 only. Qwen3-4B and Llama-3.1-8B have five evaluated datasets; the other five models have four.
-
-### Current causal evaluation
-
-All policies use per-token activation factors. C4 has 256 validation documents per model; literature (PG19), science (arXiv articles), and government (GovReport reports) each have 64 test documents per model. Each document contributes a 512-token crop. Causal WikiText-2 uses all nonoverlapping512-token windows of the concatenated raw test split, omitting only the final incomplete window. The same frozen map serves all available domains of a model.
-
-| Model | C4 | WikiText-2 | PG19 / literature | arXiv / science | GovReport / government | Mean PPL |
-|---|---:|---:|---:|---:|---:|---:|
-| OPT-350M | 26.7439 → 26.4696 | — | 26.7803 → 26.3180 | 39.9885 → 38.9790 | 19.3052 → 19.0420 | 28.2045 → 27.7021 |
-| Qwen3-0.6B | 37.9007 → 34.7924 | — | 42.2868 → 38.2347 | 22.9779 → 21.3853 | 20.9650 → 19.2934 | 31.0326 → 28.4265 |
-| Llama-3.2-1B-Instruct | 24.8986 → 24.1244 | — | 27.4281 → 26.1702 | 22.9979 → 22.1912 | 15.9390 → 15.4375 | 22.8159 → 21.9808 |
-| OLMo-1B | 14.9844 → 14.8830 | — | 18.3616 → 18.2721 | 21.5055 → 21.1115 | 12.1762 → 12.0859 | 16.7569 → 16.5881 |
-| Pythia-1.4B | 20.4712 → 20.1627 | — | 17.3559 → 17.0860 | 19.7099 → 19.4682 | 14.1871 → 13.9786 | 17.9310 → 17.6739 |
-| Qwen3-4B | 21.9282 → 20.9027 | 19.4149 → 17.5212 | 21.7798 → 20.5380 | 13.6565 → 13.0184 | 12.7575 → 12.0811 | 17.9074 → 16.8123 |
-| Llama-3.1-8B | 11.6001 → 11.5099 | 9.0929 → 9.0113 | 11.6750 → 11.5913 | 10.8050 → 10.7011 | 8.2520 → 8.1814 | 10.2850 → 10.1990 |
-| Qwen3.8-27B | 12.6450 → 12.6353 | 9.0409 → 8.9971 | — | — | — | 10.8429 → 10.8162 |
-
-The 27B C4 difference is inconclusive (paired ΔNLL −0.000764 ±0.001538, descriptive two-SE); its small point gain must not be presented as a supported improvement. OLMo-1B literature is also inconclusive. Of the preceding 29 causal comparisons excluding WikiText-2, 27 have supporting descriptive paired two-SE intervals. The three added WikiText-2 comparisons have 3 supported gains and 0 supported harms under descriptive two-SE intervals; adjacent WikiText windows may share articles, so these intervals do not account for article dependence. [Transfer results](results/transfer_rule/REPORT.md), [seven-model C4 results](results/c4_frozen/REPORT_332781.md), [27B C4 result](results/pooled_qwen27b/model_332840/REPORT.md), [causal WikiText-2 results](results/wiki_frozen/REPORT_332974_332976.md).
-
-### Earlier development evaluations: window-wide activation factors
-
-These are the original three pooled maps, replayed unchanged in subsequent confirmation. WikiText-2 uses 32 held-out 512-token windows; GSM8K and MBPP use 32 held-out reference-text examples each, truncated to at most 512 tokens. Their reported PPL is exp(mean example NLL); math and code scores are not answer accuracy or pass@k. These historical runs cover only the three models below; the causal WikiText-2 runs for three larger models are in the current table. GSM8K and MBPP were not evaluated for the other five models with this pooled rule.
-
-**Historical only:** window-wide activation factors can depend on future tokens. These numbers are retained for completeness and are not causal-likelihood evidence. Their averages are kept separate from the causal table.
-
-| Model | WikiText-2 | GSM8K reference text | MBPP reference text | Mean PPL |
+| Policy | E0M3 blocks | % of type blocks | WikiText-2 | C4 |
 |---|---:|---:|---:|---:|
-| OPT-350M | 37.8453 → 37.1308 | 19.1657 → 19.1168 | 29.7292 → 28.7015 | 28.9134 → 28.3164 |
-| Qwen3-0.6B | 39.4416 → 34.5269 | 5.9890 → 5.6115 | 11.4359 → 10.4532 | 18.9555 → 16.8639 |
-| Llama-3.2-1B-Instruct | 21.0039 → 20.3201 | 5.0743 → 4.9452 | 9.6906 → 9.5024 | 11.9229 → 11.5892 |
+| BF16 reference | — | — | 6.240087 | 8.958212 |
+| NVFP4 W4A4 | 0 | 0 | 6.940252 | 9.925099 |
+| NVFP4 FourOverSix W4A4 | 0 | 0 | 6.875525 | 9.823733 |
+| **MixFP4, ours** | 256 | 0.001878% | **6.848383** | **9.764387** |
 
-[Development study](results/consensus_format/REPORT_332332.md). The all-source pooled map was a secondary control; it does not rescue the failed leave-source-out consensus screen.
-
-### Original confirmation: window-wide activation factors
-
-These five-model measurements used the same maps and inputs later replayed in the causal table. They are shown to preserve every evaluation setting, and must not be counted again as independent confirmation. The full prespecified confirmation screen failed its C4-only comparison despite the baseline gains.
-
-| Model | PG19 / literature | arXiv / science | GovReport / government | Mean PPL |
+| Comparison | Wiki ΔPPL | Wiki ΔNLL ±2SE | C4 ΔPPL | C4 ΔNLL ±2SE |
 |---|---:|---:|---:|---:|
-| OPT-350M | 26.8110 → 26.3857 | 39.9208 → 38.9119 | 19.3680 → 19.0120 | 28.6999 → 28.1032 |
-| Qwen3-0.6B | 42.4125 → 38.1521 | 22.9353 → 21.3439 | 20.9340 → 19.3883 | 28.7606 → 26.2947 |
-| Llama-3.2-1B-Instruct | 27.5652 → 26.3203 | 23.0250 → 22.1103 | 15.9851 → 15.4686 | 22.1917 → 21.2997 |
-| OLMo-1B | 18.3940 → 18.2765 | 21.7249 → 20.9924 | 12.1758 → 12.0902 | 17.4315 → 17.1197 |
-| Pythia-1.4B | 18.9405 → 18.5658 | 21.5648 → 20.9412 | 15.4993 → 15.1421 | 18.6682 → 18.2164 |
+| MixFP4 − FourOverSix | -0.027142 | -0.003956 ±0.001604 | -0.059346 | -0.006059 ±0.002295 |
+| MixFP4 − NVFP4 | -0.091869 | -0.013326 ±0.001994 | -0.160712 | -0.016325 ±0.002911 |
+| FourOverSix − NVFP4 | -0.064728 | -0.009370 ±0.002000 | -0.101366 | -0.010266 ±0.002287 |
 
-[Original confirmation](results/pooled_confirmation/REPORT_332349.md). No window-wide confirmation run was performed for Qwen3-4B, Llama-3.1-8B, or Qwen3.8-27B under this pooled protocol.
+Movement relative to the unquantized BF16 reference:
 
-Source values and per-cell report paths: [table data](results/transfer_rule/pooled_performance_tables.json). Reproduce with `build_pooled_performance_tables.py` via `slurm/pooled_performance_tables.sbatch`.
-<!-- END POOLED PERFORMANCE TABLES -->
+- wikitext: FourOverSix sits +0.635437 above BF16; MixFP4 moves 0.027142 toward it (4.3% of the gap).
+- c4: FourOverSix sits +0.865521 above BF16; MixFP4 moves 0.059346 toward it (6.9% of the gap).
+
+Against the archived released NVFP4 run: WikiText 6.941772 (-0.001520), C4 9.940895 (-0.015796). See "Two deliberate differences from the released code" for why these differ.
+
+The FourOverSix row reproduces the archived released run exactly, asserted at run time.
+
+### Qwen3-4B
+
+Scope: 252 text linear matrices, 7,096,320 type blocks of 8x64, 3,633,315,840 weights. MixFP4 switches **256 blocks = 0.003608% of type blocks** (131,072 weights, about 1 block in 27,720).
+
+| Policy | E0M3 blocks | % of type blocks | WikiText-2 | C4 |
+|---|---:|---:|---:|---:|
+| BF16 reference | — | — | 13.662473 | 16.643560 |
+| NVFP4 W4A4 | 0 | 0 | 13.936539 | 17.293613 |
+| NVFP4 FourOverSix W4A4 | 0 | 0 | 14.269062 | 17.326633 |
+| **MixFP4, ours** | 256 | 0.003608% | **13.040957** | **16.615953** |
+
+| Comparison | Wiki ΔPPL | Wiki ΔNLL ±2SE | C4 ΔPPL | C4 ΔNLL ±2SE |
+|---|---:|---:|---:|---:|
+| MixFP4 − FourOverSix | -1.228105 | -0.089999 ±0.005297 | -0.710680 | -0.041881 ±0.002294 |
+| MixFP4 − NVFP4 | -0.895581 | -0.066419 ±0.004484 | -0.677660 | -0.039974 ±0.002311 |
+| FourOverSix − NVFP4 | +0.332523 | +0.023580 ±0.004994 | +0.033020 | +0.001907 ±0.002283 |
+
+Movement relative to the unquantized BF16 reference:
+
+- wikitext: FourOverSix sits +0.606589 above BF16; MixFP4 moves 1.228105 toward it (202.5% of the gap). MixFP4 lands **below** the BF16 reference here, so this share exceeds 100%; perplexity below an unquantized reference is a known effect on this model and is not evidence of a better model.
+- c4: FourOverSix sits +0.683073 above BF16; MixFP4 moves 0.710680 toward it (104.0% of the gap). MixFP4 lands **below** the BF16 reference here, so this share exceeds 100%; perplexity below an unquantized reference is a known effect on this model and is not evidence of a better model.
 
 <!-- FIXED256_PAPER_EVAL_START -->
-## Math/code-only calibration: fixed-256 W4A4, aligned 2048-token benchmark
+## 2. Math/code-only calibration: fixed-256 W4A4, aligned 2048-token benchmark
 
 Calibration uses **OpenWebMath and CodeParrot only; neither WikiText nor C4 is used for calibration**. One 128-sequence causal scoring pass per model (64 math + 64 code, 512 tokens each) supplies the ten frozen source/sample-count settings below. The numeric suffix denotes the total calibration sequence count; math_code settings use equal numbers from each source.
 
@@ -136,12 +138,8 @@ Execution jobs: 335407, 335428; consolidated results: `job_335428`. Each job use
 
 <!-- FIXED256_PAPER_EVAL_END -->
 
-<!-- MATH_CODE_ADAPTIVE_START -->
-**Historical 512-token adaptive study:** [Full tables and diagnostics](results/math_code_adaptive/summary_333786_333788/REPORT.md). Its adaptive counts, fixed-256 controls, and weight-MSE controls use a different evaluation protocol and are not part of the aligned benchmark above.
-<!-- MATH_CODE_ADAPTIVE_END -->
-
 <!-- BASELINE_PROTOCOL_AUDIT_START -->
-## Baseline audit against RaZeR Table 3
+## 3. Baseline audit against RaZeR Table 3
 
 The historical math/code-only study used **512-token evaluation windows**. A separate baseline-only audit at **2048 tokens**, with the released C4 sampling procedure and tensor-wide activation factors, gives the values below. No calibration or E0M3 map selection occurs in this audit. The unquantized baselines match the paper to its displayed precision; shorter context accounts for most of the large gap in the original study.
 
@@ -166,7 +164,7 @@ The corrected full-W4A4 measurements remain the appropriate baseline for methods
 <!-- BASELINE_PROTOCOL_AUDIT_END -->
 
 <!-- RELEASED_REPRODUCTION_START -->
-## Direct reproduction with the February RaZeR release
+## 4. Direct reproduction with the February RaZeR release
 
 The archived released evaluator at commit `e230099` was run directly for 14 cases (28 separate WikiText-2/C4 cells). **15/28 cells match Table 3 at its published two-decimal precision.** No calibration or parameter search was used. The evaluator uses 2048-token windows, seed 0, 256 sampled C4 windows, and its original float32 PPL aggregation.
 
@@ -226,646 +224,135 @@ Qwen3-4B NVFP4 weight-only WikiText is listed as **13.63 in Table 1** and **13.8
 
 <!-- RELEASED_REPRODUCTION_END -->
 
-
-
-
-## Current result: a frozen rule across seven models
-
-With causal per-token activation factors, the unchanged rule now improves
-**21/21** matched FourOverSix perplexity comparisons across seven models,
-from OPT350M to Llama8B, on literature, science and government text.
-Twenty gains have supporting descriptive paired2SE intervals; none has
-supported harm. It also beats weight-MSE election in21/21 point comparisons.
-The [consolidated result](results/transfer_rule/REPORT.md) separates the
-initial confirmation, causal replay and4B/8B size extension, and preserves
-the unsuccessful comparator criterion described below.
-
-One shared scoring pass on a fixed192-sequence pool supports a simple tile
-rule: estimate each8x64 switch's next-token-loss and teacher-KL derivatives,
-require both to favor the switch after a common2SE filter, and take at most256
-tiles. All models use the same recipe. There is no candidate-loss backtracking,
-per-domain configuration election, or separate calibration per configuration.
-The [method](results/pooled_confirmation/METHOD.md) gives the equations and
-states the approximation and fixed-constant assumptions explicitly.
-
-The frozen confirmation covers five model families and three previously
-uninspected data families: literature, scientific articles and government
-reports. Pythia1.4B and OLMo1B are new model families relative to development;
-the other three models' primary maps replay exactly. The same map is used for
-every domain of each model. The method improves **15/15 comparisons over
-FourOverSix**, with all15 paired descriptive2SE intervals supporting gains,
-and beats weight-MSE election in15/15. Raw losses, source/data hashes, controls
-and fitting audits are in the
-[confirmation report](results/pooled_confirmation/REPORT_332349.md).
-
-The complete prespecified screen nevertheless **fails** its stronger C4-only
-comparison:8/15 point wins, versus the required9. At equal calibration-token
-count, mixing sources improves only6/15 point estimates, with two supported
-gains and two supported harms. The evidence supports transfer of the frozen
-procedure; it does not establish that source diversity is the cause or is
-uniformly preferable. No criterion has been relaxed after seeing these results.
-
-This remains a calibrated procedure, not a weight-only universal theorem or
-a novelty claim for gradient selection. The original confirmation used
-window-wide activation factors. The subsequent
-[causal audit](results/causal_replay/REPORT_332374.md) retained improvements
-in15/15 comparisons with per-token factors,14 supported, and passed its
-declared retention/prefix-independence screen. It reused the same frozen maps
-and inputs, without recalibration. The
-[4B/8B extension](results/pooled_scale/REPORT_332389.md) then passed its
-size-transfer screen with6/6 supported gains and the same256-tile cap.
-
-Changing future tokens changed earlier logits under the older window-wide
-factor in all five models tested under both conventions. The per-token
-version produced bitwise-identical prefix logits for both baseline and
-selected maps in all seven models. Per-token factors change the activation
-representation; this is not claimed as a free native-kernel modification.
-All results simulate W4A4 nonhead linear operations. Native FP4-kernel speed,
-generation accuracy and multi-pool seed replication are not measured.
-
-## Held-out C4 evaluation of the frozen maps
-
-The unchanged maps improve held-out C4 PPL on **7/7 models**, all seven with
-supporting descriptive paired two-SE intervals. They beat weight-MSE on 7/7
-and C4-only selection on 4/7 point comparisons.
-
-| Model | FourOverSix C4 PPL | Selected C4 PPL | ΔPPL |
-|---|---:|---:|---:|
-| OPT-350M | 26.743945 | 26.469613 | -0.274332 |
-| Qwen3-0.6B | 37.900671 | 34.792433 | -3.108238 |
-| Llama-3.2-1B-Instruct | 24.898634 | 24.124422 | -0.774213 |
-| OLMo-1B | 14.984432 | 14.883008 | -0.101424 |
-| Pythia-1.4B | 20.471159 | 20.162666 | -0.308493 |
-| Qwen3-4B | 21.928243 | 20.902742 | -1.025501 |
-| Llama-3.1-8B | 11.600109 | 11.509863 | -0.090246 |
-
-The [C4 follow-up](results/c4_frozen/REPORT_332781.md) evaluates the same seven
-saved maps on 256 distinct validation documents per model, with one seeded
-512-token crop per document. Exact text hashes exclude all 192 calibration
-documents for each model. Model revisions, source linear weights and map-file
-hashes are verified; no calibration, gradient scoring, map selection or
-backtracking is performed. All policies use the causal per-token activation
-convention. The report includes FourOverSix, pooled192, C4-only64, mixed64 and
-weight-MSE PPL, raw paired document losses, and descriptive two-SE intervals.
-
-C4 is a calibration source. This is held-out within-source evaluation,
-separate from the 21 literature/science/government transfer comparisons.
-The `C4-64` control means a map selected earlier using 64 C4 training sequences;
-it does not mean that its evaluation examples are calibration examples.
-
-## Qwen3.8-27B: the same rule gives an inconclusive C4 gain
-
-The [27B extension](results/pooled_qwen27b/model_332840/REPORT.md) retains the
-same 192-sequence calibration recipe, CE/KL two-SE score and 256-tile cap.
-It uses the pinned native hybrid text architecture with Transformers 5.16.1.
-Held-out C4 PPL changes from **12.644977 to 12.635323**, a reduction of only
-**0.009654**. Paired ΔNLL is **-0.000764 ±0.001538** (descriptive two-SE),
-which includes zero. This is below the earlier 0.01-PPL practical reference
-threshold and is not a supported improvement. The seven-model gains above
-therefore do not establish meaningful C4 improvement on this 27B target.
-
-C4-only64 reaches 12.630390, mixed64 reaches 12.627442, and weight-MSE reaches
-12.671271. None of these controls is used to replace the primary pooled map.
-All policies use the same 256 held-out documents and causal activation factors.
-Exact calibration/test text-hash overlap is zero; baseline and selected prefix
-independence checks pass. The [eight-model comparison and independent overlap
-audit](results/pooled_qwen27b/C4_COMPARISON_332840.md) preserve this inconclusive
-target result separately from the preceding seven-model confirmation.
-
-## Earlier report and exploratory research record
-
-**Research continuation (September 7; subsequent workspace experiments):**
-The calibration/backtracking method below does not resolve the request for a
-strong, transferable tile-selection rule. Six additional fixed-method studies
-test conditional compensation, asymmetric compensation, calibration-free
-activation election, interacting weight tiles, teacher-Fisher sensitivity, and
-complete tile branches with columnwise GPTQ compensation.
-Their protocols, unsuccessful cases, and paired results are collected in
-[the continuation report](results/format_directions/REPORT.md). The
-[method analysis](results/format_directions/METHOD_AND_EVIDENCE.md) separates
-what each objective guarantees from what must generalize empirically. These
-experiments are exploratory and do not establish a paper-ready universal rule.
-The [findings](results/format_directions/FINDINGS.md) summarize why all six
-screens failed; the final panel improves seven of nine comparisons over
-FourOverSix but has two supported math regressions.
-
-**September 8 continuation:** Additional fixed-method studies and a replay of
-failed maps on their original fitting examples are recorded in the
-[continuation log](results/format_directions/CONTINUATION_20260908.md).
-The replay identifies failure of the actual fitting objective, before domain
-transfer, for the large curvature-selected maps. Current-model binary updates
-and subsequent shared-score methods were tested under frozen recipes. The
-validated transfer results and their claim limits are summarized above.
-
-MixFP4 gives a quantizer an additional choice: represent a block with E2M1 or
-E0M3 while keeping its element width at four bits. The difficult part is choosing
-where that flexibility helps the model. A format that reconstructs a weight
-block more accurately need not improve the predictions of an already quantized
-network. A selection that improves WikiText need not improve another domain.
-
-The earlier approach used **task-gradient selection on C4, followed by
-actual-loss backtracking and independent validation**. The same algorithm
-produced accepted maps on three models, with two calibration seeds for the
-27B target. It reduced perplexity by at least **0.01 in 15 of 16 evaluated
-model/seed/domain cases**. Fourteen cases had paired uncertainty intervals
-supporting an improvement; no case had an interval supporting harm. The
-remaining case, Llama code, was inconclusive rather than an established gain.
-
-This is evidence for a useful common calibration procedure. It is not a
-universal weight-statistic rule, a fixed map that can be reused across models,
-or a guarantee for arbitrary domains. The experiments also identify clear
-failures of Wiki-only selection and teacher-based selection on code.
-
-## 1. Motivation: use four bits more effectively
-
-At four bits, the placement of representable values matters. The two formats
-used in this implementation have the following value sets before scaling:
-
-| Format | Nonnegative values | Main distinction |
-|---|---|---|
-| E2M1 | 0, 0.5, 1, 1.5, 2, 3, 4, 6 | Nonuniform spacing, with smaller gaps near zero |
-| E0M3 | 0, 1, 2, 3, 4, 5, 6, 7 | Uniform spacing |
-
-Both also represent the negative values. Each has 15 distinct numerical values
-in 16 codes because zero has redundant encodings. E0M3 here denotes the
-implemented signed uniform grid; it does not mean that three mantissa bits
-make every value more accurate than E2M1.
-
-The tradeoff depends on scaling. With an ideal maximum-fitting scale, E2M1
-places more resolution near zero, whereas E0M3 distributes resolution evenly
-across the range. Real block scales are also quantized, so rounding those scales
-can change which candidate is preferable. Different blocks can therefore
-benefit from different grids.
-
-The study uses two granularities:
-
-| Quantity | Granularity |
-|---|---|
-| Element representation | Four bits |
-| Block scale | One E4M3 scale per 16 elements |
-| Format choice | One E0M3/E2M1 decision per 8×64 weight tile |
-| Tensor normalization | Shared tensor-scale convention |
-
-An 8×64 tile contains 512 weights and 32 scale groups. Its format choice is
-shared by all those weights, while each 16-element group keeps its own scale.
-This constrains the search to legal tile changes rather than independent
-per-weight decisions. It also means that adding a format option does not
-increase the element width. The experiments do **not** establish the packed
-metadata cost or runtime speed of a production mixed-format kernel.
-
-The practical objective is to improve accuracy at this fixed quantization
-scope. A reduction of 0.01 absolute PPL already counts as worthwhile in this
-project; a method need not produce a dramatic percentage gain to be useful.
-
-## 2. Why a straightforward format election is insufficient
-
-### Local reconstruction does not measure the full task
-
-A natural selector compares the squared weight errors of the two candidates:
-
-$$
-\|Q_{E0M3}(W_b)-W_b\|_F^2
-\quad\text{and}\quad
-\|Q_{E2M1}(W_b)-W_b\|_F^2.
-$$
-
-This measures how well each candidate approximates the pristine weights.
-It does not account for which inputs reach the block or how its outputs affect
-the final prediction. Even at the linear-layer level, the output error is
-
-$$
-\mathbb E\|\Delta W x\|^2
-=\operatorname{tr}(\Delta W\,\mathbb E[xx^T]\,\Delta W^T),
-$$
-
-which depends on the input second moment. Replacing weight error with output
-error adds useful information, but still does not include the full downstream
-loss or interactions with other quantized blocks.
-
-The earlier mechanism experiments illustrate the distinction. High-energy
-input columns identified a useful region of the target model, but randomizing
-output-row groups within the selected regions lost much of the benefit.
-The input location alone was not a sufficient selector. Separately useful
-sets of corrections also did not combine additively. These observations
-motivated a task-level selector rather than a universal channel-index rule.
-See the [earlier mechanism findings](results/task_sensitivity_four_over_six/FINDINGS.md).
-
-### Scale improvements must be separated from format improvements
-
-MixFP4 can appear to help because its implementation searches more scales,
-even when the additional E0M3 representation is not responsible for the gain.
-We therefore used a strong fixed baseline and fixed candidate formulas:
-
-- **E2M1 baseline:** FourOverSix, choosing between normalization toward code 6
-  and code 4 independently in each scale group, using reconstruction error.
-- **E0M3 alternative:** maximum-fitting normalization toward code 7, with
-  alpha fixed at 1.
-- **Selection experiment:** change only the tile's candidate representation;
-  add no scale search, rotation, permutation, or weight training.
-
-FourOverSix's two E2M1 normalizations correspond to alpha values 1 and 1.5
-relative to normalization toward code 6. The candidates include the existing
-E4M3 scale rounding and saturation behavior. Thus the final experiment asks
-whether E0M3 can improve an already strong E2M1 baseline, not whether a weaker
-baseline can be beaten by giving one branch extra scale optimization.
-
-The implementation is in [quantizer.py](quantize/quantizer.py). Earlier scale
-search results motivated this control; their numerical gains should not be
-substituted for the type-selection results below.
-
-## 3. The selection method
-
-The central question is: **at the quantized model we will actually deploy,
-which finite E0M3 substitutions are likely to improve task loss?**
-
-Let $W^B$ denote the FourOverSix baseline and define the fixed candidate
-change for tile $b$ as
-
-$$
-\Delta W_b=Q_{E0M3}(W_b)-W^B_b.
-$$
-
-For calibration sequence $i$, calculate
-
-$$
-s_{i,b}=\left\langle
-\nabla_{W_b}\ell_i(W^B),\Delta W_b
-\right\rangle.
-$$
-
-Here $\ell_i$ is mean next-token negative log-likelihood (NLL), in nats per
-token. A negative score predicts that moving toward the E0M3 candidate reduces
-loss. Crucially, the gradient is evaluated at the **quantized baseline**, not
-the pristine model. It can identify corrections useful in the presence of the
-baseline's existing errors.
-
-The forward pass uses the actual fake-quantized weights and activations.
-Backward propagation uses an identity straight-through estimator (STE) through
-activation quantization. For a linear projection, its weight gradient is
-formed from the actual quantized input $X$ and output adjoint $D$ as
-$D^T X$, then reduced against $\Delta W_b$ per tile. Parameters remain
-frozen: this collects sensitivity scores, not trained weights.
-
-This is an approximate discrete-switch predictor. The STE does not make
-activation rounding differentiable in the ordinary sense, and a full switch
-can differ substantially from its first-order forecast.
-
-### Stable scores and a bounded proposal
-
-Across the fitting sequences, estimate the mean $\mu_b$ and standard error
-$SE_b$. A tile is eligible only when
-
-$$
-\mu_b+2SE_b<0.
-$$
-
-Rank eligible tiles by their mean, most negative first. Starting with budget
-$B=0.1$, take the largest ranked prefix satisfying
-
-$$
--\sum_{b\in S}\mu_b\le B.
-$$
-
-The budget is in predicted NLL units rather than a fixed number or fraction of
-tiles. This lets the same procedure select a different count on each model.
-The budget limits extrapolation empirically; it is not an upper bound on the
-actual loss change. The per-tile two-SE check is also a heuristic, not a
-multiple-comparison certificate over millions of tiles.
-
-### Backtracking on actual joint loss
-
-We then install the **entire proposed map** and evaluate its fitting loss.
-Let $\widehat\Delta=\sum_{b\in S}\mu_b$ be the predicted change, and let
-$\bar d$ and $SE_d$ describe the measured paired per-sequence NLL change.
-The fitting check requires
-
-$$
-\bar d+2SE_d<0,
-\qquad
-\frac{\bar d}{\widehat\Delta}\ge0.25.
-$$
-
-If either condition fails, halve the budget and construct a smaller prefix.
-There are at most eight attempts, with budgets $0.1\times2^{-k}$ for
-$k=0,\ldots,7$. If none succeeds, retain the baseline.
-
-Backtracking was the decisive repair. In the first Qwen3.8 C4 run:
-
-| Budget | E0M3 tiles | Predicted fitting ΔNLL | Measured fitting ΔNLL | Decision |
-|---|---:|---:|---:|---|
-| 0.1000 | 53,859 | -0.1000 | +0.09948 | Reject |
-| 0.0500 | 12,202 | -0.0500 | +0.02287 | Reject |
-| 0.0250 | 3,145 | -0.0250 | -0.00290 | Reject: only 11.6% of forecast |
-| 0.0125 | 905 | -0.01250 | -0.00611 | Pass: 48.9% of forecast |
-
-The second seed reproduced the initial wrong-direction prediction: predicted
--0.1, measured +0.09430. It also passed after shrinking the budget to 0.0125.
-Because these failures occurred on the fitting domain itself, matching the
-calibration domain alone could not solve the problem. The residual can include
-STE error, finite-step curvature, and interactions; these experiments do not
-uniquely assign the failure to one cause.
-
-### Independent acceptance
-
-After fitting selects one map, a separate validation set checks its actual
-NLL change once. Acceptance requires validation mean plus two SE below zero.
-A rejected map is preserved for analysis, but its export contains the baseline.
-Validation does not choose the backtracking budget, and held-out evaluation
-does not change the map or acceptance decision.
-
-The recommended C4 variant uses 64 fitting windows and 16 independent
-validation windows. Its operation can be summarized as:
-
-```text
-Construct the fixed FourOverSix baseline and E0M3 alternatives.
-Collect task-gradient tile scores on 64 C4 fitting windows.
-Keep tiles with mean + 2 SE < 0 and rank by predicted benefit.
-For budget = 0.1, 0.05, ..., 0.00078125:
-    Construct the prefix within the predicted-loss budget.
-    Measure the combined map on fitting data.
-    Stop when the paired improvement and prediction-ratio checks pass.
-Validate that frozen map once on 16 separate C4 windows.
-Export it if validation passes; otherwise export FourOverSix.
+## 5. Two deliberate differences from the released code
+
+Both make our baselines harder to beat, not easier.
+
+**Qwen `o_proj` inputs are quantized.** At the archived release commit
+`e230099`, `models/qmodule_qwen3.py` passed unquantized attention output into
+`o_proj`, so Qwen "W4A4" left one projection's input in BF16. The RaZeR author
+corrected this himself in commit `abab3c6`, after publication. We evaluate the
+corrected behaviour, so our Qwen FourOverSix baseline is 14.269062 WikiText
+where the pre-fix code gives 14.201942. Llama was never affected, and its rows
+match the released run to the last digit; that is the control which shows the
+difference comes only from that one line. Qwen rows here are therefore **not**
+comparable with the published RaZeR Qwen row.
+
+**NVFP4 saturation is clamped.** The archived `quant_nvfp4` used a rounding
+path with no E2M1 saturation clamp, so an FP8 subnormal block scale that rounded
+down could produce magnitude code 8, which is not a legal FP4 code. The current
+`quant_nvfp4` clamps to [-6, 6]. Baseline and method both use the corrected
+quantizer. Exact equality with the released NVFP4 run is therefore not expected
+and not asserted; the released values are recorded as a comparison in each
+report. The FourOverSix path is unchanged since the release and keeps a hard
+exact-equality assertion.
+
+## 6. The format
+
+MixFP4 is NVFP4 plus a second, coarser block granularity that selects the FP4
+element data type. The FP32 per-tensor global scale, the E4M3 block scale and
+the 16-element scale block are inherited from NVFP4 unchanged.
+
+A **scale block** is always 16 elements along K and owns one E4M3 scale. A
+**type block** is a 2-D tile that owns one element data type and contains many
+scale blocks. The two element types are **E2M1**, the standard FP4 grid with
+maximum magnitude 6, and **E0M3**, the evenly spaced signed grid with maximum
+magnitude 7. Both encode 15 distinct values in 16 codes and share the same
+ue4m3 scale; only the spacing differs, so the better choice depends on the
+distribution inside the tile.
+
+The tile shape is not free. The public NVFP4 path issues
+
+```
+mma.sync.aligned.kind::mxf4nvf4.block_scale.scale_vec::4X.m16n8k64.row.col.f32.e2m1.e2m1.f32.ue4m3
 ```
 
-This avoids an exhaustive search over tile combinations, but it still needs
-backward passes and a bounded number of joint forward evaluations. It is not
-a calibration-free or purely analytical performance predictor.
+and the same instruction can read either operand as E0M3. A single instruction
+cannot subdivide its operand tile, so for weights in operand B the smallest
+realizable type block is `n8 x k64`. All results here use exactly that 8x64
+weight tile, with alpha fixed at 1 on the E0M3 branch.
 
-## 4. Experimental design
+## 7. Why a weight-error election is insufficient
 
-The final domain study used native Transformers 5.16.1 implementations and
-matched baselines for each model. It quantized the selected text linear weights
-and their inputs to W4A4; the target's other native components, embeddings and
-language-model head retained their existing behavior. The smaller-model panel
-quantized non-head linear weights and inputs. Format decisions concerned
-**weights**; activation quantization stayed fixed at FourOverSix throughout.
+The natural selector compares the squared weight error of the two candidates
+per tile and takes the smaller. It measures how well a candidate approximates
+the pristine weights, not which inputs reach the block or how its outputs move
+the prediction. Even at one linear layer the output error is
 
-| Model | Calibration runs | Held-out Wiki windows | Held-out C4 documents | Math / code examples |
-|---|---|---:|---:|---:|
-| Qwen/Qwen3.8-27B | Seeds 20260912 and 20260913 | 127 | 256 | 128 / 128 |
-| Qwen3-4B | Seed 20260918 | 128 | 256 | 128 / 128 |
-| Llama-3.1-8B | Seed 20260918 | 123 | 256 | 128 / 128 |
+$$
+\mathbb E\|\Delta W x\|^2=\operatorname{tr}(\Delta W\,\mathbb E[xx^T]\,\Delta W^T),
+$$
 
-Wiki calibration uses disjoint regions of the training split for fitting,
-validation and diagnostic probes. Held-out Wiki uses the official raw
-validation split. C4 calibration uses distinct training documents; each
-qualifying document contributes one random 2,048-token window. Held-out C4
-uses 256 documents from a separate validation shard, with recorded document
-and token hashes. Calibration and evaluation C4 documents are hash-disjoint.
+which depends on the input second moment, and that still omits the downstream
+loss and interactions between quantized blocks. A weight-error gain of factor
+$g$ certifies an output-error reduction only when $g > 1-1/\kappa(S)$, and the
+measured conditioning of $S$ puts that threshold far above the gains available
+at a realizable tile size. This is why the election below is driven by a task
+loss rather than a reconstruction loss.
 
-Math and code use GSM8K and MBPP reference text. They are **uncalibrated domain
-stress tests of language-model loss**, not generated-answer accuracy, reasoning
-success, or code pass@k. Their main metric weights examples equally; the raw
-reports also contain token-weighted perplexity.
+MixFP4 can also appear to help merely because its implementation searches more
+scales. We therefore hold the scale search fixed: the E2M1 baseline is
+FourOverSix, the E0M3 alternative is fixed at alpha 1, and the experiment
+changes only the tile's element type. No rotation, permutation, scale search or
+weight training is added.
 
-The two target seeds share held-out examples. Different model tokenizers change
-Wiki window boundaries and can change which C4 documents satisfy the minimum
-length condition. All policy comparisons are paired on identical examples
-within a model. Native panel numbers must not be directly equated with older
-results obtained using copied model implementations or different evaluation
-splits.
+## 8. The selection method
 
-We evaluated six selection variants:
+Form the canonical FourOverSix Q0 and the E0M3-alpha1 Q1 once, so each 8x64
+tile j has a fixed difference D_j. At the unchanged FourOverSix W4A4 student,
+one forward per calibration sequence supports two backward passes, giving each
+tile a directional derivative for next-token cross entropy and for KL from the
+pristine BF16 teacher:
 
-| Rule | Fitting data / objective | Independent validation |
-|---|---|---|
-| Wiki | 64 Wiki windows, observed-token NLL | 16 Wiki windows |
-| C4 | 64 C4 windows, observed-token NLL | 16 C4 windows |
-| Mixed | 32 Wiki + 32 C4, pooled NLL scores and fitting loss | Pooled 8 + 8 windows |
-| Consensus | 32 Wiki + 32 C4, stable negative scores and measured fitting improvement in each domain | Each 8-window domain separately |
-| Teacher mixed | Same 32 + 32, teacher KL for scoring and fitting | Actual NLL on pooled 8 + 8 |
-| Teacher consensus | Same 32 + 32, per-domain teacher-KL checks | Actual NLL in each domain |
+    g_CE[i,j] = <grad_Wj CE_i, D_j>,   g_KL[i,j] = <grad_Wj KL(teacher||student)_i, D_j>.
 
-Consensus ranks eligible tiles by their worst domain mean score. Its joint
-fitting checks require a supported reduction and sufficient actual/predicted
-agreement separately in both domains. A worst-domain score budget alone does
-not bound the predicted change in every other domain.
+Activation quantization uses an identity straight-through derivative during
+scoring. With n calibration sequences,
 
-Teacher variants were tested on the two smaller models, using cached logits
-from their pristine, unquantized BF16 reference models. The fitting objective
-was $KL(p_{teacher}\|q_{quantized})$. Validation still checked actual NLL,
-so better imitation of the teacher could not override an NLL validation failure.
-This follow-up was motivated by fitting-score diagnostics before new held-out
-results were inspected.
+    u_j = max(mean(g_CE[:,j]) + 2 SE(g_CE[:,j]), mean(g_KL[:,j]) + 2 SE(g_KL[:,j])),
 
-The study contains 20 candidate maps and 80 candidate/domain evaluations.
-All proposals and acceptance decisions were frozen before their held-out
-evaluations. All heavy CPU work, GPU work, tests and numerical summaries ran
-through Slurm on H100 allocations. No H200 or login-node heavy compute was used.
+and the 256 most negative u_j are switched to E0M3. Requiring both objectives to
+favour a switch is the point of the maximum: for each objective separately, the
+sum of its estimated upper directional scores is bounded above by the sum of
+per-tile maxima, so one selection bounds both. This is an approximate predictor
+of a discrete switch, not a proof that a finite joint flip lowers the network
+loss, and two SE does not control the many tile comparisons simultaneously. The
+count 256 and the factor 2 are fixed empirical constants, never tuned per model
+or per destination dataset.
 
-## 5. Results: what transfers
+Calibration uses OpenWebMath and CodeParrot only. Neither evaluation corpus
+contributes gradients or any selection feedback.
 
-For these tables, **ΔPPL = candidate PPL − matched baseline PPL**. Negative is
-better. An absolute reduction of 0.01 is practically meaningful. Statistical
-support is reported separately through paired NLL mean ± two SE, transformed
-to PPL units. Those intervals are descriptive, not simultaneous guarantees.
+## 9. Limits
 
-### C4 calibration gives the strongest overall coverage
+- Simulated W4A4 on text linear weights and their inputs. No KV-cache
+  quantization, generation accuracy, or native FP4 kernel throughput is
+  measured, and no speedup is claimed.
+- Tensor-wide activation factors span the whole teacher-forced window, so these
+  are reference-text perplexities, not causal generation likelihoods.
+- Two-SE intervals are descriptive evaluation-window intervals. They do not
+  adjust for comparisons across the ten calibration settings, for WikiText
+  article dependence, or for calibration-draw variability; one calibration draw
+  per setting is used.
+- The 256-tile count is a fixed constant here. Evidence that the count/gain
+  curve has a model-dependent interior optimum exists only under the
+  512-token protocol and is deliberately excluded from this report until it is
+  re-measured under the aligned protocol.
+- Gradient selection, distillation and sparse optimization are established
+  tools. Their use here is not by itself a novelty claim.
 
-All four C4 maps passed independent validation. Their held-out changes were:
+## 10. Records not included in this report
 
-| Model / seed | E0M3 tiles | Final budget | Wiki ΔPPL | C4 ΔPPL | Math ΔPPL | Code ΔPPL |
-|---|---:|---:|---:|---:|---:|---:|
-| Qwen3.8-27B / 20260912 | 905 | 0.0125 | -0.1094 | -0.0500 | -0.0343 | -0.0462 |
-| Qwen3.8-27B / 20260913 | 864 | 0.0125 | -0.0775 | -0.0532 | -0.0199 | -0.0352 |
-| Qwen3-4B / 20260918 | 125 | 0.1000 | -1.9695 | -1.1781 | -0.4542 | -0.5216 |
-| Llama-3.1-8B / 20260918 | 2,924 | 0.0250 | -0.0452 | -0.0546 | -0.0342 | +0.0103 |
+These studies use protocols other than the aligned 2048-token one and are
+excluded from the tables above. Their records are retained.
 
-For scale, the target's Wiki baseline was 7.6890 PPL and its C4 baseline was
-10.2257. The first C4 map changed these to 7.5796 and 10.1758. Qwen3-4B changed
-from 15.2160 to 13.2465 on Wiki and from 17.8187 to 16.6406 on C4.
-
-All eight target cells and all four Qwen3-4B cells have intervals supporting
-improvement. On Llama, Wiki and C4 improvements are supported, while math and
-code are inconclusive. The Llama code interval is [-0.0565, +0.0778] PPL:
-the +0.0103 mean is not a verified gain, but neither is it confirmed harm.
-
-The 15/16 count describes point improvements of at least 0.01 PPL, not 15
-independent statistical confirmations. The final budget also varies by model;
-0.0125 should not be substituted for adaptive backtracking as a universal
-constant.
-
-On the target, there are 47,559,680 candidate weight tiles. Selecting 905 and
-864 corresponds to roughly 0.0019% and 0.0018% of them. Very sparse changes can
-therefore give useful gains; maximizing the fraction of E0M3 tiles is not the
-objective.
-
-### Wiki-only gains do not establish domain transfer
-
-The complete target comparison shows why Wiki performance alone was insufficient:
-
-| Rule | Wiki ΔPPL, seed 1 / seed 2 | C4 ΔPPL, seed 1 / seed 2 | Maps accepted |
-|---|---|---|---:|
-| Wiki | -0.3684 / -0.4088 | +0.0028 / +0.0064 | 2/2 |
-| C4 | -0.1094 / -0.0775 | -0.0500 / -0.0532 | 2/2 |
-| Mixed | -0.4509 / -0.4183 | -0.0026 / +0.0004 | 2/2 |
-| Consensus | -0.1781 / -0.2092 | -0.0209 / -0.0353 | 1/2 |
-
-Both Wiki-only C4 changes are inconclusive and neither meets the 0.01 gain
-criterion. Mixed calibration mainly strengthens Wiki: equal sample counts did
-not produce meaningful C4 gains on this model. In seed one, mixed beats the
-Wiki map by a paired -0.01133 ± 0.00232 NLL on Wiki, but its C4 contrast with
-the Wiki map is inconclusive. Pooling can improve the aggregate objective
-without improving the weaker domain.
-
-Consensus produces useful candidate changes in both target domains, but the
-second map failed validation: its favorable means were too uncertain in eight
-windows per domain. Its later held-out gains belong to the **candidate**, not
-the exported baseline. This distinction matters when comparing procedures.
-
-### Broad comparisons and the code counterexamples
-
-| Rule | Candidate cases with ≥0.01 PPL gain | Cases with supported improvement | Cases with supported harm | Accepted maps |
-|---|---:|---:|---:|---:|
-| Wiki | 13/16 | 12/16 | 1/16 | 4/4 |
-| C4 | 15/16 | 14/16 | 0/16 | 4/4 |
-| Mixed | 13/16 | 13/16 | 0/16 | 4/4 |
-| Consensus | 15/16 | 13/16 | 0/16 | 2/4 |
-| Teacher mixed | 7/8 | 6/8 | 0/8 | 1/2 |
-| Teacher consensus | 6/8 | 5/8 | 1/8 | 2/2 |
-
-Teacher rows cover only the two smaller models and are not a matched 16-case
-comparison. Counts include rejected candidates; an exported fallback has zero
-change from baseline, not the candidate's measured gain. Repeated target seeds
-also share evaluation data.
-
-No tested procedure established useful improvement everywhere. Two clear
-counterexamples are particularly informative:
-
-- The accepted Wiki map on Llama increased code PPL by **0.1078**, with an
-  interval of [+0.0404, +0.1760], despite improving Wiki, C4 and math.
-- Accepted teacher-consensus on Qwen3-4B increased code PPL by **0.1850**, with
-  an interval of [+0.0298, +0.3426], despite passing Wiki/C4 validation.
-
-These are measured failures on an uncalibrated domain. They rule out treating
-Wiki/C4 acceptance, or teacher fidelity, as an automatic certificate for code.
-
-![Absolute perplexity changes for all candidates, with paired uncertainty and rejected exports marked by crosses.](results/task_sensitivity_domains/comparison.png)
-
-## 6. What the diagnostics explain—and what they do not
-
-### Useful selections depend on the calibration distribution
-
-The target's Wiki and C4 maps shared only 10 tiles in seed one and 14 in seed
-two, giving Jaccard overlaps near 0.009 and 0.012. However, the C4 maps improved
-Wiki too. Low overlap therefore demonstrates different useful selections; it
-does not prove that the domains require inherently conflicting optimal maps.
-
-We also tested 15 selected tiles per target seed individually on reserved
-eight-window probes in each domain. Point-sign agreement between forecast and
-measurement was only about half, but almost all effects were inconclusive.
-No probe established a stable wrong-sign effect. The small, deliberately
-selected probe sample cannot estimate a global tile error rate or settle the
-mechanism of domain conflict.
-
-### Score alignment and noise differ across models
-
-Using 64 fitting windows per domain, Wiki/C4 score-vector cosines were about
-0.038 and 0.033 for the two target seeds, 0.795 for Qwen3-4B, and 0.276 for
-Llama. Within-C4 split-half cosines were approximately 0.219, 0.961 and 0.204
-for those model groups. Weak cross-domain alignment on the target coexists
-with considerable within-domain sampling variability.
-
-This helps explain why a single scalar summary of score disagreement cannot
-decide whether a format change will generalize. It also makes the useful
-four-domain transfer on Qwen3-4B less surprising, but it is an association,
-not a causal proof or a new validated selector.
-
-### Teacher KL did not provide a universal repair
-
-For observed-token NLL, the logit gradient is $q-\mathrm{onehot}(y)$.
-For teacher KL it is $q-p$. Removing the observed-token residual suggested
-a hypothesis: teacher probabilities might provide a less noisy measure of
-quantization damage.
-
-The result was model-dependent. On Qwen3-4B at matched 32-window budgets,
-cross-domain cosine fell from 0.775 for NLL to 0.350 for teacher KL. The C4
-ratio $\sum SE_b^2/\sum\mu_b^2$ rose from 0.051 to 0.496. On Llama,
-alignment improved and this noise-scale estimate decreased, but accuracy did
-not become uniformly better. The ratio is descriptive, not a certified
-fraction of noise. Together with the code regression, these measurements do
-not support replacing actual-NLL selection with teacher KL as the default.
-
-## 7. What “universal” can reasonably mean
-
-The experiments support reusing the **procedure**: construct candidates at the
-deployment baseline, estimate task sensitivity, limit the proposed change,
-measure its actual effect, and validate independently. They do not support
-reusing the same tile identities, a fixed tile quota, or one final budget.
-
-An unconditional improvement for every possible text/label distribution is
-also too strong a requirement. If two normalized next-token distributions
-differ, at least one token has lower probability under the changed model.
-A distribution concentrated on that context and token would have worse log
-loss. This does not prevent broad practical gains on real workloads; it
-clarifies why evidence must refer to specified domains.
-
-If a fixed map's **true expected NLL change** is nonpositive separately in
-each declared domain, its change is nonpositive on any fixed mixture of those
-domains by linearity of expectation. Our finite-sample two-SE checks do not
-prove that premise, and the identity does not cover a new domain outside the
-mixture. The [guarantee analysis](results/task_sensitivity_four_over_six/GUARANTEE.md)
-discusses the assumptions needed for stronger certification.
-
-## 8. Implementation, validation, and reproducibility
-
-The final experiment uses fake quantization to evaluate accuracy with native
-model behavior. It does not benchmark a packed mixed-format inference kernel,
-latency, memory bandwidth, long-context generation, or task decoding accuracy.
-Small perplexity gains should not be converted into throughput or reasoning
-claims.
-
-Model revisions, dataset revisions, token fingerprints, quantized module
-shapes, maps, validation decisions, and per-example losses are recorded in
-the raw reports. Native baseline checks reproduced the required reference
-losses. Structural tests covered moment pooling, consensus eligibility and
-fallback behavior; teacher-loss checks covered its gradient and normalization.
-All summary calculations and plot generation completed on Slurm allocations.
-
-An attempted scoring placement optimization was rejected by an exact score
-comparison and disabled. The reported experiments use the original scoring
-backend. Intermediate failures are documented rather than mixed into the
-final numerical results.
-
-| Artifact | Purpose |
-|---|---|
-| [Final numerical report](results/task_sensitivity_domains/REPORT.md) | All 80 candidate/domain cells, intervals, contrasts and acceptance decisions |
-| [Summary CSV](results/task_sensitivity_domains/summary.csv) | Absolute and relative PPL changes, uncertainty and the 0.01 criterion |
-| [Hypotheses](results/task_sensitivity_domains/HYPOTHESES.md) | Motivation and competing explanations declared during experiment design |
-| [Execution notes](results/task_sensitivity_domains/RUN_NOTES.md) | Provenance checks, unsuccessful setup attempts and scheduling changes |
-| [Target runner](run_domain_sensitivity.py) | Two-seed calibration, finite-step checks and held-out evaluation |
-| [Model panel](run_domain_panel.py) | Matched native model transfer experiments |
-| [Teacher follow-up](run_domain_teacher.py) | Teacher-KL hypotheses with actual-NLL validation |
-| [Summary generator](summarize_domain_sensitivity.py) | Paired tables, CSVs and figure |
-
-The accepted C4 type maps are under `results/task_sensitivity_domains/`:
-`seed20260912/c4_export.json`, `seed20260913/c4_export.json`,
-`panel/qwen3-4b/c4_export.json`, and
-`panel/llama-3.1-8b-local/c4_export.json`. They must be applied to the same
-pristine source weights, with the recorded activation configuration and the
-appropriate native or generic map loader. Rejected candidates are retained
-separately for analysis. Large score checkpoints are gitignored; the committed
-JSON reports and scripts preserve the experimental record and regeneration
-procedure.
-
-## 9. Practical conclusion and next experiments
-
-For the tested setting, C4 task-gradient selection with backtracking is the
-best starting point when broad transfer and acceptance rate matter. It is not
-the winner on every individual metric: mixed calibration yields larger target
-Wiki gains, and consensus can be stronger on Qwen3-4B. The common improvement
-over a raw selector is to respect the actual quantized baseline and verify
-the combined finite change.
-
-The next unresolved problem is reliable coverage of domains such as code.
-A useful follow-up would add code to independently split calibration and
-validation data, preserve fresh held-out tests, and size validation to resolve
-0.01 PPL differences. Larger validation budgets may also reduce the rejection
-of useful consensus candidates. These are proposed experiments, not fixes
-already established by this study.
-
-MixFP4 works here because a small number of carefully selected E0M3 switches
-can improve the quantized network's task loss. The evidence favors **adaptive,
-measured selection** over choosing a format from weight shape alone or assuming
-that gains on one dataset will carry over everywhere.
+- [Pooled calibration transfer panel](results/transfer_rule/REPORT.md) and
+  [held-out C4](results/c4_frozen/REPORT_332781.md): 512-token windows, causal
+  per-token activation factors, C4 among the calibration sources.
+- [Qwen3.8-27B pooled extension](results/pooled_qwen27b/model_332840/REPORT.md).
+- [Tile-count sweep](results/cap_sweep/REPORT.md) and
+  [calibration-chosen count](results/adaptive_count/REPORT.md): 512-token.
+- [Adaptive-count study](results/math_code_adaptive/summary_333786_333788/REPORT.md):
+  512-token evaluation of the curvature-penalised selector.
+- [Earlier format exploration](results/MIXFP4_REPORT.md) and
+  [decision-rule rounds](results/DECIDE_SUMMARY.md).
