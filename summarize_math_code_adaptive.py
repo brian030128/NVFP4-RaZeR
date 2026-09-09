@@ -60,6 +60,23 @@ def performance_table(model,r):
             fields += [str(r['block_statistics'][policy]['selected_blocks']),
                        *(f'{v:.6f}' for v in values),f'{sum(values)/2:.6f}']
         lines.append('| '+' | '.join(fields)+' |')
+    lines+=['','**Fixed-256 ΔPPL versus FourOverSix:** method PPL minus baseline PPL, '
+        'in absolute PPL units. Negative is better; positive is a regression. '
+        'All settings select 256 E0M3 type blocks. Average ΔPPL compares the arithmetic means of Wiki/C4 PPL.','',
+        '| Calibration | Fixed-256 Wiki ΔPPL | Fixed-256 C4 ΔPPL | Fixed-256 average ΔPPL |',
+        '|---|---:|---:|---:|']
+    baseline=[r['evaluation']['four_over_six'][d]['ppl'] for d in DOMAINS]
+    baseline+=[sum(baseline)/2]
+    for setting in source_subsets():
+        fields=[setting]
+        for mode in ('fixed256',):
+            policy=f'{mode}_{setting}'
+            if policy not in r['evaluation']:
+                fields+=['—']*3; continue
+            values=[r['evaluation'][policy][d]['ppl'] for d in DOMAINS]
+            values+=[sum(values)/2]
+            fields += [f'{v-b:+.6f}' for b,v in zip(baseline,values)]
+        lines.append('| '+' | '.join(fields)+' |')
     return lines
 
 
@@ -119,6 +136,8 @@ def main():
                     assert v['origin']['first_window_absolute_error']<=1e-6
                 cells.append(dict(model=model,policy=p,dataset=d,ppl=v['ppl'],
                     baseline_ppl=r['evaluation']['four_over_six'][d]['ppl'],**contrast,
+                    ppl_improvement=r['evaluation']['four_over_six'][d]['ppl']-v['ppl'],
+                    ppl_improvement_percent=100*(1-v['ppl']/r['evaluation']['four_over_six'][d]['ppl']),
                     selected_e0m3_type_blocks=s['selected_blocks'],selected_fraction=s['selected_fraction'],
                     calibration_sequences=s.get('calibration_sequences',0),reused=v['origin']['reused'],report=str(path)))
     with (out/'cells.csv').open('w') as stream:

@@ -31,6 +31,21 @@ Counts are **8x64 E0M3 type blocks**, each containing 512 weights and 32 distinc
 | math_code64 | 64 | 1 | 19.397059 | 21.909817 | 20.653438 | 256 | 17.436687 | 20.991402 | 19.214044 |
 | math_code128 | 128 | 1 | 19.397059 | 21.909817 | 20.653438 | 256 | 17.426627 | 20.940578 | 19.183602 |
 
+**Fixed-256 ΔPPL versus FourOverSix:** method PPL minus baseline PPL, in absolute PPL units. Negative is better; positive is a regression. All settings select 256 E0M3 type blocks. Average ΔPPL compares the arithmetic means of Wiki/C4 PPL.
+
+| Calibration | Fixed-256 Wiki ΔPPL | Fixed-256 C4 ΔPPL | Fixed-256 average ΔPPL |
+|---|---:|---:|---:|
+| math16 | -0.907396 | -0.517952 | -0.712674 |
+| math32 | -1.285887 | -0.737873 | -1.011880 |
+| math64 | -1.394283 | -0.808280 | -1.101281 |
+| code16 | -2.046484 | -0.904172 | -1.475328 |
+| code32 | -2.165290 | -0.988381 | -1.576836 |
+| code64 | -2.299361 | -1.073696 | -1.686528 |
+| math_code16 | -1.495006 | -0.787878 | -1.141442 |
+| math_code32 | -1.961882 | -0.931777 | -1.446829 |
+| math_code64 | -1.978209 | -0.936841 | -1.457525 |
+| math_code128 | -1.988270 | -0.987665 | -1.487968 |
+
 ### Llama-3.1-8B
 
 | Calibration | Sequences | Adaptive E0M3 blocks | Adaptive Wiki PPL | Adaptive C4 PPL | Adaptive average | Fixed E0M3 blocks | Fixed Wiki PPL | Fixed C4 PPL | Fixed average |
@@ -46,6 +61,21 @@ Counts are **8x64 E0M3 type blocks**, each containing 512 weights and 32 distinc
 | math_code64 | 64 | 1 | 9.084794 | 11.615502 | 10.350148 | 256 | 9.028759 | 11.539653 | 10.284206 |
 | math_code128 | 128 | 2 | 9.088794 | 11.587583 | 10.338189 | 256 | 9.028599 | 11.513102 | 10.270851 |
 
+**Fixed-256 ΔPPL versus FourOverSix:** method PPL minus baseline PPL, in absolute PPL units. Negative is better; positive is a regression. All settings select 256 E0M3 type blocks. Average ΔPPL compares the arithmetic means of Wiki/C4 PPL.
+
+| Calibration | Fixed-256 Wiki ΔPPL | Fixed-256 C4 ΔPPL | Fixed-256 average ΔPPL |
+|---|---:|---:|---:|
+| math16 | -0.037588 | -0.044259 | -0.040923 |
+| math32 | -0.050657 | -0.074326 | -0.062491 |
+| math64 | -0.062062 | -0.073985 | -0.068023 |
+| code16 | -0.040842 | -0.059707 | -0.050274 |
+| code32 | -0.054506 | -0.061811 | -0.058159 |
+| code64 | -0.049685 | -0.046868 | -0.048277 |
+| math_code16 | -0.042974 | -0.054447 | -0.048711 |
+| math_code32 | -0.043764 | -0.055262 | -0.049513 |
+| math_code64 | -0.064175 | -0.060456 | -0.062315 |
+| math_code128 | -0.064335 | -0.087006 | -0.075671 |
+
 ### Qwen3.8-27B
 
 | Calibration | Sequences | Adaptive E0M3 blocks | Adaptive Wiki PPL | Adaptive C4 PPL | Adaptive average | Fixed E0M3 blocks | Fixed Wiki PPL | Fixed C4 PPL | Fixed average |
@@ -60,6 +90,21 @@ Counts are **8x64 E0M3 type blocks**, each containing 512 weights and 32 distinc
 | math_code32 | 32 | 2 | 9.040062 | 12.647666 | 10.843864 | 256 | 9.006973 | 12.643467 | 10.825220 |
 | math_code64 | 64 | 6 | 9.038289 | 12.650116 | 10.844203 | 256 | 9.013104 | 12.643789 | 10.828447 |
 | math_code128 | 128 | 1 | 9.042556 | 12.650176 | 10.846366 | 256 | 9.005556 | 12.635394 | 10.820475 |
+
+**Fixed-256 ΔPPL versus FourOverSix:** method PPL minus baseline PPL, in absolute PPL units. Negative is better; positive is a regression. All settings select 256 E0M3 type blocks. Average ΔPPL compares the arithmetic means of Wiki/C4 PPL.
+
+| Calibration | Fixed-256 Wiki ΔPPL | Fixed-256 C4 ΔPPL | Fixed-256 average ΔPPL |
+|---|---:|---:|---:|
+| math16 | -0.014464 | -0.014911 | -0.014688 |
+| math32 | -0.008604 | +0.004930 | -0.001837 |
+| math64 | -0.028348 | -0.012919 | -0.020633 |
+| code16 | -0.020060 | +0.005886 | -0.007087 |
+| code32 | -0.032317 | +0.000967 | -0.015675 |
+| code64 | -0.023678 | -0.005013 | -0.014345 |
+| math_code16 | -0.007929 | -0.000738 | -0.004334 |
+| math_code32 | -0.033935 | -0.001510 | -0.017722 |
+| math_code64 | -0.027805 | -0.001188 | -0.014496 |
+| math_code128 | -0.035352 | -0.009584 | -0.022468 |
 
 ### Adaptive objective, counts, and fractions
 
