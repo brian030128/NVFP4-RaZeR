@@ -1,0 +1,26 @@
+#!/bin/bash
+# Transparent `singularity` shim that drops --fakeroot.
+#
+# harbor's singularity environment always passes --fakeroot (see
+# harbor/environments/singularity/singularity.py, _start_server). On this cluster that flag is
+# fatal rather than helpful: it forces the unprivileged user-namespace path, which then
+#   1. mounts the SIF with squashfuse -o allow_other, refused because /etc/fuse.conf has
+#      user_allow_other commented out, and
+#   2. falls back to extracting the SIF to a sandbox, which needs a /etc/subuid mapping this
+#      account does not have -- "could not use fakeroot: no mapping entry found in /etc/subuid".
+#
+# singularity-ce 4.1.2 here is installed setuid (starter-suid present, `allow setuid = yes`), so
+# without --fakeroot the setuid starter loop-mounts the SIF directly: no FUSE, no subuid, and
+# --writable-tmpfs still gives the container a writable overlay. The cost is that processes
+# inside run as the invoking user rather than as root, so a task that needs real root (apt-get
+# into the image, chown, mount) fails inside the container instead of at startup.
+#
+# Put this directory first on PATH; every other argument is passed through untouched.
+args=()
+for a in "$@"; do
+    if [[ "$a" == "--fakeroot" || "$a" == "-f" ]]; then
+        continue
+    fi
+    args+=("$a")
+done
+exec /usr/bin/singularity "${args[@]}"
