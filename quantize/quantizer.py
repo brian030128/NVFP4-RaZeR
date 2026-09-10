@@ -2046,3 +2046,55 @@ def quant_act(act, quant_config: QuantConfig):
             return out.index_select(-1, inv)
 
     return quant_func(act, n_bits=n_bits, groupsize=a_groupsize)
+
+
+@torch.no_grad()
+def quant_nvfp4_4over6_pair(w_fp, n_bits: int = 4, groupsize: Optional[int] = None):
+    """FourOverSix, plus the per-scale-block alternative it did not choose.
+
+    Returns (selected, flipped, select_4) where `selected` is bit-identical to
+    quant_nvfp4_4over6 and `flipped` takes the other alpha in every scale block.
+    The difference of the two is the candidate step for a task-gradient rule that
+    replaces the reconstruction-error choice made at `select_4`.
+    """
+    quant_value = sorted([0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0])
+    mid_value = [(quant_value[i] + quant_value[i + 1]) / 2 for i in range(len(quant_value) - 1)]
+
+    orig_shape = w_fp.shape
+    w_fp_new = w_fp.reshape(-1, groupsize).to(torch.float32)
+
+    qmax_6 = 6.0
+    qmax_4 = 4.0
+    global_scale = w_fp_new.abs().amax() / (qmax_6 * 448)
+    w_scaled = w_fp_new / global_scale
+    w_dq_sign = w_scaled.sign()
+    block_scale = w_scaled.abs().amax(dim=-1, keepdim=True)
+
+    def scale_for(qmax):
+        return (block_scale / qmax).clamp(
+            max=torch.finfo(torch.float8_e4m3fn).max, min=2 ** (-9)
+        ).to(torch.float8_e4m3fn).to(w_scaled.dtype)
+
+    def codes_for(scaled):
+        out = torch.zeros_like(w_scaled)
+        for i, data in enumerate(quant_value):
+            if i == 0:
+                out += torch.where(scaled <= mid_value[i], data, 0)
+            elif i == len(quant_value) - 1:
+                out += torch.where(scaled > mid_value[i - 1], data, 0)
+            else:
+                out += torch.where((mid_value[i - 1] < scaled) & (scaled <= mid_value[i]), data, 0)
+        return out * w_dq_sign
+
+    block_scale_6, block_scale_4 = scale_for(qmax_6), scale_for(qmax_4)
+    w_q_6 = codes_for((w_scaled / block_scale_6).abs())
+    w_q_4 = codes_for((w_scaled / block_scale_4).abs())
+    error_6 = ((w_q_6 * block_scale_6 - w_scaled) ** 2).sum(dim=-1)
+    error_4 = ((w_q_4 * block_scale_4 - w_scaled) ** 2).sum(dim=-1)
+    select_4 = (error_4 < error_6)[:, None]
+
+    chosen = torch.where(select_4, w_q_4 * block_scale_4, w_q_6 * block_scale_6) * global_scale
+    other = torch.where(select_4, w_q_6 * block_scale_6, w_q_4 * block_scale_4) * global_scale
+    return (chosen.view(orig_shape).to(torch.bfloat16),
+            other.view(orig_shape).to(torch.bfloat16),
+            select_4.reshape(-1))
