@@ -68,8 +68,30 @@ grep -q '^root:' /etc/passwd 2>/dev/null || \
     echo 'root:x:0:0:root:/root:/bin/bash' >> /etc/passwd 2>/dev/null
 grep -q '^root:' /etc/group 2>/dev/null || echo 'root:x:0:' >> /etc/group 2>/dev/null
 
+# --- 5. tmux, which dpkg cannot install onto this overlay -------------------------------------
+# The terminal agents drive a tmux session, and the task images do not ship tmux. Installing it
+# with apt fails even with the dpkg options above:
+#   dpkg: error processing archive .../tmux_3.5a-3_amd64.deb (--unpack):
+#    unable to install new version of './usr/share/doc/tmux': Invalid cross-device link
+# dpkg unpacks by renaming into place, and a rename onto singularity's overlay returns EXDEV.
+# path-exclude does not avoid it either, because the directory itself is still renamed. So the
+# packages are downloaded and extracted directly with dpkg-deb -x, which just writes files and
+# never renames. tmux is not registered in the dpkg database this way, which does not matter --
+# nothing here queries it, and the container is discarded after the trial.
+if ! command -v tmux > /dev/null 2>&1 && command -v apt-get > /dev/null 2>&1; then
+    apt-get update -qq > /dev/null 2>&1
+    # --download-only puts tmux AND its dependencies in the archive cache without unpacking.
+    apt-get install -y --download-only tmux > /dev/null 2>&1
+    for _deb in /var/cache/apt/archives/*.deb; do
+        [ -f "$_deb" ] && dpkg-deb -x "$_deb" / 2>/dev/null
+    done
+    unset _deb
+    ldconfig 2>/dev/null || true
+fi
+
 # One line in the trial log, so a future failure can be told apart from the prelude not running
-# at all -- which is exactly the ambiguity that cost a debugging round here.
-echo "[harbor-prelude] applied: python3=$(command -v python3 2>/dev/null) su=$(command -v su 2>/dev/null) uid=$(id -u)" >&2
+# at all. Note the caller must NOT redirect this away -- an earlier version sourced the prelude
+# with 2>/dev/null and spent a debugging round unable to tell the two cases apart.
+echo "[harbor-prelude] applied: python3=$(command -v python3 2>/dev/null) su=$(command -v su 2>/dev/null) tmux=$(command -v tmux 2>/dev/null) uid=$(id -u)" >&2
 
 true    # never let a failed repair abort the bootstrap

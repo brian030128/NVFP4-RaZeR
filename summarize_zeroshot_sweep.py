@@ -190,19 +190,20 @@ def main():
         for lbl, first, second, diff in repeats:
             lines.append(f"| {lbl} | {fmt(first)} | {fmt(second)} | {fmt(diff, signed=True)} |")
         worst = max(abs(d) for _, _, _, d in repeats)
-        qwen = [d for lbl, _, _, d in repeats if lbl.startswith("Qwen")]
-        llama = [d for lbl, _, _, d in repeats if lbl.startswith("Llama")]
+        drifting = [lbl for lbl, _, _, d in repeats if d != 0]
+        exact = [lbl for lbl, _, _, d in repeats if d == 0]
         lines += [
             "",
-            f"The spread is up to **{worst:.4f}**, and it is not random across the panel: "
-            + ("every Qwen model reproduces exactly while every Llama drifts"
-               if qwen and llama and all(d == 0 for d in qwen) and all(d != 0 for d in llama)
-               else "it differs by model")
-            + ". The likely mechanism is that the two runs evaluate the configuration in a "
-              "different order, so allocator and cuBLAS state differ, and tiny logit differences "
-              "flip multiple-choice items that were near ties. Whatever the cause, a delta of "
-              "this size on a Llama is not evidence of anything, which is why the paired test "
-              "below matters more than the table above.",
+            f"The spread reaches **{worst:.4f}**, and it is a property of the model rather than "
+            f"of the run: {', '.join(exact)} reproduce exactly, while "
+            f"{', '.join(drifting)} do not. The likely mechanism is that the two runs reach this "
+            "configuration in a different order, so allocator and cuBLAS state differ, and tiny "
+            "logit differences flip multiple-choice items that were already near ties -- which "
+            "also explains why the models that drift are the ones with the most near ties. "
+            f"Whatever the cause, a delta of {worst:.4f} on "
+            + (drifting[0] if len(drifting) == 1 else "one of those models")
+            + " is not evidence of anything, and several deltas in the table above are that "
+              "size. That is what the paired test below is for.",
             "",
         ]
 
@@ -237,7 +238,24 @@ def main():
         for lbl, header, pl in paired_rows:
             lines.append(f"| {lbl} | {header} | {pl['n']} | {pl['b']} | {pl['c']} | "
                          f"{fmt(pl['delta'], signed=True)} | {pl['p']:.3g} |")
-        lines.append("")
+        n_tests = len(paired_rows)
+        sig = [(lbl, h, pl) for lbl, h, pl in paired_rows if pl["p"] < 0.05]
+        bonf = [(lbl, h, pl) for lbl, h, pl in paired_rows if pl["p"] < 0.05 / n_tests]
+        lines += [
+            "",
+            f"{n_tests} tests were run, so the 0.05 threshold is worth {0.05 / n_tests:.4f} "
+            f"after a Bonferroni correction. "
+            + (f"Uncorrected, {len(sig)} row(s) fall below 0.05: "
+               + ", ".join(f"{lbl} {h} (p = {pl['p']:.3g})" for lbl, h, pl in sig) + ". "
+               if sig else "No row falls below 0.05 even uncorrected. ")
+            + (f"Corrected, {len(bonf)} survive"
+               + (": " + ", ".join(f"{lbl} {h}" for lbl, h, pl in bonf) if bonf else "")
+               + ".")
+            + " Read the table accordingly: it is evidence about the SIZE of these effects, and "
+              "the honest summary of that size is that it is small enough to need 18,600 "
+              "documents to see at all.",
+            "",
+        ]
 
     # --- per-task detail, so a panel mean cannot hide a single task doing all the work ---------
     lines += ["<details>", "<summary>Per-task accuracy</summary>", ""]

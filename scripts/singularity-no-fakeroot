@@ -42,7 +42,9 @@ BOOTSTRAP='exec /staging/bootstrap.sh "$@"'
 PRELUDE_CMD=""
 if [[ -f "$PRELUDE_SRC" ]]; then
     _b64=$(base64 -w0 < "$PRELUDE_SRC" 2>/dev/null || base64 < "$PRELUDE_SRC" | tr -d '\n')
-    PRELUDE_CMD="printf %s '$_b64' | base64 -d > /harbor-prelude.sh 2>/dev/null; . /harbor-prelude.sh 2>/dev/null; "
+    # stderr is deliberately NOT discarded here: the prelude's one status line is the only way
+    # to tell "the prelude did not run" from "it ran and did not help" in a trial log.
+    PRELUDE_CMD="printf %s '$_b64' | base64 -d > /harbor-prelude.sh 2>/dev/null; . /harbor-prelude.sh; "
 fi
 
 args=()

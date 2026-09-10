@@ -49,10 +49,11 @@ Positive is better here -- the opposite sign convention from the perplexity tabl
 |---|---|---|---|
 | Llama-3.1-8B | 0.6654 | 0.6639 | -0.0016 |
 | Llama-3.1-8B-Ins | 0.6749 | 0.6758 | +0.0010 |
+| Llama-3.2-1B-Ins | 0.5202 | 0.5202 | +0.0000 |
 | Qwen3-8B | 0.6674 | 0.6674 | +0.0000 |
 | Qwen3-14B | 0.7040 | 0.7040 | +0.0000 |
 
-The spread is up to **0.0016**, and it is not random across the panel: every Qwen model reproduces exactly while every Llama drifts. The likely mechanism is that the two runs evaluate the configuration in a different order, so allocator and cuBLAS state differ, and tiny logit differences flip multiple-choice items that were near ties. Whatever the cause, a delta of this size on a Llama is not evidence of anything, which is why the paired test below matters more than the table above.
+The spread reaches **0.0016**, and it is a property of the model rather than of the run: Llama-3.2-1B-Ins, Qwen3-8B, Qwen3-14B reproduce exactly, while Llama-3.1-8B, Llama-3.1-8B-Ins do not. The likely mechanism is that the two runs reach this configuration in a different order, so allocator and cuBLAS state differ, and tiny logit differences flip multiple-choice items that were already near ties -- which also explains why the models that drift are the ones with the most near ties. Whatever the cause, a delta of 0.0016 on one of those models is not evidence of anything, and several deltas in the table above are that size. That is what the paired test below is for.
 
 ### Paired test against `nvfp4`
 
@@ -63,9 +64,15 @@ Both configurations are scored on the same documents, so the comparison is paire
 | Llama-3.1-8B | `hess_h1.5` | 18627 | 663 | 769 | +0.0057 | 0.00551 |
 | Llama-3.1-8B | `hess_impg16_h10` | 18627 | 573 | 554 | -0.0010 | 0.592 |
 | Llama-3.1-8B-Ins | `hess_h1.5` | 18627 | 585 | 633 | +0.0026 | 0.178 |
+| Llama-3.1-8B-Ins | `hess_impg16_h10` | 18627 | 523 | 472 | -0.0027 | 0.113 |
+| Llama-3.2-1B-Ins | `hess_h1.5` | 18627 | 1013 | 1021 | +0.0004 | 0.877 |
+| Llama-3.2-1B-Ins | `hess_impg16_h10` | 18627 | 866 | 843 | -0.0012 | 0.595 |
 | Qwen3-8B | `hess_h1.5` | 18627 | 640 | 690 | +0.0027 | 0.179 |
 | Qwen3-8B | `hess_impg16_h10` | 18627 | 545 | 563 | +0.0010 | 0.61 |
 | Qwen3-14B | `hess_h1.5` | 18627 | 513 | 585 | +0.0039 | 0.0321 |
+| Qwen3-14B | `hess_impg16_h10` | 18627 | 443 | 439 | -0.0002 | 0.92 |
+
+10 tests were run, so the 0.05 threshold is worth 0.0050 after a Bonferroni correction. Uncorrected, 2 row(s) fall below 0.05: Llama-3.1-8B `hess_h1.5` (p = 0.00551), Qwen3-14B `hess_h1.5` (p = 0.0321). Corrected, 0 survive. Read the table accordingly: it is evidence about the SIZE of these effects, and the honest summary of that size is that it is small enough to need 18,600 documents to see at all.
 
 <details>
 <summary>Per-task accuracy</summary>
