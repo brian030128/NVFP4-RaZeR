@@ -32,8 +32,18 @@ set -u
 
 SELF=$(readlink -f "${BASH_SOURCE[0]}")
 PRELUDE_SRC=$(dirname "$SELF")/harbor-container-prelude.sh
-PRELUDE_DST=/harbor-prelude.sh
 BOOTSTRAP='exec /staging/bootstrap.sh "$@"'
+
+# The prelude is carried INSIDE the command string, base64-encoded, rather than bind-mounted.
+# A bind was the obvious approach and silently did not work: singularity skips a bind whose
+# destination does not exist in the image, without failing, so the container came up with the
+# prelude absent and the same in-container errors as before -- indistinguishable from the
+# prelude running and not helping. Encoding it removes the failure mode entirely.
+PRELUDE_CMD=""
+if [[ -f "$PRELUDE_SRC" ]]; then
+    _b64=$(base64 -w0 < "$PRELUDE_SRC" 2>/dev/null || base64 < "$PRELUDE_SRC" | tr -d '\n')
+    PRELUDE_CMD="printf %s '$_b64' | base64 -d > /harbor-prelude.sh 2>/dev/null; . /harbor-prelude.sh 2>/dev/null; "
+fi
 
 args=()
 for a in "$@"; do
@@ -42,25 +52,13 @@ for a in "$@"; do
             continue                        # see (1)
             ;;
         "$BOOTSTRAP")
-            # Source the repairs in the same shell, then hand over to harbor unchanged.
-            args+=(". $PRELUDE_DST 2>/dev/null; $BOOTSTRAP")
+            # Apply the repairs in the same shell, then hand over to harbor unchanged.
+            args+=("${PRELUDE_CMD}${BOOTSTRAP}")
             continue
             ;;
     esac
     args+=("$a")
 done
-
-# Only bind the prelude for the container start that will actually source it. The flag has to
-# sit after the subcommand ("singularity exec -B ... image cmd"), not in front of it.
-if [[ -f "$PRELUDE_SRC" && ${#args[@]} -gt 0 ]]; then
-    need=0
-    for a in "${args[@]}"; do
-        [[ "$a" == *"$PRELUDE_DST"* ]] && need=1 && break
-    done
-    if [[ "$need" == "1" ]]; then
-        args=("${args[0]}" -B "$PRELUDE_SRC:$PRELUDE_DST:ro" "${args[@]:1}")
-    fi
-fi
 
 # Already root (a real root, or an outer userns someone else set up): nothing to map.
 if [[ "$(id -u)" == "0" ]]; then

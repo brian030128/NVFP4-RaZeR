@@ -40,6 +40,8 @@ fi
 # replaces su with a shim that skips the user/shell arguments and runs the command.
 # /usr/local/bin precedes /usr/bin on the Debian PATH, which is the same assumption harbor's
 # fake sudo already relies on.
+# Written to BOTH paths: harbor's server invokes a bare `su`, and the PATH its exec environment
+# uses is not guaranteed to put /usr/local/bin first, so /usr/bin/su is overridden as well.
 mkdir -p /usr/local/bin 2>/dev/null
 cat > /usr/local/bin/su <<'HARBOR_SU'
 #!/bin/bash
@@ -59,10 +61,15 @@ done
 exec "$shell"
 HARBOR_SU
 chmod 755 /usr/local/bin/su 2>/dev/null
+cp -f /usr/local/bin/su /usr/bin/su 2>/dev/null && chmod 755 /usr/bin/su 2>/dev/null
 
 # Also give the namespace a root identity, so anything that looks the uid up by name works.
 grep -q '^root:' /etc/passwd 2>/dev/null || \
     echo 'root:x:0:0:root:/root:/bin/bash' >> /etc/passwd 2>/dev/null
 grep -q '^root:' /etc/group 2>/dev/null || echo 'root:x:0:' >> /etc/group 2>/dev/null
+
+# One line in the trial log, so a future failure can be told apart from the prelude not running
+# at all -- which is exactly the ambiguity that cost a debugging round here.
+echo "[harbor-prelude] applied: python3=$(command -v python3 2>/dev/null) su=$(command -v su 2>/dev/null) uid=$(id -u)" >&2
 
 true    # never let a failed repair abort the bootstrap
