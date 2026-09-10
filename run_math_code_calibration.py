@@ -12,6 +12,7 @@ import transformers
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from quantize.adaptive_prefix import derive_maps, source_subsets
+from quantize.basis import BASES, build_pair, direction_statistics
 from quantize.causal_four_over_six import quantize_rows
 from quantize.quantizer import quant_mix_4_6, quant_nvfp4_4over6
 from run_c4_frozen import digest_file
@@ -80,6 +81,8 @@ def main():
     ap.add_argument('--model', choices=ORIGINS, required=True)
     ap.add_argument('--out', required=True)
     ap.add_argument('--adaptive-only', action='store_true')
+    ap.add_argument('--basis', choices=tuple(BASES), default='e0m3',
+                    help='which candidate direction to score; see quantize/basis.py')
     args = ap.parse_args()
     target = args.model == 'qwen27b'
     torch.set_num_threads(12 if target else 4); torch.backends.cuda.matmul.allow_tf32 = False
@@ -90,13 +93,14 @@ def main():
     teacher_dir = Path(os.environ['HF_HOME'])/'adaptive_teacher'; teacher_dir.mkdir()
     files = ('run_math_code_calibration.py', 'quantize/adaptive_prefix.py',
              'quantize/causal_four_over_six.py', 'quantize/quantizer.py',
-             'results/math_code_adaptive/PROTOCOL.md')
+             'quantize/basis.py', 'results/math_code_adaptive/PROTOCOL.md')
     r = dict(status='running', model=args.model, source=prior['source'], revision=prior['revision'],
         job_id=os.environ['SLURM_JOB_ID'], torch_version=torch.__version__, transformers_version=transformers.__version__,
         origin=str(old), source_sha256={f:digest_file(f) for f in files}, matrices={},
         activation_convention='causal per-token factors for scoring and evaluation',
         calibration_sources=['OpenWebMath','CodeParrot'], uses_c4_calibration=False, uses_wiki_calibration=False,
-        subsets=source_subsets(), fixed256_comparison=not args.adaptive_only)
+        subsets=source_subsets(), fixed256_comparison=not args.adaptive_only,
+        basis=args.basis, basis_definition=BASES[args.basis], direction={})
     save(out,r)
     for f in ('quantize/causal_four_over_six.py','quantize/quantizer.py'):
         assert r['source_sha256'][f] == prior['source_sha256'][f]
@@ -125,9 +129,9 @@ def main():
     with torch.no_grad():
         for i,(name,m) in enumerate(modules.items()):
             w=m.weight.detach(); o,k=w.shape
-            b=quant_nvfp4_4over6(w,4,16)
-            a=quant_mix_4_6(w,4,16,type_block=(8,64),clip='a1',elect='always')
+            b,a=build_pair(w,args.basis)
             assert torch.isfinite(a).all() and torch.isfinite(b).all()
+            r['direction'][name]=direction_statistics(w,b,a)
             diff=(a.float()-w.float()).square()-(b.float()-w.float()).square()
             mse[name]=(diff.reshape(o//8,8,k//64,64).sum((1,3))<0).cpu()
             base[name],alt[name]=(b.cpu().pin_memory(),a.cpu().pin_memory()) if target else (b,a)
@@ -199,7 +203,9 @@ def main():
     torch.save(dict(source=r['source'],revision=r['revision'],weight_mse=mse),out/'weight_mse.pt')
     r['weight_mse_sha256']=digest_file(out/'weight_mse.pt')
     (out/'maps.json').write_text(json.dumps(dict(source=r['source'],revision=r['revision'],
-        type_block=[8,64],baseline='FourOverSix',alternative='E0M3 alpha1',maps=maps),indent=2)+'\n')
+        type_block=[8,64],basis=args.basis,
+        baseline=BASES[args.basis]['baseline'],alternative=BASES[args.basis]['alternative'],
+        maps=maps),indent=2)+'\n')
     r['map_sha256']=digest_file(out/'maps.json'); r['maps_frozen']=True
     r['status']='complete'; save(out,r)
     print('FROZEN '+json.dumps({p:s['selected_blocks'] for p,s in r['block_statistics'].items()}),flush=True)

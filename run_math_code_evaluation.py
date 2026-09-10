@@ -10,6 +10,7 @@ import transformers
 from transformers import AutoTokenizer
 from quantize.causal_four_over_six import quantize_rows
 from quantize.interacting_format import apply_mask
+from quantize.basis import BASES, build_pair
 from quantize.quantizer import quant_mix_4_6, quant_nvfp4_4over6
 from run_c4_frozen import digest_file, heldout_data
 from run_conditional_format import save, sha
@@ -32,9 +33,13 @@ def main():
     assert transformers.__version__ == prior['transformers_version']
     assert digest_file(old/'maps.json') == prior['map_sha256']
     assert digest_file(old/'weight_mse.pt') == prior['weight_mse_sha256']
+    basis=prior.get('basis','e0m3')
+    assert basis in BASES, basis
     bundle=json.loads((old/'maps.json').read_text())
     assert bundle['source']==prior['source'] and bundle['revision']==prior['revision']
-    assert bundle['type_block']==[8,64] and bundle['baseline']=='FourOverSix' and bundle['alternative']=='E0M3 alpha1'
+    assert bundle['type_block']==[8,64]
+    assert bundle['baseline']==BASES[basis]['baseline'] and bundle['alternative']==BASES[basis]['alternative']
+    assert bundle.get('basis',basis)==basis
     policies=['four_over_six',*bundle['maps'],'weight_mse']
     domains=('c4','wiki') if args.group=='all' else (('c4',) if args.group=='c4' else ('wiki',))
     if args.group.startswith('wiki_'):
@@ -45,13 +50,15 @@ def main():
     out=Path(args.out); out.mkdir(parents=True,exist_ok=False)
     files=('run_math_code_evaluation.py','run_math_code_calibration.py','quantize/adaptive_prefix.py',
            'quantize/causal_four_over_six.py','quantize/quantizer.py','quantize/interacting_format.py',
+           'quantize/basis.py',
            'run_c4_frozen.py','run_wiki_frozen.py','results/math_code_adaptive/PROTOCOL.md')
     r=dict(status='running',model=prior['model'],source=prior['source'],revision=prior['revision'],
         torch_version=torch.__version__,transformers_version=transformers.__version__,job_id=os.environ['SLURM_JOB_ID'],
         calibration=str(old),calibration_report_sha256=digest_file(old/'report.json'),map_sha256=prior['map_sha256'],
         source_sha256={f:digest_file(f) for f in files},block_statistics=prior['block_statistics'],
         calibration_sources=prior['calibration_sources'],uses_c4_calibration=False,uses_wiki_calibration=False,
-        group=args.group,policies=policies,domains=list(domains),evaluation={},data={},suffix_intervention={})
+        group=args.group,policies=policies,domains=list(domains),evaluation={},data={},suffix_intervention={},
+        basis=basis,basis_definition=BASES[basis])
     for f in ('quantize/causal_four_over_six.py','quantize/quantizer.py'):
         assert r['source_sha256'][f] == prior['source_sha256'][f]
     save(out,r)
@@ -77,8 +84,7 @@ def main():
     with torch.no_grad():
         for n,m in modules.items():
             assert sha(m.weight)==prior['matrices'][n]['source_sha256'],n
-            b=quant_nvfp4_4over6(m.weight,4,16)
-            a=quant_mix_4_6(m.weight,4,16,type_block=(8,64),clip='a1',elect='always')
+            b,a=build_pair(m.weight,basis)
             assert torch.isfinite(a).all() and torch.isfinite(b).all()
             base[n],alt[n]=(b.cpu().pin_memory(),a.cpu().pin_memory()) if target else (b,a)
         del a,b
