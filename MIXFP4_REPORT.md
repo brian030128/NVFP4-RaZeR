@@ -213,54 +213,7 @@ forward pass and are correlated, so it is optimistic in magnitude. The
 conclusion it supports is the qualitative one — a 2 SE bar is far too loose
 across millions of comparisons — not a precise contamination figure.
 
-## 4. Protocol, and two deliberate differences from the released code
-
-The scope is corrected full W4A4: every targeted text linear weight and its input
-is quantized. Both differences below make our baselines harder to beat.
-
-**Qwen `o_proj` inputs are quantized.** At the archived release commit `e230099`,
-`models/qmodule_qwen3.py` passed unquantized attention output into `o_proj`, so
-Qwen "W4A4" left one projection's input in BF16. The RaZeR author corrected this
-in commit `abab3c6`, after publication. We evaluate the corrected behaviour, so
-our Qwen FourOverSix baseline is 14.269062 WikiText where the pre-fix code gives
-14.201942. Qwen rows here are therefore **not** comparable with the published
-RaZeR Qwen row. Llama was never affected, and its rows match the released run to
-the last digit — the control showing the difference comes only from that line.
-
-**NVFP4 saturation is clamped.** The archived `quant_nvfp4` used a rounding path
-with no E2M1 saturation clamp, so an FP8 subnormal block scale that rounded down
-could produce magnitude code 8, which is not a legal FP4 code. The current
-`quant_nvfp4` clamps to [-6, 6], and baseline and method both use it.
-
-Verification carried by the runs themselves: the shipped 2 SE score is
-reproduced exactly by the k = 2 case; the 256-tile prefix of that ranking
-reproduces the previously frozen map bitwise; the Llama FourOverSix row is
-asserted equal to the archived released-code reproduction; pristine weight
-hashes and frozen map hashes are checked; and the C4 evaluation documents have
-zero hash overlap with the calibration documents.
-
-## 5. Perplexity below BF16 is not a quality claim
-
-On Qwen3-4B some MixFP4 perplexities fall below the unquantized BF16 reference.
-Perplexity cannot settle that on its own: a model that becomes less overconfident scores
-better on next-token loss without predicting better. The same frozen maps were therefore
-evaluated zero-shot on multiple choice, where a smoothing artefact should not help. BF16
-restores pristine weights and removes activation quantization.
-
-| Policy | WikiText-2 PPL | arc_easy | arc_challenge | hellaswag | openbookqa | boolq | winogrande | mean acc |
-|---|---|---|---|---|---|---|---|---|
-| BF16 reference | 13.662473 | 0.7816 | 0.5358 | 0.6846 | 0.4020 | 0.8495 | 0.6519 | 0.6509 |
-| FourOverSix W4A4 | 14.269062 | 0.7462 | 0.4906 | 0.6616 | 0.3940 | 0.8358 | 0.6212 | 0.6249 |
-| MixFP4, 256 tiles | 13.040957 | 0.7563 | 0.4881 | 0.6652 | 0.3880 | 0.8330 | 0.6409 | 0.6286 |
-| MixFP4, 65,536 tiles | 10.864750 | 0.7778 | 0.5043 | 0.6725 | 0.4060 | 0.8453 | 0.6314 | 0.6395 |
-
-Accuracy corroborates the method among the quantized policies, in the same order perplexity gives: 0.6249 for FourOverSix, 0.6286 at 256 tiles, 0.6395 at 65,536, the larger map ahead on 5/6 tasks. Quantization costs 0.0260 mean accuracy against BF16; those maps recover 14.2% and 56.2% of it.
-
-Accuracy does **not** support beating BF16. The best quantized policy is still 0.0114 below the unquantized model while its perplexity is 2.797723 better. Perplexity is therefore not a reliable absolute quality measure against BF16 on this model. No claim here rests on a below-BF16 perplexity; comparisons against the matched baselines are unaffected.
-
-Zero-shot via lm_eval 0.4.5. Skipped for dataset-loading reasons unrelated to the model: piqa.
-
-## 6. Limits
+## 4. Limits
 
 - Simulated W4A4 on text linear weights and their inputs. No KV-cache
   quantization, generation accuracy, or native FP4 kernel throughput is measured,
