@@ -15,6 +15,8 @@ import json
 import math
 import os
 
+from analyze_zeroshot_paired import compare, load as load_samples
+
 # §1's models, in §1's order, with the label the report uses for each.
 MODELS = [
     ("llama-3.1-8b-local",     "Llama-3.1-8B"),
@@ -159,6 +161,83 @@ def main():
         lines.append(f"| {header} | {fmt(mean, signed=True)} | {worst[1]} {fmt(worst[0], signed=True)} "
                      f"| {best[1]} {fmt(best[0], signed=True)} |")
     lines.append("")
+
+    # --- how big is a difference that means nothing? ------------------------------------------
+    # Measured, not assumed: the paired jobs re-ran `nvfp4` from scratch on every model, and
+    # `nvfp4` uses no calibration, so its quantization is bit-deterministic. Any gap between the
+    # two runs of it is pure evaluation noise, and it is the floor every delta above must clear.
+    repeats = []
+    for m, lbl in present:
+        rp = os.path.join(args.root, f"paired_{m}.json")
+        if not os.path.isfile(rp):
+            continue
+        rerun = json.load(open(rp))
+        if REFERENCE in rerun and REFERENCE in data[m]:
+            first, second = acc(data[m][REFERENCE]), acc(rerun[REFERENCE])
+            repeats.append((lbl, first, second, second - first))
+    if repeats:
+        lines += [
+            "### The noise floor, measured",
+            "",
+            "`nvfp4` uses no calibration, so its quantization is bit-deterministic and re-running "
+            "it must give the same number. The paired jobs below re-ran it from scratch on every "
+            "model, which turns that into a measurement of the evaluation's own reproducibility "
+            "-- the floor any delta above has to clear.",
+            "",
+            "| model | first run | re-run | difference |",
+            "|---|---|---|---|",
+        ]
+        for lbl, first, second, diff in repeats:
+            lines.append(f"| {lbl} | {fmt(first)} | {fmt(second)} | {fmt(diff, signed=True)} |")
+        worst = max(abs(d) for _, _, _, d in repeats)
+        qwen = [d for lbl, _, _, d in repeats if lbl.startswith("Qwen")]
+        llama = [d for lbl, _, _, d in repeats if lbl.startswith("Llama")]
+        lines += [
+            "",
+            f"The spread is up to **{worst:.4f}**, and it is not random across the panel: "
+            + ("every Qwen model reproduces exactly while every Llama drifts"
+               if qwen and llama and all(d == 0 for d in qwen) and all(d != 0 for d in llama)
+               else "it differs by model")
+            + ". The likely mechanism is that the two runs evaluate the configuration in a "
+              "different order, so allocator and cuBLAS state differ, and tiny logit differences "
+              "flip multiple-choice items that were near ties. Whatever the cause, a delta of "
+              "this size on a Llama is not evidence of anything, which is why the paired test "
+              "below matters more than the table above.",
+            "",
+        ]
+
+    # --- paired tests, where per-document outcomes were logged --------------------------------
+    paired_rows = []
+    for m, lbl in present:
+        sdir = os.path.join(args.root, f"samples_{m}")
+        ref_file = os.path.join(sdir, f"{REFERENCE}.json")
+        if not os.path.isfile(ref_file):
+            continue
+        ref_docs = load_samples(ref_file)
+        for header, key in RULES:
+            vf = os.path.join(sdir, f"{key}.json")
+            if not os.path.isfile(vf):
+                continue
+            _, pooled = compare(ref_docs, load_samples(vf))
+            paired_rows.append((lbl, header, pooled))
+    if paired_rows:
+        lines += [
+            "### Paired test against `nvfp4`",
+            "",
+            "Both configurations are scored on the same documents, so the comparison is paired "
+            "and the question is not how much each one varies but how often they disagree. "
+            "`b` counts documents only the reference gets right, `c` documents only the variant "
+            "gets right; everything else carries no information about the difference. The "
+            "p-value is an exact two-sided McNemar test on those counts, pooled over all "
+            "documents of all tasks (`analyze_zeroshot_paired.py`).",
+            "",
+            "| model | rule | documents | b | c | pooled delta | McNemar p |",
+            "|---|---|---|---|---|---|---|",
+        ]
+        for lbl, header, pl in paired_rows:
+            lines.append(f"| {lbl} | {header} | {pl['n']} | {pl['b']} | {pl['c']} | "
+                         f"{fmt(pl['delta'], signed=True)} | {pl['p']:.3g} |")
+        lines.append("")
 
     # --- per-task detail, so a panel mean cannot hide a single task doing all the work ---------
     lines += ["<details>", "<summary>Per-task accuracy</summary>", ""]
