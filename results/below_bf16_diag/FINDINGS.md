@@ -15,6 +15,15 @@ not a numerical result — nothing about approximating a network more coarsely c
 make it a better predictor than the network being approximated. The explanation
 is that the map is not chosen for numerical fidelity at all.
 
+**Summary of the finding.** The map is a gradient-descent step on cross-entropy
+with the element-type choice as a binary parameter (§3), so BF16 is its
+initialization rather than its target. `Qwen/Qwen3-4B` is a post-trained release
+whose predictive distribution is about 35% too sharp for raw-text next-token
+prediction, which leaves a large amount of cross-entropy recoverable (§4, §5a);
+base models in the same panel have almost none and are harmed at large counts.
+Of the 2.812 PPL headline gain, **95% is recalibration of that over-sharpness and
+5% is a genuine likelihood improvement** (§5a). Accuracy never reaches BF16.
+
 ## 1. The effect is real, and it is not evaluation leakage
 
 The 2048-token protocol scales activations with a tensor-wide factor taken over
@@ -133,6 +142,73 @@ Among the quantized policies accuracy does corroborate the method, in the order
 perplexity gives (FourOverSix 0.6249 → 256 tiles 0.6286 → 65,536 tiles 0.6395),
 so the map is genuinely repairing quantization damage as well. Both things are
 happening; only the first one crosses the BF16 line.
+
+## 5a. How much of the gap is sharpness: the temperature-matched measurement
+
+Job 336584 measures this directly on the same 146 WikiText windows. Rescaling
+logits by a scalar changes only sharpness and leaves every argmax — hence every
+accuracy — untouched, so a per-policy optimal temperature separates "predicts
+better" from "is calibrated better". `T*` is fitted on the evaluation set over a
+15-point grid, which makes it an oracle upper bound on what recalibration can
+buy, not a deployable method.
+
+| Policy | PPL | Entropy | top-1 prob | top-1 acc | BF16 argmax agreement | T* | PPL @ T* |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| BF16 | 13.659909 | 1.2047 | 0.6911 | 0.5159 | 1.0000 | 1.35 | 10.782109 |
+| FourOverSix | 14.212161 | 1.3287 | 0.6715 | 0.5031 | 0.8550 | 1.30 | 11.683453 |
+| MixFP4 256 | 13.035763 | 1.4497 | 0.6536 | 0.5053 | 0.8561 | 1.25 | 11.371508 |
+| MixFP4 65,536 | 10.847653 | 1.9383 | 0.5910 | 0.5107 | 0.8366 | 1.10 | 10.642044 |
+
+(These use `use_cache=False` uniformly, so they sit about 0.057 below the
+published table's WikiText values, which use the released per-window cache. All
+four rows share the setting, so the contrasts are unaffected.)
+
+Three things are visible at once.
+
+**BF16 is over-sharp for this text, and that is the bulk of the story.** Its own
+optimal temperature is 1.35 — its logits are about 35% too confident for raw-text
+next-token prediction — and recalibrating it alone takes 13.659909 to 10.782109,
+a 2.878 PPL drop. The entire headline gain of the map is 2.812 PPL. A single
+scalar on the unquantized model recovers more than the whole thing.
+
+**The map's mechanism is visibly the consumption of that headroom.** Entropy
+rises monotonically with tile count (1.2047 → 1.3287 → 1.4497 → 1.9383, a 61%
+increase over BF16) while the residual optimal temperature falls monotonically
+toward 1 (1.35 → 1.30 → 1.25 → 1.10). By 65,536 tiles almost nothing is left to
+recalibrate, because the map has already spent it.
+
+**A small residual is genuine.** At matched calibration the map is still ahead of
+BF16, 10.642044 against 10.782109. Decomposing the 2.812 PPL headline gain:
+
+| Component | PPL |
+|---|---:|
+| Sharpness / calibration | 2.672 (95.0%) |
+| Genuine likelihood improvement | 0.140 (5.0%) |
+
+So the honest statement is not "it is entirely an artefact". It is that **95% of
+the improvement is recalibration of an over-sharp post-trained model, and 5% is a
+real gain in next-token likelihood** — which is exactly what a cross-entropy
+gradient step should produce, and exactly why the accuracy numbers barely move.
+
+The elected tiles are not concentrated in one high-leverage place, which rules
+out the simplest version of "it just rescales the logits". All 252 targeted
+linear modules are touched, across every projection type:
+
+| projection | q_proj | k_proj | v_proj | o_proj | gate_proj | up_proj | down_proj |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| tiles | 5,043 | 1,380 | 3,196 | 13,547 | 9,705 | 13,142 | 19,523 |
+
+`lm_head` is not quantized at all (the scoring and evaluation both exclude the
+output embedding), so the sharpness change is produced inside the network rather
+than by scaling the output layer.
+
+The argmax agreement column supports the same reading from the other side. The
+65,536-tile map agrees with BF16's argmax *least* of all policies (0.8366, below
+even plain FourOverSix at 0.8550) while scoring *higher* accuracy than
+FourOverSix (0.5107 against 0.5031). It has moved the model further from BF16 than
+plain quantization did, and in a slightly better direction. That is a training
+step, not noise — but it is a very small one, and it does not reach BF16's own
+accuracy of 0.5159.
 
 ## 6. Consequences
 
