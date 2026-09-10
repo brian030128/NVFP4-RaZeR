@@ -46,7 +46,13 @@ causal BF16 reference on the same sample:
 Below BF16 under a causal convention too. Whatever is happening survives the
 removal of future-token information.
 
-## 2. It is not that E0M3 is a better number format
+## 2. The gain is not attributable to E0M3 being a better number format
+
+To be clear about what is and is not in dispute: flipping a selected subset of
+blocks to E0M3 **does** improve over matched FourOverSix and NVFP4, at equal bit
+width, the same 8×64 tile, and the same kernel cost. That result stands. What
+does not follow is the causal reading — that the improvement comes from E0M3
+representing those blocks' values more faithfully.
 
 The direct control is already in the record. A pure weight-MSE criterion —
 elect E0M3 wherever it reduces the reconstruction error of the weights — selects
@@ -58,9 +64,12 @@ map, and the result is *worse* than the baseline it started from:
 | FourOverSix baseline | 0 | 19.414897 |
 | Weight-MSE | 3,407,142 | 20.108009 (+0.693) |
 
-So E0M3 is not more accurate in any sense that perplexity rewards. Selecting it
-on numerical grounds, aggressively, hurts. The gain comes entirely from the
-criterion used to choose tiles, not from the format being chosen.
+So on this model E0M3 is not more accurate in any sense perplexity rewards:
+selecting it on numerical grounds, aggressively, hurts. The information is in the
+criterion used to choose tiles, not in the grid being chosen. §5b bounds the
+representational contribution independently, and notes where the argument stops
+being decisive; §5c gives the reason a fidelity criterion could not have produced
+a below-BF16 number at all.
 
 ## 3. What the criterion actually is
 
@@ -209,6 +218,87 @@ FourOverSix (0.5107 against 0.5031). It has moved the model further from BF16 th
 plain quantization did, and in a slightly better direction. That is a training
 step, not noise — but it is a very small one, and it does not reach BF16's own
 accuracy of 0.5159.
+
+## 5b. Independent of §5a: the representational ceiling is ~0.06 PPL
+
+The temperature decomposition is one line of argument. This one is separate and
+survives even if that analysis is rejected entirely.
+
+`1x16` is the finest possible type block, and because the MSE selection is
+error-minimizing and `1x16` divides every coarser shape, it is a **strict upper
+bound** on what any fidelity-driven E0M3 mixing can achieve at any granularity.
+From `results/mixfp4_sweep/REPORT.md`, against NVFP4:
+
+| model / setting | `1x16` (MSE ceiling) | `8x64` (deployable shape) |
+|---|---:|---:|
+| Llama-2-7B W4A16 | −0.0089 | **+0.0282** |
+| Llama-2-7B W4A4 | −0.0504 | **+0.0030** |
+| Llama-3.1-8B W4A16 | −0.0643 | **+0.0142** |
+
+So the entire representational value of making E0M3 available, measured where it
+is maximal, is at most about 0.06 PPL — and at the 8×64 shape this study
+deploys, it is *negative*. The Qwen3-4B adaptive gain over FourOverSix is 3.40
+PPL, roughly fifty times that ceiling. It cannot be the same phenomenon.
+
+Two further separations point the same way:
+
+- **Same format, fidelity criterion, opposite sign.** On Qwen3-4B, weight-MSE
+  elects 3,407,142 tiles (48%, 52× the adaptive map) and WikiText goes
+  20.108009 against a 19.414897 baseline — worse. More E0M3, chosen precisely
+  for representational accuracy, moves backwards.
+- **The sign depends on the checkpoint.** Qwen3-4B −2.864, OLMo-1B −0.140,
+  Llama-3.1-8B −0.091, Pythia-1.4B *harmed* beyond 16,384 tiles. A grid that
+  represents values better does not damage Pythia.
+
+**Where this argument does not reach.** For Llama-3.1-8B the adaptive gain
+(−0.03 to −0.09) is the same order as the representational ceiling (~0.06), so
+there the two accounts are not separable by magnitude. The separation is
+decisive only where the gain is large, which is Qwen3-4B.
+
+The supportable claim is therefore *"a per-tile type map fitted to task loss
+beats FourOverSix at equal bits and equal kernel cost"* — not *"E0M3 is a better
+element type"*. E0M3 is the actuator, and a necessary one: without a second
+element type there is no free parameter to fit. The information came from the
+calibration data, not from the shape of the grid.
+
+## 5c. Why a fidelity method could never have produced this number
+
+"Uses calibration data" does not distinguish this from GPTQ or AWQ, which are
+calibrated too. What distinguishes it is what the objective targets:
+
+| method | objective | its optimum | BF16 is |
+|---|---|---|---|
+| GPTQ | layer output reconstruction | the original weights | a ceiling, by construction |
+| AWQ / SmoothQuant | weighted fidelity to W | the original weights | a ceiling |
+| distillation | KL to the BF16 teacher | the teacher | a ceiling |
+| this rule's CE term | CE on ground-truth labels | **not the original weights** | **not a ceiling** |
+
+A method whose objective is a distance to the original model can approach BF16
+and not pass it — the target *is* BF16. This rule scores on two losses, and the
+KL-to-teacher half is exactly such a fidelity term, bounded by BF16. The CE half
+is not: its minimizer is whatever weights predict text best, and there is no
+reason that is the released checkpoint.
+
+This makes a large below-BF16 result a **one-way diagnostic**. A fidelity-objective
+method cannot produce one, so observing one is positive evidence that the
+objective included ground-truth labels, and the size of the overshoot measures
+how much training occurred.
+
+None of which makes the method illegitimate. It is quantization-aware training
+with an unusual parameterization: one gradient step, 66,856 binary parameters,
+zero inference cost, no metadata change, and an output that is still a legal
+4-bit format on the existing `mma.sync` path. Naming it that way changes the
+baseline set, though — as a format the baselines are NVFP4 / FourOverSix / RaZeR
+at equal bits, which it beats; as QAT a reader will also want round-to-nearest
+plus a fitted temperature, and a matched-budget QAT comparison.
+
+**Counterexample to keep in view.** On Qwen3.8-27B the repository records
+weight-MSE selection at WikiText 7.1545 with 43.49 million switches, statistically
+indistinguishable from the calibrated sparse maps (7.1331 / 7.1569), with an
+explicit instruction not to claim calibration beats MSE there. So fidelity
+criteria do not always lose. The margin by which calibration beats MSE tracks the
+available cross-entropy headroom: large on the over-sharp Qwen3-4B, absent on the
+27B. That is the same variable as §4 and §5a, and it is not a property of E0M3.
 
 ## 6. Consequences
 
