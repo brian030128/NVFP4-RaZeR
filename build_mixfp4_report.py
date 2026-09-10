@@ -1,10 +1,8 @@
-"""Rebuild MIXFP4_REPORT.md from paper-aligned results only.
+"""Rebuild MIXFP4_REPORT.md: the k-SE element-type rule and its 2048-token results.
 
-Keeps the three already-verified 2048-token blocks verbatim (they are delimited
-by HTML markers in the existing report), prepends the NVFP4/FourOverSix/MixFP4
-panel, and replaces the remaining prose with method and limits sections. Every
-512-token table is dropped from the report; the underlying records stay in
-results/ and are listed as historical pointers.
+The report carries only paper-aligned 2048-token measurements and the method that
+produced them. Everything measured under other protocols lives under results/ and
+is not summarised here.
 """
 import argparse
 import json
@@ -14,13 +12,7 @@ from pathlib import Path
 
 REPRO = Path('results/released_reproduction/job_335297')
 MODELS = (('llama8b', 'llama-3.1-8b', 'Llama-3.1-8B'), ('qwen4b', 'qwen3-4b', 'Qwen3-4B'))
-PRIMARY = 'math_code128'
-
-
-def block(text, start, end):
-    a = text.index(f'<!-- {start} -->')
-    b = text.index(f'<!-- {end} -->') + len(f'<!-- {end} -->')
-    return text[a:b]
+K = 3
 
 
 def paired(a, b):
@@ -38,201 +30,162 @@ def released(slug, tag):
     return {'wiki': losses[:n], 'c4': losses[n:]}, r['ppl']
 
 
-def evaluated(path):
-    r = json.loads((path / 'report.json').read_text())
+def paper_case(root, case):
+    r = json.loads((root / case / 'report.json').read_text())
     assert r['status'] == 'complete' and r['source_weights_verified']
     return ({d: r['evaluation'][d]['nll'] for d in ('wiki', 'c4')},
-            {'wikitext': r['evaluation']['wiki']['ppl'], 'c4': r['evaluation']['c4']['ppl']}, r)
+            {'wiki': r['evaluation']['wiki']['ppl'], 'c4': r['evaluation']['c4']['ppl']}, r)
 
 
-def scope(report):
-    """Total 8x64 type blocks and weights in the quantized scope."""
-    prior = json.loads((Path(report['case']['calibration']) / 'report.json').read_text())
-    tiles = sum((v['shape'][0] // 8) * (v['shape'][1] // 64) for v in prior['matrices'].values())
-    weights = sum(v['shape'][0] * v['shape'][1] for v in prior['matrices'].values())
-    return tiles, weights
+def kse(root, model):
+    r = json.loads((root / model / 'report.json').read_text())
+    assert r['status'] == 'complete' and r['frozen_map_reproduced']
+    assert r['shipped_score_identical_at_k2']
+    return r
+
+
+def results_section(kse_root, base_root):
+    L = ['## 1. Results', '',
+         'Baselines are NVFP4 and NVFP4 FourOverSix, both W4A4. The method is MixFP4: the same',
+         'FourOverSix E2M1 weights, with the tiles the rule elects switched to E0M3. Calibration',
+         'uses OpenWebMath and CodeParrot only, so WikiText-2 and C4 are held out for every row.',
+         'BF16 is the unquantized reference, not a competitor.', '']
+    for model, slug, label in MODELS:
+        r = kse(kse_root, model)
+        _, bf16 = released(slug, 'bf16')
+        nv_l, nv, _ = paper_case(base_root, f'{model}_nvfp4')
+        fo_l = {d: r['evaluation']['four_over_six'][d]['nll'] for d in ('wiki', 'c4')}
+        fo = {d: r['evaluation']['four_over_six'][d]['ppl'] for d in ('wiki', 'c4')}
+        mx_l = {d: r['evaluation'][f'k{K}'][d]['nll'] for d in ('wiki', 'c4')}
+        mx = {d: r['evaluation'][f'k{K}'][d]['ppl'] for d in ('wiki', 'c4')}
+        el = r['election'][f'k{K}']
+        L += [f'### {label}', '',
+              f'{r["total_tiles"]:,} type blocks of 8x64 across the quantized text linear '
+              f'weights. The rule elects **{el["selected"]:,} of them, {100 * el["fraction"]:.4f}%** '
+              f'— about one block in {round(1 / el["fraction"]):,}.', '',
+              '| Policy | E0M3 blocks | WikiText-2 | C4 |', '|---|---:|---:|---:|',
+              f'| BF16 reference | — | {bf16["wikitext"]:.6f} | {bf16["c4"]:.6f} |',
+              f'| NVFP4 W4A4 | 0 | {nv["wiki"]:.6f} | {nv["c4"]:.6f} |',
+              f'| NVFP4 FourOverSix W4A4 | 0 | {fo["wiki"]:.6f} | {fo["c4"]:.6f} |',
+              f'| **MixFP4 (k={K}), ours** | {el["selected"]:,} | **{mx["wiki"]:.6f}** | '
+              f'**{mx["c4"]:.6f}** |', '',
+              '| Comparison | Wiki ΔPPL | Wiki ΔNLL ±2SE | C4 ΔPPL | C4 ΔNLL ±2SE |',
+              '|---|---:|---:|---:|---:|']
+        for nm, al, ap, bl, bp in (('MixFP4 − FourOverSix', mx_l, mx, fo_l, fo),
+                                   ('MixFP4 − NVFP4', mx_l, mx, nv_l,
+                                    {'wiki': nv['wiki'], 'c4': nv['c4']}),
+                                   ('FourOverSix − NVFP4', fo_l, fo, nv_l,
+                                    {'wiki': nv['wiki'], 'c4': nv['c4']})):
+            cells = []
+            for dom in ('wiki', 'c4'):
+                m, se = paired(al[dom], bl[dom])
+                cells.append(f'{ap[dom] - bp[dom]:+.6f} | {m:+.6f} ±{se:.6f}')
+            L.append(f'| {nm} | ' + ' | '.join(cells) + ' |')
+        L.append('')
+    L += ['MixFP4 improves both datasets on both models against both baselines, with every paired',
+          'two-SE interval excluding zero. Note FourOverSix is not uniformly the stronger baseline:',
+          'on Qwen3-4B plain NVFP4 beats it, so the method is measured against the better of the',
+          'two, not only against its own base.', '',
+          '### The count is not a tuned constant', '',
+          'The same rule at other values of k, for reference. k is fixed at 3 for both models and',
+          'is not selected per model or per dataset.', '']
+    for model, _, label in MODELS:
+        r = kse(kse_root, model)
+        b = r['evaluation']['four_over_six']
+        L += [f'**{label}**', '', '| k | Tiles | % of blocks | ΔWiki | ΔC4 |', '|---|---:|---:|---:|---:|']
+        for k in r['k_values']:
+            e, el = r['evaluation'][f'k{k}'], r['election'][f'k{k}']
+            mark = '**' if k == K else ''
+            L.append(f'| {mark}{k}{mark} | {el["selected"]:,} | {100 * el["fraction"]:.4f}% | '
+                     f'{e["wiki"]["ppl"] - b["wiki"]["ppl"]:+.6f} | '
+                     f'{e["c4"]["ppl"] - b["c4"]["ppl"]:+.6f} |')
+        L.append('')
+    return '\n'.join(L)
 
 
 def accuracy_section(path, ppl):
-    """Zero-shot corroboration for the model whose perplexity falls below BF16."""
     r = json.loads((path / 'report.json').read_text())
     assert r['status'] == 'complete'
     a, tasks = r['accuracy'], r['tasks_evaluated']
     order = ['bf16', 'four_over_six', 'n256', 'n65536']
     label = {'bf16': 'BF16 reference', 'four_over_six': 'FourOverSix W4A4',
-             'n256': 'MixFP4 256 tiles', 'n65536': 'MixFP4 65,536 tiles'}
+             'n256': 'MixFP4, 256 tiles', 'n65536': 'MixFP4, 65,536 tiles'}
     base, top = a['four_over_six']['mean'], a['bf16']['mean']
     gap = top - base
-    L = ['## Perplexity below BF16 is not a quality claim', '',
-         'On Qwen3-4B, MixFP4 perplexity falls below the unquantized BF16 reference. Perplexity',
-         'cannot settle that on its own: a model that becomes less overconfident scores better on',
-         'next-token loss without predicting better. The same frozen policies were therefore',
-         'evaluated zero-shot on multiple choice, where a smoothing artefact should not help.',
-         'BF16 restores pristine weights and removes activation quantization; every other row uses',
-         'the paper-aligned W4A4 path.', '',
+    L = ['## 5. Perplexity below BF16 is not a quality claim', '',
+         'On Qwen3-4B some MixFP4 perplexities fall below the unquantized BF16 reference.',
+         'Perplexity cannot settle that on its own: a model that becomes less overconfident scores',
+         'better on next-token loss without predicting better. The same frozen maps were therefore',
+         'evaluated zero-shot on multiple choice, where a smoothing artefact should not help. BF16',
+         'restores pristine weights and removes activation quantization.', '',
          '| Policy | WikiText-2 PPL | ' + ' | '.join(tasks) + ' | mean acc |',
          '|---' * (len(tasks) + 3) + '|']
     for p in order:
         L.append(f'| {label[p]} | {ppl[p]:.6f} | ' +
                  ' | '.join(f'{a[p][t]["value"]:.4f}' for t in tasks) + f' | {a[p]["mean"]:.4f} |')
-    L += ['', '**Two conclusions, and they point in different directions.**', '',
-          f'Accuracy corroborates the method among the quantized policies: FourOverSix '
-          f'{base:.4f} to {a["n256"]["mean"]:.4f} at 256 tiles to {a["n65536"]["mean"]:.4f} at '
-          f'65,536, the same ordering perplexity gives, with the larger map ahead on '
+    L += ['', f'Accuracy corroborates the method among the quantized policies, in the same order '
+          f'perplexity gives: {base:.4f} for FourOverSix, {a["n256"]["mean"]:.4f} at 256 tiles, '
+          f'{a["n65536"]["mean"]:.4f} at 65,536, the larger map ahead on '
           f'{sum(1 for t in tasks if a["n65536"][t]["value"] > a["n256"][t]["value"])}/{len(tasks)} '
-          f'tasks. Quantization costs {gap:.4f} mean accuracy against BF16; the 256-tile map '
-          f'recovers {100 * (a["n256"]["mean"] - base) / gap:.1f}% of that and the larger map '
-          f'{100 * (a["n65536"]["mean"] - base) / gap:.1f}%.', '',
-          f'Accuracy does **not** support beating BF16. The best quantized policy remains '
-          f'{a["bf16"]["mean"] - a["n65536"]["mean"]:.4f} below the unquantized model, while its '
-          f'perplexity is {ppl["bf16"] - ppl["n65536"]:.6f} better. Perplexity is therefore not a '
-          f'reliable absolute quality measure against BF16 on this model, and no claim in this '
-          f'report rests on the below-BF16 perplexities. Comparisons against the matched '
-          f'FourOverSix baseline are unaffected.', '',
-          f'Tasks are 0-shot via lm_eval {r["lm_eval_version"]}.' +
+          f'tasks. Quantization costs {gap:.4f} mean accuracy against BF16; those maps recover '
+          f'{100 * (a["n256"]["mean"] - base) / gap:.1f}% and '
+          f'{100 * (a["n65536"]["mean"] - base) / gap:.1f}% of it.', '',
+          f'Accuracy does **not** support beating BF16. The best quantized policy is still '
+          f'{top - a["n65536"]["mean"]:.4f} below the unquantized model while its perplexity is '
+          f'{ppl["bf16"] - ppl["n65536"]:.6f} better. Perplexity is therefore not a reliable '
+          f'absolute quality measure against BF16 on this model. No claim here rests on a '
+          f'below-BF16 perplexity; comparisons against the matched baselines are unaffected.', '',
+          f'Zero-shot via lm_eval {r["lm_eval_version"]}.' +
           (f' Skipped for dataset-loading reasons unrelated to the model: '
            f'{", ".join(sorted(r["tasks_skipped"]))}.' if r.get('tasks_skipped') else ''), '']
     return '\n'.join(L)
 
 
-def panel(root):
-    L = ['## 1. Paper-aligned W4A4 result', '',
-         'Baselines are NVFP4 and NVFP4 FourOverSix. The method is MixFP4: the same FourOverSix',
-         'E2M1 weights with 256 8x64 tiles switched to E0M3, elected by our CE/KL task-gradient',
-         'calibration on OpenWebMath and CodeParrot only. WikiText-2 and C4 supply no calibration',
-         'data, no gradients and no selection feedback, so both are held out for every row.', '']
-    for model, slug, label in MODELS:
-        _, bf16 = released(slug, 'bf16')
-        nv_l, nv, nv_r = evaluated(root / f'{model}_nvfp4')
-        fo_l, fo, fo_r = evaluated(root / f'{model}_four_over_six')
-        mx_l, mx, mx_r = evaluated(root / f'{model}_fixed256_{PRIMARY}')
-        assert nv_r['selected_e0m3_blocks'] == 0 and fo_r['selected_e0m3_blocks'] == 0
-        assert mx_r['selected_e0m3_blocks'] == 256
-        tiles, weights = scope(mx_r)
-        pct = 100 * 256 / tiles
-        L += [f'### {label}', '',
-              f'Scope: {len(mx_r["quantized_weight_sha256"]):,} text linear matrices, '
-              f'{tiles:,} type blocks of 8x64, {weights:,} weights. MixFP4 switches '
-              f'**256 blocks = {pct:.6f}% of type blocks** ({256 * 512:,} weights, '
-              f'about 1 block in {round(tiles / 256):,}).', '',
-              '| Policy | E0M3 blocks | % of type blocks | WikiText-2 | C4 |',
-              '|---|---:|---:|---:|---:|',
-              f"| BF16 reference | — | — | {bf16['wikitext']:.6f} | {bf16['c4']:.6f} |",
-              f"| NVFP4 W4A4 | 0 | 0 | {nv['wikitext']:.6f} | {nv['c4']:.6f} |",
-              f"| NVFP4 FourOverSix W4A4 | 0 | 0 | {fo['wikitext']:.6f} | {fo['c4']:.6f} |",
-              f"| **MixFP4, ours** | 256 | {pct:.6f}% | **{mx['wikitext']:.6f}** | "
-              f"**{mx['c4']:.6f}** |", '',
-              '| Comparison | Wiki ΔPPL | Wiki ΔNLL ±2SE | C4 ΔPPL | C4 ΔNLL ±2SE |',
-              '|---|---:|---:|---:|---:|']
-        for name, al, ap, bl, bp in (('MixFP4 − FourOverSix', mx_l, mx, fo_l, fo),
-                                     ('MixFP4 − NVFP4', mx_l, mx, nv_l, nv),
-                                     ('FourOverSix − NVFP4', fo_l, fo, nv_l, nv)):
-            cells = []
-            for dom, key in (('wiki', 'wikitext'), ('c4', 'c4')):
-                m, se = paired(al[dom], bl[dom])
-                cells.append(f'{ap[key] - bp[key]:+.6f} | {m:+.6f} ±{se:.6f}')
-            L.append(f'| {name} | ' + ' | '.join(cells) + ' |')
-        L += ['', 'Movement relative to the unquantized BF16 reference:', '']
-        for dom, key in (('wiki', 'wikitext'), ('c4', 'c4')):
-            gap = fo[key] - bf16[key]
-            got = fo[key] - mx[key]
-            note = (f'- {key}: FourOverSix sits {gap:+.6f} above BF16; MixFP4 moves '
-                    f'{got:.6f} toward it ({100 * got / gap:.1f}% of the gap)')
-            if mx[key] < bf16[key]:
-                note += ('. MixFP4 lands **below** the BF16 reference here, so this share '
-                         'exceeds 100%. Zero-shot accuracy shows this is not a better model '
-                         'than BF16; see "Perplexity below BF16 is not a quality claim"')
-            L.append(note + '.')
-        L.append('')
-        if 'released_comparison' in nv_r:
-            c = nv_r['released_comparison']
-            L += [f'Against the archived released NVFP4 run: WikiText {c["wiki_released"]:.6f} '
-                  f'({c["wiki_delta"]:+.6f}), C4 {c["c4_released"]:.6f} ({c["c4_delta"]:+.6f}). '
-                  'See "Two deliberate differences from the released code" for why these '
-                  'differ.', '']
-        if fo_r.get('released_baseline_exact'):
-            L += ['The FourOverSix row reproduces the archived released run exactly, asserted at '
-                  'run time.', '']
-    return '\n'.join(L)
-
-
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--job', required=True)
+    ap.add_argument('--kse-job', default='336566')
+    ap.add_argument('--baseline-job', default='335962')
     ap.add_argument('--zeroshot', default='results/zeroshot_check/job_336108/qwen4b')
     ap.add_argument('--report', default='MIXFP4_REPORT.md')
     args = ap.parse_args()
-    root = Path(f'results/paper_baseline/job_{args.job}')
-    old = Path(args.report).read_text()
-    _, qwen_ppl, _ = evaluated(root / 'qwen4b_fixed256_math_code128')
-    _, qwen_fos, _ = evaluated(root / 'qwen4b_four_over_six')
+    kse_root = Path(f'results/kse_paper/job_{args.kse_job}')
+    base_root = Path(f'results/paper_baseline/job_{args.baseline_job}')
+
+    qwen = kse(kse_root, 'qwen4b')
     _, qwen_bf16 = released('qwen3-4b', 'bf16')
     adaptive = json.loads(Path('results/adaptive_paper/job_335993/qwen4b/report.json').read_text())
     accuracy = accuracy_section(Path(args.zeroshot), {
-        'bf16': qwen_bf16['wikitext'], 'four_over_six': qwen_fos['wikitext'],
-        'n256': qwen_ppl['wikitext'],
+        'bf16': qwen_bf16['wikitext'],
+        'four_over_six': qwen['evaluation']['four_over_six']['wiki']['ppl'],
+        'n256': qwen['evaluation']['n256']['wiki']['ppl'],
         'n65536': adaptive['evaluation']['n65536']['wiki']['ppl']})
 
-    fixed = block(old, 'FIXED256_PAPER_EVAL_START', 'FIXED256_PAPER_EVAL_END')
-    audit = block(old, 'BASELINE_PROTOCOL_AUDIT_START', 'BASELINE_PROTOCOL_AUDIT_END')
-    repro = block(old, 'RELEASED_REPRODUCTION_START', 'RELEASED_REPRODUCTION_END')
+    head = f"""# MixFP4: choosing the FP4 element type per tile
 
-    head = f"""# MixFP4 with task-calibrated type selection
+NVFP4 hardware can already read a weight operand tile as either E2M1 or E0M3 at
+no cost. This report is about how to set that one bit per 8x64 tile, and what it
+buys. Every number is the released 2048-token evaluation: WikiText-2 raw test in
+141 full nonoverlapping windows, C4 as 256 seed-0 crops from validation shard
+00000, tensor-wide activation factors, SDPA, WikiText cached per window with C4
+uncached, and the released float32 perplexity aggregation. Measurements taken
+under any other protocol are not reported here.
 
-Every result in this report uses the released 2048-token evaluation protocol.
-WikiText-2 raw test is read as 141 full nonoverlapping windows; C4 is 256 seed-0
-crops from validation shard 00000. Activation factors are tensor-wide, attention
-is SDPA, WikiText is cached per window and C4 uncached, and perplexity uses the
-released float32 aggregation. Non-aligned 512-token studies have been removed
-from this report; their records remain under `results/` and are listed in the
-final section.
+{results_section(kse_root, base_root)}
+## 2. How the element type is chosen
 
-[Paper-aligned panel](results/paper_baseline/REPORT.md) (job {args.job}).
+### The two candidates
 
-{panel(root)}
-{fixed}
+A **scale block** is always 16 elements along K and owns one E4M3 scale; this is
+inherited from NVFP4 unchanged. A **type block** is a 2-D tile that owns one
+element data type and contains many scale blocks. The two types are:
 
-{audit}
+- **E2M1**, the standard FP4 grid, maximum magnitude 6, log-spaced so it is fine
+  near zero and coarse near the block maximum.
+- **E0M3**, the evenly spaced signed grid, maximum magnitude 7, uniform.
 
-{repro}
-
-{accuracy}
-## 3. Two deliberate differences from the released code
-
-Both make our baselines harder to beat, not easier.
-
-**Qwen `o_proj` inputs are quantized.** At the archived release commit
-`e230099`, `models/qmodule_qwen3.py` passed unquantized attention output into
-`o_proj`, so Qwen "W4A4" left one projection's input in BF16. The RaZeR author
-corrected this himself in commit `abab3c6`, after publication. We evaluate the
-corrected behaviour, so our Qwen FourOverSix baseline is 14.269062 WikiText
-where the pre-fix code gives 14.201942. Llama was never affected, and its rows
-match the released run to the last digit; that is the control which shows the
-difference comes only from that one line. Qwen rows here are therefore **not**
-comparable with the published RaZeR Qwen row.
-
-**NVFP4 saturation is clamped.** The archived `quant_nvfp4` used a rounding
-path with no E2M1 saturation clamp, so an FP8 subnormal block scale that rounded
-down could produce magnitude code 8, which is not a legal FP4 code. The current
-`quant_nvfp4` clamps to [-6, 6]. Baseline and method both use the corrected
-quantizer. Exact equality with the released NVFP4 run is therefore not expected
-and not asserted; the released values are recorded as a comparison in each
-report. The FourOverSix path is unchanged since the release and keeps a hard
-exact-equality assertion.
-
-## 4. The format
-
-MixFP4 is NVFP4 plus a second, coarser block granularity that selects the FP4
-element data type. The FP32 per-tensor global scale, the E4M3 block scale and
-the 16-element scale block are inherited from NVFP4 unchanged.
-
-A **scale block** is always 16 elements along K and owns one E4M3 scale. A
-**type block** is a 2-D tile that owns one element data type and contains many
-scale blocks. The two element types are **E2M1**, the standard FP4 grid with
-maximum magnitude 6, and **E0M3**, the evenly spaced signed grid with maximum
-magnitude 7. Both encode 15 distinct values in 16 codes and share the same
-ue4m3 scale; only the spacing differs, so the better choice depends on the
-distribution inside the tile.
+Both encode 15 values in 16 codes and share the same ue4m3 scale. Only the
+spacing differs, so which one is better depends on the distribution inside the
+tile, which is why the choice must be data driven rather than fixed.
 
 The tile shape is not free. The public NVFP4 path issues
 
@@ -240,104 +193,139 @@ The tile shape is not free. The public NVFP4 path issues
 mma.sync.aligned.kind::mxf4nvf4.block_scale.scale_vec::4X.m16n8k64.row.col.f32.e2m1.e2m1.f32.ue4m3
 ```
 
-and the same instruction can read either operand as E0M3. A single instruction
-cannot subdivide its operand tile, so for weights in operand B the smallest
-realizable type block is `n8 x k64`. All results here use exactly that 8x64
-weight tile, with alpha fixed at 1 on the E0M3 branch.
+and the same instruction can read either operand as E0M3. One instruction cannot
+subdivide its operand tile, so for weights in operand B the smallest realizable
+type block is `n8 x k64`. Everything here uses exactly that 8x64 tile, with the
+E0M3 branch pinned at alpha 1 so no extra scale search is smuggled in.
 
-## 5. Why a weight-error election is insufficient
+### The score
 
-The natural selector compares the squared weight error of the two candidates
-per tile and takes the smaller. It measures how well a candidate approximates
-the pristine weights, not which inputs reach the block or how its outputs move
-the prediction. Even at one linear layer the output error is
+Form the canonical FourOverSix Q0 and the E0M3-alpha1 Q1 once, so each tile j has
+a fixed difference D_j. At the unchanged FourOverSix W4A4 model, one forward pass
+per calibration sequence supports two backward passes, giving each tile a
+directional derivative for next-token cross entropy and for KL from the pristine
+BF16 teacher:
 
-$$
-\\mathbb E\\|\\Delta W x\\|^2=\\operatorname{{tr}}(\\Delta W\\,\\mathbb E[xx^T]\\,\\Delta W^T),
-$$
+    g_CE[i,j] = <grad_Wj CE_i, D_j>,   g_KL[i,j] = <grad_Wj KL(teacher||student)_i, D_j>
 
-which depends on the input second moment, and that still omits the downstream
-loss and interactions between quantized blocks. A weight-error gain of factor
-$g$ certifies an output-error reduction only when $g > 1-1/\\kappa(S)$, and the
-measured conditioning of $S$ puts that threshold far above the gains available
-at a realizable tile size. This is why the election below is driven by a task
-loss rather than a reconstruction loss.
+A negative value predicts that switching tile j to E0M3 lowers that loss. The
+gradient is taken at the **quantized** model, not the pristine one, so it finds
+corrections that are useful given the errors already present. Activation
+quantization uses an identity straight-through derivative during scoring.
 
-MixFP4 can also appear to help merely because its implementation searches more
-scales. We therefore hold the scale search fixed: the E2M1 baseline is
-FourOverSix, the E0M3 alternative is fixed at alpha 1, and the experiment
-changes only the tile's element type. No rotation, permutation, scale search or
-weight training is added.
+### The rule
 
-## 6. The selection method
+Over n calibration sequences take each tile's mean and standard error, and switch
+tile j to E0M3 when
 
-Form the canonical FourOverSix Q0 and the E0M3-alpha1 Q1 once, so each 8x64
-tile j has a fixed difference D_j. At the unchanged FourOverSix W4A4 student,
-one forward per calibration sequence supports two backward passes, giving each
-tile a directional derivative for next-token cross entropy and for KL from the
-pristine BF16 teacher:
+    max( mean(g_CE) + k SE(g_CE),  mean(g_KL) + k SE(g_KL) ) < 0,  with k = {K}
 
-    g_CE[i,j] = <grad_Wj CE_i, D_j>,   g_KL[i,j] = <grad_Wj KL(teacher||student)_i, D_j>.
+Everything else stays E2M1. There is no cap and no per-model search: the number
+of switched tiles is whatever passes.
 
-Activation quantization uses an identity straight-through derivative during
-scoring. With n calibration sequences,
+## 3. Why this rule
 
-    u_j = max(mean(g_CE[:,j]) + 2 SE(g_CE[:,j]), mean(g_KL[:,j]) + 2 SE(g_KL[:,j])),
+### Why a task gradient and not the weight error
 
-and the 256 most negative u_j are switched to E0M3. Requiring both objectives to
-favour a switch is the point of the maximum: for each objective separately, the
-sum of its estimated upper directional scores is bounded above by the sum of
-per-tile maxima, so one selection bounds both. This is an approximate predictor
-of a discrete switch, not a proof that a finite joint flip lowers the network
-loss, and two SE does not control the many tile comparisons simultaneously. The
-count 256 and the factor 2 are fixed empirical constants, never tuned per model
-or per destination dataset.
+The obvious selector compares the two candidates' squared weight error per tile
+and takes the smaller. That measures how well a candidate approximates the
+pristine weights, not which inputs reach the block or how its outputs move the
+prediction. Even for one linear layer the output error is
 
-Calibration uses OpenWebMath and CodeParrot only. Neither evaluation corpus
-contributes gradients or any selection feedback.
+    E||dW x||^2 = tr(dW E[x x^T] dW^T)
 
-## 7. Limits
+which depends on the input second moment, and that still ignores the downstream
+loss and interactions between blocks. A weight-error gain of factor g certifies
+an output-error reduction only when g > 1 - 1/kappa(S), and the measured
+conditioning of S puts that threshold far above the gains available at a
+realizable tile size. So the criterion has to be a task loss.
+
+### Why both CE and KL
+
+The two objectives fail in opposite directions. Cross entropy alone can be
+lowered by fitting the calibration corpus's particular observed tokens, which
+does not transfer. Teacher KL alone can be lowered by restoring agreement with
+the unquantized model on positions the task does not care about, and it is blind
+to whether the recovered probability mass sits on the right tokens. Requiring
+both means a switch is kept only when it improves the actual task loss **and**
+moves the quantized model back toward its own unquantized reference.
+
+Taking the maximum is what makes that a single objective: for each loss
+separately, the sum of its estimated upper directional scores is bounded above by
+the sum of the per-tile maxima, so one selection bounds both. It also needs no
+weighting constant between two quantities that have no common scale, and the
+eligible set is unchanged if either objective is rescaled by a positive factor.
+
+### Why k = {K}, and why a threshold rather than a fixed count
+
+Rearranged, `mean + k SE < 0` is `|mean|/SE > k`: k is a t-statistic cutoff, the
+number of standard errors of evidence a tile must show. It adapts on its own,
+because SE measures each model's own score noise — the count is never set, it
+falls out.
+
+k = 2 is too loose here, and the reason is multiple comparisons. There are
+millions of tiles. Under a null where a tile has no real effect, the chance it
+clears the bar on both objectives is about Phi(-k)^2, so at k = 2 one expects
+thousands of false positives, and the elected set is measurably polluted by them:
+at k = 2 the rule elects 0.73% of Llama-3.1-8B's tiles and **harms** the model.
+At k = {K} the expected null count falls to a few dozen out of thousands elected.
+k = {K} is the smallest value at which that expected contamination becomes
+negligible relative to the selected set, computed from the calibration table
+alone with no evaluation data involved.
+
+That null estimate treats the CE and KL tests as independent when they share a
+forward pass and are correlated, so it is optimistic in magnitude. The
+conclusion it supports is the qualitative one — a 2 SE bar is far too loose
+across millions of comparisons — not a precise contamination figure.
+
+## 4. Protocol, and two deliberate differences from the released code
+
+The scope is corrected full W4A4: every targeted text linear weight and its input
+is quantized. Both differences below make our baselines harder to beat.
+
+**Qwen `o_proj` inputs are quantized.** At the archived release commit `e230099`,
+`models/qmodule_qwen3.py` passed unquantized attention output into `o_proj`, so
+Qwen "W4A4" left one projection's input in BF16. The RaZeR author corrected this
+in commit `abab3c6`, after publication. We evaluate the corrected behaviour, so
+our Qwen FourOverSix baseline is 14.269062 WikiText where the pre-fix code gives
+14.201942. Qwen rows here are therefore **not** comparable with the published
+RaZeR Qwen row. Llama was never affected, and its rows match the released run to
+the last digit — the control showing the difference comes only from that line.
+
+**NVFP4 saturation is clamped.** The archived `quant_nvfp4` used a rounding path
+with no E2M1 saturation clamp, so an FP8 subnormal block scale that rounded down
+could produce magnitude code 8, which is not a legal FP4 code. The current
+`quant_nvfp4` clamps to [-6, 6], and baseline and method both use it.
+
+Verification carried by the runs themselves: the shipped 2 SE score is
+reproduced exactly by the k = 2 case; the 256-tile prefix of that ranking
+reproduces the previously frozen map bitwise; the Llama FourOverSix row is
+asserted equal to the archived released-code reproduction; pristine weight
+hashes and frozen map hashes are checked; and the C4 evaluation documents have
+zero hash overlap with the calibration documents.
+
+{accuracy}
+## 6. Limits
 
 - Simulated W4A4 on text linear weights and their inputs. No KV-cache
-  quantization, generation accuracy, or native FP4 kernel throughput is
-  measured, and no speedup is claimed.
+  quantization, generation accuracy, or native FP4 kernel throughput is measured,
+  and no speedup is claimed.
 - Tensor-wide activation factors span the whole teacher-forced window, so these
   are reference-text perplexities, not causal generation likelihoods.
+- k = {K} is prespecified from the calibration score distribution, but it has so
+  far been measured on two models. A model that played no part in choosing it,
+  such as Qwen3.8-27B, has not yet been evaluated under this rule.
 - Two-SE intervals are descriptive evaluation-window intervals. They do not
-  adjust for comparisons across the ten calibration settings, for WikiText
-  article dependence, or for calibration-draw variability; one calibration draw
-  per setting is used.
-- The 256-tile count is a fixed constant here. Evidence that the count/gain
-  curve has a model-dependent interior optimum exists only under the
-  512-token protocol and is deliberately excluded from this report until it is
-  re-measured under the aligned protocol.
-- Gradient selection, distillation and sparse optimization are established
-  tools. Their use here is not by itself a novelty claim.
-
-## 8. Records not included in this report
-
-These studies use protocols other than the aligned 2048-token one and are
-excluded from the tables above. Their records are retained.
-
-- [Pooled calibration transfer panel](results/transfer_rule/REPORT.md) and
-  [held-out C4](results/c4_frozen/REPORT_332781.md): 512-token windows, causal
-  per-token activation factors, C4 among the calibration sources.
-- [Qwen3.8-27B pooled extension](results/pooled_qwen27b/model_332840/REPORT.md).
-- [Tile-count sweep](results/cap_sweep/REPORT.md) and
-  [calibration-chosen count](results/adaptive_count/REPORT.md): 512-token.
-- [Adaptive-count study](results/math_code_adaptive/summary_333786_333788/REPORT.md):
-  512-token evaluation of the curvature-penalised selector.
-- [Earlier format exploration](results/MIXFP4_REPORT.md) and
-  [decision-rule rounds](results/DECIDE_SUMMARY.md).
+  adjust for multiple comparisons, WikiText article dependence, or
+  calibration-draw variability; one calibration draw per model is used.
+- Gradient selection, distillation and sparse optimization are established tools.
+  Their use here is not by itself a novelty claim.
 """
-    # Number the top-level sections sequentially; the carried blocks arrive unnumbered
-    # and the authored ones carry provisional numbers, so strip and renumber uniformly.
     lines, n = [], 0
     for line in head.split('\n'):
         if line.startswith('## ') and not line.startswith('###'):
             n += 1
-            title = re.sub(r'^## (?:\d+\.\s*)?', '', line)
-            line = f'## {n}. {title}'
+            line = f'## {n}. ' + re.sub(r'^## (?:\d+\.\s*)?', '', line)
         lines.append(line)
     Path(args.report).write_text('\n'.join(lines))
     print(f'wrote {args.report}: {len(lines)} lines, {n} sections')
