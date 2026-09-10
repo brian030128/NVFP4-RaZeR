@@ -1,21 +1,37 @@
 #!/bin/bash
-# Transparent `singularity` shim that drops --fakeroot.
+# Transparent `singularity` shim that makes harbor's container startup work on this cluster.
 #
-# harbor's singularity environment always passes --fakeroot (see
-# harbor/environments/singularity/singularity.py, _start_server). On this cluster that flag is
-# fatal rather than helpful: it forces the unprivileged user-namespace path, which then
-#   1. mounts the SIF with squashfuse -o allow_other, refused because /etc/fuse.conf has
-#      user_allow_other commented out, and
-#   2. falls back to extracting the SIF to a sandbox, which needs a /etc/subuid mapping this
-#      account does not have -- "could not use fakeroot: no mapping entry found in /etc/subuid".
+# harbor's singularity backend always starts the container with
+#     singularity exec --writable-tmpfs --fakeroot --containall --pid ...
+# (harbor/environments/singularity/singularity.py, _start_server). Both of those privilege
+# choices are wrong for this account, in different ways, and the shim fixes each:
 #
-# singularity-ce 4.1.2 here is installed setuid (starter-suid present, `allow setuid = yes`), so
-# without --fakeroot the setuid starter loop-mounts the SIF directly: no FUSE, no subuid, and
-# --writable-tmpfs still gives the container a writable overlay. The cost is that processes
-# inside run as the invoking user rather than as root, so a task that needs real root (apt-get
-# into the image, chown, mount) fails inside the container instead of at startup.
+# 1. --fakeroot is fatal. It selects the unprivileged user-namespace path, which then tries to
+#    mount the SIF with squashfuse -o allow_other -- refused, because /etc/fuse.conf leaves
+#    user_allow_other commented out -- and falls back to extracting the SIF, which wants an
+#    /etc/subuid mapping this account does not have:
+#        FATAL: could not use fakeroot: no mapping entry found in /etc/subuid for u4320956
+#    So the flag is dropped.
 #
-# Put this directory first on PATH; every other argument is passed through untouched.
+# 2. Dropping it alone is not enough. singularity-ce 4.1.2 here is setuid, so without --fakeroot
+#    the container starts -- but as the invoking user, and --writable-tmpfs overlays a tmpfs
+#    whose lower layer still says /opt is root:root 755. harbor's bootstrap installs its server
+#    venv into /opt/harbor-server, so it dies with "Permission denied" instead.
+#
+# The fix for (2) is `unshare -r`: an unprivileged user namespace that maps our uid to 0.
+# Verified on this cluster (max_user_namespaces = 15076, no subuid needed):
+#     unshare -r singularity exec --writable-tmpfs --containall --pid alpine.sif \
+#         sh -c 'id -u; mkdir -p /opt/probe && echo write-ok > /opt/probe/f'
+#     -> 0 / write-ok
+# Inside that namespace singularity extracts the SIF to a sandbox it owns, so the container runs
+# as root with a fully writable root filesystem -- which is what the task images expect.
+#
+# The cost is that each container start extracts the SIF rather than loop-mounting it: slower,
+# and it needs room in SINGULARITY_TMPDIR (point that at node-local /tmp, never /home).
+#
+# Everything else is passed through untouched. Put this directory first on PATH as `singularity`.
+set -u
+
 args=()
 for a in "$@"; do
     if [[ "$a" == "--fakeroot" || "$a" == "-f" ]]; then
@@ -23,4 +39,16 @@ for a in "$@"; do
     fi
     args+=("$a")
 done
+
+# Already root (a real root, or an outer userns someone else set up): nothing to map.
+if [[ "$(id -u)" == "0" ]]; then
+    exec /usr/bin/singularity "${args[@]}"
+fi
+
+if command -v unshare > /dev/null 2>&1 && unshare -r true 2>/dev/null; then
+    exec unshare -r /usr/bin/singularity "${args[@]}"
+fi
+
+# No user namespaces available: still better to try than to pass --fakeroot, which cannot work.
+echo "singularity-no-fakeroot: unshare -r unavailable, running unprivileged" >&2
 exec /usr/bin/singularity "${args[@]}"
