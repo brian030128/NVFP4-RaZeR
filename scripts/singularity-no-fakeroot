@@ -1,66 +1,66 @@
 #!/bin/bash
-# Transparent `singularity` shim that makes harbor's container startup work on this cluster.
+# Transparent `singularity` shim that makes harbor's Terminal-Bench containers work here.
 #
-# harbor's singularity backend always starts the container with
-#     singularity exec --writable-tmpfs --fakeroot --containall --pid ...
-# (harbor/environments/singularity/singularity.py, _start_server). Both of those privilege
-# choices are wrong for this account, in different ways, and the shim fixes each:
+# harbor's singularity backend starts every container with
+#     singularity exec --writable-tmpfs --fakeroot --containall --pid ... \
+#         bash -c 'exec /staging/bootstrap.sh "$@"' bash <workdir> ...
+# (harbor/environments/singularity/singularity.py, _start_server). Two things about that are
+# wrong for this cluster, and this shim fixes both without patching the installed harbor.
 #
-# 1. --fakeroot is fatal. It selects the unprivileged user-namespace path, which then tries to
-#    mount the SIF with squashfuse -o allow_other -- refused, because /etc/fuse.conf leaves
-#    user_allow_other commented out -- and falls back to extracting the SIF, which wants an
-#    /etc/subuid mapping this account does not have:
+# 1. --fakeroot is fatal. It selects the unprivileged user-namespace path, which mounts the SIF
+#    with squashfuse -o allow_other -- refused, because /etc/fuse.conf leaves user_allow_other
+#    commented out -- and then falls back to extracting the SIF, which wants an /etc/subuid
+#    mapping this account does not have:
 #        FATAL: could not use fakeroot: no mapping entry found in /etc/subuid for u4320956
 #    So the flag is dropped.
 #
-# 2. Dropping it alone is not enough. singularity-ce 4.1.2 here is setuid, so without --fakeroot
-#    the container starts -- but as the invoking user, and --writable-tmpfs overlays a tmpfs
-#    whose lower layer still says /opt is root:root 755. harbor's bootstrap installs its server
-#    venv into /opt/harbor-server, so it dies with "Permission denied" instead.
+# 2. Dropping it alone is not enough. singularity-ce 4.1.2 here is setuid, so the container then
+#    starts -- but as the invoking user, and --writable-tmpfs overlays a tmpfs whose lower layer
+#    still says /opt is root:root 755, so harbor's bootstrap cannot create its server venv.
+#    `unshare -r` maps this uid to 0 in an unprivileged user namespace (verified available:
+#    max_user_namespaces = 15076), and singularity then extracts the SIF to a sandbox it owns,
+#    giving a root-owned writable root filesystem. The cost is extraction instead of a loop
+#    mount at every container start, so SINGULARITY_TMPDIR must point at node-local /tmp.
 #
-# The fix for (2) is `unshare -r`: an unprivileged user namespace that maps our uid to 0.
-# Verified on this cluster (max_user_namespaces = 15076, no subuid needed):
-#     unshare -r singularity exec --writable-tmpfs --containall --pid alpine.sif \
-#         sh -c 'id -u; mkdir -p /opt/probe && echo write-ok > /opt/probe/f'
-#     -> 0 / write-ok
-# Inside that namespace singularity extracts the SIF to a sandbox it owns, so the container runs
-# as root with a fully writable root filesystem -- which is what the task images expect.
-#
-# The cost is that each container start extracts the SIF rather than loop-mounting it: slower,
-# and it needs room in SINGULARITY_TMPDIR (point that at node-local /tmp, never /home).
+# Being uid 0 by namespace rather than for real then breaks several things INSIDE the container
+# -- apt, dpkg, su, and bootstrap's python probe. Those are repaired by
+# scripts/harbor-container-prelude.sh, which this shim bind-mounts in and sources just before
+# handing control to harbor's bootstrap. Each repair there is tied to an observed failure.
 #
 # Everything else is passed through untouched. Put this directory first on PATH as `singularity`.
 set -u
 
+SELF=$(readlink -f "${BASH_SOURCE[0]}")
+PRELUDE_SRC=$(dirname "$SELF")/harbor-container-prelude.sh
+PRELUDE_DST=/harbor-prelude.sh
+BOOTSTRAP='exec /staging/bootstrap.sh "$@"'
+
 args=()
 for a in "$@"; do
-    if [[ "$a" == "--fakeroot" || "$a" == "-f" ]]; then
-        continue
-    fi
+    case "$a" in
+        --fakeroot|-f)
+            continue                        # see (1)
+            ;;
+        "$BOOTSTRAP")
+            # Source the repairs in the same shell, then hand over to harbor unchanged.
+            args+=(". $PRELUDE_DST 2>/dev/null; $BOOTSTRAP")
+            continue
+            ;;
+    esac
     args+=("$a")
 done
 
-# 3. Two more things break INSIDE the container, both consequences of the user namespace, and
-#    both are fixed by a prelude in front of harbor's bootstrap rather than by patching harbor.
-#    Probed on a real task image (results/terminal_bench/probe_337478):
-#
-#    a. Task images are Debian with python at /usr/local/bin/python3 and no /usr/bin/python3.
-#       bootstrap.sh tests that exact path, so it declares python missing and tries to install
-#       it. Symlinking the interpreter the image already ships satisfies it -- verified:
-#       "symlinked /usr/bin/python3 -> /usr/local/bin/python3 / venv ok / ensurepip ok".
-#
-#    b. apt-get cannot run: it drops privileges to the _apt user, which a single-mapping userns
-#       forbids, so every fetch dies and the package lists never refresh --
-#           E: seteuid 42 failed / setgroups 0 failed / Unable to locate package python3
-#       Telling apt to stay root (APT::Sandbox::User "root") is the standard fix, and it also
-#       lets bootstrap.sh install the tmux these images lack and terminal agents need.
-BOOTSTRAP='exec /staging/bootstrap.sh "$@"'
-PRELUDE='mkdir -p /etc/apt/apt.conf.d 2>/dev/null && printf "APT::Sandbox::User \"root\";\n" > /etc/apt/apt.conf.d/99-harbor-userns 2>/dev/null; [ -x /usr/bin/python3 ] || { p=$(command -v python3 2>/dev/null); [ -n "$p" ] && ln -sf "$p" /usr/bin/python3 2>/dev/null; }; '
-for i in "${!args[@]}"; do
-    if [[ "${args[$i]}" == "$BOOTSTRAP" ]]; then
-        args[$i]="${PRELUDE}${BOOTSTRAP}"
+# Only bind the prelude for the container start that will actually source it. The flag has to
+# sit after the subcommand ("singularity exec -B ... image cmd"), not in front of it.
+if [[ -f "$PRELUDE_SRC" && ${#args[@]} -gt 0 ]]; then
+    need=0
+    for a in "${args[@]}"; do
+        [[ "$a" == *"$PRELUDE_DST"* ]] && need=1 && break
+    done
+    if [[ "$need" == "1" ]]; then
+        args=("${args[0]}" -B "$PRELUDE_SRC:$PRELUDE_DST:ro" "${args[@]:1}")
     fi
-done
+fi
 
 # Already root (a real root, or an outer userns someone else set up): nothing to map.
 if [[ "$(id -u)" == "0" ]]; then
