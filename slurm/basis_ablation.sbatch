@@ -42,6 +42,6 @@ echo "=== ARM model=$MODEL basis=$BASIS stem=$STEM $(date -Iseconds) ==="
   --out "$STEM/calibration"
 
 "$PYTHON" run_math_code_evaluation.py \
-  --calibration "$STEM/calibration" --out "$STEM/evaluation"
+  --calibration "$STEM/calibration" --out "$STEM/evaluation" --no-reuse
 
 echo "=== done model=$MODEL basis=$BASIS $(date -Iseconds) ==="

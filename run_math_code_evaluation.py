@@ -25,6 +25,8 @@ def main():
     ap.add_argument('--calibration',required=True)
     ap.add_argument('--out',required=True)
     ap.add_argument('--group',choices=('all','c4','wiki_adaptive','wiki_fixed'),default='all')
+    ap.add_argument('--no-reuse',action='store_true',
+                    help='measure every policy fresh instead of reusing recorded control losses')
     args=ap.parse_args()
     old=Path(args.calibration); prior=json.loads((old/'report.json').read_text())
     assert prior['status']=='complete' and prior['maps_frozen'] and prior['source_weights_verified']
@@ -98,11 +100,19 @@ def main():
         assert all(b.shape==(1,512) for b in batches[domain])
         assert [sha(b) for b in batches[domain]]==r['data'][domain]['token_sha256']
     # Controls only: reuse previous losses when all relevant identities match.
+    # Valid ONLY for the reported e0m3 direction. Both reused policies are
+    # basis-dependent: `weight_mse` elects the tiles where THIS basis'
+    # alternative reconstructs better, and under type_pure the policy named
+    # `four_over_six` is actually NVFP4 alpha=1, so a FourOverSix reference
+    # would be the wrong control. An ablation also wants every arm measured
+    # under identical conditions, which is what --no-reuse gives.
     history=Path(prior['origin'])
-    old_maps=torch.load(history/'maps.pt',map_location='cpu',weights_only=True)
-    assert all(torch.equal(maps['weight_mse'][n],old_maps['maps']['weight_mse'][n]) for n in modules)
     refs={}
-    for domain in domains:
+    r['control_reuse']='reused' if not args.no_reuse and basis=='e0m3' else f'disabled (basis={basis}, no_reuse={args.no_reuse})'
+    if r['control_reuse']=='reused':
+        old_maps=torch.load(history/'maps.pt',map_location='cpu',weights_only=True)
+        assert all(torch.equal(maps['weight_mse'][n],old_maps['maps']['weight_mse'][n]) for n in modules)
+    for domain in (domains if r['control_reuse']=='reused' else ()):
         path=(history/'report.json' if target else Path(f'results/c4_frozen/model_332781_{r["model"]}/report.json')) if domain=='c4' else Path(
             f'results/wiki_frozen/model_{"332976" if target else "332974"}_{r["model"]}/report.json')
         ref=json.loads(path.read_text())
