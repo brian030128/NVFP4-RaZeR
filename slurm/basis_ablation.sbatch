@@ -6,7 +6,7 @@
 #SBATCH --account=gov113008
 #SBATCH --partition=taide
 #SBATCH --job-name=basis_ablation
-#SBATCH --array=0-5%6
+#SBATCH --array=0-5%5
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
