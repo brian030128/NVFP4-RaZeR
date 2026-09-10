@@ -65,15 +65,38 @@ def usable_tasks(tasks):
     return ok, skipped
 
 
-def evaluate(model, tokenizer, tasks, batch_size, limit=None):
+def evaluate(model, tokenizer, tasks, batch_size, limit=None, samples_path=None):
+    """
+        `samples_path` writes lm-eval's per-document outcomes for this configuration.
+
+        Worth the disk: every configuration is scored on the SAME documents, so the difference
+        between two of them is a paired comparison, while the standard error lm-eval reports is
+        the error of ONE measurement. With per-document outcomes in hand a delta can be tested
+        against how often the two configurations actually disagree, which is a far tighter and
+        more honest test than the unpaired bound.
+    """
     import lm_eval
     from lm_eval.models.huggingface import HFLM
 
     # HFLM wraps the live module, and weights are rewritten in place, so it is rebuilt per
     # configuration only to reset the harness's own caches -- the model is never reloaded.
     lm = HFLM(pretrained=model, tokenizer=tokenizer, batch_size=batch_size)
-    res = lm_eval.simple_evaluate(model=lm, tasks=list(tasks), num_fewshot=0,
-                                  batch_size=batch_size, limit=limit)["results"]
+    out = lm_eval.simple_evaluate(model=lm, tasks=list(tasks), num_fewshot=0,
+                                  batch_size=batch_size, limit=limit,
+                                  log_samples=samples_path is not None)
+    if samples_path is not None:
+        os.makedirs(os.path.dirname(samples_path) or ".", exist_ok=True)
+        keep = {}
+        for task, records in (out.get("samples") or {}).items():
+            # doc_id plus the scored metrics is all a paired test needs; prompts and raw
+            # continuations are large and identical across configurations.
+            keep[task] = [{"doc_id": r.get("doc_id"),
+                           **{k: v for k, v in r.items()
+                              if k in ("acc", "acc_norm", "exact_match")}}
+                          for r in records]
+        with open(samples_path, "w") as f:
+            json.dump(keep, f)
+    res = out["results"]
     acc = {}
     for task, values in res.items():
         for key in METRIC_ORDER:
@@ -107,6 +130,9 @@ def main():
     parser.add_argument("--calib_batches", type=int, default=4)
     parser.add_argument("--limit", type=int, default=None,
                         help="Cap documents per task (smoke tests only -- not a reportable run).")
+    parser.add_argument("--samples_dir", type=str, default=None,
+                        help="Write per-document outcomes per configuration here, so deltas can "
+                             "be tested as the paired comparisons they are.")
     args = parser.parse_args()
 
     assert os.environ.get("SLURM_JOB_ID"), "Use Slurm -- see /home/u4320956/CLAUDE.md"
@@ -176,7 +202,10 @@ def main():
         t_quant = time.time() - t0
 
         t1 = time.time()
-        acc = evaluate(model, tokenizer, tasks, args.batch_size, limit=args.limit)
+        samples_path = (os.path.join(args.samples_dir, f"{label}.json")
+                        if args.samples_dir else None)
+        acc = evaluate(model, tokenizer, tasks, args.batch_size, limit=args.limit,
+                       samples_path=samples_path)
         entry = {"w_dtype": w_dtype, "w_type_block": w_tb, "a_dtype": a_dtype,
                  "a_type_block": a_tb, "quant_sec": round(t_quant, 1),
                  "eval_sec": round(time.time() - t1, 1), "accuracy": acc}
