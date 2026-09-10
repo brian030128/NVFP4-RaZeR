@@ -74,6 +74,61 @@ Both configurations are scored on the same documents, so the comparison is paire
 
 10 tests were run, so the 0.05 threshold is worth 0.0050 after a Bonferroni correction. Uncorrected, 2 row(s) fall below 0.05: Llama-3.1-8B `hess_h1.5` (p = 0.00551), Qwen3-14B `hess_h1.5` (p = 0.0321). Corrected, 0 survive. Read the table accordingly: it is evidence about the SIZE of these effects, and the honest summary of that size is that it is small enough to need 18,600 documents to see at all.
 
+### Perplexity and accuracy do not rank these rules the same way
+
+Every cell below is one (model, rule) pair: its wikitext perplexity delta from §1 and its zero-shot accuracy delta from this section, both against `nvfp4` on the same weights. The sign conventions are opposite -- perplexity down is good, accuracy up is good -- so if the two metrics agreed, the correlation would be negative and the two columns would have opposite signs cell by cell.
+
+| model | rule | d wikitext | d accuracy | agree? |
+|---|---|---|---|---|
+| Llama-3.1-8B | `h10` | -0.0085 | +0.0025 | yes |
+| Llama-3.1-8B | `hess_h1.5` | -0.0442 | +0.0097 | yes |
+| Llama-3.1-8B | `hess_h10` | -0.0043 | -0.0009 | **no** |
+| Llama-3.1-8B | `hess_m1` | -0.0388 | +0.0059 | yes |
+| Llama-3.1-8B | `hess_impg16_h10` | +0.0006 | -0.0040 | yes |
+| Llama-3.1-8B-Ins | `h10` | -0.0140 | +0.0011 | yes |
+| Llama-3.1-8B-Ins | `hess_h1.5` | -0.0587 | +0.0043 | yes |
+| Llama-3.1-8B-Ins | `hess_h10` | -0.0099 | +0.0015 | yes |
+| Llama-3.1-8B-Ins | `hess_m1` | -0.0314 | +0.0040 | yes |
+| Llama-3.1-8B-Ins | `hess_impg16_h10` | -0.0099 | -0.0020 | **no** |
+| Llama-3.2-1B-Ins | `h10` | -0.0200 | -0.0021 | **no** |
+| Llama-3.2-1B-Ins | `hess_h1.5` | +0.0938 | -0.0016 | yes |
+| Llama-3.2-1B-Ins | `hess_h10` | -0.0409 | +0.0022 | yes |
+| Llama-3.2-1B-Ins | `hess_m1` | -0.0205 | +0.0004 | yes |
+| Llama-3.2-1B-Ins | `hess_impg16_h10` | -0.0164 | -0.0001 | **no** |
+| Qwen3-4B | `h10` | +0.0123 | -0.0039 | yes |
+| Qwen3-4B | `hess_h1.5` | +0.4231 | +0.0017 | **no** |
+| Qwen3-4B | `hess_h10` | -0.0170 | -0.0009 | **no** |
+| Qwen3-4B | `hess_m1` | +0.2865 | +0.0082 | **no** |
+| Qwen3-4B | `hess_impg16_h10` | -0.1222 | +0.0056 | yes |
+| Qwen3-8B | `h10` | +0.0009 | +0.0044 | **no** |
+| Qwen3-8B | `hess_h1.5` | -0.0179 | +0.0020 | yes |
+| Qwen3-8B | `hess_h10` | +0.0093 | +0.0027 | **no** |
+| Qwen3-8B | `hess_m1` | -0.0837 | +0.0052 | yes |
+| Qwen3-8B | `hess_impg16_h10` | -0.0581 | +0.0029 | yes |
+| Qwen3-14B | `h10` | +0.0023 | -0.0006 | yes |
+| Qwen3-14B | `hess_h1.5` | -0.0317 | +0.0029 | yes |
+| Qwen3-14B | `hess_h10` | +0.0492 | -0.0024 | yes |
+| Qwen3-14B | `hess_m1` | -0.0217 | +0.0015 | yes |
+| Qwen3-14B | `hess_impg16_h10` | +0.0113 | +0.0011 | **no** |
+
+Spearman rho over these 30 pairs is **-0.50** -- negative, so the two metrics do agree in rank more often than not, and the signs match in 20 of 30 cells. **The disagreement is not in direction, it is in magnitude, and the magnitude is what §1's recommendation rests on.**
+
+The clearest case is `hess_h1.5` on Qwen3-4B. §1 records it as the worst number in the report, **+0.4231** wikitext -- the single result that disqualifies that rule there -- and its accuracy cost is **+0.0017**, which is to say none at all. A perplexity catastrophe that a reader would expect to be visible in what the model answers simply is not. Across the panel the median |accuracy| per unit |perplexity| is about 0.094, and it varies over orders of magnitude between cells, so a perplexity delta does not convert into an expected accuracy delta at any fixed rate.
+
+The largest accuracy gain in the panel, `hess_h1.5` on Llama-3.1-8B at **+0.0097**, does come with a healthy -0.0442 wikitext, so the two metrics are not adversaries. They are simply measuring things that come apart exactly where §1 has to make its decision -- at the worst case.
+
+### What this changes, and what it does not
+
+**It does not overturn §1.** The perplexity numbers there are real and were measured on these same weights. What this section adds is that they do not carry over to task accuracy.
+
+1. **The recommended rule is invisible here.** `hess_impg16_h10` is the configuration §1 recommends on worst-case grounds, and on every one of the 5 models with per-document logs its paired delta is not significant (p = 0.59, 0.11, 0.59, 0.61, 0.92). Whatever it buys in perplexity, it does not show up in what the model answers.
+
+2. **The election is not a confidence artefact either.** That was the worry this section was run to test: a rule chosen to shrink a squared error could lower next-token loss by flattening the distribution while predicting no better. If that were happening, accuracy would fall. It does not -- most rules are slightly positive. The perplexity gain is not an artefact of confidence -- it simply does not buy accuracy.
+
+3. **Both are dwarfed by W4A4 itself.** Quantizing costs 0.0132 to 0.0291 accuracy against BF16, while the best election rule recovers at most +0.0097. The element type is a second-order decision about a first-order loss.
+
+4. **If a rule were to be chosen on accuracy, it would not be this one.** By accuracy alone `hess_m1` has both the best panel mean and the best worst case, and it is the one rule that is never negative on any model -- while §1 rejects it precisely because its perplexity worst case is +0.2865. There is no configuration here that is best on both metrics, and this section does not propose changing the recommendation: it argues that the recommendation should be stated as what it is, a perplexity result.
+
 <details>
 <summary>Per-task accuracy</summary>
 

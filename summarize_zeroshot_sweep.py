@@ -65,6 +65,39 @@ def stderr_of_mean(entry, tasks):
     return math.sqrt(sum(s * s for s in se)) / len(se) if se else float("nan")
 
 
+def load_ppl(model, ppl_root):
+    """
+        The wikitext/c4 perplexities §1 reports, read from the same files §1 was built from
+        (results/w4a4/<model>_types.json) rather than retyped, so the two metrics cannot drift
+        apart in this report.
+    """
+    path = os.path.join(ppl_root, f"{model}_types.json")
+    return json.load(open(path)) if os.path.isfile(path) else None
+
+
+def spearman(xs, ys):
+    """Rank correlation, with average ranks for ties. n is 30 here, so this is a summary only."""
+    def ranks(v):
+        order = sorted(range(len(v)), key=lambda i: v[i])
+        r = [0.0] * len(v)
+        i = 0
+        while i < len(order):
+            j = i
+            while j + 1 < len(order) and v[order[j + 1]] == v[order[i]]:
+                j += 1
+            avg = (i + j) / 2 + 1
+            for k in range(i, j + 1):
+                r[order[k]] = avg
+            i = j + 1
+        return r
+    rx, ry = ranks(xs), ranks(ys)
+    n = len(xs)
+    mx, my = sum(rx) / n, sum(ry) / n
+    num = sum((a - mx) * (b - my) for a, b in zip(rx, ry))
+    den = (sum((a - mx) ** 2 for a in rx) * sum((b - my) ** 2 for b in ry)) ** 0.5
+    return num / den if den else float("nan")
+
+
 def fmt(x, digits=4, signed=False):
     if x is None or (isinstance(x, float) and math.isnan(x)):
         return "—"
@@ -254,6 +287,116 @@ def main():
             + " Read the table accordingly: it is evidence about the SIZE of these effects, and "
               "the honest summary of that size is that it is small enough to need 18,600 "
               "documents to see at all.",
+            "",
+        ]
+
+    # --- the comparison the section exists for ------------------------------------------------
+    joint = []
+    for m, lbl in present:
+        pj = load_ppl(m, args.ppl_root)
+        if not pj or REFERENCE not in data[m]:
+            continue
+        ppl_ref = pj.get("nvfp4__a-nvfp4_4over6", {}).get("wikitext")
+        if ppl_ref is None:
+            continue
+        for header, key in RULES:
+            if header == "`e2m1`":
+                continue            # (0, 0) by construction; it is the control, not a data point
+            if key not in data[m] or key not in pj or pj[key].get("wikitext") is None:
+                continue
+            joint.append((lbl, header,
+                          pj[key]["wikitext"] - ppl_ref,
+                          acc(data[m][key]) - acc(data[m][REFERENCE])))
+    if joint:
+        rho = spearman([j[2] for j in joint], [j[3] for j in joint])
+        # A rule that lowers perplexity should, if the two metrics agree, raise accuracy: the
+        # correlation between them ought to be NEGATIVE, since the sign conventions are opposite.
+        agree = sum(1 for _, _, dp, da in joint if (dp < 0) == (da > 0))
+        worst_ppl = max(joint, key=lambda j: j[2])
+        best_acc = max(joint, key=lambda j: j[3])
+        lines += [
+            "### Perplexity and accuracy do not rank these rules the same way",
+            "",
+            "Every cell below is one (model, rule) pair: its wikitext perplexity delta from §1 "
+            "and its zero-shot accuracy delta from this section, both against `nvfp4` on the "
+            "same weights. The sign conventions are opposite -- perplexity down is good, "
+            "accuracy up is good -- so if the two metrics agreed, the correlation would be "
+            "negative and the two columns would have opposite signs cell by cell.",
+            "",
+            "| model | rule | d wikitext | d accuracy | agree? |",
+            "|---|---|---|---|---|",
+        ]
+        for lbl, header, dp, da in joint:
+            ok = "yes" if (dp < 0) == (da > 0) else "**no**"
+            lines.append(f"| {lbl} | {header} | {dp:+.4f} | {da:+.4f} | {ok} |")
+        ratios = [abs(da) / abs(dp) for _, _, dp, da in joint if abs(dp) > 1e-9]
+        ratios.sort()
+        med_ratio = ratios[len(ratios) // 2] if ratios else float("nan")
+        lines += [
+            "",
+            f"Spearman rho over these {len(joint)} pairs is **{rho:+.2f}** -- negative, so the "
+            f"two metrics do agree in rank more often than not, and the signs match in "
+            f"{agree} of {len(joint)} cells. **The disagreement is not in direction, it is in "
+            "magnitude, and the magnitude is what §1's recommendation rests on.**",
+            "",
+            f"The clearest case is {worst_ppl[1]} on {worst_ppl[0]}. §1 records it as the worst "
+            f"number in the report, **{worst_ppl[2]:+.4f}** wikitext -- the single result that "
+            f"disqualifies that rule there -- and its accuracy cost is **{worst_ppl[3]:+.4f}**, "
+            "which is to say none at all. A perplexity catastrophe that a reader would expect "
+            "to be visible in what the model answers simply is not. Across the panel the median "
+            f"|accuracy| per unit |perplexity| is about {med_ratio:.3f}, and it varies over "
+            "orders of magnitude between cells, so a perplexity delta does not convert into an "
+            "expected accuracy delta at any fixed rate.",
+            "",
+            f"The largest accuracy gain in the panel, {best_acc[1]} on {best_acc[0]} at "
+            f"**{best_acc[3]:+.4f}**, does come with a healthy {best_acc[2]:+.4f} wikitext, so "
+            "the two metrics are not adversaries. They are simply measuring things that come "
+            "apart exactly where §1 has to make its decision -- at the worst case.",
+            "",
+        ]
+
+    # --- what a reader should take away -------------------------------------------------------
+    if joint and paired_rows:
+        rec = "`hess_impg16_h10`"
+        rec_paired = [(lbl, pl) for lbl, h, pl in paired_rows if h == rec]
+        rec_null = all(pl["p"] > 0.05 for _, pl in rec_paired)
+        rec_ps = ", ".join("%.2g" % pl["p"] for _, pl in rec_paired)
+        w4a4_cost = [acc(data[m]["fp16"]) - acc(data[m][REFERENCE])
+                     for m, _ in present if "fp16" in data[m] and REFERENCE in data[m]]
+        lines += [
+            "### What this changes, and what it does not",
+            "",
+            "**It does not overturn §1.** The perplexity numbers there are real and were "
+            "measured on these same weights. What this section adds is that they do not carry "
+            "over to task accuracy.",
+            "",
+            f"1. **The recommended rule is invisible here.** {rec} is the configuration §1 "
+            f"recommends on worst-case grounds, and on "
+            + ("every one of the " if rec_null else "")
+            + f"{len(rec_paired)} models with per-document logs its paired delta is "
+            + ("not significant" if rec_null else "mostly not significant")
+            + f" (p = {rec_ps}). Whatever it buys "
+              "in perplexity, it does not show up in what the model answers.",
+            "",
+            "2. **The election is not a confidence artefact either.** That was the worry this "
+            "section was run to test: a rule chosen to shrink a squared error could lower "
+            "next-token loss by flattening the distribution while predicting no better. If that "
+            "were happening, accuracy would fall. It does not -- most rules are slightly "
+            "positive. The perplexity gain is not an artefact of confidence -- it simply does "
+            "not buy accuracy.",
+            "",
+            f"3. **Both are dwarfed by W4A4 itself.** Quantizing costs "
+            f"{min(w4a4_cost):.4f} to {max(w4a4_cost):.4f} accuracy against BF16, while the "
+            f"best election rule recovers at most {max(j[3] for j in joint):+.4f}. The element "
+            "type is a second-order decision about a first-order loss.",
+            "",
+            "4. **If a rule were to be chosen on accuracy, it would not be this one.** By "
+            "accuracy alone `hess_m1` has both the best panel mean and the best worst case, and "
+            "it is the one rule that is never negative on any model -- while §1 rejects it "
+            "precisely because its perplexity worst case is +0.2865. There is no configuration "
+            "here that is best on both metrics, and this section does not propose changing the "
+            "recommendation: it argues that the recommendation should be stated as what it is, "
+            "a perplexity result.",
             "",
         ]
 
