@@ -40,6 +40,28 @@ for a in "$@"; do
     args+=("$a")
 done
 
+# 3. Two more things break INSIDE the container, both consequences of the user namespace, and
+#    both are fixed by a prelude in front of harbor's bootstrap rather than by patching harbor.
+#    Probed on a real task image (results/terminal_bench/probe_337478):
+#
+#    a. Task images are Debian with python at /usr/local/bin/python3 and no /usr/bin/python3.
+#       bootstrap.sh tests that exact path, so it declares python missing and tries to install
+#       it. Symlinking the interpreter the image already ships satisfies it -- verified:
+#       "symlinked /usr/bin/python3 -> /usr/local/bin/python3 / venv ok / ensurepip ok".
+#
+#    b. apt-get cannot run: it drops privileges to the _apt user, which a single-mapping userns
+#       forbids, so every fetch dies and the package lists never refresh --
+#           E: seteuid 42 failed / setgroups 0 failed / Unable to locate package python3
+#       Telling apt to stay root (APT::Sandbox::User "root") is the standard fix, and it also
+#       lets bootstrap.sh install the tmux these images lack and terminal agents need.
+BOOTSTRAP='exec /staging/bootstrap.sh "$@"'
+PRELUDE='mkdir -p /etc/apt/apt.conf.d 2>/dev/null && printf "APT::Sandbox::User \"root\";\n" > /etc/apt/apt.conf.d/99-harbor-userns 2>/dev/null; [ -x /usr/bin/python3 ] || { p=$(command -v python3 2>/dev/null); [ -n "$p" ] && ln -sf "$p" /usr/bin/python3 2>/dev/null; }; '
+for i in "${!args[@]}"; do
+    if [[ "${args[$i]}" == "$BOOTSTRAP" ]]; then
+        args[$i]="${PRELUDE}${BOOTSTRAP}"
+    fi
+done
+
 # Already root (a real root, or an outer userns someone else set up): nothing to map.
 if [[ "$(id -u)" == "0" ]]; then
     exec /usr/bin/singularity "${args[@]}"
