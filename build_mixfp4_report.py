@@ -11,7 +11,13 @@ import re
 from pathlib import Path
 
 REPRO = Path('results/released_reproduction/job_335297')
-MODELS = (('llama8b', 'llama-3.1-8b', 'Llama-3.1-8B'), ('qwen4b', 'qwen3-4b', 'Qwen3-4B'))
+# slug is the released-reproduction name and supplies the BF16 reference; the 27B has
+# no matched 2048-token BF16 run, so that row is omitted rather than borrowed.
+MODELS = (
+    dict(key='llama8b', label='Llama-3.1-8B', slug='llama-3.1-8b', kse='336566', base='335962'),
+    dict(key='qwen4b', label='Qwen3-4B', slug='qwen3-4b', kse='336566', base='335962'),
+    dict(key='qwen27b', label='Qwen3.8-27B', slug=None, kse='336969', base='337022'),
+)
 K = 3
 
 
@@ -44,16 +50,18 @@ def kse(root, model):
     return r
 
 
-def results_section(kse_root, base_root):
+def results_section():
     L = ['## 1. Results', '',
          'Baselines are NVFP4 and NVFP4 FourOverSix, both W4A4. The method is MixFP4: the same',
          'FourOverSix E2M1 weights, with the tiles the rule elects switched to E0M3. Calibration',
          'uses OpenWebMath and CodeParrot only, so WikiText-2 and C4 are held out for every row.',
-         'BF16 is the unquantized reference, not a competitor.', '']
-    for model, slug, label in MODELS:
-        r = kse(kse_root, model)
-        _, bf16 = released(slug, 'bf16')
-        nv_l, nv, _ = paper_case(base_root, f'{model}_nvfp4')
+         'Where shown, BF16 is the unquantized reference, not a competitor.', '']
+    for spec in MODELS:
+        model, label, slug = spec['key'], spec['label'], spec['slug']
+        r = kse(Path(f'results/kse_paper/job_{spec["kse"]}'), model)
+        bf16 = released(slug, 'bf16')[1] if slug else None
+        nv_l, nv, _ = paper_case(Path(f'results/paper_baseline/job_{spec["base"]}'),
+                                 f'{model}_nvfp4')
         fo_l = {d: r['evaluation']['four_over_six'][d]['nll'] for d in ('wiki', 'c4')}
         fo = {d: r['evaluation']['four_over_six'][d]['ppl'] for d in ('wiki', 'c4')}
         mx_l = {d: r['evaluation'][f'k{K}'][d]['nll'] for d in ('wiki', 'c4')}
@@ -63,9 +71,10 @@ def results_section(kse_root, base_root):
               f'{r["total_tiles"]:,} type blocks of 8x64 across the quantized text linear '
               f'weights. The rule elects **{el["selected"]:,} of them, {100 * el["fraction"]:.4f}%** '
               f'— about one block in {round(1 / el["fraction"]):,}.', '',
-              '| Policy | E0M3 blocks | WikiText-2 | C4 |', '|---|---:|---:|---:|',
-              f'| BF16 reference | — | {bf16["wikitext"]:.6f} | {bf16["c4"]:.6f} |',
-              f'| NVFP4 W4A4 | 0 | {nv["wiki"]:.6f} | {nv["c4"]:.6f} |',
+              '| Policy | E0M3 blocks | WikiText-2 | C4 |', '|---|---:|---:|---:|']
+        if bf16:
+            L.append(f'| BF16 reference | — | {bf16["wikitext"]:.6f} | {bf16["c4"]:.6f} |')
+        L += [f'| NVFP4 W4A4 | 0 | {nv["wiki"]:.6f} | {nv["c4"]:.6f} |',
               f'| NVFP4 FourOverSix W4A4 | 0 | {fo["wiki"]:.6f} | {fo["c4"]:.6f} |',
               f'| **MixFP4 (k={K}), ours** | {el["selected"]:,} | **{mx["wiki"]:.6f}** | '
               f'**{mx["c4"]:.6f}** |', '',
@@ -82,15 +91,16 @@ def results_section(kse_root, base_root):
                 cells.append(f'{ap[dom] - bp[dom]:+.6f} | {m:+.6f} ±{se:.6f}')
             L.append(f'| {nm} | ' + ' | '.join(cells) + ' |')
         L.append('')
-    L += ['MixFP4 improves both datasets on both models against both baselines, with every paired',
+    L += ['MixFP4 improves both datasets on every model against both baselines, with every paired',
           'two-SE interval excluding zero. Note FourOverSix is not uniformly the stronger baseline:',
           'on Qwen3-4B plain NVFP4 beats it, so the method is measured against the better of the',
           'two, not only against its own base.', '',
           '### The count is not a tuned constant', '',
-          'The same rule at other values of k, for reference. k is fixed at 3 for both models and',
+          'The same rule at other values of k, for reference. k is fixed at 3 for every model and',
           'is not selected per model or per dataset.', '']
-    for model, _, label in MODELS:
-        r = kse(kse_root, model)
+    for spec in MODELS:
+        label = spec['label']
+        r = kse(Path(f'results/kse_paper/job_{spec["kse"]}'), spec['key'])
         b = r['evaluation']['four_over_six']
         L += [f'**{label}**', '', '| k | Tiles | % of blocks | ΔWiki | ΔC4 |', '|---|---:|---:|---:|---:|']
         for k in r['k_values']:
@@ -148,10 +158,7 @@ def main():
     ap.add_argument('--zeroshot', default='results/zeroshot_check/job_336108/qwen4b')
     ap.add_argument('--report', default='MIXFP4_REPORT.md')
     args = ap.parse_args()
-    kse_root = Path(f'results/kse_paper/job_{args.kse_job}')
-    base_root = Path(f'results/paper_baseline/job_{args.baseline_job}')
-
-    qwen = kse(kse_root, 'qwen4b')
+    qwen = kse(Path('results/kse_paper/job_336566'), 'qwen4b')
     _, qwen_bf16 = released('qwen3-4b', 'bf16')
     adaptive = json.loads(Path('results/adaptive_paper/job_335993/qwen4b/report.json').read_text())
     accuracy = accuracy_section(Path(args.zeroshot), {
@@ -170,7 +177,7 @@ buys. Every number is the released 2048-token evaluation: WikiText-2 raw test in
 uncached, and the released float32 perplexity aggregation. Measurements taken
 under any other protocol are not reported here.
 
-{results_section(kse_root, base_root)}
+{results_section()}
 ## 2. How the element type is chosen
 
 ### The two candidates
@@ -312,9 +319,13 @@ zero hash overlap with the calibration documents.
   and no speedup is claimed.
 - Tensor-wide activation factors span the whole teacher-forced window, so these
   are reference-text perplexities, not causal generation likelihoods.
-- k = {K} is prespecified from the calibration score distribution, but it has so
-  far been measured on two models. A model that played no part in choosing it,
-  such as Qwen3.8-27B, has not yet been evaluated under this rule.
+- k = {K} is prespecified from the calibration score distribution and was fixed
+  using Llama-3.1-8B and Qwen3-4B. Qwen3.8-27B played no part in choosing it and
+  is a held-out check of the rule, not a third fitting model. Three models is
+  still a small panel, and one calibration draw is used per model.
+- No matched 2048-token BF16 run exists for Qwen3.8-27B, so that reference row is
+  omitted for it rather than filled from a measurement taken under another
+  protocol.
 - Two-SE intervals are descriptive evaluation-window intervals. They do not
   adjust for multiple comparisons, WikiText article dependence, or
   calibration-draw variability; one calibration draw per model is used.

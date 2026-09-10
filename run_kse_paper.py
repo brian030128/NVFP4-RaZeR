@@ -23,12 +23,16 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from quantize.interacting_format import apply_mask
 from quantize.quantizer import quant_mix_4_6, quant_nvfp4_4over6
 from quantize.relinearized_format import common_descent_scores
-from run_adaptive_paper import MODELS, LENGTH, FROZEN
+from run_adaptive_paper import LENGTH, FROZEN
 from run_baseline_protocol_audit import data
 from run_c4_frozen import digest_file
 from run_conditional_format import sha
 
+MODELS = {'llama8b': '333779', 'qwen4b': '333779', 'qwen27b': '333787'}
 K_VALUES = (2, 3, 4, 5, 6)
+# 24.35B parameters will not hold a resident baseline and alternative alongside the
+# model, so the target streams each module's candidates from a CPU copy instead.
+STREAMED = ('qwen27b',)
 
 
 def upper_scores(ce, kl, k):
@@ -114,12 +118,25 @@ def main():
     r['election']['n256'] = dict(k=2, selected=int(flat.sum()), fraction=float(flat.sum()) / flat.numel())
     del uppers, order
 
-    model = AutoModelForCausalLM.from_pretrained(
-        prior['source'], torch_dtype=torch.bfloat16, attn_implementation='sdpa', device_map='cuda')
+    target = args.model in STREAMED
+    if target:
+        from transformers import Qwen3_5ForConditionalGeneration
+        model, loading = Qwen3_5ForConditionalGeneration.from_pretrained(
+            prior['source'], dtype=torch.bfloat16, attn_implementation='sdpa',
+            device_map='cuda', output_loading_info=True)
+        assert not loading['missing_keys'] and not loading.get('mismatched_keys')
+        modules = {n: m for n, m in model.named_modules() if isinstance(m, torch.nn.Linear)
+                   and 'language_model' in n and 'head' not in n}
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            prior['source'], torch_dtype=torch.bfloat16, attn_implementation='sdpa',
+            device_map='cuda')
+        modules = {n: m for n, m in model.named_modules()
+                   if isinstance(m, torch.nn.Linear) and m is not model.get_output_embeddings()}
     model.eval().requires_grad_(False)
     tok = AutoTokenizer.from_pretrained(prior['source'])
-    modules = {n: m for n, m in model.named_modules()
-               if isinstance(m, torch.nn.Linear) and m is not model.get_output_embeddings()}
+    r['model_class'] = type(model).__name__
+    r['attention_backend'] = model.config._attn_implementation
     assert list(modules) == names
     for policy in maps:
         for n, m in modules.items():
@@ -132,12 +149,19 @@ def main():
     print(f'REELECTION AT 256 MATCHES {FROZEN}', flush=True)
     save()
 
-    base, alt = {}, {}
+    base, alt, pristine = {}, {}, {}
     with torch.no_grad():
         for n, m in modules.items():
             assert sha(m.weight) == prior['matrices'][n]['source_sha256'], n
-            base[n] = quant_nvfp4_4over6(m.weight, 4, 16)
-            alt[n] = quant_mix_4_6(m.weight, 4, 16, type_block=(8, 64), clip='a1', elect='always')
+            if target:
+                # Baseline cached on CPU so it is not recomputed once per policy;
+                # the E0M3 side is rebuilt on demand only where a policy switches.
+                pristine[n] = m.weight.detach().to('cpu', copy=True)
+                base[n] = quant_nvfp4_4over6(m.weight, 4, 16).to('cpu', copy=True)
+            else:
+                base[n] = quant_nvfp4_4over6(m.weight, 4, 16)
+                alt[n] = quant_mix_4_6(m.weight, 4, 16, type_block=(8, 64), clip='a1',
+                                       elect='always')
     r['source_weights_verified'] = True
     batches, r['data'] = data(tok, prior, LENGTH)
     excluded = {d['document_sha256'] for meta in prior['fit'].values() for d in meta['documents']}
@@ -151,8 +175,18 @@ def main():
 
     def install(policy):
         for n, m in modules.items():
-            m.weight.copy_(base[n] if policy == 'four_over_six'
-                           else apply_mask(base[n], alt[n], maps[policy][n].cuda()))
+            if not target:
+                m.weight.copy_(base[n] if policy == 'four_over_six'
+                               else apply_mask(base[n], alt[n], maps[policy][n].cuda()))
+                continue
+            b = base[n].cuda()
+            if policy != 'four_over_six' and bool(maps[policy][n].any()):
+                w = pristine[n].cuda()
+                a = quant_mix_4_6(w, 4, 16, type_block=(8, 64), clip='a1', elect='always')
+                b = apply_mask(b, a, maps[policy][n].cuda())
+                del a, w
+            m.weight.copy_(b)
+            del b
 
     def ppl(values):
         t = torch.tensor(values, dtype=torch.float32) * LENGTH

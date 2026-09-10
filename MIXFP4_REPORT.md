@@ -13,7 +13,7 @@ under any other protocol are not reported here.
 Baselines are NVFP4 and NVFP4 FourOverSix, both W4A4. The method is MixFP4: the same
 FourOverSix E2M1 weights, with the tiles the rule elects switched to E0M3. Calibration
 uses OpenWebMath and CodeParrot only, so WikiText-2 and C4 are held out for every row.
-BF16 is the unquantized reference, not a competitor.
+Where shown, BF16 is the unquantized reference, not a competitor.
 
 ### Llama-3.1-8B
 
@@ -49,14 +49,30 @@ BF16 is the unquantized reference, not a competitor.
 | MixFP4 − NVFP4 | -2.073630 | -0.161098 ±0.006276 | -1.469580 | -0.088807 ±0.003390 |
 | FourOverSix − NVFP4 | +0.332523 | +0.023580 ±0.004994 | +0.033020 | +0.001907 ±0.002283 |
 
-MixFP4 improves both datasets on both models against both baselines, with every paired
+### Qwen3.8-27B
+
+47,559,680 type blocks of 8x64 across the quantized text linear weights. The rule elects **3,785 of them, 0.0080%** — about one block in 12,565.
+
+| Policy | E0M3 blocks | WikiText-2 | C4 |
+|---|---:|---:|---:|
+| NVFP4 W4A4 | 0 | 7.579994 | 10.230958 |
+| NVFP4 FourOverSix W4A4 | 0 | 7.287076 | 10.188365 |
+| **MixFP4 (k=3), ours** | 3,785 | **7.214750** | **10.149866** |
+
+| Comparison | Wiki ΔPPL | Wiki ΔNLL ±2SE | C4 ΔPPL | C4 ΔNLL ±2SE |
+|---|---:|---:|---:|---:|
+| MixFP4 − FourOverSix | -0.072327 | -0.009975 ±0.003516 | -0.038499 | -0.003786 ±0.000809 |
+| MixFP4 − NVFP4 | -0.365244 | -0.049385 ±0.008052 | -0.081092 | -0.007958 ±0.001083 |
+| FourOverSix − NVFP4 | -0.292918 | -0.039410 ±0.007762 | -0.042593 | -0.004172 ±0.001171 |
+
+MixFP4 improves both datasets on every model against both baselines, with every paired
 two-SE interval excluding zero. Note FourOverSix is not uniformly the stronger baseline:
 on Qwen3-4B plain NVFP4 beats it, so the method is measured against the better of the
 two, not only against its own base.
 
 ### The count is not a tuned constant
 
-The same rule at other values of k, for reference. k is fixed at 3 for both models and
+The same rule at other values of k, for reference. k is fixed at 3 for every model and
 is not selected per model or per dataset.
 
 **Llama-3.1-8B**
@@ -78,6 +94,16 @@ is not selected per model or per dataset.
 | 4 | 1,837 | 0.0259% | -1.553578 | -0.968634 |
 | 5 | 576 | 0.0081% | -0.858928 | -0.545380 |
 | 6 | 222 | 0.0031% | -0.446252 | -0.289104 |
+
+**Qwen3.8-27B**
+
+| k | Tiles | % of blocks | ΔWiki | ΔC4 |
+|---|---:|---:|---:|---:|
+| 2 | 149,033 | 0.3134% | -0.187205 | -0.086909 |
+| **3** | 3,785 | 0.0080% | -0.072327 | -0.038499 |
+| 4 | 593 | 0.0012% | -0.031829 | -0.020767 |
+| 5 | 165 | 0.0003% | -0.004445 | -0.013606 |
+| 6 | 47 | 0.0001% | -0.001054 | -0.001950 |
 
 ## 2. How the element type is chosen
 
@@ -240,9 +266,13 @@ Zero-shot via lm_eval 0.4.5. Skipped for dataset-loading reasons unrelated to th
   and no speedup is claimed.
 - Tensor-wide activation factors span the whole teacher-forced window, so these
   are reference-text perplexities, not causal generation likelihoods.
-- k = 3 is prespecified from the calibration score distribution, but it has so
-  far been measured on two models. A model that played no part in choosing it,
-  such as Qwen3.8-27B, has not yet been evaluated under this rule.
+- k = 3 is prespecified from the calibration score distribution and was fixed
+  using Llama-3.1-8B and Qwen3-4B. Qwen3.8-27B played no part in choosing it and
+  is a held-out check of the rule, not a third fitting model. Three models is
+  still a small panel, and one calibration draw is used per model.
+- No matched 2048-token BF16 run exists for Qwen3.8-27B, so that reference row is
+  omitted for it rather than filled from a measurement taken under another
+  protocol.
 - Two-SE intervals are descriptive evaluation-window intervals. They do not
   adjust for multiple comparisons, WikiText article dependence, or
   calibration-draw variability; one calibration draw per model is used.
