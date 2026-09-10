@@ -13,7 +13,7 @@ under any other protocol are not reported here.
 Baselines are NVFP4 and NVFP4 FourOverSix, both W4A4. The method is MixFP4: the same
 FourOverSix E2M1 weights, with the tiles the rule elects switched to E0M3. Calibration
 uses OpenWebMath and CodeParrot only, so WikiText-2 and C4 are held out for every row.
-Where shown, BF16 is the unquantized reference, not a competitor.
+BF16 is the unquantized reference, not a competitor.
 
 ### Llama-3.1-8B
 
@@ -55,6 +55,7 @@ Where shown, BF16 is the unquantized reference, not a competitor.
 
 | Policy | E0M3 blocks | WikiText-2 | C4 |
 |---|---:|---:|---:|
+| BF16 reference | — | 7.050375 | 9.893323 |
 | NVFP4 W4A4 | 0 | 7.579994 | 10.230958 |
 | NVFP4 FourOverSix W4A4 | 0 | 7.287076 | 10.188365 |
 | **MixFP4 (k=3), ours** | 3,785 | **7.214750** | **10.149866** |
@@ -270,9 +271,10 @@ Zero-shot via lm_eval 0.4.5. Skipped for dataset-loading reasons unrelated to th
   using Llama-3.1-8B and Qwen3-4B. Qwen3.8-27B played no part in choosing it and
   is a held-out check of the rule, not a third fitting model. Three models is
   still a small panel, and one calibration draw is used per model.
-- No matched 2048-token BF16 run exists for Qwen3.8-27B, so that reference row is
-  omitted for it rather than filled from a measurement taken under another
-  protocol.
+- The released evaluator predates the Qwen3.8 architecture, so its BF16 reference
+  is measured through this report's own path. That path reproduces the released
+  BF16 values exactly for Llama-3.1-8B and Qwen3-4B, which is the basis for
+  trusting the 27B row; it is not an independent implementation.
 - Two-SE intervals are descriptive evaluation-window intervals. They do not
   adjust for multiple comparisons, WikiText article dependence, or
   calibration-draw variability; one calibration draw per model is used.

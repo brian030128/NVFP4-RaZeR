@@ -11,12 +11,14 @@ import re
 from pathlib import Path
 
 REPRO = Path('results/released_reproduction/job_335297')
-# slug is the released-reproduction name and supplies the BF16 reference; the 27B has
-# no matched 2048-token BF16 run, so that row is omitted rather than borrowed.
+# BF16 references come from job 337128, which runs the unquantized model through this
+# same path; its Llama and Qwen-4B rows reproduce the released reproduction exactly,
+# which is what licenses the 27B row the released evaluator cannot produce.
+BF16_JOB = '337128'
 MODELS = (
-    dict(key='llama8b', label='Llama-3.1-8B', slug='llama-3.1-8b', kse='336566', base='335962'),
-    dict(key='qwen4b', label='Qwen3-4B', slug='qwen3-4b', kse='336566', base='335962'),
-    dict(key='qwen27b', label='Qwen3.8-27B', slug=None, kse='336969', base='337022'),
+    dict(key='llama8b', label='Llama-3.1-8B', kse='336566', base='335962'),
+    dict(key='qwen4b', label='Qwen3-4B', kse='336566', base='335962'),
+    dict(key='qwen27b', label='Qwen3.8-27B', kse='336969', base='337022'),
 )
 K = 3
 
@@ -55,11 +57,11 @@ def results_section():
          'Baselines are NVFP4 and NVFP4 FourOverSix, both W4A4. The method is MixFP4: the same',
          'FourOverSix E2M1 weights, with the tiles the rule elects switched to E0M3. Calibration',
          'uses OpenWebMath and CodeParrot only, so WikiText-2 and C4 are held out for every row.',
-         'Where shown, BF16 is the unquantized reference, not a competitor.', '']
+         'BF16 is the unquantized reference, not a competitor.', '']
     for spec in MODELS:
-        model, label, slug = spec['key'], spec['label'], spec['slug']
+        model, label = spec['key'], spec['label']
         r = kse(Path(f'results/kse_paper/job_{spec["kse"]}'), model)
-        bf16 = released(slug, 'bf16')[1] if slug else None
+        bf16 = paper_case(Path(f'results/bf16_reference/job_{BF16_JOB}'), f'{model}_bf16')[1]
         nv_l, nv, _ = paper_case(Path(f'results/paper_baseline/job_{spec["base"]}'),
                                  f'{model}_nvfp4')
         fo_l = {d: r['evaluation']['four_over_six'][d]['nll'] for d in ('wiki', 'c4')}
@@ -72,9 +74,8 @@ def results_section():
               f'weights. The rule elects **{el["selected"]:,} of them, {100 * el["fraction"]:.4f}%** '
               f'— about one block in {round(1 / el["fraction"]):,}.', '',
               '| Policy | E0M3 blocks | WikiText-2 | C4 |', '|---|---:|---:|---:|']
-        if bf16:
-            L.append(f'| BF16 reference | — | {bf16["wikitext"]:.6f} | {bf16["c4"]:.6f} |')
-        L += [f'| NVFP4 W4A4 | 0 | {nv["wiki"]:.6f} | {nv["c4"]:.6f} |',
+        L += [f'| BF16 reference | — | {bf16["wiki"]:.6f} | {bf16["c4"]:.6f} |',
+              f'| NVFP4 W4A4 | 0 | {nv["wiki"]:.6f} | {nv["c4"]:.6f} |',
               f'| NVFP4 FourOverSix W4A4 | 0 | {fo["wiki"]:.6f} | {fo["c4"]:.6f} |',
               f'| **MixFP4 (k={K}), ours** | {el["selected"]:,} | **{mx["wiki"]:.6f}** | '
               f'**{mx["c4"]:.6f}** |', '',
@@ -323,9 +324,10 @@ zero hash overlap with the calibration documents.
   using Llama-3.1-8B and Qwen3-4B. Qwen3.8-27B played no part in choosing it and
   is a held-out check of the rule, not a third fitting model. Three models is
   still a small panel, and one calibration draw is used per model.
-- No matched 2048-token BF16 run exists for Qwen3.8-27B, so that reference row is
-  omitted for it rather than filled from a measurement taken under another
-  protocol.
+- The released evaluator predates the Qwen3.8 architecture, so its BF16 reference
+  is measured through this report's own path. That path reproduces the released
+  BF16 values exactly for Llama-3.1-8B and Qwen3-4B, which is the basis for
+  trusting the 27B row; it is not an independent implementation.
 - Two-SE intervals are descriptive evaluation-window intervals. They do not
   adjust for multiple comparisons, WikiText article dependence, or
   calibration-draw variability; one calibration draw per model is used.

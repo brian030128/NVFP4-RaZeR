@@ -32,8 +32,10 @@ def main():
     assert bundle['type_block']==[8,64]
     assert digest_file(old/'maps.json')==prior['map_sha256']
     # 'nvfp4' is the plain NVFP4 baseline: alpha=1 E2M1 on weights and activations.
-    assert policy in ('four_over_six','nvfp4') or policy.startswith('fixed256_')
+    # 'bf16' is the unquantized reference: pristine weights, no activation hook.
+    assert policy in ('four_over_six','nvfp4','bf16') or policy.startswith('fixed256_')
     weight_q=quant_nvfp4 if policy=='nvfp4' else quant_nvfp4_4over6
+    unquantized=policy=='bf16'
     assert transformers.__version__==prior['transformers_version']
     torch.set_num_threads(4); torch.backends.cuda.matmul.allow_tf32=False
     torch.manual_seed(0)
@@ -52,7 +54,8 @@ def main():
         account=os.environ.get('SLURM_JOB_ACCOUNT'),gpu=torch.cuda.get_device_name(),
         torch_version=torch.__version__,transformers_version=transformers.__version__,
         evaluation={},length=2048,
-        activation=('NVFP4 tensor-wide factor' if policy=='nvfp4' else 'FourOverSix tensor-wide factor'),
+        activation=('none' if policy=='bf16' else 'NVFP4 tensor-wide factor'
+                    if policy=='nvfp4' else 'FourOverSix tensor-wide factor'),
         wiki_use_cache=True,c4_use_cache=False,
         qwen_o_proj_quantized=True,kv_quantization=False,recalibration=False,
         calibration_sources=['OpenWebMath','CodeParrot'],uses_c4_calibration=False,uses_wiki_calibration=False,
@@ -82,6 +85,8 @@ def main():
         for n,m in modules.items():
             assert sha(m.weight)==prior['matrices'][n]['source_sha256'],n
             b=weight_q(m.weight,4,16)
+            if unquantized:
+                report['quantized_weight_sha256'][n]=sha(m.weight); continue
             indices=[] if policy in ('four_over_six','nvfp4') else bundle['maps'][policy][n]
             if indices:
                 shape=(m.weight.shape[0]//8,m.weight.shape[1]//64)
@@ -93,7 +98,7 @@ def main():
                 del a,mask
             m.weight.copy_(b); report['quantized_weight_sha256'][n]=sha(m.weight)
             del b
-        assert selected==(0 if policy in ('four_over_six','nvfp4') else 256)
+        assert selected==(0 if policy in ('four_over_six','nvfp4','bf16') else 256)
         report['selected_e0m3_blocks']=selected; report['source_weights_verified']=True
         tok=AutoTokenizer.from_pretrained(case['model_path'])
         batches,report['data']=data(tok,prior,2048)
@@ -105,7 +110,7 @@ def main():
             assert report['data']['wiki']['token_sha256']+report['data']['c4_paper']['token_sha256']==[w['input_sha256'] for w in reference['windows']]
             report['released_inputs_identical']=True
         def act(module,inputs): return (weight_q(inputs[0],4,16),*inputs[1:])
-        handles=[m.register_forward_pre_hook(act) for m in modules.values()]
+        handles=[] if unquantized else [m.register_forward_pre_hook(act) for m in modules.values()]
         report['activation_quantized_modules']=list(modules)
         assert not target or any(n.endswith('self_attn.o_proj') for n in modules)
         if not target and policy=='four_over_six':
@@ -152,15 +157,16 @@ def main():
             report['evaluation']['c4' if domain=='c4_paper' else domain]=dict(ppl=ppl,nll=losses,
                 windows=len(losses),scored_tokens=len(losses)*2047)
             save(); print(f'PPL {case["id"]} {domain} {ppl:.6f}',flush=True)
-        if prior['model']=='llama8b' and policy in ('four_over_six','nvfp4'):
-            tag='nvfp4_w4a4' if policy=='nvfp4' else 'four_over_six_w4a4'
+        if prior['model']=='llama8b' and policy in ('four_over_six','nvfp4','bf16'):
+            tag={'nvfp4':'nvfp4_w4a4','bf16':'bf16'}.get(policy,'four_over_six_w4a4')
             ref=json.loads(Path(f'results/released_reproduction/job_335297/llama-3.1-8b_{tag}/report.json').read_text())
             report['released_comparison']=dict(tag=tag,
                 wiki_released=ref['ppl']['wikitext'],c4_released=ref['ppl']['c4'],
                 wiki_delta=report['evaluation']['wiki']['ppl']-ref['ppl']['wikitext'],
                 c4_delta=report['evaluation']['c4']['ppl']-ref['ppl']['c4'])
-            if policy=='four_over_six':
-                # quant_nvfp4_4over6 is unchanged since the archived release, so this must be exact.
+            if policy in ('four_over_six','bf16'):
+                # Unchanged paths since the archived release, so these must be exact.
+                # bf16 touches no quantizer at all and is the strongest such check.
                 assert report['evaluation']['wiki']['ppl']==ref['ppl']['wikitext']
                 assert report['evaluation']['c4']['ppl']==ref['ppl']['c4']
                 report['released_baseline_exact']=True
