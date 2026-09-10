@@ -108,6 +108,13 @@ for CFG in "${CFG_LIST[@]}"; do
     fi
     echo "vllm ready after ${i}0s"
 
+    # harbor resolves the provider's key and base URL from the HOST environment
+    # (harbor/agents/model_connection.py) before forwarding them into the container, so these
+    # have to be exported here as well as passed with --ae.
+    export OPENAI_API_KEY=local
+    export OPENAI_BASE_URL="http://127.0.0.1:$PORT/v1"
+    export OPENAI_API_BASE="http://127.0.0.1:$PORT/v1"
+
     # 3. run the benchmark against it. The agent runs inside the container but singularity
     #    shares the host network namespace, so 127.0.0.1 is the same loopback vLLM bound to.
     timeout "${HARBOR_TIMEOUT:-36000}" harbor run \
