@@ -39,8 +39,16 @@ from run_adaptive_paper import FROZEN
 from run_c4_frozen import digest_file
 from run_conditional_format import sha
 from run_kse_paper import MODELS, STREAMED, elect_k
+from analyze_objective_ablation import scores_for
 
 K = 3
+
+# The shipped rule elects on max(CE bound, KL bound) -- both objectives must be confidently
+# negative. `k3_kl` and `k3_ce` drop that conjunction and threshold one objective alone, which
+# MIXFP4_REPORT.md argues against on theoretical grounds but never measured. Evaluating them in
+# the same run as k3 keeps the comparison paired on identical documents.
+POLICY_OBJECTIVE = {f'k{K}': 'max', f'k{K}_kl': 'kl', f'k{K}_ce': 'ce'}
+DEFAULT_POLICIES = ('bf16', 'nvfp4', 'four_over_six', f'k{K}')
 
 # Script-based loaders are gone from datasets 4.x, so a task can fail to download for reasons
 # unrelated to the model. Each is probed and any that cannot load is recorded and skipped.
@@ -62,6 +70,11 @@ def main():
                          'longer has its score shards.')
     ap.add_argument('--out', required=True)
     ap.add_argument('--batch-size', type=int, default=8)
+    ap.add_argument('--policies',
+                    type=lambda v: tuple(x.strip() for x in v.split(',') if x.strip()),
+                    default=DEFAULT_POLICIES,
+                    help='Which policies to evaluate. Besides bf16/nvfp4/four_over_six/k3, '
+                         'k3_kl and k3_ce elect on one objective instead of requiring both.')
     ap.add_argument('--tasks', type=lambda v: tuple(x.strip() for x in v.split(',') if x.strip()),
                     default=TASKS,
                     help='Task list. The default panel is 4-way multiple choice, which resolves '
@@ -131,6 +144,7 @@ def main():
              frozen_map_source=frozen_source,
              batch_size=args.batch_size, samples_dir=args.samples_dir,
              tasks_requested=list(args.tasks), num_fewshot=args.num_fewshot,
+             policies=list(args.policies),
              election={}, accuracy={})
 
     def save():
@@ -145,11 +159,20 @@ def main():
     uppers, slices, names = elect_k(calib, prior, (2, K))
     r['shipped_score_identical_at_k2'] = True
     r['total_tiles'] = int(uppers[2].numel())
-    flat_k = uppers[K] < 0
-    maps = {f'k{K}': {n: flat_k[lo:hi].clone() for n, (lo, hi) in slices.items()}}
-    r['election'][f'k{K}'] = dict(k=K, selected=int(flat_k.sum()),
-                                  fraction=float(flat_k.sum()) / flat_k.numel())
-    print(f'ELECT k={K}: {int(flat_k.sum()):,} of {flat_k.numel():,} tiles', flush=True)
+    maps = {}
+    wanted = [pol for pol in args.policies if pol in POLICY_OBJECTIVE]
+    if any(POLICY_OBJECTIVE[pol] != 'max' for pol in wanted):
+        # Single-objective variants need the per-objective bounds, which elect_k does not keep.
+        obj_upper, obj_slices, obj_names = scores_for(calib, prior, (K,))
+        assert obj_names == names and obj_slices == slices
+    for pol in wanted:
+        objective = POLICY_OBJECTIVE[pol]
+        flat = (uppers[K] < 0) if objective == 'max' else (obj_upper[(objective, K)] < 0)
+        maps[pol] = {n: flat[lo:hi].clone() for n, (lo, hi) in slices.items()}
+        r['election'][pol] = dict(k=K, objective=objective, selected=int(flat.sum()),
+                                  fraction=float(flat.sum()) / flat.numel())
+        print(f'ELECT {pol} (objective={objective}, k={K}): '
+              f'{int(flat.sum()):,} of {flat.numel():,} tiles', flush=True)
 
     # The 256-tile prefix of the k = 2 ranking must be the frozen map, bitwise.
     order = torch.argsort(uppers[2], stable=True)[:256]
@@ -271,7 +294,7 @@ def main():
                     w = nvfp4_w[n]
                 elif policy == 'four_over_six':
                     w = base[n]
-                else:
+                elif policy in POLICY_OBJECTIVE:
                     b = base[n].to(m.weight.device)
                     if target:
                         a = quant_mix_4_6(pristine[n].to(m.weight.device), 4, 16,
@@ -291,7 +314,7 @@ def main():
 
         handles = [m.register_forward_pre_hook(act) for m in modules.values()]
 
-    for policy in ('bf16', 'nvfp4', 'four_over_six', f'k{K}'):
+    for policy in args.policies:
         install(policy)
         torch.cuda.empty_cache()
         lm = HFLM(pretrained=model, tokenizer=tok, batch_size=args.batch_size)
