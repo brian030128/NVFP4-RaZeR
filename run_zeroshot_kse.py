@@ -62,6 +62,11 @@ def main():
                          'scored on the same documents, so their differences are paired, and '
                          'the per-task standard error lm-eval prints is the error of one '
                          'measurement rather than of the difference.')
+    ap.add_argument('--allow-map-drift', action='store_true',
+                    help='Evaluate even when the re-election does not reproduce the shipped '
+                         'frozen map, recording exactly how far off it is. The result is then '
+                         'the k-SE rule at this k re-derived here, NOT the shipped artifact, '
+                         'and must be labelled as such wherever it is reported.')
     ap.add_argument('--stage-root', default='/home/u4320956/NVFP4-RaZeR')
     args = ap.parse_args()
 
@@ -164,13 +169,36 @@ def main():
         for n, m in modules.items():
             maps[policy][n] = maps[policy][n].reshape(m.weight.shape[0] // 8,
                                                       m.weight.shape[1] // 64)
+    drift = {}
     for n, m in modules.items():
         want = torch.zeros(maps['n256'][n].numel(), dtype=torch.bool)
         want[bundle['maps'][FROZEN][n]] = True
-        assert torch.equal(maps['n256'][n].reshape(-1), want), n
-    r['frozen_map_reproduced'] = True
-    print(f'REELECTION AT 256 MATCHES {frozen_source.upper()} {FROZEN} -- this election is the '
-          f'shipped k = {K} policy', flush=True)
+        got = maps['n256'][n].reshape(-1)
+        if not torch.equal(got, want):
+            drift[n] = dict(shipped_only=int((want & ~got).sum()),
+                            reelected_only=int((got & ~want).sum()))
+    r['frozen_map_reproduced'] = not drift
+    if drift:
+        # Quantified, not waved away: how many tiles moved, and where.
+        r['frozen_map_drift'] = dict(
+            modules_differing=len(drift),
+            tiles_in_shipped_only=sum(d['shipped_only'] for d in drift.values()),
+            tiles_in_reelected_only=sum(d['reelected_only'] for d in drift.values()),
+            detail=drift)
+        msg = (f'RE-ELECTION DIFFERS FROM {frozen_source.upper()} {FROZEN}: '
+               f'{len(drift)} module(s), '
+               f'{r["frozen_map_drift"]["tiles_in_shipped_only"]} tile(s) only in the shipped '
+               f'map, {r["frozen_map_drift"]["tiles_in_reelected_only"]} only in the '
+               f're-election')
+        print(msg, flush=True)
+        assert args.allow_map_drift, (
+            msg + ' -- refusing to report this as the shipped policy. Pass --allow-map-drift to '
+            'evaluate it anyway, clearly labelled as a re-derivation.')
+        print('PROCEEDING UNDER --allow-map-drift: results are the k-SE rule re-derived here, '
+              'not the shipped artifact', flush=True)
+    else:
+        print(f'REELECTION AT 256 MATCHES {frozen_source.upper()} {FROZEN} -- this election is '
+              f'the shipped k = {K} policy', flush=True)
     save()
 
     # Weight variants. Held on CPU for the streamed target, which cannot keep three copies.
