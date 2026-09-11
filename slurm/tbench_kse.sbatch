@@ -81,9 +81,14 @@ export PYTHONPATH="$PROJECT:$SCRATCH/deps"
 # This is also why it cannot be served by vLLM here: the pinned vllm 0.11.0 predates that
 # architecture entirely, so the in-process server is the only route -- which happens to be the
 # faithful one, since it keeps the W4A4 activation hooks a checkpoint would drop.
+# huggingface_hub is pinned, not left to the resolver. transformers 5.16.1 needs hub >=1.5,
+# and unpinned that resolved to 1.31, whose URI handling breaks the datasets lm-eval loads:
+# four of the six tasks died with HfUriError ("Invalid HF URI hf://datasets/...huggingface.yaml")
+# and the run silently evaluated two, which would not be comparable with the other models.
+# 1.5.0 satisfies transformers and loads all six.
 if [[ "$MODEL" == "qwen27b" ]]; then
     "$UV" pip install --python "$PYTHON" --target "$SCRATCH/deps27" --no-deps \
-      transformers==5.16.1 huggingface_hub tokenizers safetensors hf-xet loguru || exit 1
+      transformers==5.16.1 'huggingface_hub==1.5.0' tokenizers safetensors hf-xet loguru || exit 1
     export PYTHONPATH="$PROJECT:$SCRATCH/deps27:$SCRATCH/deps"
 fi
 
