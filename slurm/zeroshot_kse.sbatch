@@ -55,6 +55,17 @@ rm -rf "$SCRATCH"/deps/{transformers,tokenizers,torch,torchvision,torchaudio,tri
 rm -rf "$SCRATCH"/deps/{transformers,tokenizers,torch,torchvision,torchaudio,triton}-*.dist-info
 export PYTHONPATH="$PROJECT:$SCRATCH/deps"
 
+# Qwen3.8-27B is a Qwen3.5-family model and its calibration origin pins transformers 5.16.1 --
+# the native code path, not the older Qwen3 copies (see the project CLAUDE.md). The venv carries
+# 4.57.3, which every other model here requires, so 5.16.1 is layered in front of it for this
+# model only, exactly as slurm/kse_paper_27b.sbatch does: --no-deps so the venv's torch stays,
+# and ahead of $SCRATCH/deps so it wins over whatever lm_eval resolved.
+if [[ "$MODEL" == "qwen27b" ]]; then
+    "$UV" pip install --python "$PYTHON" --target "$SCRATCH/deps27" --no-deps \
+      transformers==5.16.1 huggingface_hub tokenizers safetensors hf-xet loguru || exit 1
+    export PYTHONPATH="$PROJECT:$SCRATCH/deps27:$SCRATCH/deps"
+fi
+
 OUT="$PROJECT/results/zeroshot_kse/job_$SLURM_JOB_ID"
 mkdir -p "$OUT"
 
