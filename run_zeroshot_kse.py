@@ -327,7 +327,14 @@ def main():
                     acc[task] = dict(metric=key.split(',')[0], value=values[key],
                                      stderr=values.get(key.replace(',none', '_stderr,none')))
                     break
-        acc['mean'] = sum(v['value'] for k, v in acc.items() if k != 'mean') / len(acc)
+        # Mean over the tasks that were ASKED for, not over every key lm-eval returns. A group
+        # task reports its aggregate and each of its members: mmlu comes back as `mmlu` plus 57
+        # subject rows plus 4 category rows, so averaging everything counts the subjects twice
+        # and silently reweights the panel towards whichever task happens to be a group.
+        named = [k for k in acc if k in usable]
+        acc['mean'] = (sum(acc[k]['value'] for k in named) / len(named)) if named else \
+            sum(v['value'] for k, v in acc.items() if k != 'mean') / max(len(acc), 1)
+        acc['mean_over'] = named
         r['accuracy'][policy] = acc
         save()
         print(f'ACC {policy} mean {acc["mean"]:.4f} ' +
