@@ -38,7 +38,8 @@ K = 3
 POLICIES = ('bf16', 'nvfp4', 'four_over_six', f'k{K}')
 
 
-def build(model_name, calib_dir, policy, stage_root, allow_drift, activation_hooks=True):
+def build(model_name, calib_dir, policy, stage_root, allow_drift, activation_hooks=True,
+          map_path=None, save_map=None):
     """
         Load the model and install `policy`, returning (model, tokenizer, provenance).
 
@@ -48,7 +49,7 @@ def build(model_name, calib_dir, policy, stage_root, allow_drift, activation_hoo
         records which half was applied, so a W4A16 measurement cannot be mistaken for a W4A4 one.
     """
     calib = Path(calib_dir)
-    prior = json.loads((calib / 'report.json').read_text())
+    prior = json.loads((calib / 'report.json').read_text())   # source path and version pins
     assert prior['status'] == 'complete' and prior['maps_frozen']
     assert transformers.__version__ == prior['transformers_version']
 
@@ -74,7 +75,24 @@ def build(model_name, calib_dir, policy, stage_root, allow_drift, activation_hoo
     model.eval().requires_grad_(False)
     tok = AutoTokenizer.from_pretrained(prior['source'])
 
-    if policy == f'k{K}':
+    if policy == f'k{K}' and map_path:
+        # The election is a pure function of the frozen calibration, so it is computed once and
+        # cached. Rebuilding it costs a 128-sequence scoring pass -- 25 minutes, and two GPUs on
+        # the 27B because its calibration shards the model with device_map='balanced' -- to
+        # arrive at the same few thousand tile indices every time.
+        cached = torch.load(map_path, map_location='cpu', weights_only=False)
+        assert cached['model'] == model_name and cached['k'] == K, cached
+        tile_map = cached['map']
+        assert set(tile_map) == set(modules), 'cached map does not match this model'
+        prov.update(elected_tiles=cached['elected_tiles'], total_tiles=cached['total_tiles'],
+                    frozen_map_reproduced=cached['frozen_map_reproduced'],
+                    frozen_map_drift_tiles=cached['frozen_map_drift_tiles'],
+                    map_source=str(map_path))
+        print(f'loaded cached k={K} election from {map_path}: '
+              f"{cached['elected_tiles']:,} tiles", flush=True)
+        for n, m in modules.items():
+            tile_map[n] = tile_map[n].reshape(m.weight.shape[0] // 8, m.weight.shape[1] // 64)
+    elif policy == f'k{K}':
         uppers, slices, names = elect_k(calib, prior, (2, K))
         assert list(modules) == names
         flat = uppers[K] < 0
@@ -101,6 +119,16 @@ def build(model_name, calib_dir, policy, stage_root, allow_drift, activation_hoo
             assert allow_drift, (f're-election differs from the shipped frozen map by {drift} '
                                  f'tile(s); pass --allow-map-drift to serve it anyway, labelled '
                                  f'as a re-derivation')
+        if save_map:
+            # Flat, before the per-module reshape, so a reload is independent of module shapes.
+            Path(save_map).parent.mkdir(parents=True, exist_ok=True)
+            torch.save(dict(model=model_name, k=K, map={n: v.clone() for n, v in tile_map.items()},
+                            elected_tiles=prov['elected_tiles'],
+                            total_tiles=prov['total_tiles'],
+                            frozen_map_reproduced=prov['frozen_map_reproduced'],
+                            frozen_map_drift_tiles=prov['frozen_map_drift_tiles'],
+                            source=prior['source'], calibration=str(calib)), save_map)
+            print(f'saved k={K} election to {save_map}', flush=True)
         for n, m in modules.items():
             tile_map[n] = tile_map[n].reshape(m.weight.shape[0] // 8, m.weight.shape[1] // 64)
 
@@ -141,6 +169,12 @@ def main():
     ap.add_argument('--served-name', default='qmodel')
     ap.add_argument('--max-new-tokens', type=int, default=1024)
     ap.add_argument('--allow-map-drift', action='store_true')
+    ap.add_argument('--map', dest='map_path', default=None,
+                    help='Load the k=3 election from this file instead of rebuilding it from '
+                         'the calibration scores. The election is a pure function of the frozen '
+                         'calibration, so recomputing it per job is wasted work.')
+    ap.add_argument('--save-map', default=None,
+                    help='Write the election here after computing it, for later runs.')
     ap.add_argument('--provenance', default=None)
     ap.add_argument('--stage-root', default='/home/u4320956/NVFP4-RaZeR')
     args = ap.parse_args()
@@ -153,7 +187,8 @@ def main():
     torch.set_num_threads(4)
     torch.backends.cuda.matmul.allow_tf32 = False
     model, tok, prov = build(args.model, args.calib, args.policy, args.stage_root,
-                             args.allow_map_drift)
+                             args.allow_map_drift, map_path=args.map_path,
+                             save_map=args.save_map)
     print('PROVENANCE ' + json.dumps(prov), flush=True)
     if args.provenance:
         Path(args.provenance).write_text(json.dumps(prov, indent=2) + '\n')

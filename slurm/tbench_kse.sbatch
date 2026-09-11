@@ -124,7 +124,22 @@ if [[ -z "$SHIPPED_CALIB" ]]; then
         *)       SHIPPED_CALIB=results/math_code_adaptive/calibration_333779_$MODEL ;;
     esac
 fi
-if [[ ",$POLICIES," == *",k3,"* ]]; then
+# The k=3 election is a pure function of the frozen calibration, so it is computed once and
+# reused. results/kse_maps/<model>_k3.pt is written the first time and loaded thereafter, which
+# removes both the 25-minute scoring pass and (on the 27B) the two-GPU requirement that only
+# the calibration had. Nothing upstream stored this map: the published PPL run recorded that
+# k=3 elects 3,785 tiles and not which ones, and the score shards it read are gone.
+MAP_CACHE=${MAP_CACHE:-$PROJECT/results/kse_maps/${MODEL}_k${KVAL:-3}.pt}
+MAP_ARGS=()
+if [[ ",$POLICIES," == *",k3,"* && -f "$MAP_CACHE" ]]; then
+    MAP_ARGS=(--map "$MAP_CACHE")
+    echo "--- reusing the cached k=3 election: $MAP_CACHE"
+elif [[ ",$POLICIES," == *",k3,"* ]]; then
+    MAP_ARGS=(--save-map "$MAP_CACHE")
+    echo "--- no cached election yet; it will be written to $MAP_CACHE"
+fi
+
+if [[ ",$POLICIES," == *",k3,"* && ! -f "$MAP_CACHE" ]]; then
     CALIB="$SCRATCH/calibration_$MODEL"
     echo "--- calibration -> $CALIB (k3 needs the election)"
     env PYTHONPATH="$PYPATH" "$PYTHON" run_math_code_calibration.py \
@@ -134,7 +149,7 @@ if [[ ",$POLICIES," == *",k3,"* ]]; then
         echo 'NOTE: maps.json differs; serve_quantized.py checks the frozen map itself.'
 else
     CALIB="$PROJECT/$SHIPPED_CALIB"
-    echo "--- no election needed for '$POLICIES'; using the shipped calibration: $CALIB"
+    echo "--- no scoring pass needed for '$POLICIES'; using the shipped calibration: $CALIB"
 fi
 
 IFS=',' read -ra LIST <<< "$POLICIES"
@@ -143,7 +158,7 @@ for POLICY in "${LIST[@]}"; do
     env PYTHONPATH="$PYPATH" "$PYTHON" serve_quantized.py \
         --model "$MODEL" --calib "$CALIB" --policy "$POLICY" \
         --port "$PORT" --served-name qmodel \
-        --provenance "$OUT/provenance_$POLICY.json" ${SERVE_ARGS:-} \
+        --provenance "$OUT/provenance_$POLICY.json" "${MAP_ARGS[@]}" ${SERVE_ARGS:-} \
         > "$OUT/serve_$POLICY.log" 2>&1 &
     SRV=$!
     READY=0
