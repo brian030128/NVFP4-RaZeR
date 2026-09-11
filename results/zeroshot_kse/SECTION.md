@@ -47,5 +47,5 @@ Every policy is scored on the same documents, so MixFP4 against its own base is 
 
 ### Coverage
 
-This section covers Llama-3.1-8B, Qwen3-4B. It does not cover Qwen3.8-27B. Qwen3.8-27B does not reproduce its shipped election in this environment: the rule elects 3,787 tiles where the report records 3,785, and the 256-tile cross-check differs, while the calibration reproduces all 128 teacher losses bit for bit and matches weight_mse_sha256. That is threshold sensitivity in a 24B scoring pass, not a different calibration, but it means an accuracy number measured here would be the k-SE rule re-derived rather than the shipped artifact. No claim is made about the missing model either way.
+This section covers Llama-3.1-8B, Qwen3-4B. It does not cover Qwen3.8-27B. No claim is made about the missing model either way.
 
