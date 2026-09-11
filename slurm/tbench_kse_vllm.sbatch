@@ -44,6 +44,19 @@ MAX_TURNS=${MAX_TURNS:-20}
 AGENT_TMULT=${AGENT_TMULT:-0.25}
 PORT=${PORT:-18131}
 
+# Three of the 66 tasks declare a GPU inside the container (scripts/list_gpu_tasks.py reads it
+# out of each task.toml). harbor's singularity environment has no GPU capability, so they raise
+#     RuntimeError: Task requires 1 GPU(s) but EnvironmentType.SINGULARITY ...
+# before the agent runs. They fail identically for every policy and say nothing about
+# quantization, so they are excluded by name rather than discovered one failure at a time.
+GPU_TASKS=${GPU_TASKS:-"fp8-rmsnorm-gemm jax-speedrun-gpu math-eval-grader"}
+EXCLUDE_ARGS=()
+for t in $GPU_TASKS; do EXCLUDE_ARGS+=(-x "$t"); done
+
+# -n 1 by default. At -n 2 the 15-task run lost 7 of 13 trials to container startup rather
+# than to the model: "Failed to start Singularity FastAPI server after 3 port attempts" and
+# "Server process died on port". Each container extracts a multi-GB SIF (the unshare -r path
+# extracts rather than loop-mounts), so two at once contend for ports and scratch.
 PROJECT="$PWD"
 SCRATCH="/tmp/$USER/tbv_$SLURM_JOB_ID"
 mkdir -p "$SCRATCH"/{sif,cache,tmp,jobs,ckpt}
@@ -126,7 +139,8 @@ for POLICY in "${LIST[@]}"; do
         --ae "OPENAI_API_BASE=http://127.0.0.1:$PORT/v1" \
         --ae "OPENAI_BASE_URL=http://127.0.0.1:$PORT/v1" \
         --allow-agent-host 127.0.0.1 \
-        -l "$NTASKS" -k 1 -n "${NCONCURRENT:-2}" -q \
+        "${EXCLUDE_ARGS[@]}" \
+        -l "$NTASKS" -k 1 -n "${NCONCURRENT:-1}" -q \
         -o "$SCRATCH/jobs" --job-name "$POLICY" -y \
         > "$OUT/harbor_$POLICY.log" 2>&1
     echo "harbor exit=$? for $POLICY"
