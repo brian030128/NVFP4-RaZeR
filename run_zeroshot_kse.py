@@ -46,6 +46,11 @@ K = 3
 # unrelated to the model. Each is probed and any that cannot load is recorded and skipped.
 TASKS = ('arc_easy', 'arc_challenge', 'hellaswag', 'openbookqa', 'boolq', 'winogrande', 'piqa')
 
+# lm-eval names its metric differently per task family; generative tasks report exact_match with
+# an extraction suffix. Tried in order, first hit wins.
+METRIC_KEYS = ('acc_norm,none', 'acc,none',
+               'exact_match,strict-match', 'exact_match,flexible-extract', 'exact_match,none')
+
 
 def main():
     assert os.environ.get('SLURM_JOB_ID'), 'Use Slurm -- see /home/u4320956/CLAUDE.md'
@@ -57,6 +62,14 @@ def main():
                          'longer has its score shards.')
     ap.add_argument('--out', required=True)
     ap.add_argument('--batch-size', type=int, default=8)
+    ap.add_argument('--tasks', type=lambda v: tuple(x.strip() for x in v.split(',') if x.strip()),
+                    default=TASKS,
+                    help='Task list. The default panel is 4-way multiple choice, which resolves '
+                         'differences of about 0.004 and no smaller; generative chain-of-thought '
+                         'tasks (gsm8k) are far more sensitive to a small per-token degradation '
+                         'because errors compound over the chain.')
+    ap.add_argument('--num-fewshot', type=int, default=0,
+                    help='0 for the zero-shot panel; 8 is conventional for gsm8k, 5 for mmlu.')
     ap.add_argument('--samples-dir', default=None,
                     help='Write per-document outcomes per policy here. All four policies are '
                          'scored on the same documents, so their differences are paired, and '
@@ -117,6 +130,7 @@ def main():
              calibration_maps_json_matches_shipped=(shipped_sha == prior['map_sha256']),
              frozen_map_source=frozen_source,
              batch_size=args.batch_size, samples_dir=args.samples_dir,
+             tasks_requested=list(args.tasks), num_fewshot=args.num_fewshot,
              election={}, accuracy={})
 
     def save():
@@ -253,7 +267,7 @@ def main():
         handles = [m.register_forward_pre_hook(act) for m in modules.values()]
 
     usable, skipped = [], {}
-    for task in TASKS:
+    for task in args.tasks:
         try:
             lm_eval.tasks.TaskManager().load_task_or_group([task])
             usable.append(task)
@@ -268,7 +282,8 @@ def main():
     for policy in ('bf16', 'nvfp4', 'four_over_six', f'k{K}'):
         install(policy)
         lm = HFLM(pretrained=model, tokenizer=tok, batch_size=args.batch_size)
-        full = lm_eval.simple_evaluate(model=lm, tasks=list(usable), num_fewshot=0,
+        full = lm_eval.simple_evaluate(model=lm, tasks=list(usable),
+                                       num_fewshot=args.num_fewshot,
                                        batch_size=args.batch_size,
                                        log_samples=args.samples_dir is not None)
         if args.samples_dir:
@@ -286,7 +301,7 @@ def main():
         res = full['results']
         acc = {}
         for task, values in res.items():
-            for key in ('acc_norm,none', 'acc,none'):
+            for key in METRIC_KEYS:
                 if key in values:
                     acc[task] = dict(metric=key.split(',')[0], value=values[key],
                                      stderr=values.get(key.replace(',none', '_stderr,none')))
