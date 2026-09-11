@@ -112,13 +112,30 @@ echo "=== tbench_kse $MODEL  policies=$POLICIES  tasks=$NTASKS  $(date -Iseconds
 singularity --version; harbor --version
 
 # --- the calibration the k=3 election needs (its shipped score shards are gone) --------------
-CALIB="$SCRATCH/calibration_$MODEL"
-echo "--- calibration -> $CALIB"
-env PYTHONPATH="$PYPATH" "$PYTHON" run_math_code_calibration.py \
-    --model "$MODEL" --out "$CALIB" --allow-source-drift \
-    > "$OUT/calibration_$MODEL.log" 2>&1 || { tail -20 "$OUT/calibration_$MODEL.log"; exit 1; }
-env PYTHONPATH="$PYPATH" "$PYTHON" "$PROJECT/scripts/check_map_digest.py" "$CALIB" "$MODEL" || \
-    echo 'NOTE: maps.json differs; serve_quantized.py checks the frozen map itself.'
+# The scoring pass is only needed for k3, which is the one policy built from an election.
+# Skipping it elsewhere saves ~25 minutes and, for Qwen3.8-27B, avoids a hard failure: that
+# model's calibration spreads over two GPUs with device_map='balanced', so on a single-GPU
+# allocation it dies with "CUDA error: invalid device ordinal". Serving the model needs one GPU;
+# only calibrating it needs two.
+SHIPPED_CALIB=${SHIPPED_CALIB:-}
+if [[ -z "$SHIPPED_CALIB" ]]; then
+    case "$MODEL" in
+        qwen27b) SHIPPED_CALIB=results/math_code_adaptive/calibration_333787_qwen27b ;;
+        *)       SHIPPED_CALIB=results/math_code_adaptive/calibration_333779_$MODEL ;;
+    esac
+fi
+if [[ ",$POLICIES," == *",k3,"* ]]; then
+    CALIB="$SCRATCH/calibration_$MODEL"
+    echo "--- calibration -> $CALIB (k3 needs the election)"
+    env PYTHONPATH="$PYPATH" "$PYTHON" run_math_code_calibration.py \
+        --model "$MODEL" --out "$CALIB" --allow-source-drift \
+        > "$OUT/calibration_$MODEL.log" 2>&1 || { tail -20 "$OUT/calibration_$MODEL.log"; exit 1; }
+    env PYTHONPATH="$PYPATH" "$PYTHON" "$PROJECT/scripts/check_map_digest.py" "$CALIB" "$MODEL" || \
+        echo 'NOTE: maps.json differs; serve_quantized.py checks the frozen map itself.'
+else
+    CALIB="$PROJECT/$SHIPPED_CALIB"
+    echo "--- no election needed for '$POLICIES'; using the shipped calibration: $CALIB"
+fi
 
 IFS=',' read -ra LIST <<< "$POLICIES"
 for POLICY in "${LIST[@]}"; do
