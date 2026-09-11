@@ -6,9 +6,14 @@
     election has to be rebuilt from a fresh scoring pass -- and a fresh pass is only the shipped
     policy if it lands on the shipped map.
 
-    This is the gate for that, and it is the reason the calibration's own source-digest check can
-    be relaxed: comparing what the pass produced is a stronger statement than comparing the
-    bytes of the file that produced it.
+    This compares the whole of maps.json, which is INFORMATIONAL rather than decisive: the file
+    holds 20 maps and only fixed256_math_code128 cross-checks the k-SE election, so a difference
+    in the adaptive_* searches -- which nothing here uses -- shows up as a mismatch that means
+    nothing for this experiment. Qwen3.8-27B does exactly that while reproducing all 128 teacher
+    losses bit for bit and matching weight_mse_sha256.
+
+    The gate that decides lives in run_zeroshot_kse.py: the re-elected 256-tile prefix must equal
+    the SHIPPED frozen map bitwise, or it refuses to evaluate.
 
         python scripts/check_map_digest.py <fresh calibration dir> <model>
 """
@@ -40,10 +45,11 @@ def main():
     print(f'MAP DIGEST fresh   = {fresh}')
     print(f'MAP DIGEST shipped = {shipped}')
     if fresh != shipped:
-        print('FATAL: the regenerated calibration does not reproduce the shipped map, so the '
-              'election built from it is not the shipped k = 3 policy.')
+        print('DIFFERS: maps.json is not identical to the shipped one. This alone does not mean '
+              'the election differs -- 19 of its 20 maps are unused here. The frozen-map gate in '
+              'run_zeroshot_kse.py is what decides.')
         return 1
-    print('MAP DIGEST MATCHES SHIPPED')
+    print('MAP DIGEST MATCHES SHIPPED (all 20 maps identical)')
     return 0
 
 
