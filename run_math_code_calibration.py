@@ -80,6 +80,10 @@ def main():
     ap.add_argument('--model', choices=ORIGINS, required=True)
     ap.add_argument('--out', required=True)
     ap.add_argument('--adaptive-only', action='store_true')
+    ap.add_argument('--allow-source-drift', action='store_true',
+        help='Proceed when quantizer sources differ from the origin job, recording exactly which '
+             'files differ. Intended for a re-run whose output is itself checked against the '
+             'shipped map digest; the file hash is then the weaker of the two guards.')
     args = ap.parse_args()
     target = args.model == 'qwen27b'
     torch.set_num_threads(12 if target else 4); torch.backends.cuda.matmul.allow_tf32 = False
@@ -98,8 +102,20 @@ def main():
         calibration_sources=['OpenWebMath','CodeParrot'], uses_c4_calibration=False, uses_wiki_calibration=False,
         subsets=source_subsets(), fixed256_comparison=not args.adaptive_only)
     save(out,r)
-    for f in ('quantize/causal_four_over_six.py','quantize/quantizer.py'):
-        assert r['source_sha256'][f] == prior['source_sha256'][f]
+    # The origin job pinned the quantizer sources by digest. A later commit can invalidate that
+    # digest without changing any function this pass calls -- 384b803 appended
+    # quant_nvfp4_4over6_pair and touched nothing else -- so --allow-source-drift downgrades the
+    # check to a recorded difference. It is not a way to skip verification: the caller is
+    # expected to compare the resulting map digest against the shipped one, which tests the
+    # thing the file hash is standing in for.
+    drift = {f: dict(origin=prior['source_sha256'][f], now=r['source_sha256'][f])
+             for f in ('quantize/causal_four_over_six.py', 'quantize/quantizer.py')
+             if r['source_sha256'][f] != prior['source_sha256'][f]}
+    r['source_drift'] = drift
+    if drift:
+        assert args.allow_source_drift, f'quantizer sources differ from origin: {sorted(drift)}'
+        print('SOURCE DRIFT ALLOWED: ' + ', '.join(sorted(drift)), flush=True)
+    save(out, r)
     model, modules = load_model(prior,target)
     for name,m in modules.items():
         assert sha(m.weight) == prior['matrices'][name]['source_sha256']
