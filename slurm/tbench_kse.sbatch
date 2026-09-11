@@ -91,9 +91,10 @@ rm -rf "$SCRATCH"/deps/{transformers,tokenizers,torch,nvidia,triton}
 PYPATH="$PROJECT:$SCRATCH/deps"
 
 # Qwen3.8-27B is a Qwen3.5-family model and its calibration origin pins transformers 5.16.1.
-# This is also why it cannot be served by vLLM here: the pinned vllm 0.11.0 predates that
-# architecture entirely, so the in-process server is the only route -- which happens to be the
-# faithful one, since it keeps the W4A4 activation hooks a checkpoint would drop.
+# Serving is in-process (serve_quantized.py) rather than through an inference server. That is
+# the faithful route: it keeps the W4A4 activation hooks, which no checkpoint export carries,
+# and it is fast enough -- the 27B measures 1.85-2.0 tok/s, about 0.6 h for a 10-turn trial.
+# If an external server is ever needed here, use sglang, not vLLM.
 # huggingface_hub is pinned, not left to the resolver. transformers 5.16.1 needs hub >=1.5,
 # and unpinned that resolved to 1.31, whose URI handling breaks the datasets lm-eval loads:
 # four of the six tasks died with HfUriError ("Invalid HF URI hf://datasets/...huggingface.yaml")

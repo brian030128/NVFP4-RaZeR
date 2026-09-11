@@ -13,17 +13,14 @@
 #
 # What would a Terminal-Bench trial on Qwen3.8-27B actually cost?
 #
-# There is no fast serving path for that model here. The driver is CUDA 12.4, and every vLLM
-# that knows the Qwen3.5 architecture needs CUDA 13:
+# Serving is in-process (serve_quantized.py), which is the faithful route: it keeps the W4A4
+# activation hooks that no checkpoint export carries. The question here is whether it is fast
+# enough to be worth using, rather than extrapolating the 4B's three-hours-per-trial by
+# parameter count. It times generation at the shape an agent turn actually has -- a few
+# thousand tokens of prompt, a few hundred generated -- and converts that into hours/trial.
 #
-#     vllm 0.11.0   no Qwen3.5 support     torch 2.8.0+cu128    loads here
-#     vllm 0.26.0   Qwen3_5 registered     torch 2.11.0 -> nvidia-*-cu13
-#     vllm 0.29.0   Qwen3_5 registered     torch 2.13.0+cu130
-#
-# So the only option is the in-process W4A4 server, measured at about three hours per trial for
-# a 4B model. Rather than extrapolate that to 24B, this measures it: serve the real policy and
-# time generation at the shape an agent turn actually has -- a few thousand tokens of context,
-# a few hundred generated -- and convert that into hours per trial.
+# Answer, measured: 1.85-2.0 tok/s, so a 400-token turn is 3.6 min and a 10-turn trial 0.6 h.
+# Fast enough, and no inference server is needed. If one ever is, use sglang.
 #
 #   sbatch slurm/tbench_27b_throughput.sbatch
 
