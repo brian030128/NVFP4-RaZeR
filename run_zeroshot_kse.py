@@ -215,18 +215,20 @@ def main():
               f'the shipped k = {K} policy', flush=True)
     save()
 
-    # Weight variants. Held on CPU for the streamed target, which cannot keep three copies.
+    # Weight variants, always on CPU. Keeping them on the GPU costs three extra copies of the
+    # model there, which likelihood scoring tolerates and generation does not: gsm8k's
+    # generate_until with a KV cache over 8-shot prompts ran the 8B model out of 79 GiB. They are
+    # read once per policy install, so the transfer is negligible next to the evaluation.
     pristine, nvfp4_w, base, alt = {}, {}, {}, {}
     with torch.no_grad():
         for n, m in modules.items():
             assert sha(m.weight) == prior['matrices'][n]['source_sha256'], n
-            dest = 'cpu' if target else m.weight.device
-            pristine[n] = m.weight.detach().to(dest, copy=True)
-            nvfp4_w[n] = quant_nvfp4(m.weight, 4, 16).to(dest, copy=True)
-            base[n] = quant_nvfp4_4over6(m.weight, 4, 16).to(dest, copy=True)
+            pristine[n] = m.weight.detach().to('cpu', copy=True)
+            nvfp4_w[n] = quant_nvfp4(m.weight, 4, 16).to('cpu', copy=True)
+            base[n] = quant_nvfp4_4over6(m.weight, 4, 16).to('cpu', copy=True)
             if not target:
                 alt[n] = quant_mix_4_6(m.weight, 4, 16, type_block=(8, 64), clip='a1',
-                                       elect='always')
+                                       elect='always').to('cpu', copy=True)
     r['source_weights_verified'] = True
     save()
 
@@ -255,7 +257,8 @@ def main():
                             if bool(maps[policy][n].any()) else None
                         w = apply_mask(b, a, maps[policy][n].cuda()) if a is not None else b
                     else:
-                        w = apply_mask(b, alt[n], maps[policy][n].cuda())
+                        w = apply_mask(b, alt[n].to(m.weight.device),
+                                       maps[policy][n].to(m.weight.device))
                 m.weight.copy_(w.to(m.weight.device))
         if policy == 'bf16':
             return
@@ -281,6 +284,7 @@ def main():
 
     for policy in ('bf16', 'nvfp4', 'four_over_six', f'k{K}'):
         install(policy)
+        torch.cuda.empty_cache()
         lm = HFLM(pretrained=model, tokenizer=tok, batch_size=args.batch_size)
         full = lm_eval.simple_evaluate(model=lm, tasks=list(usable),
                                        num_fewshot=args.num_fewshot,
