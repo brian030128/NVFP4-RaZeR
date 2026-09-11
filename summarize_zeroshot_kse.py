@@ -143,6 +143,36 @@ def main():
                      f"{fmt(pl['delta'], signed=True)} | {pl['p']:.3g} |")
         L.append('')
 
+    # Say plainly which of the report's models this covers. A section that silently lists two
+    # of three invites the reader to assume the third agreed.
+    missing = [lbl for m, lbl in MODELS if m not in runs]
+    if missing:
+        L += ['### Coverage', '',
+              'This section covers ' + ', '.join(lbl for _, lbl in present) +
+              '. It does not cover ' + ', '.join(missing) + '. ' +
+              ('Qwen3.8-27B does not reproduce its shipped election in this environment: the '
+               'rule elects 3,787 tiles where the report records 3,785, and the 256-tile '
+               'cross-check differs, while the calibration reproduces all 128 teacher losses '
+               'bit for bit and matches weight_mse_sha256. That is threshold sensitivity in a '
+               '24B scoring pass, not a different calibration, but it means an accuracy number '
+               'measured here would be the k-SE rule re-derived rather than the shipped '
+               'artifact. '
+               if 'Qwen3.8-27B' in missing else '') +
+              'No claim is made about the missing model either way.', '']
+    drifted = [(lbl, runs[m][0]) for m, lbl in present
+               if runs[m][0].get('frozen_map_drift')]
+    if drifted:
+        L += ['> **Re-derived, not the shipped map.** ' +
+              '; '.join(
+                  f'{lbl}: the re-election differs from the shipped frozen map in '
+                  f'{r["frozen_map_drift"]["modules_differing"]} module(s), '
+                  f'{r["frozen_map_drift"]["tiles_in_shipped_only"]} tile(s) only in the '
+                  f'shipped map and '
+                  f'{r["frozen_map_drift"]["tiles_in_reelected_only"]} only in the re-election'
+                  for lbl, r in drifted) +
+              '. These rows are the k-SE rule at this k re-derived here, and should not be '
+              'quoted as measurements of the shipped artifact.', '']
+
     out = '\n'.join(L) + '\n'
     os.makedirs(os.path.dirname(args.out) or '.', exist_ok=True)
     with open(args.out, 'w') as f:
