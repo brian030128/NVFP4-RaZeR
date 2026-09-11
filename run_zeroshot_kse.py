@@ -295,9 +295,17 @@ def main():
         install(policy)
         torch.cuda.empty_cache()
         lm = HFLM(pretrained=model, tokenizer=tok, batch_size=args.batch_size)
+        # bootstrap_iters=0 disables lm-eval's bootstrap standard errors. Two reasons: they
+        # spawn a multiprocessing Pool after evaluation, and forking from a parent that holds
+        # the model fails with "OSError: [Errno 12] Cannot allocate memory" -- which killed an
+        # mmlu run at the aggregation step, after all the compute was already spent. And they
+        # are not the error model used here: differences between policies are tested paired,
+        # with an exact McNemar test on per-document outcomes, which the bootstrap over a single
+        # policy's score cannot substitute for. Per-task acc stderr is analytic and unaffected.
         full = lm_eval.simple_evaluate(model=lm, tasks=list(usable),
                                        num_fewshot=args.num_fewshot,
                                        batch_size=args.batch_size,
+                                       bootstrap_iters=0,
                                        log_samples=args.samples_dir is not None)
         if args.samples_dir:
             sdir = Path(args.samples_dir)
