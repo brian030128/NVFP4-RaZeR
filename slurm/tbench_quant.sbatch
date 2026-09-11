@@ -41,6 +41,14 @@ DATASET=${DATASET:-terminal-bench/terminal-bench@4.0.0}
 NTASKS=${NTASKS:-10}
 AGENT=${AGENT:-terminus-2}
 KATTEMPTS=${KATTEMPTS:-1}
+# An 8B agent does not converge on these tasks: an unbounded run served 10,812 completions in
+# four hours on two tasks and was still going when the job hit its wall limit. The point here is
+# a comparison between quantization policies at a FIXED budget, not a leaderboard number, so the
+# agent is capped -- terminus-2's own max_turns, plus a shortened per-task agent timeout. Both
+# caps are identical across policies, so the comparison stays fair; the absolute scores are not
+# comparable to published Terminal-Bench results and must not be quoted as such.
+MAX_TURNS=${MAX_TURNS:-30}
+AGENT_TMULT=${AGENT_TMULT:-0.25}
 PORT=${PORT:-18123}
 
 PROJECT="$PWD"
@@ -123,6 +131,8 @@ for CFG in "${CFG_LIST[@]}"; do
         --ek "singularity_image_cache_dir=$SCRATCH/sif" \
         -a "$AGENT" \
         -m "openai/qmodel" \
+        --ak "max_turns=${MAX_TURNS:-30}" \
+        --agent-timeout-multiplier "${AGENT_TMULT:-0.25}" \
         --ae "OPENAI_API_KEY=local" \
         --ae "OPENAI_API_BASE=http://127.0.0.1:$PORT/v1" \
         --ae "OPENAI_BASE_URL=http://127.0.0.1:$PORT/v1" \
