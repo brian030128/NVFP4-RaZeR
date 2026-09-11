@@ -70,15 +70,21 @@ def other_runs(runs):
             if tuple(tasks) != PANEL]
 
 
-def ppl_deltas(model):
-    """MixFP4 (k=3) minus FourOverSix in wikitext and c4, from the report's own source."""
+def ppl_deltas(model, against=None):
+    """MixFP4 (k=3) minus a baseline in wikitext and c4, from the report's own source."""
+    against = against or BASE
     p = f'results/kse_paper/job_{KSE_JOB[model]}/{model}/report.json'
     if not os.path.isfile(p):
         return None
     ev = json.load(open(p))['evaluation']
-    if f'k{K}' not in ev or BASE not in ev:
+    if f'k{K}' not in ev or against not in ev:
         return None
-    return {d: ev[f'k{K}'][d]['ppl'] - ev[BASE][d]['ppl'] for d in ('wiki', 'c4')}
+    return {d: ev[f'k{K}'][d]['ppl'] - ev[against][d]['ppl'] for d in ('wiki', 'c4')}
+
+
+def ev_names(model):
+    p = f'results/kse_paper/job_{KSE_JOB[model]}/{model}/report.json'
+    return set(json.load(open(p))['evaluation']) if os.path.isfile(p) else set()
 
 
 def fmt(x, digits=4, signed=False):
@@ -136,12 +142,15 @@ def main():
             d_acc = acc[f'k{K}']['mean'] - acc[BASE]['mean']
             d_nv = acc[f'k{K}']['mean'] - acc['nvfp4']['mean'] if 'nvfp4' in acc else None
             dp = ppl_deltas(model)
+            dn = ppl_deltas(model, 'nvfp4') if 'nvfp4' in ev_names(model) else None
             L += ['| Comparison | d accuracy | d WikiText PPL | d C4 PPL |', '|---|---:|---:|---:|',
                   f'| MixFP4 − FourOverSix | {fmt(d_acc, signed=True)} | '
                   f'{fmt(dp["wiki"], 6, True) if dp else "—"} | '
                   f'{fmt(dp["c4"], 6, True) if dp else "—"} |']
             if d_nv is not None:
-                L.append(f'| MixFP4 − NVFP4 | {fmt(d_nv, signed=True)} | — | — |')
+                L.append(f'| MixFP4 − NVFP4 | {fmt(d_nv, signed=True)} | '
+                         f'{fmt(dn["wiki"], 6, True) if dn else "—"} | '
+                         f'{fmt(dn["c4"], 6, True) if dn else "—"} |')
             L.append('')
 
     # --- paired tests, where per-document outcomes were kept ---------------------------------
@@ -149,11 +158,12 @@ def main():
     for model, label in present:
         _, rundir = runs[model]
         sdir = os.path.join(os.path.dirname(rundir), f'samples_{model}')
-        ref = os.path.join(sdir, f'{BASE}.json')
         var = os.path.join(sdir, f'k{K}.json')
-        if os.path.isfile(ref) and os.path.isfile(var):
-            _, pooled = compare(load_samples(ref), load_samples(var))
-            rows.append((label, pooled))
+        for refname in (BASE, 'nvfp4'):
+            ref = os.path.join(sdir, f'{refname}.json')
+            if os.path.isfile(ref) and os.path.isfile(var):
+                _, pooled = compare(load_samples(ref), load_samples(var))
+                rows.append((label, refname, pooled))
     if rows:
         L += ['### Is the difference real?', '',
               'Every policy is scored on the same documents, so MixFP4 against its own base is '
@@ -162,11 +172,19 @@ def main():
               'gets right, `c` only MixFP4; the rest carry no information about the difference. '
               'The p-value is an exact two-sided McNemar test on those counts, pooled over all '
               'tasks.', '',
-              '| model | documents | b | c | pooled delta | McNemar p |', '|---|---|---|---|---|---|']
-        for label, pl in rows:
-            L.append(f"| {label} | {pl['n']} | {pl['b']} | {pl['c']} | "
-                     f"{fmt(pl['delta'], signed=True)} | {pl['p']:.3g} |")
-        L.append('')
+              '| model | against | documents | b | c | pooled delta | McNemar p |',
+              '|---|---|---|---|---|---|---|']
+        pretty = {BASE: 'FourOverSix', 'nvfp4': 'NVFP4'}
+        for label, refname, pl in rows:
+            L.append(f"| {label} | {pretty.get(refname, refname)} | {pl['n']} | {pl['b']} | "
+                     f"{pl['c']} | {fmt(pl['delta'], signed=True)} | {pl['p']:.3g} |")
+        L += ['',
+              'Which baseline is used changes the verdict, so both are given. Against its own '
+              'base the method is significant on one model of three; against plain NVFP4 it is '
+              'significant on two. The report treats NVFP4 and FourOverSix as separate baselines '
+              'for the same reason -- FourOverSix is not uniformly the stronger of the two, and '
+              'on Llama-3.1-8B it already captures most of what is available, leaving MixFP4 '
+              'little to add on top of it while still clearly beating plain NVFP4.', '']
 
     # --- other task sets, which measure the same policies on more sensitive metrics ----------
     extra = other_runs(all_runs)

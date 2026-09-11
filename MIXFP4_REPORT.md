@@ -166,11 +166,16 @@ The rule elects **3,787 of 47,559,680** type blocks, 0.0080%.
 
 Every policy is scored on the same documents, so MixFP4 against its own base is a paired comparison and the standard error lm-eval prints -- the error of one measurement -- is the wrong yardstick. `b` counts documents only FourOverSix gets right, `c` only MixFP4; the rest carry no information about the difference. The p-value is an exact two-sided McNemar test on those counts, pooled over all tasks.
 
-| model | documents | b | c | pooled delta | McNemar p |
-|---|---|---|---|---|---|
-| Llama-3.1-8B | 18627 | 570 | 588 | +0.0010 | 0.617 |
-| Qwen3-4B | 18627 | 683 | 935 | +0.0135 | 4.04e-10 |
-| Qwen3.8-27B | 18627 | 504 | 556 | +0.0028 | 0.117 |
+| model | against | documents | b | c | pooled delta | McNemar p |
+|---|---|---|---|---|---|---|
+| Llama-3.1-8B | FourOverSix | 18627 | 570 | 588 | +0.0010 | 0.617 |
+| Llama-3.1-8B | NVFP4 | 18627 | 625 | 765 | +0.0075 | 0.000191 |
+| Qwen3-4B | FourOverSix | 18627 | 683 | 935 | +0.0135 | 4.04e-10 |
+| Qwen3-4B | NVFP4 | 18627 | 820 | 1100 | +0.0150 | 1.79e-10 |
+| Qwen3.8-27B | FourOverSix | 18627 | 504 | 556 | +0.0028 | 0.117 |
+| Qwen3.8-27B | NVFP4 | 18627 | 616 | 655 | +0.0021 | 0.286 |
+
+Which baseline is used changes the verdict, so both are given. Against its own base the method is significant on one model of three; against plain NVFP4 it is significant on two. The report treats NVFP4 and FourOverSix as separate baselines for the same reason -- FourOverSix is not uniformly the stronger of the two, and on Llama-3.1-8B it already captures most of what is available, leaving MixFP4 little to add on top of it while still clearly beating plain NVFP4.
 
 ### What the multiple-choice panel can and cannot see
 
