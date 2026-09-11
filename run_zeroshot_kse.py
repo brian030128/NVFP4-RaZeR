@@ -57,6 +57,11 @@ def main():
                          'longer has its score shards.')
     ap.add_argument('--out', required=True)
     ap.add_argument('--batch-size', type=int, default=8)
+    ap.add_argument('--samples-dir', default=None,
+                    help='Write per-document outcomes per policy here. All four policies are '
+                         'scored on the same documents, so their differences are paired, and '
+                         'the per-task standard error lm-eval prints is the error of one '
+                         'measurement rather than of the difference.')
     ap.add_argument('--stage-root', default='/home/u4320956/NVFP4-RaZeR')
     args = ap.parse_args()
 
@@ -92,7 +97,8 @@ def main():
              calibration=str(calib), map_sha256=prior['map_sha256'],
              shipped_map_sha256=shipped_sha,
              calibration_reproduces_shipped=(shipped_sha == prior['map_sha256']),
-             batch_size=args.batch_size, election={}, accuracy={})
+             batch_size=args.batch_size, samples_dir=args.samples_dir,
+             election={}, accuracy={})
 
     def save():
         (out / 'report.json').write_text(json.dumps(r, indent=2) + '\n')
@@ -217,8 +223,22 @@ def main():
     for policy in ('bf16', 'nvfp4', 'four_over_six', f'k{K}'):
         install(policy)
         lm = HFLM(pretrained=model, tokenizer=tok, batch_size=args.batch_size)
-        res = lm_eval.simple_evaluate(model=lm, tasks=list(usable), num_fewshot=0,
-                                      batch_size=args.batch_size)['results']
+        full = lm_eval.simple_evaluate(model=lm, tasks=list(usable), num_fewshot=0,
+                                       batch_size=args.batch_size,
+                                       log_samples=args.samples_dir is not None)
+        if args.samples_dir:
+            sdir = Path(args.samples_dir)
+            sdir.mkdir(parents=True, exist_ok=True)
+            keep = {}
+            for task, records in (full.get('samples') or {}).items():
+                # doc_id and the scored metric are all a paired test needs; prompts and raw
+                # continuations are identical across policies and large.
+                keep[task] = [{'doc_id': rec.get('doc_id'),
+                               **{kk: vv for kk, vv in rec.items()
+                                  if kk in ('acc', 'acc_norm', 'exact_match')}}
+                              for rec in records]
+            (sdir / f'{policy}.json').write_text(json.dumps(keep))
+        res = full['results']
         acc = {}
         for task, values in res.items():
             for key in ('acc_norm,none', 'acc,none'):

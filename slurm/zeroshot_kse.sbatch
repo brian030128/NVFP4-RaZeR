@@ -83,6 +83,7 @@ cp "$CALIB/report.json" "$OUT/calibration_report_$MODEL.json" 2>/dev/null
 
 # --- step 2: elect k = 3 from those scores and evaluate the four policies -------------------
 "$PYTHON" run_zeroshot_kse.py --model "$MODEL" --calib "$CALIB" \
-    --out "$OUT/$MODEL" --batch-size "$BATCH" 2>&1 | tee "$OUT/zeroshot_$MODEL.log"
+    --out "$OUT/$MODEL" --batch-size "$BATCH" \
+    --samples-dir "$OUT/samples_$MODEL" 2>&1 | tee "$OUT/zeroshot_$MODEL.log"
 
 echo "=== done $(date -Iseconds) ==="
