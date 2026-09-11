@@ -36,6 +36,13 @@ mkdir -p slurm/logs
 
 MODEL=${1:-qwen4b}
 POLICIES=${POLICIES:-"bf16,four_over_six,k3"}
+# Serving is one request at a time through HF generate, and the W4A4 hooks re-quantize every
+# linear's input on every token, so the 24B target is far slower than the 4B. Its task count
+# and turn cap are correspondingly smaller; both are identical across policies, which is what
+# the comparison needs.
+if [[ "${1:-qwen4b}" == "qwen27b" ]]; then
+    : "${NTASKS:=8}" "${MAX_TURNS:=15}"
+fi
 DATASET=${DATASET:-terminal-bench/terminal-bench@4.0.0}
 NTASKS=${NTASKS:-15}
 AGENT=${AGENT:-terminus-2}
@@ -69,6 +76,16 @@ UV=/home/u4320956/.local/bin/uv
   fastapi uvicorn loguru || exit 1
 rm -rf "$SCRATCH"/deps/{transformers,tokenizers,torch,nvidia,triton}
 export PYTHONPATH="$PROJECT:$SCRATCH/deps"
+
+# Qwen3.8-27B is a Qwen3.5-family model and its calibration origin pins transformers 5.16.1.
+# This is also why it cannot be served by vLLM here: the pinned vllm 0.11.0 predates that
+# architecture entirely, so the in-process server is the only route -- which happens to be the
+# faithful one, since it keeps the W4A4 activation hooks a checkpoint would drop.
+if [[ "$MODEL" == "qwen27b" ]]; then
+    "$UV" pip install --python "$PYTHON" --target "$SCRATCH/deps27" --no-deps \
+      transformers==5.16.1 huggingface_hub tokenizers safetensors hf-xet loguru || exit 1
+    export PYTHONPATH="$PROJECT:$SCRATCH/deps27:$SCRATCH/deps"
+fi
 
 OUT="$PROJECT/results/terminal_bench/kse_job_$SLURM_JOB_ID"
 mkdir -p "$OUT"
