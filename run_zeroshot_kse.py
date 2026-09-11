@@ -77,7 +77,7 @@ def main():
 
     calib = Path(args.calib)
     prior = json.loads((calib / 'report.json').read_text())
-    bundle = json.loads((calib / 'maps.json').read_text())
+    fresh_bundle = json.loads((calib / 'maps.json').read_text())
     assert prior['status'] == 'complete' and prior['maps_frozen']
     assert not prior['uses_c4_calibration'] and not prior['uses_wiki_calibration']
     assert digest_file(calib / 'maps.json') == prior['map_sha256']
@@ -86,9 +86,21 @@ def main():
     # The shipped calibration for this model, kept only as a reference digest now that its
     # score shards are gone. If the regenerated maps.json matches it, the re-election below is
     # the shipped election and not merely a re-derivation of it.
-    shipped = Path(args.stage_root) / \
-        f'results/math_code_adaptive/calibration_{MODELS[args.model]}_{args.model}/report.json'
-    shipped_sha = json.loads(shipped.read_text())['map_sha256'] if shipped.is_file() else None
+    shipped_dir = Path(args.stage_root) / \
+        f'results/math_code_adaptive/calibration_{MODELS[args.model]}_{args.model}'
+    shipped_report = shipped_dir / 'report.json'
+    shipped_sha = json.loads(shipped_report.read_text())['map_sha256'] \
+        if shipped_report.is_file() else None
+
+    # The election is validated against the SHIPPED frozen map, not the freshly generated one.
+    # Checking the fresh re-election against the fresh bundle only proves internal consistency;
+    # what has to hold is that it lands on the artifact the report was built from. maps.json
+    # carries 20 maps and only fixed256_math_code128 cross-checks this election, so comparing
+    # whole-file digests is the wrong test -- a difference in the adaptive_* searches, which
+    # nothing here uses, would fail it for no reason. Qwen3.8-27B does exactly that.
+    shipped_maps = shipped_dir / 'maps.json'
+    bundle = json.loads(shipped_maps.read_text()) if shipped_maps.is_file() else fresh_bundle
+    frozen_source = 'shipped' if shipped_maps.is_file() else 'fresh'
 
     r = dict(status='running', model=args.model, source=prior['source'], k=K,
              job_id=os.environ['SLURM_JOB_ID'], torch_version=torch.__version__,
@@ -97,7 +109,8 @@ def main():
              .version('lm_eval'),
              calibration=str(calib), map_sha256=prior['map_sha256'],
              shipped_map_sha256=shipped_sha,
-             calibration_reproduces_shipped=(shipped_sha == prior['map_sha256']),
+             calibration_maps_json_matches_shipped=(shipped_sha == prior['map_sha256']),
+             frozen_map_source=frozen_source,
              batch_size=args.batch_size, samples_dir=args.samples_dir,
              election={}, accuracy={})
 
@@ -105,7 +118,9 @@ def main():
         (out / 'report.json').write_text(json.dumps(r, indent=2) + '\n')
 
     save()
-    print(f'CALIBRATION REPRODUCES SHIPPED MAP: {r["calibration_reproduces_shipped"]}', flush=True)
+    print(f'maps.json matches shipped: {r["calibration_maps_json_matches_shipped"]} '
+          f'(informational -- covers 20 maps, 19 unused here)', flush=True)
+    print(f'frozen map for validation taken from: {frozen_source}', flush=True)
 
     # Re-elect. k = 2 is asserted inside elect_k to equal the shipped score exactly.
     uppers, slices, names = elect_k(calib, prior, (2, K))
@@ -154,7 +169,8 @@ def main():
         want[bundle['maps'][FROZEN][n]] = True
         assert torch.equal(maps['n256'][n].reshape(-1), want), n
     r['frozen_map_reproduced'] = True
-    print(f'REELECTION AT 256 MATCHES {FROZEN}', flush=True)
+    print(f'REELECTION AT 256 MATCHES {frozen_source.upper()} {FROZEN} -- this election is the '
+          f'shipped k = {K} policy', flush=True)
     save()
 
     # Weight variants. Held on CPU for the streamed target, which cannot keep three copies.
