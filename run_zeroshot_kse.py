@@ -159,6 +159,28 @@ def main():
     del uppers, order
     save()
 
+    # Task datasets are prepared BEFORE the model is loaded, and the order matters. `datasets`
+    # forks worker processes to build a dataset, and a fork from a parent holding the model --
+    # on the GPU plus its CPU-side variants -- fails to reserve memory:
+    #     File "multiprocessing/popen_fork.py", line 66, in _launch
+    #       self.pid = os.fork()
+    #     OSError: [Errno 12] Cannot allocate memory
+    # Probing first leaves the parent small at fork time, and everything is cached by the time
+    # evaluation runs. Each task is probed independently so one unavailable dataset is recorded
+    # and skipped rather than failing the run.
+    usable, skipped = [], {}
+    for task in args.tasks:
+        try:
+            lm_eval.tasks.TaskManager().load_task_or_group([task])
+            usable.append(task)
+        except Exception as exc:  # dataset availability, not a model property
+            skipped[task] = repr(exc)[:200]
+            print(f'SKIP {task}: {repr(exc)[:120]}', flush=True)
+    assert usable, f'No task could be loaded: {skipped}'
+    r['tasks_evaluated'], r['tasks_skipped'] = usable, skipped
+    print(f'TASKS {usable}', flush=True)
+    save()
+
     target = args.model in STREAMED
     if target:
         from transformers import Qwen3_5ForConditionalGeneration
@@ -268,19 +290,6 @@ def main():
             return (q(inputs[0], 4, 16), *inputs[1:])
 
         handles = [m.register_forward_pre_hook(act) for m in modules.values()]
-
-    usable, skipped = [], {}
-    for task in args.tasks:
-        try:
-            lm_eval.tasks.TaskManager().load_task_or_group([task])
-            usable.append(task)
-        except Exception as exc:  # dataset availability, not a model property
-            skipped[task] = repr(exc)[:200]
-            print(f'SKIP {task}: {repr(exc)[:120]}', flush=True)
-    assert usable, f'No task could be loaded: {skipped}'
-    r['tasks_evaluated'], r['tasks_skipped'] = usable, skipped
-    print(f'TASKS {usable}', flush=True)
-    save()
 
     for policy in ('bf16', 'nvfp4', 'four_over_six', f'k{K}'):
         install(policy)
