@@ -75,7 +75,11 @@ UV=/home/u4320956/.local/bin/uv
 "$UV" pip install --python "$PYTHON" --target "$SCRATCH/deps" \
   fastapi uvicorn loguru || exit 1
 rm -rf "$SCRATCH"/deps/{transformers,tokenizers,torch,nvidia,triton}
-export PYTHONPATH="$PROJECT:$SCRATCH/deps"
+# NOT exported: these are built for the venv's Python 3.11, while harbor runs on its own
+# uv-managed 3.13. A global PYTHONPATH hands harbor binary extensions built for the wrong
+# interpreter -- "ModuleNotFoundError: No module named 'pydantic_core._pydantic_core'" -- so the
+# path is applied per command instead.
+PYPATH="$PROJECT:$SCRATCH/deps"
 
 # Qwen3.8-27B is a Qwen3.5-family model and its calibration origin pins transformers 5.16.1.
 # This is also why it cannot be served by vLLM here: the pinned vllm 0.11.0 predates that
@@ -89,7 +93,7 @@ export PYTHONPATH="$PROJECT:$SCRATCH/deps"
 if [[ "$MODEL" == "qwen27b" ]]; then
     "$UV" pip install --python "$PYTHON" --target "$SCRATCH/deps27" --no-deps \
       transformers==5.16.1 'huggingface_hub==1.5.0' tokenizers safetensors hf-xet loguru || exit 1
-    export PYTHONPATH="$PROJECT:$SCRATCH/deps27:$SCRATCH/deps"
+    PYPATH="$PROJECT:$SCRATCH/deps27:$SCRATCH/deps"
 fi
 
 OUT="$PROJECT/results/terminal_bench/kse_job_$SLURM_JOB_ID"
@@ -101,15 +105,17 @@ singularity --version; harbor --version
 # --- the calibration the k=3 election needs (its shipped score shards are gone) --------------
 CALIB="$SCRATCH/calibration_$MODEL"
 echo "--- calibration -> $CALIB"
-"$PYTHON" run_math_code_calibration.py --model "$MODEL" --out "$CALIB" --allow-source-drift \
+env PYTHONPATH="$PYPATH" "$PYTHON" run_math_code_calibration.py \
+    --model "$MODEL" --out "$CALIB" --allow-source-drift \
     > "$OUT/calibration_$MODEL.log" 2>&1 || { tail -20 "$OUT/calibration_$MODEL.log"; exit 1; }
-"$PYTHON" "$PROJECT/scripts/check_map_digest.py" "$CALIB" "$MODEL" || \
+env PYTHONPATH="$PYPATH" "$PYTHON" "$PROJECT/scripts/check_map_digest.py" "$CALIB" "$MODEL" || \
     echo 'NOTE: maps.json differs; serve_quantized.py checks the frozen map itself.'
 
 IFS=',' read -ra LIST <<< "$POLICIES"
 for POLICY in "${LIST[@]}"; do
     echo "########## policy $POLICY"
-    "$PYTHON" serve_quantized.py --model "$MODEL" --calib "$CALIB" --policy "$POLICY" \
+    env PYTHONPATH="$PYPATH" "$PYTHON" serve_quantized.py \
+        --model "$MODEL" --calib "$CALIB" --policy "$POLICY" \
         --port "$PORT" --served-name qmodel \
         --provenance "$OUT/provenance_$POLICY.json" ${SERVE_ARGS:-} \
         > "$OUT/serve_$POLICY.log" 2>&1 &
