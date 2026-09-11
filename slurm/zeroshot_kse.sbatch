@@ -70,8 +70,10 @@ OUT="$PROJECT/results/zeroshot_kse/job_$SLURM_JOB_ID"
 mkdir -p "$OUT"
 
 echo "=== zeroshot k=3  $MODEL  $(date -Iseconds) on $(hostname) ==="
-"$PYTHON" -c "import torch,transformers,lm_eval,importlib.metadata as M; \
-print('torch',torch.__version__,'transformers',transformers.__version__,'lm_eval',M.version('lm_eval'))"
+# lm_eval_compat first: under transformers 5 (Qwen3.8-27B) importing lm_eval raises without it.
+"$PYTHON" -c "import torch,transformers,lm_eval_compat,lm_eval,importlib.metadata as M; \
+print('torch',torch.__version__,'transformers',transformers.__version__,'lm_eval',M.version('lm_eval'))" \
+  || { echo 'FATAL: evaluation stack does not import'; exit 1; }
 
 # --- step 1: regenerate the calibration scores the election needs ---------------------------
 CALIB="$SCRATCH/calibration_$MODEL"

@@ -65,19 +65,7 @@ def main():
     ap.add_argument('--stage-root', default='/home/u4320956/NVFP4-RaZeR')
     args = ap.parse_args()
 
-    # lm-eval 0.4.5 imports transformers.AutoModelForVision2Seq at module scope. transformers 5
-    # removed that name, and Qwen3.8-27B's calibration origin pins transformers 5.16.1, so the
-    # import fails for that model alone. The alias is restored rather than moving to a newer
-    # lm-eval, because changing the harness between models would make the 27B's accuracies
-    # incomparable to the other two -- which is the whole point of running them together. The
-    # name is only used for vision-to-text models; every task here is text.
-    if int(transformers.__version__.split('.')[0]) >= 5 and \
-            not hasattr(transformers, 'AutoModelForVision2Seq'):
-        successor = getattr(transformers, 'AutoModelForImageTextToText', None) \
-            or getattr(transformers, 'AutoModel')
-        transformers.AutoModelForVision2Seq = successor
-        print(f'SHIM transformers.AutoModelForVision2Seq -> {successor.__name__}', flush=True)
-
+    import lm_eval_compat  # noqa: F401  -- restores a name transformers 5 dropped; see module
     import lm_eval
     from lm_eval.models.huggingface import HFLM
 
