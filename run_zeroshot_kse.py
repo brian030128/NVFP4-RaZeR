@@ -360,8 +360,11 @@ def main():
         acc['mean_over'] = named
         r['accuracy'][policy] = acc
         save()
+        # `mean_over` is a list of task names, not a metric, so the summary line has to skip
+        # anything that is not a per-task record rather than assume every other key is one.
         print(f'ACC {policy} mean {acc["mean"]:.4f} ' +
-              ' '.join(f'{k}={v["value"]:.4f}' for k, v in acc.items() if k != 'mean'), flush=True)
+              ' '.join(f'{k}={v["value"]:.4f}' for k, v in acc.items()
+                       if k != 'mean' and isinstance(v, dict)), flush=True)
 
     for h in handles:
         h.remove()
