@@ -193,8 +193,14 @@ def main():
     async def chat(body: dict):
         messages = body.get('messages', [])
         try:
-            ids = tok.apply_chat_template(messages, add_generation_prompt=True,
+            enc = tok.apply_chat_template(messages, add_generation_prompt=True,
                                           return_tensors='pt')
+            # transformers 5 returns a BatchEncoding here where 4.x returned the tensor, and
+            # passing the mapping to generate() fails deep inside with an opaque AttributeError
+            # on .shape. Qwen3.8-27B pins transformers 5.16.1, so both shapes occur.
+            ids = enc['input_ids'] if hasattr(enc, 'keys') else enc
+            if isinstance(ids, list):
+                ids = torch.tensor([ids] if not isinstance(ids[0], list) else ids)
         except Exception:
             # Models without a chat template still have to answer something coherent.
             flat = '\n'.join(f"{m.get('role')}: {m.get('content')}" for m in messages)
