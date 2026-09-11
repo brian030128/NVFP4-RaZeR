@@ -38,8 +38,15 @@ K = 3
 POLICIES = ('bf16', 'nvfp4', 'four_over_six', f'k{K}')
 
 
-def build(model_name, calib_dir, policy, stage_root, allow_drift):
-    """Load the model and install `policy`, returning (model, tokenizer, provenance)."""
+def build(model_name, calib_dir, policy, stage_root, allow_drift, activation_hooks=True):
+    """
+        Load the model and install `policy`, returning (model, tokenizer, provenance).
+
+        `activation_hooks=False` installs the weight half only. That is not the reported policy
+        -- every row in MIXFP4_REPORT.md is W4A4 -- and exists solely so the weights can be
+        written to a checkpoint for a serving stack that cannot run the hooks. The provenance
+        records which half was applied, so a W4A16 measurement cannot be mistaken for a W4A4 one.
+    """
     calib = Path(calib_dir)
     prior = json.loads((calib / 'report.json').read_text())
     assert prior['status'] == 'complete' and prior['maps_frozen']
@@ -47,7 +54,9 @@ def build(model_name, calib_dir, policy, stage_root, allow_drift):
 
     prov = dict(model=model_name, policy=policy, source=prior['source'], k=K,
                 transformers_version=transformers.__version__,
-                activation_quantized=policy != 'bf16')
+                activation_quantized=bool(activation_hooks) and policy != 'bf16',
+                precision='W4A4' if (activation_hooks and policy != 'bf16')
+                          else ('BF16' if policy == 'bf16' else 'W4A16'))
 
     target = model_name in STREAMED
     if target:
@@ -111,7 +120,7 @@ def build(model_name, calib_dir, policy, stage_root, allow_drift):
             m.weight.copy_(w)
             del w
 
-    if policy != 'bf16':
+    if policy != 'bf16' and activation_hooks:
         q = quant_nvfp4 if policy == 'nvfp4' else quant_nvfp4_4over6
 
         def act(module, inputs):
