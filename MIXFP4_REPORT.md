@@ -181,12 +181,13 @@ Which baseline is used changes the verdict, so both are given. Against its own b
 
 The panel above resolves a difference of roughly 0.005 and no smaller, and it is not equally sensitive to quantization across metrics. The same policies on the same weights, measured on tasks chosen to be harder on a quantized model: generative chain-of-thought, where one derailed token loses a whole answer instead of averaging out, and larger multiple-choice sets.
 
-| model | metric | BF16 | NVFP4 | FourOverSix | MixFP4 (k=3) | MixFP4 − FourOverSix |
-|---|---|---|---|---|---|---|
-| Llama-3.1-8B | `mmlu` | 0.6344 | 0.5996 | 0.5998 | 0.6035 | +0.0036 |
-| Llama-3.1-8B | `lambada_openai` | 0.7530 | 0.7370 | 0.7440 | 0.7454 | +0.0014 |
+| model | metric | n | BF16 | NVFP4 | FourOverSix | MixFP4 (k=3) | k3 − FourOverSix (p) | k3 − NVFP4 (p) |
+|---|---|---|---|---|---|---|---|---|
+| Llama-3.1-8B | `gsm8k` | 1319 | 0.4882 | 0.3859 | 0.4117 | 0.4200 | +0.0106 (0.43) | +0.0364 (0.0083) |
+| Llama-3.1-8B | `mmlu` | 14042 | 0.6344 | 0.5996 | 0.5998 | 0.6035 | +0.0036 (0.28) | +0.0038 (0.28) |
+| Llama-3.1-8B | `lambada_openai` | 5153 | 0.7530 | 0.7370 | 0.7440 | 0.7454 | +0.0014 (0.74) | +0.0083 (0.036) |
 
-The spread in what quantization costs is the point: on Llama-3.1-8B, W4A4 costs about four times as much on gsm8k as on the multiple-choice panel. A null on the panel is therefore a weaker statement than it looks, which is why it is reported here alongside metrics that have more room to show a difference.
+Two things follow. First, what quantization costs depends heavily on the metric: on Llama-3.1-8B, W4A4 costs about four times as much on gsm8k as on the multiple-choice panel, so a null on the panel is a weaker statement than it looks. Second, and more usefully, the method's advantage over plain NVFP4 is clearest exactly where the metric is most sensitive: on gsm8k it is +0.0364 at p = 0.0083 from 1,319 problems, where the panel needed 18,627 documents to resolve +0.0075. Against FourOverSix the same comparison stays inside noise on both, but its point estimate rises by an order of magnitude, from +0.0010 to +0.0106.
 
 > **Election re-derived.** Qwen3.8-27B: 4 module(s) differ from the shipped frozen map, 2 tile(s) present only in the shipped map and 2 only here. The rule, k, and calibration are the reported ones and the calibration reproduces the shipped teacher losses bit for bit; what differs is which side of the threshold a handful of borderline tiles fall on in a re-run. The effect on the elected set is a few tiles in tens of millions, so these rows are treated as the reported policy, with the difference recorded here rather than hidden.
 

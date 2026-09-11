@@ -82,6 +82,27 @@ def ppl_deltas(model, against=None):
     return {d: ev[f'k{K}'][d]['ppl'] - ev[against][d]['ppl'] for d in ('wiki', 'c4')}
 
 
+def paired_for_metric(sdir, metric, reference):
+    """
+        Paired test for one metric inside a run's samples.
+
+        A group task's samples arrive as its member subtasks (mmlu as 57 subjects), so a metric
+        is whatever matches its name or is prefixed by it; pooling those is what the group's
+        own score means.
+    """
+    ref_f = os.path.join(sdir, f'{reference}.json')
+    var_f = os.path.join(sdir, f'k{K}.json')
+    if not (os.path.isfile(ref_f) and os.path.isfile(var_f)):
+        return None
+    ref, var = load_samples(ref_f), load_samples(var_f)
+    keep = [t for t in ref if t == metric or t.startswith(metric + '_')]
+    if not keep:
+        return None
+    _, pooled = compare({t: ref[t] for t in keep},
+                        {t: var[t] for t in keep if t in var})
+    return pooled
+
+
 def ev_names(model):
     p = f'results/kse_paper/job_{KSE_JOB[model]}/{model}/report.json'
     return set(json.load(open(p))['evaluation']) if os.path.isfile(p) else set()
@@ -195,26 +216,38 @@ def main():
               'same weights, measured on tasks chosen to be harder on a quantized model: '
               'generative chain-of-thought, where one derailed token loses a whole answer '
               'instead of averaging out, and larger multiple-choice sets.', '',
-              '| model | metric | BF16 | NVFP4 | FourOverSix | MixFP4 (k=3) | MixFP4 − FourOverSix |',
-              '|---|---|---|---|---|---|---|']
+              '| model | metric | n | BF16 | NVFP4 | FourOverSix | MixFP4 (k=3) | '
+              'k3 − FourOverSix (p) | k3 − NVFP4 (p) |',
+              '|---|---|---|---|---|---|---|---|---|']
         label_of = dict(MODELS)
-        for m, tset, r, _ in extra:
+        for m, tset, r, rundir in extra:
             acc = r['accuracy']
+            sdir = os.path.join(os.path.dirname(rundir), f'samples_{m}')
             for t in tset:
                 cells = []
                 for key in ('bf16', 'nvfp4', 'four_over_six', f'k{K}'):
                     v = acc.get(key, {}).get(t, {}).get('value')
                     cells.append(fmt(v) if v is not None else '—')
-                base_v = acc.get(BASE, {}).get(t, {}).get('value')
-                k_v = acc.get(f'k{K}', {}).get(t, {}).get('value')
-                d = fmt(k_v - base_v, signed=True) if (base_v is not None and k_v is not None) \
-                    else '—'
-                L.append(f'| {label_of.get(m, m)} | `{t}` | ' + ' | '.join(cells) + f' | {d} |')
+                stats, n = [], '—'
+                for refname in (BASE, 'nvfp4'):
+                    pl = paired_for_metric(sdir, t, refname)
+                    if pl:
+                        n = str(pl['n'])
+                        stats.append(f"{fmt(pl['delta'], signed=True)} ({pl['p']:.2g})")
+                    else:
+                        stats.append('—')
+                L.append(f'| {label_of.get(m, m)} | `{t}` | {n} | ' + ' | '.join(cells)
+                         + ' | ' + ' | '.join(stats) + ' |')
         L += ['',
-              'The spread in what quantization costs is the point: on Llama-3.1-8B, W4A4 costs '
-              'about four times as much on gsm8k as on the multiple-choice panel. A null on the '
-              'panel is therefore a weaker statement than it looks, which is why it is reported '
-              'here alongside metrics that have more room to show a difference.', '']
+              'Two things follow. First, what quantization costs depends heavily on the metric: '
+              'on Llama-3.1-8B, W4A4 costs about four times as much on gsm8k as on the '
+              'multiple-choice panel, so a null on the panel is a weaker statement than it '
+              'looks. Second, and more usefully, the method\'s advantage over plain NVFP4 is '
+              'clearest exactly where the metric is most sensitive: on gsm8k it is +0.0364 at '
+              'p = 0.0083 from 1,319 problems, where the panel needed 18,627 documents to '
+              'resolve +0.0075. Against FourOverSix the same comparison stays inside noise on '
+              'both, but its point estimate rises by an order of magnitude, from +0.0010 to '
+              '+0.0106.', '']
 
     # Say plainly which of the report's models this covers. A section that silently lists two
     # of three invites the reader to assume the third agreed.
