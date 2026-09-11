@@ -59,11 +59,23 @@ fi
 OUT="$PROJECT/results/terminal_bench/tput_$SLURM_JOB_ID"
 mkdir -p "$OUT"
 
-CALIB="$SCRATCH/calibration_$MODEL"
 echo "=== throughput probe $MODEL/$POLICY  $(date -Iseconds) on $(hostname) ==="
-env PYTHONPATH="$PYPATH" "$PYTHON" run_math_code_calibration.py \
-    --model "$MODEL" --out "$CALIB" --allow-source-drift \
-    > "$OUT/calibration.log" 2>&1 || { tail -20 "$OUT/calibration.log"; exit 1; }
+
+# A throughput probe of four_over_six needs no election, so it needs no scoring pass: the
+# shipped calibration directory supplies the report.json that serve_quantized reads, and the
+# scores it lacks are only used for k3. That skips ~25 minutes, and it avoids the 27B
+# calibration's device_map='balanced' over two GPUs, which failed here with
+# "CUDA error: invalid device ordinal" on a single-GPU allocation.
+SHIPPED_CALIB=${SHIPPED_CALIB:-results/math_code_adaptive/calibration_333787_qwen27b}
+if [[ "$POLICY" == "k3" ]]; then
+    CALIB="$SCRATCH/calibration_$MODEL"
+    env PYTHONPATH="$PYPATH" "$PYTHON" run_math_code_calibration.py \
+        --model "$MODEL" --out "$CALIB" --allow-source-drift \
+        > "$OUT/calibration.log" 2>&1 || { tail -20 "$OUT/calibration.log"; exit 1; }
+else
+    CALIB="$PROJECT/$SHIPPED_CALIB"
+    echo "using the shipped calibration (no election needed for $POLICY): $CALIB"
+fi
 
 env PYTHONPATH="$PYPATH" "$PYTHON" serve_quantized.py --model "$MODEL" --calib "$CALIB" \
     --policy "$POLICY" --port "$PORT" --allow-map-drift \
