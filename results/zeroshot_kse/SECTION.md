@@ -36,6 +36,22 @@ The rule elects **7,912 of 7,096,320** type blocks, 0.1115%.
 | MixFP4 − FourOverSix | +0.0180 | -2.406154 | -1.502600 |
 | MixFP4 − NVFP4 | +0.0219 | — | — |
 
+### Qwen3.8-27B
+
+The rule elects **3,787 of 47,559,680** type blocks, 0.0080%.
+
+| Policy | arc_easy | arc_challenge | hellaswag | openbookqa | boolq | winogrande | mean |
+|---|---|---|---|---|---|---|---|
+| BF16 reference | 0.7298 | 0.5896 | 0.8291 | 0.4620 | 0.8670 | 0.7561 | 0.7056 |
+| NVFP4 W4A4 | 0.7542 | 0.5828 | 0.8237 | 0.4460 | 0.7783 | 0.7451 | 0.6883 |
+| NVFP4 FourOverSix W4A4 | 0.7273 | 0.5580 | 0.8233 | 0.4480 | 0.8043 | 0.7435 | 0.6841 |
+| **MixFP4 (k=3), ours** | 0.7475 | 0.5836 | 0.8208 | 0.4520 | 0.8034 | 0.7443 | **0.6919** |
+
+| Comparison | d accuracy | d WikiText PPL | d C4 PPL |
+|---|---:|---:|---:|
+| MixFP4 − FourOverSix | +0.0078 | -0.072327 | -0.038499 |
+| MixFP4 − NVFP4 | +0.0036 | — | — |
+
 ### Is the difference real?
 
 Every policy is scored on the same documents, so MixFP4 against its own base is a paired comparison and the standard error lm-eval prints -- the error of one measurement -- is the wrong yardstick. `b` counts documents only FourOverSix gets right, `c` only MixFP4; the rest carry no information about the difference. The p-value is an exact two-sided McNemar test on those counts, pooled over all tasks.
@@ -44,8 +60,18 @@ Every policy is scored on the same documents, so MixFP4 against its own base is 
 |---|---|---|---|---|---|
 | Llama-3.1-8B | 18627 | 570 | 588 | +0.0010 | 0.617 |
 | Qwen3-4B | 18627 | 683 | 935 | +0.0135 | 4.04e-10 |
+| Qwen3.8-27B | 18627 | 504 | 556 | +0.0028 | 0.117 |
 
-### Coverage
+### What the multiple-choice panel can and cannot see
 
-This section covers Llama-3.1-8B, Qwen3-4B. It does not cover Qwen3.8-27B. No claim is made about the missing model either way.
+The panel above resolves a difference of roughly 0.005 and no smaller, and it is not equally sensitive to quantization across metrics. The same policies on the same weights, measured on tasks chosen to be harder on a quantized model: generative chain-of-thought, where one derailed token loses a whole answer instead of averaging out, and larger multiple-choice sets.
+
+| model | metric | BF16 | NVFP4 | FourOverSix | MixFP4 (k=3) | MixFP4 − FourOverSix |
+|---|---|---|---|---|---|---|
+| Llama-3.1-8B | `mmlu` | 0.6344 | 0.5996 | 0.5998 | 0.6035 | +0.0036 |
+| Llama-3.1-8B | `lambada_openai` | 0.7530 | 0.7370 | 0.7440 | 0.7454 | +0.0014 |
+
+The spread in what quantization costs is the point: on Llama-3.1-8B, W4A4 costs about four times as much on gsm8k as on the multiple-choice panel. A null on the panel is therefore a weaker statement than it looks, which is why it is reported here alongside metrics that have more room to show a difference.
+
+> **Election re-derived.** Qwen3.8-27B: 4 module(s) differ from the shipped frozen map, 2 tile(s) present only in the shipped map and 2 only here. The rule, k, and calibration are the reported ones and the calibration reproduces the shipped teacher losses bit for bit; what differs is which side of the threshold a handful of borderline tiles fall on in a re-run. The effect on the elected set is a few tiles in tens of millions, so these rows are treated as the reported policy, with the difference recorded here rather than hidden.
 

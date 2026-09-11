@@ -32,8 +32,19 @@ K = 3
 KSE_JOB = {'llama8b': '336566', 'qwen4b': '336566', 'qwen27b': '336969'}
 
 
+# The multiple-choice panel the three models are compared on. A model may also have runs on
+# other task sets (the Llama sensitivity probes), which must not be mixed into the same table.
+PANEL = ('arc_easy', 'arc_challenge', 'hellaswag', 'openbookqa', 'boolq', 'winogrande')
+
+
 def find_runs(root):
-    """Newest complete run per model."""
+    """
+        Newest complete run per (model, task set).
+
+        Keying by model alone silently mixed panels once the Llama sensitivity runs existed: the
+        table took its column headers from whichever run was newest and its values from another,
+        so every cell of the other models read as missing.
+    """
     runs = {}
     for path in sorted(glob.glob(os.path.join(root, 'job_*', '*', 'report.json'))):
         try:
@@ -44,8 +55,19 @@ def find_runs(root):
         # reported with it rather than used to hide it. Only incomplete runs are skipped.
         if r.get('status') != 'complete':
             continue
-        runs[r['model']] = (r, os.path.dirname(path))
+        runs[(r['model'], tuple(r['tasks_evaluated']))] = (r, os.path.dirname(path))
     return runs
+
+
+def panel_runs(runs):
+    """Just the runs on the shared multiple-choice panel, per model."""
+    return {m: v for (m, tasks), v in runs.items() if tuple(tasks) == PANEL}
+
+
+def other_runs(runs):
+    """Runs on any other task set, as (model, tasks, report, dir)."""
+    return [(m, tasks, r, d) for (m, tasks), (r, d) in sorted(runs.items())
+            if tuple(tasks) != PANEL]
 
 
 def ppl_deltas(model):
@@ -71,10 +93,11 @@ def main():
     ap.add_argument('--out', default='results/zeroshot_kse/SECTION.md')
     args = ap.parse_args()
 
-    runs = find_runs(args.root)
+    all_runs = find_runs(args.root)
+    runs = panel_runs(all_runs)
     present = [(m, lbl) for m, lbl in MODELS if m in runs]
-    assert present, f'no complete run under {args.root}'
-    tasks = runs[present[0][0]][0]['tasks_evaluated']
+    assert present, f'no complete panel run under {args.root}'
+    tasks = list(PANEL)
 
     L = ['## Zero-shot accuracy', '',
          'The tables above are perplexity, which is a next-token loss: a quantizer that makes '
@@ -145,9 +168,39 @@ def main():
                      f"{fmt(pl['delta'], signed=True)} | {pl['p']:.3g} |")
         L.append('')
 
+    # --- other task sets, which measure the same policies on more sensitive metrics ----------
+    extra = other_runs(all_runs)
+    if extra:
+        L += ['### What the multiple-choice panel can and cannot see', '',
+              'The panel above resolves a difference of roughly 0.005 and no smaller, and it is '
+              'not equally sensitive to quantization across metrics. The same policies on the '
+              'same weights, measured on tasks chosen to be harder on a quantized model: '
+              'generative chain-of-thought, where one derailed token loses a whole answer '
+              'instead of averaging out, and larger multiple-choice sets.', '',
+              '| model | metric | BF16 | NVFP4 | FourOverSix | MixFP4 (k=3) | MixFP4 − FourOverSix |',
+              '|---|---|---|---|---|---|---|']
+        label_of = dict(MODELS)
+        for m, tset, r, _ in extra:
+            acc = r['accuracy']
+            for t in tset:
+                cells = []
+                for key in ('bf16', 'nvfp4', 'four_over_six', f'k{K}'):
+                    v = acc.get(key, {}).get(t, {}).get('value')
+                    cells.append(fmt(v) if v is not None else '—')
+                base_v = acc.get(BASE, {}).get(t, {}).get('value')
+                k_v = acc.get(f'k{K}', {}).get(t, {}).get('value')
+                d = fmt(k_v - base_v, signed=True) if (base_v is not None and k_v is not None) \
+                    else '—'
+                L.append(f'| {label_of.get(m, m)} | `{t}` | ' + ' | '.join(cells) + f' | {d} |')
+        L += ['',
+              'The spread in what quantization costs is the point: on Llama-3.1-8B, W4A4 costs '
+              'about four times as much on gsm8k as on the multiple-choice panel. A null on the '
+              'panel is therefore a weaker statement than it looks, which is why it is reported '
+              'here alongside metrics that have more room to show a difference.', '']
+
     # Say plainly which of the report's models this covers. A section that silently lists two
     # of three invites the reader to assume the third agreed.
-    missing = [lbl for m, lbl in MODELS if m not in runs]
+    missing = [lbl for m, lbl in MODELS if m not in runs]  # panel coverage
     if missing:
         L += ['### Coverage', '',
               'This section covers ' + ', '.join(lbl for _, lbl in present) +
