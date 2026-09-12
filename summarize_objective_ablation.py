@@ -193,17 +193,20 @@ def main():
                 pooled = None
                 if os.path.isfile(ref) and os.path.isfile(var):
                     _, pooled = compare(load_samples(ref), load_samples(var))
-                rows.append((label, pol, mean, d, pooled))
+                tiles = r.get('election', {}).get(pol, {}).get('selected')
+                rows.append((label, pol, tiles, mean, d, pooled))
         if rows:
             L += ['#### Zero-shot accuracy', '',
                   'The same policies on the multiple-choice panel, with the paired McNemar test '
                   'against the FourOverSix base. Positive is better here.', '',
-                  '| model | policy | panel mean | d accuracy | pooled delta | McNemar p |',
-                  '|---|---|---:|---:|---:|---:|']
-            for label, pol, mean, d, pooled in rows:
+                  '| model | policy | tiles | panel mean | d accuracy | pooled delta | '
+                  'McNemar p |',
+                  '|---|---|---:|---:|---:|---:|---:|']
+            for label, pol, tiles, mean, d, pooled in rows:
                 pd = fmt(pooled['delta'], 4, True) if pooled else '—'
                 pp = f"{pooled['p']:.3g}" if pooled else '—'
-                L.append(f'| {label} | {PRETTY.get(pol, pol)} | {fmt(mean, 4)} | '
+                L.append(f'| {label} | {PRETTY.get(pol, pol)} | '
+                         f'{f"{tiles:,}" if tiles is not None else "—"} | {fmt(mean, 4)} | '
                          f'{fmt(d, 4, True) if d is not None else "—"} | {pd} | {pp} |')
             L.append('')
 
