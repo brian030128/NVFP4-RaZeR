@@ -144,6 +144,44 @@ def main():
                              f'{fmt(c - base["c4"]["ppl"], signed=True)} |')
         L.append('')
 
+        best = []
+        for m, label in MODELS:
+            if m not in ppl:
+                continue
+            ev = ppl[m]['evaluation']
+            el = ppl[m]['election']
+            if f'k{K}' not in ev:
+                continue
+            ref = ev[f'k{K}']
+            cand = [(k, ev[f'k{k}_kl']) for k in ppl[m].get('k_values', [K])
+                    if f'k{k}_kl' in ev]
+            if len(cand) < 2:                 # a single k is not a strictness sweep
+                continue
+            kk, e = min(cand, key=lambda kv: kv[1]['wiki']['ppl'])
+            dw = e['wiki']['ppl'] - ref['wiki']['ppl']
+            dc = e['c4']['ppl'] - ref['c4']['ppl']
+            tiles = el.get(f'k{kk}_kl', {}).get('selected')
+            shipped_tiles = el.get(f'k{K}', {}).get('selected')
+            verdict = ('beats the conjunction on both corpora' if dw < 0 and dc < 0 else
+                       'loses on both corpora' if dw > 0 and dc > 0 else
+                       'is better on one corpus and worse on the other')
+            note = ''
+            if tiles and shipped_tiles:
+                ratio = tiles / shipped_tiles
+                note = (f' It gets there by electing {ratio:.0f}x as many tiles '
+                        f'({tiles:,} against {shipped_tiles:,}), so this is the most permissive '
+                        f'setting swept rather than a like-for-like one.' if ratio >= 2 else
+                        f' It elects {tiles:,} tiles against {shipped_tiles:,}, so the two are '
+                        f'roughly count-matched.')
+            best.append(f'**{label}**: the lowest-WikiText KL-only threshold is k = {kk}, '
+                        f'{dw:+.3f} WikiText and {dc:+.3f} C4 against the shipped rule -- it '
+                        f'{verdict}.{note}')
+        if best:
+            L += ['Tightening the threshold is the obvious way to try to rescue KL alone, since '
+                  'at a fixed k it elects several times more tiles. Sweeping k answers that '
+                  'directly. Taking the best KL-only row by WikiText, whatever its tile count:',
+                  ''] + [f'- {b}' for b in best] + ['']
+
         # The verdict is counted, not asserted: every (model, k) cell where a single-objective
         # election was run is compared against the conjunction at the same k.
         for objective in ('kl', 'ce'):

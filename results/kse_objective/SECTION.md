@@ -32,6 +32,11 @@ WikiText-2 and C4 at 2048 under the report's own protocol (`run_kse_paper.py`), 
 | Qwen3-4B | 2 | max(CE, KL) | 66,856 | 10.850905 | -3.418157 | 15.162447 | -2.164186 |
 | Qwen3-4B | 2 | KL only | 212,858 | 11.328046 | -2.941016 | 16.015682 | -1.310951 |
 
+Tightening the threshold is the obvious way to try to rescue KL alone, since at a fixed k it elects several times more tiles. Sweeping k answers that directly. Taking the best KL-only row by WikiText, whatever its tile count:
+
+- **Llama-3.1-8B**: the lowest-WikiText KL-only threshold is k = 3, +0.507 WikiText and +0.621 C4 against the shipped rule -- it loses on both corpora. It gets there by electing 10x as many tiles (32,774 against 3,345), so this is the most permissive setting swept rather than a like-for-like one.
+- **Qwen3-4B**: the lowest-WikiText KL-only threshold is k = 2, -0.535 WikiText and +0.192 C4 against the shipped rule -- it is better on one corpus and worse on the other. It gets there by electing 27x as many tiles (212,858 against 7,912), so this is the most permissive setting swept rather than a like-for-like one.
+
 **KL alone loses in 4 of 4 cells.** Across 2 models (Llama-3.1-8B, Qwen3-4B) and 2 thresholds, dropping the other objective is worse on both corpora in 4 of the 4 (model, k) cells measured, and in 2 of them it is worse than not switching at all -- the method goes from a win to a loss.
 
 
