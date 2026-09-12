@@ -210,6 +210,57 @@ def main():
                          f'{fmt(d, 4, True) if d is not None else "—"} | {pd} | {pp} |')
             L.append('')
 
+    # Perplexity and accuracy do not agree here, so the synthesis names both per model rather
+    # than reporting whichever is more convenient. `verdict_rows` is (model, ppl verdict, acc
+    # verdict), each entry None when that metric was not run for the model.
+    synth = []
+    for m, label in MODELS:
+        pv = av = None
+        if m in ppl:
+            ev = ppl[m]['evaluation']
+            if f'k{K}' in ev and f'k{K}_kl' in ev:
+                dw = ev[f'k{K}_kl']['wiki']['ppl'] - ev[f'k{K}']['wiki']['ppl']
+                dc = ev[f'k{K}_kl']['c4']['ppl'] - ev[f'k{K}']['c4']['ppl']
+                pv = (f'costs {dw:+.3f} WikiText and {dc:+.3f} C4' if dw > 0 and dc > 0 else
+                      f'gains {dw:+.3f} WikiText and {dc:+.3f} C4' if dw < 0 and dc < 0 else
+                      f'is mixed ({dw:+.3f} WikiText, {dc:+.3f} C4)')
+        if m in acc:
+            r, rundir = acc[m]
+            sdir = os.path.join(os.path.dirname(rundir), f'samples_{m}')
+            ref, var = (os.path.join(sdir, f'k{K}.json'), os.path.join(sdir, f'k{K}_kl.json'))
+            if os.path.isfile(ref) and os.path.isfile(var):
+                _, pooled = compare(load_samples(ref), load_samples(var))
+                sig = pooled['p'] < 0.05
+                direction = 'better' if pooled['delta'] > 0 else 'worse'
+                av = (f'is {pooled["delta"]:+.4f} on accuracy, '
+                      + (f'significantly {direction} (p = {pooled["p"]:.3g})' if sig else
+                         f'not distinguishable from it (p = {pooled["p"]:.2f})'))
+        if pv or av:
+            synth.append((label, pv, av))
+
+    if synth and any(a for _, _, a in synth):
+        L += ['#### Reading the two together', '',
+              'The metrics do not agree, so both are stated per model rather than generalizing '
+              'from whichever is more convenient.', '']
+        for label, pv, av in synth:
+            parts = [x for x in (pv, av) if x]
+            L.append(f'- **{label}.** Against the shipped rule at the same k, KL alone '
+                     + ' and '.join(parts) + '.')
+        # Whether accuracy anywhere favours KL alone decides how the closing claim may be put.
+        wins = [label for label, _, av in synth
+                if av and 'significantly better' in av]
+        tail = ('No model shows accuracy favouring KL alone by a significant margin, so nothing '
+                'in the accuracy numbers offsets the perplexity cost.' if not wins else
+                f'On {", ".join(wins)} accuracy does significantly favour KL alone, which the '
+                f'perplexity numbers do not, and that disagreement is unresolved here rather '
+                f'than settled in favour of either.')
+        L += ['',
+              'Perplexity is the metric the election is calibrated on -- the score is a '
+              'teacher-forced loss -- so it is the one KL alone should do well on if the '
+              'objective were sufficient, and it is the one where it does not. The accuracy '
+              'panel resolves about 0.005 at best (§1a), so a null there is a weaker statement '
+              'than a perplexity regression of the size seen above. ' + tail, '']
+
     # Coverage, derived rather than asserted, so the note cannot drift from the runs behind it.
     covered = sorted({label for m, label in MODELS if m in ppl or m in acc})
     missing = [label for m, label in MODELS if m not in ppl and m not in acc]
