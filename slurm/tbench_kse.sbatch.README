@@ -1,0 +1,15 @@
+Harbor's task cache is ~/.cache/harbor/tasks and its path is hardcoded (harbor/constants.py:
+CACHE_DIR = Path("~/.cache/harbor")), so it cannot be scoped per job the way HF_HOME is.
+Concurrent runs against a COLD dataset race on it and leave half-written task directories --
+tests/ present, task.toml missing -- and every one of them then dies with
+
+    Error: [(... '/home/u4320956/.cache/harbor/tasks/<hash>/<task>/task.toml',
+             "[Errno 2] No such file or directory: ...")]
+
+within two minutes, exiting 0 from the job script so it looks like a clean completion.
+
+Warm the cache once, serially, before submitting concurrent policies on a new dataset:
+
+    harbor datasets download 'terminal-bench@2.0' --cache
+
+and delete any entry missing its task.toml before retrying.
