@@ -30,7 +30,7 @@ def trials(run_dir, policy):
     naming the reward per task, and it drops tasks that raised before the verifier ran. Reading
     the per-trial files keeps errored tasks visible as errors instead of silently as zeros.
     """
-    out, errors, minutes = {}, {}, {}
+    out, errors, minutes, truncated = {}, {}, {}, set()
     root = os.path.join(run_dir, f'jobs_{policy}')
     for path in glob.glob(os.path.join(root, '*', 'result.json')):
         try:
@@ -41,16 +41,21 @@ def trials(run_dir, policy):
             continue                       # the job-level result.json sits alongside the trials
         task = r['task_name'].split('/')[-1]
         exc = r.get('exception_info')
-        if exc:
+        rewards = (r.get('verifier_result') or {}).get('rewards') or {}
+        # An exception does not mean the trial went unscored: the agent phase can time out
+        # after the task is already solved, and the verifier still runs. Only a trial with no
+        # reward at all is an error for counting purposes.
+        if exc and 'reward' not in rewards:
             errors[task] = (exc.get('exception_type') or str(exc))[:60]
             continue
-        rewards = (r.get('verifier_result') or {}).get('rewards') or {}
         if 'reward' in rewards:
             out[task] = float(rewards['reward'])
+            if (exc or {}).get('exception_type') == 'AgentTimeoutError':
+                truncated.add(task)
             secs = _duration(r.get('agent_execution'))
             if secs is not None:
                 minutes[task] = secs / 60.0
-    return out, errors, minutes
+    return out, errors, minutes, truncated
 
 
 def _duration(phase):
@@ -94,14 +99,15 @@ def main():
     ap.add_argument('--out', default='results/terminal_bench/SECTION_27b.md')
     args = ap.parse_args()
 
-    got, errs, mins, provenance = {}, {}, {}, {}
+    got, errs, mins, trunc, provenance = {}, {}, {}, {}, {}
     for run in args.runs:
         for path in glob.glob(os.path.join(run, 'provenance_*.json')):
             policy = os.path.basename(path)[len('provenance_'):-len('.json')]
-            rewards, errors, minutes = trials(run, policy)
+            rewards, errors, minutes, cut = trials(run, policy)
             if not rewards and not errors:
                 continue
             got[policy], errs[policy], mins[policy] = rewards, errors, minutes
+            trunc[policy] = cut
             provenance[policy] = json.load(open(path))
     assert got, 'no completed trials found in ' + ' '.join(args.runs)
 
@@ -132,10 +138,21 @@ def main():
             med = f'{vals[len(vals) // 2]:.0f}'
         L.append(f'| {POLICY_LABEL.get(p, p)} | {prec[p]} | {solved} | {len(r)} | '
                  f'{solved / len(r):.1%} | {len(e) or "—"} | {med} |')
+    cut_n = {p: len(trunc.get(p, ())) for p in policies}
+    worst = max(cut_n.values()) if cut_n else 0
     L += ['',
-          'The last column is the median minutes the agent phase ran. It separates a policy that '
-          'worked its whole turn budget and failed from one that fell over early, which matters '
-          'here because most rewards are zero either way.', '']
+          'The last column is the median minutes the agent phase ran. `errored` counts trials '
+          'that never reached the verifier at all, so the pass rate is over the trials that did.',
+          '']
+    if worst:
+        L += [f'**These are not capability numbers.** The agent phase is capped, and the cap '
+              f'fires on most trials that get scored -- up to {worst} of them here, which the '
+              f'verifier then grades on whatever state the agent had reached. Serving runs in '
+              f'process through Transformers so the W4A4 activation hooks stay live, at roughly '
+              f'2 tokens per second, and a multi-turn task needs far longer than the cap allows. '
+              f'The cap is identical across policies, so the comparison between them is fair; '
+              f'what it measures is what each policy achieves within a fixed budget, and every '
+              f'pass rate here is a lower bound on the model.', '']
 
     ref = args.reference
     if ref in got:

@@ -46,22 +46,21 @@ def main(dirs):
                 if 'task_name' not in rec:
                     continue
                 exc = rec.get('exception_info')
+                kind = (exc or {}).get('exception_type') or 'unknown' if exc else None
                 m = phase_minutes(rec, 'agent_execution')
                 if m is not None:
                     mins.append(m)
-                if exc:
-                    causes[exc.get('exception_type') or 'unknown'] += 1
-                    continue
+                # The reward decides, not the exception. A trial that timed out after solving
+                # the task still has a verifier result, and it counts.
                 rewards = (rec.get('verifier_result') or {}).get('rewards') or {}
                 if 'reward' in rewards:
                     scored += 1
-                    if float(rewards['reward']) > 0:
-                        solved += 1
-                        causes['SOLVED'] += 1
-                    else:
-                        causes['scored 0 (real attempt)'] += 1
+                    won = float(rewards['reward']) > 0
+                    solved += won
+                    label = 'SOLVED' if won else 'scored 0'
+                    causes[f'{label} (after {kind})' if kind else label] += 1
                 else:
-                    causes['no reward recorded'] += 1
+                    causes[f'no score: {kind}' if kind else 'no score: no reward recorded'] += 1
             total = sum(causes.values())
             if not total:
                 continue
@@ -71,11 +70,11 @@ def main(dirs):
                   + (f', median agent {med:.0f} min' if med is not None else ''))
             for cause, n in causes.most_common():
                 print(f'    {n:3d}  {cause}')
-            infra = sum(n for c, n in causes.items()
-                        if c not in ('SOLVED', 'scored 0 (real attempt)'))
+            infra = sum(n for c, n in causes.items() if c.startswith('no score'))
             if infra:
-                print(f'    -> {infra} of {total} trials never reached the verifier; a pass rate '
-                      f'computed over {total} understates the model by that much')
+                print(f'    -> {infra} of {total} trials never reached the verifier; a pass '
+                      f'rate over all {total} understates the model by that much, while a rate '
+                      f'over the {scored} scored is the one to quote')
             print()
 
 

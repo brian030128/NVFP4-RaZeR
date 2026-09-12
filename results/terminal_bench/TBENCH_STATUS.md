@@ -13,14 +13,33 @@ kept their per-trial directories, show what that number is made of.
 
 ## Terminal-Bench 2.0, 20 tasks per policy
 
-| policy | trials | reached the verifier | solved | agent timed out | container died | other |
-|---|---:|---:|---:|---:|---:|---:|
-| BF16 | 20 | 1 | 0 | 11 | 8 | — |
-| NVFP4 FourOverSix W4A4 | 20 | 1 | 0 | 10 | 8 | 1 InternalServerError |
+| policy | trials | scored | solved | scored after a timeout | never scored (container) |
+|---|---:|---:|---:|---:|---:|
+| BF16 | 20 | 12 | 0 | 11 | 8 |
+| NVFP4 FourOverSix W4A4 | 20 | 11 | 0 | 10 | 9 |
+| MixFP4 k=3 W4A4 | 20 | 13 | **1** | 12 | 7 |
 
-**Nineteen of twenty trials never reached the verifier.** A pass rate computed over twenty
-trials therefore understates the model by nineteen twentieths, and a pass rate of zero says
-almost nothing about whether the model can do the task.
+**A second correction, to the first correction.** The table above originally read "1 of 20
+reached the verifier" for both policies. That was a bug in the analysis, not in the run: a trial
+can carry both an exception and a verifier reward, because the agent phase can time out *after*
+the task is already solved and harbor grades it anyway. `largest-eigenval` under MixFP4 is
+exactly that -- `AgentTimeoutError` and `reward: 1.0` together. Both scripts treated any
+exception as "never scored" and discarded the reward, which hid the only solve in the whole
+experiment. Reward now decides and the exception is context.
+
+So 11 to 13 of 20 trials were scored, and only the 7 to 9 container failures truly never ran.
+The pass rate to quote is over the scored trials.
+
+### The result, such as it is
+
+BF16 0 of 12, FourOverSix 0 of 11, MixFP4 k=3 1 of 13. Paired against FourOverSix on the tasks
+both scored, MixFP4 wins 1 and loses 0 (sign test p = 1.0) and BF16 ties 0-0. Nothing separates
+the policies, which at this sample size is the only outcome available: six clean wins are needed
+to clear 0.05.
+
+What it does support, weakly, is that W4A4 does not visibly destroy agentic capability relative
+to BF16 -- all three sit at the same near-zero rate, and the one solve belongs to a quantized
+policy. Read it as a smoke test, not a ranking.
 
 ### Cause 1: the agent timeout was set far below what this model needs
 
@@ -29,7 +48,9 @@ Transformers so that the W4A4 activation hooks stay live, which measures about *
 second** on this model (`results/terminal_bench/tput_339031/throughput.json`). A 15 to 20 turn
 task at roughly 400 tokens a turn needs 6,000 to 8,000 tokens, or 50 to 65 minutes. Fifteen
 minutes cannot finish one, so the timeout fires on nearly every task that does not fail earlier
-for another reason. The multiplier was chosen to bound the wall clock of the run; what it
+for another reason -- 10 to 12 times per policy. Those trials are still graded, on whatever
+state the agent had reached, which is why every pass rate here is a lower bound rather than a
+measurement of the model. The multiplier was chosen to bound the wall clock of the run; what it
 actually bounded was the number of trials that could produce a score.
 
 The 4.0 runs used the same 0.25. Their zeros are therefore not evidence about 4.0's difficulty.
