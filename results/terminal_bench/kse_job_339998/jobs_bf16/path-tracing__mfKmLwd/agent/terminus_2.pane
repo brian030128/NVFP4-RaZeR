@@ -1,0 +1,979 @@
+[?2004hSingularity> asciinema rec --stdin /logs/agent/recording.cast
+[?2004lbash: asciinema: command not found
+[?2004hSingularity> clear
+[?2004l[H[J[3J[?2004hSingularity> cd /app && ls -la && head -c 100 image.ppm | xxd | head -20
+[?2004ltotal 47156
+drwxr-xr-x 1 root root       40 Sep 12 14:02 .
+drwxr-xr-x 1 root root      200 Jul 10  2024 ..
+-rw-r--r-- 1 root root 48262737 Oct 28  2025 image.ppm
+-rwxr-xr-x 1 root root    21152 Oct 28  2025 orig
+bash: xxd: command not found
+[?2004hSingularity> head -c 100 image.ppm | od -c | head -20
+[?2004l0000000   P   3  \n   2   4   0   0       1   8   0   0  \n   2   5   5
+0000020  \n   1   5   9       1   9   7       2   5   5  \n   1   5   9
+0000040       1   9   7       2   5   5  \n   1   5   9       1   9   7
+0000060       2   5   5  \n   1   5   9       1   9   7       2   5   5
+0000100  \n   1   5   9       1   9   7       2   5   5  \n   1   5   9
+0000120       1   9   7       2   5   5  \n   1   5   8       1   9   7
+0000140       2   5   5
+0000144
+[?2004hSingularity> file orig && strings orig | head -40
+[?2004lbash: file: command not found
+[?2004hSingularity> strings orig | head -60
+[?2004l/lib64/ld-linux-x86-64.so.2
+_ITM_deregisterTMCloneTable
+__gmon_start__
+_ITM_registerTMCloneTable
+floor
+sqrt
+fmax
+fmin
+__stack_chk_fail
+free
+fopen
+malloc
+__libc_start_main
+stderr
+fprintf
+__cxa_finalize
+fclose
+fwrite
+libm.so.6
+libc.so.6
+GLIBC_2.2.5
+GLIBC_2.4
+GLIBC_2.34
+PTE1
+u+UH
+Error: Could not open file %s for writing
+%d %d
+%d %d %d
+Wrote image to %s
+Creating high-resolution image: %dx%d
+This will be downsampled with ffmpeg after rendering
+Rendering high-resolution image...
+Progress: %.1f%%
+Rendering complete
+image.ppm
+Done.
+?333?
+L>fff?
+9*3$"
+GCC: (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0
+Scrt1.o
+__abi_tag
+crtstuff.c
+deregister_tm_clones
+__do_global_dtors_aux
+completed.0
+__do_global_dtors_aux_fini_array_entry
+frame_dummy
+__frame_dummy_init_array_entry
+orig.c
+__FRAME_END__
+_DYNAMIC
+__GNU_EH_FRAME_HDR
+_GLOBAL_OFFSET_TABLE_
+free@GLIBC_2.2.5
+vector_normalize
+__libc_start_main@GLIBC_2.34
+_ITM_deregisterTMCloneTable
+fmax@GLIBC_2.2.5
+is_in_shadow
+[?2004hSingularity> od -A x -t x1z orig | head -5
+[?2004l000000 7f 45 4c 46 02 01 01 00 00 00 00 00 00 00 00 00  >.ELF............<
+000010 03 00 3e 00 01 00 00 00 a0 11 00 00 00 00 00 00  >..>.............<
+000020 40 00 00 00 00 00 00 00 e0 4a 00 00 00 00 00 00  >@........J......<
+000030 00 00 00 00 40 00 38 00 0d 00 40 00 1f 00 1e 00  >....@.8...@.....<
+000040 06 00 00 00 04 00 00 00 40 00 00 00 00 00 00 00  >........@.......<
+[?2004hSingularity> strings orig | grep -v -E 'GLIBC|libc|libm|ld-linux|GCC|Scrt|crtstuff|clone|gmon|_ITM|__|frame|deregister|completed|_DYNAMIC|_GNU|_GLOBAL|_FRAME|vector_normalize|is_in_shadow|fmax|fmin|floor|sqrt|free|fopen|malloc|fclose|fwrite|fprintf|stderr|Done|Error|Wrote|Creating|downsampled|Rendering|Progress|image.ppm|^[0-9]' | head -60
+[?2004lPTE1
+u+UH
+%d %d
+%d %d %d
+?333?
+L>fff?
+orig.c
+ray_create
+vector_create
+_edata
+vector_dot
+_fini
+vector_length
+_IO_stdin_used
+_end
+vector_subtract
+ray_at
+main
+write_image
+vector_add
+trace
+plane_intersect
+vector_multiply
+sphere_intersect
+allocate_image
+sky_color
+_init
+.symtab
+.strtab
+.shstrtab
+.interp
+.note.gnu.property
+.note.gnu.build-id
+.note.ABI-tag
+.gnu.hash
+.dynsym
+.dynstr
+.gnu.version
+.gnu.version_r
+.rela.dyn
+.rela.plt
+.init
+.plt.got
+.plt.sec
+.text
+.fini
+.rodata
+.init_array
+.fini_array
+.dynamic
+.data
+.bss
+.comment
+[?2004hSingularity> which objdump gdb readelf nm 2>/dev/null; echo ---
+[?2004l/usr/bin/objdump
+/usr/bin/readelf
+/usr/bin/nm
+---
+[?2004hSingularity> nm orig | sort
+[?2004l                 U __libc_start_main@GLIBC_2.34
+                 U __stack_chk_fail@GLIBC_2.4
+                 U fclose@GLIBC_2.2.5
+                 U floor@GLIBC_2.2.5
+                 U fmax@GLIBC_2.2.5
+                 U fmin@GLIBC_2.2.5
+                 U fopen@GLIBC_2.2.5
+                 U fprintf@GLIBC_2.2.5
+                 U free@GLIBC_2.2.5
+                 U fwrite@GLIBC_2.2.5
+                 U malloc@GLIBC_2.2.5
+                 U sqrt@GLIBC_2.2.5
+                 w _ITM_deregisterTMCloneTable
+                 w _ITM_registerTMCloneTable
+                 w __cxa_finalize@GLIBC_2.2.5
+                 w __gmon_start__
+000000000000038c r __abi_tag
+0000000000001000 T _init
+00000000000011a0 T _start
+00000000000011d0 t deregister_tm_clones
+0000000000001200 t register_tm_clones
+0000000000001240 t __do_global_dtors_aux
+0000000000001280 t frame_dummy
+0000000000001289 T vector_create
+00000000000012df T vector_add
+0000000000001371 T vector_subtract
+0000000000001403 T vector_multiply
+000000000000147a T vector_dot
+00000000000014d8 T vector_length
+0000000000001532 T vector_normalize
+00000000000015be T ray_create
+0000000000001643 T ray_at
+00000000000016c4 T sphere_intersect
+00000000000019e5 T plane_intersect
+0000000000001b4d T sky_color
+0000000000001c8d T is_in_shadow
+0000000000001d5c T trace
+0000000000002203 T write_image
+000000000000245d T allocate_image
+00000000000024da T free_image
+0000000000002530 T main
+0000000000002c30 T _fini
+0000000000003000 R _IO_stdin_used
+00000000000031b0 r __GNU_EH_FRAME_HDR
+0000000000003540 r __FRAME_END__
+0000000000004d58 d __frame_dummy_init_array_entry
+0000000000004d60 d __do_global_dtors_aux_fini_array_entry
+0000000000004d68 d _DYNAMIC
+0000000000004f68 d _GLOBAL_OFFSET_TABLE_
+0000000000005000 D __data_start
+0000000000005000 W data_start
+0000000000005008 D __dso_handle
+0000000000005010 D __TMC_END__
+0000000000005010 D _edata
+0000000000005020 B __bss_start
+0000000000005020 B stderr@GLIBC_2.2.5
+0000000000005028 b completed.0
+0000000000005030 B _end
+[?2004hSingularity> objdump -d -M intel orig | sed -n '/<main>:/,/^$/p' > /tmp/main.txt; wc -l /tmp/main.txt; cat /tmp/main.txt
+[?2004l403 /tmp/main.txt
+0000000000002530 <main>:
+    2530:	f3 0f 1e fa          	endbr64
+    2534:	55                   	push   rbp
+    2535:	48 89 e5             	mov    rbp,rsp
+    2538:	53                   	push   rbx
+    2539:	48 81 ec 28 01 00 00 	sub    rsp,0x128
+    2540:	64 48 8b 04 25 28 00 	mov    rax,QWORD PTR fs:0x28
+    2547:	00 00 
+    2549:	48 89 45 e8          	mov    QWORD PTR [rbp-0x18],rax
+    254d:	31 c0                	xor    eax,eax
+    254f:	c7 85 dc fe ff ff 60 	mov    DWORD PTR [rbp-0x124],0x960
+    2556:	09 00 00 
+    2559:	c7 85 e0 fe ff ff 08 	mov    DWORD PTR [rbp-0x120],0x708
+    2560:	07 00 00 
+    2563:	48 8b 05 b6 2a 00 00 	mov    rax,QWORD PTR [rip+0x2ab6]        # 5020 <stderr@GLIBC_2.2.5>
+    256a:	8b 8d e0 fe ff ff    	mov    ecx,DWORD PTR [rbp-0x120]
+    2570:	8b 95 dc fe ff ff    	mov    edx,DWORD PTR [rbp-0x124]
+    2576:	48 8d 35 f3 0a 00 00 	lea    rsi,[rip+0xaf3]        # 3070 <_IO_stdin_used+0x70>
+    257d:	48 89 c7             	mov    rdi,rax
+    2580:	b8 00 00 00 00       	mov    eax,0x0
+    2585:	e8 a6 eb ff ff       	call   1130 <fprintf@plt>
+    258a:	48 8b 05 8f 2a 00 00 	mov    rax,QWORD PTR [rip+0x2a8f]        # 5020 <stderr@GLIBC_2.2.5>
+    2591:	48 89 c1             	mov    rcx,rax
+    2594:	ba 35 00 00 00       	mov    edx,0x35
+    2599:	be 01 00 00 00       	mov    esi,0x1
+    259e:	48 8d 05 f3 0a 00 00 	lea    rax,[rip+0xaf3]        # 3098 <_IO_stdin_used+0x98>
+    25a5:	48 89 c7             	mov    rdi,rax
+    25a8:	e8 d3 eb ff ff       	call   1180 <fwrite@plt>
+    25ad:	66 0f ef d2          	pxor   xmm2,xmm2
+    25b1:	66 0f ef c9          	pxor   xmm1,xmm1
+    25b5:	8b 05 75 0b 00 00    	mov    eax,DWORD PTR [rip+0xb75]        # 3130 <_IO_stdin_used+0x130>
+    25bb:	66 0f 6e c0          	movd   xmm0,eax
+    25bf:	e8 c5 ec ff ff       	call   1289 <vector_create>
+    25c4:	66 48 0f 7e c0       	movq   rax,xmm0
+    25c9:	0f 28 c1             	movaps xmm0,xmm1
+    25cc:	48 89 85 00 ff ff ff 	mov    QWORD PTR [rbp-0x100],rax
+    25d3:	f3 0f 11 85 08 ff ff 	movss  DWORD PTR [rbp-0xf8],xmm0
+    25da:	ff 
+    25db:	f3 0f 10 05 b9 0b 00 	movss  xmm0,DWORD PTR [rip+0xbb9]        # 319c <_IO_stdin_used+0x19c>
+    25e2:	00 
+    25e3:	f3 0f 11 85 e4 fe ff 	movss  DWORD PTR [rbp-0x11c],xmm0
+    25ea:	ff 
+    25eb:	66 0f ef c0          	pxor   xmm0,xmm0
+    25ef:	f3 0f 2a 85 dc fe ff 	cvtsi2ss xmm0,DWORD PTR [rbp-0x124]
+    25f6:	ff 
+    25f7:	66 0f ef c9          	pxor   xmm1,xmm1
+    25fb:	f3 0f 2a 8d e0 fe ff 	cvtsi2ss xmm1,DWORD PTR [rbp-0x120]
+    2602:	ff 
+    2603:	f3 0f 5e c1          	divss  xmm0,xmm1
+    2607:	f3 0f 10 8d e4 fe ff 	movss  xmm1,DWORD PTR [rbp-0x11c]
+    260e:	ff 
+    260f:	f3 0f 59 c1          	mulss  xmm0,xmm1
+    2613:	f3 0f 11 85 e8 fe ff 	movss  DWORD PTR [rbp-0x118],xmm0
+    261a:	ff 
+    261b:	f3 0f 10 05 51 0b 00 	movss  xmm0,DWORD PTR [rip+0xb51]        # 3174 <_IO_stdin_used+0x174>
+    2622:	00 
+    2623:	f3 0f 11 85 ec fe ff 	movss  DWORD PTR [rbp-0x114],xmm0
+    262a:	ff 
+    262b:	8b 85 e8 fe ff ff    	mov    eax,DWORD PTR [rbp-0x118]
+    2631:	66 0f ef d2          	pxor   xmm2,xmm2
+    2635:	66 0f ef c9          	pxor   xmm1,xmm1
+    2639:	66 0f 6e c0          	movd   xmm0,eax
+    263d:	e8 47 ec ff ff       	call   1289 <vector_create>
+    2642:	66 48 0f 7e c0       	movq   rax,xmm0
+    2647:	0f 28 c1             	movaps xmm0,xmm1
+    264a:	48 89 85 0c ff ff ff 	mov    QWORD PTR [rbp-0xf4],rax
+    2651:	f3 0f 11 85 14 ff ff 	movss  DWORD PTR [rbp-0xec],xmm0
+    2658:	ff 
+    2659:	f3 0f 10 85 e4 fe ff 	movss  xmm0,DWORD PTR [rbp-0x11c]
+    2660:	ff 
+    2661:	66 0f ef d2          	pxor   xmm2,xmm2
+    2665:	0f 28 c8             	movaps xmm1,xmm0
+    2668:	8b 05 c2 0a 00 00    	mov    eax,DWORD PTR [rip+0xac2]        # 3130 <_IO_stdin_used+0x130>
+    266e:	66 0f 6e c0          	movd   xmm0,eax
+    2672:	e8 12 ec ff ff       	call   1289 <vector_create>
+    2677:	66 48 0f 7e c0       	movq   rax,xmm0
+    267c:	0f 28 c1             	movaps xmm0,xmm1
+    267f:	48 89 85 18 ff ff ff 	mov    QWORD PTR [rbp-0xe8],rax
+    2686:	f3 0f 11 85 20 ff ff 	movss  DWORD PTR [rbp-0xe0],xmm0
+    268d:	ff 
+    268e:	f3 0f 10 85 ec fe ff 	movss  xmm0,DWORD PTR [rbp-0x114]
+    2695:	ff 
+    2696:	0f 28 d0             	movaps xmm2,xmm0
+    2699:	66 0f ef c9          	pxor   xmm1,xmm1
+    269d:	8b 05 8d 0a 00 00    	mov    eax,DWORD PTR [rip+0xa8d]        # 3130 <_IO_stdin_used+0x130>
+    26a3:	66 0f 6e c0          	movd   xmm0,eax
+    26a7:	e8 dd eb ff ff       	call   1289 <vector_create>
+    26ac:	66 48 0f 7e c0       	movq   rax,xmm0
+    26b1:	0f 28 c1             	movaps xmm0,xmm1
+    26b4:	48 89 85 48 ff ff ff 	mov    QWORD PTR [rbp-0xb8],rax
+    26bb:	f3 0f 11 85 50 ff ff 	movss  DWORD PTR [rbp-0xb0],xmm0
+    26c2:	ff 
+    26c3:	48 8b 85 18 ff ff ff 	mov    rax,QWORD PTR [rbp-0xe8]
+    26ca:	f3 0f 10 8d 20 ff ff 	movss  xmm1,DWORD PTR [rbp-0xe0]
+    26d1:	ff 
+    26d2:	f3 0f 10 15 9e 0a 00 	movss  xmm2,DWORD PTR [rip+0xa9e]        # 3178 <_IO_stdin_used+0x178>
+    26d9:	00 
+    26da:	66 48 0f 6e c0       	movq   xmm0,rax
+    26df:	e8 1f ed ff ff       	call   1403 <vector_multiply>
+    26e4:	66 48 0f 7e c0       	movq   rax,xmm0
+    26e9:	0f 28 c1             	movaps xmm0,xmm1
+    26ec:	48 89 85 54 ff ff ff 	mov    QWORD PTR [rbp-0xac],rax
+    26f3:	f3 0f 11 85 5c ff ff 	movss  DWORD PTR [rbp-0xa4],xmm0
+    26fa:	ff 
+    26fb:	48 8b 85 0c ff ff ff 	mov    rax,QWORD PTR [rbp-0xf4]
+    2702:	f3 0f 10 8d 14 ff ff 	movss  xmm1,DWORD PTR [rbp-0xec]
+    2709:	ff 
+    270a:	f3 0f 10 15 66 0a 00 	movss  xmm2,DWORD PTR [rip+0xa66]        # 3178 <_IO_stdin_used+0x178>
+    2711:	00 
+    2712:	66 48 0f 6e c0       	movq   xmm0,rax
+    2717:	e8 e7 ec ff ff       	call   1403 <vector_multiply>
+    271c:	66 48 0f 7e c0       	movq   rax,xmm0
+    2721:	0f 28 c1             	movaps xmm0,xmm1
+    2724:	48 89 85 60 ff ff ff 	mov    QWORD PTR [rbp-0xa0],rax
+    272b:	f3 0f 11 85 68 ff ff 	movss  DWORD PTR [rbp-0x98],xmm0
+    2732:	ff 
+    2733:	f3 0f 7e 95 60 ff ff 	movq   xmm2,QWORD PTR [rbp-0xa0]
+    273a:	ff 
+    273b:	f3 0f 10 85 68 ff ff 	movss  xmm0,DWORD PTR [rbp-0x98]
+    2742:	ff 
+    2743:	48 8b 85 00 ff ff ff 	mov    rax,QWORD PTR [rbp-0x100]
+    274a:	f3 0f 10 8d 08 ff ff 	movss  xmm1,DWORD PTR [rbp-0xf8]
+    2751:	ff 
+    2752:	0f 28 d8             	movaps xmm3,xmm0
+    2755:	66 48 0f 6e c0       	movq   xmm0,rax
+    275a:	e8 12 ec ff ff       	call   1371 <vector_subtract>
+    275f:	66 48 0f 7e c0       	movq   rax,xmm0
+    2764:	0f 28 c1             	movaps xmm0,xmm1
+    2767:	48 89 85 6c ff ff ff 	mov    QWORD PTR [rbp-0x94],rax
+    276e:	f3 0f 11 85 74 ff ff 	movss  DWORD PTR [rbp-0x8c],xmm0
+    2775:	ff 
+    2776:	f3 0f 7e 95 54 ff ff 	movq   xmm2,QWORD PTR [rbp-0xac]
+    277d:	ff 
+    277e:	f3 0f 10 85 5c ff ff 	movss  xmm0,DWORD PTR [rbp-0xa4]
+    2785:	ff 
+    2786:	48 8b 85 6c ff ff ff 	mov    rax,QWORD PTR [rbp-0x94]
+    278d:	f3 0f 10 8d 74 ff ff 	movss  xmm1,DWORD PTR [rbp-0x8c]
+    2794:	ff 
+    2795:	0f 28 d8             	movaps xmm3,xmm0
+    2798:	66 48 0f 6e c0       	movq   xmm0,rax
+    279d:	e8 cf eb ff ff       	call   1371 <vector_subtract>
+    27a2:	66 48 0f 7e c0       	movq   rax,xmm0
+    27a7:	0f 28 c1             	movaps xmm0,xmm1
+    27aa:	48 89 85 78 ff ff ff 	mov    QWORD PTR [rbp-0x88],rax
+    27b1:	f3 0f 11 45 80       	movss  DWORD PTR [rbp-0x80],xmm0
+    27b6:	f3 0f 7e 95 48 ff ff 	movq   xmm2,QWORD PTR [rbp-0xb8]
+    27bd:	ff 
+    27be:	f3 0f 10 85 50 ff ff 	movss  xmm0,DWORD PTR [rbp-0xb0]
+    27c5:	ff 
+    27c6:	48 8b 85 78 ff ff ff 	mov    rax,QWORD PTR [rbp-0x88]
+    27cd:	f3 0f 10 4d 80       	movss  xmm1,DWORD PTR [rbp-0x80]
+    27d2:	0f 28 d8             	movaps xmm3,xmm0
+    27d5:	66 48 0f 6e c0       	movq   xmm0,rax
+    27da:	e8 92 eb ff ff       	call   1371 <vector_subtract>
+    27df:	66 48 0f 7e c0       	movq   rax,xmm0
+    27e4:	0f 28 c1             	movaps xmm0,xmm1
+    27e7:	48 89 85 24 ff ff ff 	mov    QWORD PTR [rbp-0xdc],rax
+    27ee:	f3 0f 11 85 2c ff ff 	movss  DWORD PTR [rbp-0xd4],xmm0
+    27f5:	ff 
+    27f6:	f3 0f 10 15 a2 09 00 	movss  xmm2,DWORD PTR [rip+0x9a2]        # 31a0 <_IO_stdin_used+0x1a0>
+    27fd:	00 
+    27fe:	f3 0f 10 0d 9e 09 00 	movss  xmm1,DWORD PTR [rip+0x99e]        # 31a4 <_IO_stdin_used+0x1a4>
+    2805:	00 
+    2806:	8b 05 24 09 00 00    	mov    eax,DWORD PTR [rip+0x924]        # 3130 <_IO_stdin_used+0x130>
+    280c:	66 0f 6e c0          	movd   xmm0,eax
+    2810:	e8 74 ea ff ff       	call   1289 <vector_create>
+    2815:	66 48 0f 7e c0       	movq   rax,xmm0
+    281a:	0f 28 c1             	movaps xmm0,xmm1
+    281d:	48 89 45 c0          	mov    QWORD PTR [rbp-0x40],rax
+    2821:	f3 0f 11 45 c8       	movss  DWORD PTR [rbp-0x38],xmm0
+    2826:	f3 0f 10 05 46 09 00 	movss  xmm0,DWORD PTR [rip+0x946]        # 3174 <_IO_stdin_used+0x174>
+    282d:	00 
+    282e:	f3 0f 11 45 cc       	movss  DWORD PTR [rbp-0x34],xmm0
+    2833:	f3 0f 10 15 6d 09 00 	movss  xmm2,DWORD PTR [rip+0x96d]        # 31a8 <_IO_stdin_used+0x1a8>
+    283a:	00 
+    283b:	f3 0f 10 0d 31 09 00 	movss  xmm1,DWORD PTR [rip+0x931]        # 3174 <_IO_stdin_used+0x174>
+    2842:	00 
+    2843:	8b 05 2b 09 00 00    	mov    eax,DWORD PTR [rip+0x92b]        # 3174 <_IO_stdin_used+0x174>
+    2849:	66 0f 6e c0          	movd   xmm0,eax
+    284d:	e8 37 ea ff ff       	call   1289 <vector_create>
+    2852:	66 48 0f 7e c0       	movq   rax,xmm0
+    2857:	0f 28 c1             	movaps xmm0,xmm1
+    285a:	48 89 45 84          	mov    QWORD PTR [rbp-0x7c],rax
+    285e:	f3 0f 11 45 8c       	movss  DWORD PTR [rbp-0x74],xmm0
+    2863:	48 8b 45 84          	mov    rax,QWORD PTR [rbp-0x7c]
+    2867:	f3 0f 10 4d 8c       	movss  xmm1,DWORD PTR [rbp-0x74]
+    286c:	66 48 0f 6e c0       	movq   xmm0,rax
+    2871:	e8 bc ec ff ff       	call   1532 <vector_normalize>
+    2876:	66 48 0f 7e c0       	movq   rax,xmm0
+    287b:	0f 28 c1             	movaps xmm0,xmm1
+    287e:	48 89 85 30 ff ff ff 	mov    QWORD PTR [rbp-0xd0],rax
+    2885:	f3 0f 11 85 38 ff ff 	movss  DWORD PTR [rbp-0xc8],xmm0
+    288c:	ff 
+    288d:	8b 95 e0 fe ff ff    	mov    edx,DWORD PTR [rbp-0x120]
+    2893:	8b 85 dc fe ff ff    	mov    eax,DWORD PTR [rbp-0x124]
+    2899:	89 d6                	mov    esi,edx
+    289b:	89 c7                	mov    edi,eax
+    289d:	e8 bb fb ff ff       	call   245d <allocate_image>
+    28a2:	48 89 85 f8 fe ff ff 	mov    QWORD PTR [rbp-0x108],rax
+    28a9:	48 8b 05 70 27 00 00 	mov    rax,QWORD PTR [rip+0x2770]        # 5020 <stderr@GLIBC_2.2.5>
+    28b0:	48 89 c1             	mov    rcx,rax
+    28b3:	ba 23 00 00 00       	mov    edx,0x23
+    28b8:	be 01 00 00 00       	mov    esi,0x1
+    28bd:	48 8d 05 0c 08 00 00 	lea    rax,[rip+0x80c]        # 30d0 <_IO_stdin_used+0xd0>
+    28c4:	48 89 c7             	mov    rdi,rax
+    28c7:	e8 b4 e8 ff ff       	call   1180 <fwrite@plt>
+    28cc:	c7 85 d4 fe ff ff 00 	mov    DWORD PTR [rbp-0x12c],0x0
+    28d3:	00 00 00 
+    28d6:	e9 b6 02 00 00       	jmp    2b91 <main+0x661>
+    28db:	66 0f ef c9          	pxor   xmm1,xmm1
+    28df:	f3 0f 2a 8d d4 fe ff 	cvtsi2ss xmm1,DWORD PTR [rbp-0x12c]
+    28e6:	ff 
+    28e7:	f3 0f 10 05 bd 08 00 	movss  xmm0,DWORD PTR [rip+0x8bd]        # 31ac <_IO_stdin_used+0x1ac>
+    28ee:	00 
+    28ef:	f3 0f 59 c1          	mulss  xmm0,xmm1
+    28f3:	66 0f ef c9          	pxor   xmm1,xmm1
+    28f7:	f3 0f 2a 8d e0 fe ff 	cvtsi2ss xmm1,DWORD PTR [rbp-0x120]
+    28fe:	ff 
+    28ff:	f3 0f 5e c1          	divss  xmm0,xmm1
+    2903:	66 0f ef e4          	pxor   xmm4,xmm4
+    2907:	f3 0f 5a e0          	cvtss2sd xmm4,xmm0
+    290b:	66 48 0f 7e e2       	movq   rdx,xmm4
+    2910:	48 8b 05 09 27 00 00 	mov    rax,QWORD PTR [rip+0x2709]        # 5020 <stderr@GLIBC_2.2.5>
+    2917:	66 48 0f 6e c2       	movq   xmm0,rdx
+    291c:	48 8d 15 d1 07 00 00 	lea    rdx,[rip+0x7d1]        # 30f4 <_IO_stdin_used+0xf4>
+    2923:	48 89 d6             	mov    rsi,rdx
+    2926:	48 89 c7             	mov    rdi,rax
+    2929:	b8 01 00 00 00       	mov    eax,0x1
+    292e:	e8 fd e7 ff ff       	call   1130 <fprintf@plt>
+    2933:	c7 85 d8 fe ff ff 00 	mov    DWORD PTR [rbp-0x128],0x0
+    293a:	00 00 00 
+    293d:	e9 36 02 00 00       	jmp    2b78 <main+0x648>
+    2942:	66 0f ef c0          	pxor   xmm0,xmm0
+    2946:	f3 0f 2a 85 d8 fe ff 	cvtsi2ss xmm0,DWORD PTR [rbp-0x128]
+    294d:	ff 
+    294e:	8b 85 dc fe ff ff    	mov    eax,DWORD PTR [rbp-0x124]
+    2954:	83 e8 01             	sub    eax,0x1
+    2957:	66 0f ef c9          	pxor   xmm1,xmm1
+    295b:	f3 0f 2a c8          	cvtsi2ss xmm1,eax
+    295f:	f3 0f 5e c1          	divss  xmm0,xmm1
+    2963:	f3 0f 11 85 f0 fe ff 	movss  DWORD PTR [rbp-0x110],xmm0
+    296a:	ff 
+    296b:	66 0f ef c0          	pxor   xmm0,xmm0
+    296f:	f3 0f 2a 85 d4 fe ff 	cvtsi2ss xmm0,DWORD PTR [rbp-0x12c]
+    2976:	ff 
+    2977:	8b 85 e0 fe ff ff    	mov    eax,DWORD PTR [rbp-0x120]
+    297d:	83 e8 01             	sub    eax,0x1
+    2980:	66 0f ef c9          	pxor   xmm1,xmm1
+    2984:	f3 0f 2a c8          	cvtsi2ss xmm1,eax
+    2988:	f3 0f 5e c1          	divss  xmm0,xmm1
+    298c:	f3 0f 11 85 f4 fe ff 	movss  DWORD PTR [rbp-0x10c],xmm0
+    2993:	ff 
+    2994:	f3 0f 10 05 d8 07 00 	movss  xmm0,DWORD PTR [rip+0x7d8]        # 3174 <_IO_stdin_used+0x174>
+    299b:	00 
+    299c:	f3 0f 5c 85 f4 fe ff 	subss  xmm0,DWORD PTR [rbp-0x10c]
+    29a3:	ff 
+    29a4:	48 8b 85 18 ff ff ff 	mov    rax,QWORD PTR [rbp-0xe8]
+    29ab:	f3 0f 10 8d 20 ff ff 	movss  xmm1,DWORD PTR [rbp-0xe0]
+    29b2:	ff 
+    29b3:	0f 28 d0             	movaps xmm2,xmm0
+    29b6:	66 48 0f 6e c0       	movq   xmm0,rax
+    29bb:	e8 43 ea ff ff       	call   1403 <vector_multiply>
+    29c0:	66 48 0f 7e c0       	movq   rax,xmm0
+    29c5:	0f 28 c1             	movaps xmm0,xmm1
+    29c8:	48 89 45 90          	mov    QWORD PTR [rbp-0x70],rax
+    29cc:	f3 0f 11 45 98       	movss  DWORD PTR [rbp-0x68],xmm0
+    29d1:	f3 0f 7e 95 00 ff ff 	movq   xmm2,QWORD PTR [rbp-0x100]
+    29d8:	ff 
+    29d9:	f3 0f 10 85 08 ff ff 	movss  xmm0,DWORD PTR [rbp-0xf8]
+    29e0:	ff 
+    29e1:	48 8b 45 90          	mov    rax,QWORD PTR [rbp-0x70]
+    29e5:	f3 0f 10 4d 98       	movss  xmm1,DWORD PTR [rbp-0x68]
+    29ea:	0f 28 d8             	movaps xmm3,xmm0
+    29ed:	66 48 0f 6e c0       	movq   xmm0,rax
+    29f2:	e8 7a e9 ff ff       	call   1371 <vector_subtract>
+    29f7:	66 48 0f 7e c0       	movq   rax,xmm0
+    29fc:	0f 28 c1             	movaps xmm0,xmm1
+    29ff:	48 89 45 9c          	mov    QWORD PTR [rbp-0x64],rax
+    2a03:	f3 0f 11 45 a4       	movss  DWORD PTR [rbp-0x5c],xmm0
+    2a08:	f3 0f 10 85 f0 fe ff 	movss  xmm0,DWORD PTR [rbp-0x110]
+    2a0f:	ff 
+    2a10:	48 8b 85 0c ff ff ff 	mov    rax,QWORD PTR [rbp-0xf4]
+    2a17:	f3 0f 10 8d 14 ff ff 	movss  xmm1,DWORD PTR [rbp-0xec]
+    2a1e:	ff 
+    2a1f:	0f 28 d0             	movaps xmm2,xmm0
+    2a22:	66 48 0f 6e c0       	movq   xmm0,rax
+    2a27:	e8 d7 e9 ff ff       	call   1403 <vector_multiply>
+    2a2c:	66 48 0f 7e c0       	movq   rax,xmm0
+    2a31:	0f 28 c1             	movaps xmm0,xmm1
+    2a34:	48 89 45 a8          	mov    QWORD PTR [rbp-0x58],rax
+    2a38:	f3 0f 11 45 b0       	movss  DWORD PTR [rbp-0x50],xmm0
+    2a3d:	f3 0f 7e 55 9c       	movq   xmm2,QWORD PTR [rbp-0x64]
+    2a42:	f3 0f 10 45 a4       	movss  xmm0,DWORD PTR [rbp-0x5c]
+    2a47:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    2a4b:	f3 0f 10 4d b0       	movss  xmm1,DWORD PTR [rbp-0x50]
+    2a50:	0f 28 d8             	movaps xmm3,xmm0
+    2a53:	66 48 0f 6e c0       	movq   xmm0,rax
+    2a58:	e8 82 e8 ff ff       	call   12df <vector_add>
+    2a5d:	66 48 0f 7e c0       	movq   rax,xmm0
+    2a62:	0f 28 c1             	movaps xmm0,xmm1
+    2a65:	48 89 45 b4          	mov    QWORD PTR [rbp-0x4c],rax
+    2a69:	f3 0f 11 45 bc       	movss  DWORD PTR [rbp-0x44],xmm0
+    2a6e:	f3 0f 7e 55 b4       	movq   xmm2,QWORD PTR [rbp-0x4c]
+    2a73:	f3 0f 10 45 bc       	movss  xmm0,DWORD PTR [rbp-0x44]
+    2a78:	48 8b 85 24 ff ff ff 	mov    rax,QWORD PTR [rbp-0xdc]
+    2a7f:	f3 0f 10 8d 2c ff ff 	movss  xmm1,DWORD PTR [rbp-0xd4]
+    2a86:	ff 
+    2a87:	0f 28 d8             	movaps xmm3,xmm0
+    2a8a:	66 48 0f 6e c0       	movq   xmm0,rax
+    2a8f:	e8 4b e8 ff ff       	call   12df <vector_add>
+    2a94:	66 48 0f 7e c0       	movq   rax,xmm0
+    2a99:	0f 28 c1             	movaps xmm0,xmm1
+    2a9c:	48 89 85 3c ff ff ff 	mov    QWORD PTR [rbp-0xc4],rax
+    2aa3:	f3 0f 11 85 44 ff ff 	movss  DWORD PTR [rbp-0xbc],xmm0
+    2aaa:	ff 
+    2aab:	48 8d 45 d0          	lea    rax,[rbp-0x30]
+    2aaf:	f3 0f 7e 95 3c ff ff 	movq   xmm2,QWORD PTR [rbp-0xc4]
+    2ab6:	ff 
+    2ab7:	f3 0f 10 85 44 ff ff 	movss  xmm0,DWORD PTR [rbp-0xbc]
+    2abe:	ff 
+    2abf:	48 8b 95 00 ff ff ff 	mov    rdx,QWORD PTR [rbp-0x100]
+    2ac6:	f3 0f 10 8d 08 ff ff 	movss  xmm1,DWORD PTR [rbp-0xf8]
+    2acd:	ff 
+    2ace:	0f 28 d8             	movaps xmm3,xmm0
+    2ad1:	66 48 0f 6e c2       	movq   xmm0,rdx
+    2ad6:	48 89 c7             	mov    rdi,rax
+    2ad9:	e8 e0 ea ff ff       	call   15be <ray_create>
+    2ade:	8b 85 d4 fe ff ff    	mov    eax,DWORD PTR [rbp-0x12c]
+    2ae4:	48 98                	cdqe
+    2ae6:	48 8d 14 c5 00 00 00 	lea    rdx,[rax*8+0x0]
+    2aed:	00 
+    2aee:	48 8b 85 f8 fe ff ff 	mov    rax,QWORD PTR [rbp-0x108]
+    2af5:	48 01 d0             	add    rax,rdx
+    2af8:	48 8b 08             	mov    rcx,QWORD PTR [rax]
+    2afb:	8b 85 d8 fe ff ff    	mov    eax,DWORD PTR [rbp-0x128]
+    2b01:	48 63 d0             	movsxd rdx,eax
+    2b04:	48 89 d0             	mov    rax,rdx
+    2b07:	48 01 c0             	add    rax,rax
+    2b0a:	48 01 d0             	add    rax,rdx
+    2b0d:	48 c1 e0 02          	shl    rax,0x2
+    2b11:	48 8d 1c 01          	lea    rbx,[rcx+rax*1]
+    2b15:	f3 0f 7e 95 30 ff ff 	movq   xmm2,QWORD PTR [rbp-0xd0]
+    2b1c:	ff 
+    2b1d:	f3 0f 10 85 38 ff ff 	movss  xmm0,DWORD PTR [rbp-0xc8]
+    2b24:	ff 
+    2b25:	48 8b 75 c0          	mov    rsi,QWORD PTR [rbp-0x40]
+    2b29:	f3 0f 7e 4d c8       	movq   xmm1,QWORD PTR [rbp-0x38]
+    2b2e:	48 83 ec 08          	sub    rsp,0x8
+    2b32:	48 83 ec 18          	sub    rsp,0x18
+    2b36:	48 89 e1             	mov    rcx,rsp
+    2b39:	48 8b 45 d0          	mov    rax,QWORD PTR [rbp-0x30]
+    2b3d:	48 8b 55 d8          	mov    rdx,QWORD PTR [rbp-0x28]
+    2b41:	48 89 01             	mov    QWORD PTR [rcx],rax
+    2b44:	48 89 51 08          	mov    QWORD PTR [rcx+0x8],rdx
+    2b48:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+    2b4c:	48 89 41 10          	mov    QWORD PTR [rcx+0x10],rax
+    2b50:	0f 28 d8             	movaps xmm3,xmm0
+    2b53:	66 48 0f 6e c6       	movq   xmm0,rsi
+    2b58:	e8 ff f1 ff ff       	call   1d5c <trace>
+    2b5d:	48 83 c4 20          	add    rsp,0x20
+    2b61:	66 48 0f 7e c0       	movq   rax,xmm0
+    2b66:	0f 28 c1             	movaps xmm0,xmm1
+    2b69:	48 89 03             	mov    QWORD PTR [rbx],rax
+    2b6c:	f3 0f 11 43 08       	movss  DWORD PTR [rbx+0x8],xmm0
+    2b71:	83 85 d8 fe ff ff 01 	add    DWORD PTR [rbp-0x128],0x1
+    2b78:	8b 85 d8 fe ff ff    	mov    eax,DWORD PTR [rbp-0x128]
+    2b7e:	3b 85 dc fe ff ff    	cmp    eax,DWORD PTR [rbp-0x124]
+    2b84:	0f 8c b8 fd ff ff    	jl     2942 <main+0x412>
+    2b8a:	83 85 d4 fe ff ff 01 	add    DWORD PTR [rbp-0x12c],0x1
+    2b91:	8b 85 d4 fe ff ff    	mov    eax,DWORD PTR [rbp-0x12c]
+    2b97:	3b 85 e0 fe ff ff    	cmp    eax,DWORD PTR [rbp-0x120]
+    2b9d:	0f 8c 38 fd ff ff    	jl     28db <main+0x3ab>
+    2ba3:	48 8b 05 76 24 00 00 	mov    rax,QWORD PTR [rip+0x2476]        # 5020 <stderr@GLIBC_2.2.5>
+    2baa:	48 89 c1             	mov    rcx,rax
+    2bad:	ba 14 00 00 00       	mov    edx,0x14
+    2bb2:	be 01 00 00 00       	mov    esi,0x1
+    2bb7:	48 8d 05 48 05 00 00 	lea    rax,[rip+0x548]        # 3106 <_IO_stdin_used+0x106>
+    2bbe:	48 89 c7             	mov    rdi,rax
+    2bc1:	e8 ba e5 ff ff       	call   1180 <fwrite@plt>
+    2bc6:	8b 8d e0 fe ff ff    	mov    ecx,DWORD PTR [rbp-0x120]
+    2bcc:	8b 95 dc fe ff ff    	mov    edx,DWORD PTR [rbp-0x124]
+    2bd2:	48 8b 85 f8 fe ff ff 	mov    rax,QWORD PTR [rbp-0x108]
+    2bd9:	48 89 c6             	mov    rsi,rax
+    2bdc:	48 8d 05 38 05 00 00 	lea    rax,[rip+0x538]        # 311b <_IO_stdin_used+0x11b>
+    2be3:	48 89 c7             	mov    rdi,rax
+    2be6:	e8 18 f6 ff ff       	call   2203 <write_image>
+    2beb:	48 8b 05 2e 24 00 00 	mov    rax,QWORD PTR [rip+0x242e]        # 5020 <stderr@GLIBC_2.2.5>
+    2bf2:	48 89 c1             	mov    rcx,rax
+    2bf5:	ba 06 00 00 00       	mov    edx,0x6
+    2bfa:	be 01 00 00 00       	mov    esi,0x1
+    2bff:	48 8d 05 1f 05 00 00 	lea    rax,[rip+0x51f]        # 3125 <_IO_stdin_used+0x125>
+    2c06:	48 89 c7             	mov    rdi,rax
+    2c09:	e8 72 e5 ff ff       	call   1180 <fwrite@plt>
+    2c0e:	b8 00 00 00 00       	mov    eax,0x0
+    2c13:	48 8b 55 e8          	mov    rdx,QWORD PTR [rbp-0x18]
+    2c17:	64 48 2b 14 25 28 00 	sub    rdx,QWORD PTR fs:0x28
+    2c1e:	00 00 
+    2c20:	74 05                	je     2c27 <main+0x6f7>
+    2c22:	e8 f9 e4 ff ff       	call   1120 <__stack_chk_fail@plt>
+    2c27:	48 8b 5d f8          	mov    rbx,QWORD PTR [rbp-0x8]
+    2c2b:	c9                   	leave
+    2c2c:	c3                   	ret
+
+[?2004hSingularity> sed -n '100,250p' /tmp/main.txt
+[?2004l    26e4:	66 48 0f 7e c0       	movq   rax,xmm0
+    26e9:	0f 28 c1             	movaps xmm0,xmm1
+    26ec:	48 89 85 54 ff ff ff 	mov    QWORD PTR [rbp-0xac],rax
+    26f3:	f3 0f 11 85 5c ff ff 	movss  DWORD PTR [rbp-0xa4],xmm0
+    26fa:	ff 
+    26fb:	48 8b 85 0c ff ff ff 	mov    rax,QWORD PTR [rbp-0xf4]
+    2702:	f3 0f 10 8d 14 ff ff 	movss  xmm1,DWORD PTR [rbp-0xec]
+    2709:	ff 
+    270a:	f3 0f 10 15 66 0a 00 	movss  xmm2,DWORD PTR [rip+0xa66]        # 3178 <_IO_stdin_used+0x178>
+    2711:	00 
+    2712:	66 48 0f 6e c0       	movq   xmm0,rax
+    2717:	e8 e7 ec ff ff       	call   1403 <vector_multiply>
+    271c:	66 48 0f 7e c0       	movq   rax,xmm0
+    2721:	0f 28 c1             	movaps xmm0,xmm1
+    2724:	48 89 85 60 ff ff ff 	mov    QWORD PTR [rbp-0xa0],rax
+    272b:	f3 0f 11 85 68 ff ff 	movss  DWORD PTR [rbp-0x98],xmm0
+    2732:	ff 
+    2733:	f3 0f 7e 95 60 ff ff 	movq   xmm2,QWORD PTR [rbp-0xa0]
+    273a:	ff 
+    273b:	f3 0f 10 85 68 ff ff 	movss  xmm0,DWORD PTR [rbp-0x98]
+    2742:	ff 
+    2743:	48 8b 85 00 ff ff ff 	mov    rax,QWORD PTR [rbp-0x100]
+    274a:	f3 0f 10 8d 08 ff ff 	movss  xmm1,DWORD PTR [rbp-0xf8]
+    2751:	ff 
+    2752:	0f 28 d8             	movaps xmm3,xmm0
+    2755:	66 48 0f 6e c0       	movq   xmm0,rax
+    275a:	e8 12 ec ff ff       	call   1371 <vector_subtract>
+    275f:	66 48 0f 7e c0       	movq   rax,xmm0
+    2764:	0f 28 c1             	movaps xmm0,xmm1
+    2767:	48 89 85 6c ff ff ff 	mov    QWORD PTR [rbp-0x94],rax
+    276e:	f3 0f 11 85 74 ff ff 	movss  DWORD PTR [rbp-0x8c],xmm0
+    2775:	ff 
+    2776:	f3 0f 7e 95 54 ff ff 	movq   xmm2,QWORD PTR [rbp-0xac]
+    277d:	ff 
+    277e:	f3 0f 10 85 5c ff ff 	movss  xmm0,DWORD PTR [rbp-0xa4]
+    2785:	ff 
+    2786:	48 8b 85 6c ff ff ff 	mov    rax,QWORD PTR [rbp-0x94]
+    278d:	f3 0f 10 8d 74 ff ff 	movss  xmm1,DWORD PTR [rbp-0x8c]
+    2794:	ff 
+    2795:	0f 28 d8             	movaps xmm3,xmm0
+    2798:	66 48 0f 6e c0       	movq   xmm0,rax
+    279d:	e8 cf eb ff ff       	call   1371 <vector_subtract>
+    27a2:	66 48 0f 7e c0       	movq   rax,xmm0
+    27a7:	0f 28 c1             	movaps xmm0,xmm1
+    27aa:	48 89 85 78 ff ff ff 	mov    QWORD PTR [rbp-0x88],rax
+    27b1:	f3 0f 11 45 80       	movss  DWORD PTR [rbp-0x80],xmm0
+    27b6:	f3 0f 7e 95 48 ff ff 	movq   xmm2,QWORD PTR [rbp-0xb8]
+    27bd:	ff 
+    27be:	f3 0f 10 85 50 ff ff 	movss  xmm0,DWORD PTR [rbp-0xb0]
+    27c5:	ff 
+    27c6:	48 8b 85 78 ff ff ff 	mov    rax,QWORD PTR [rbp-0x88]
+    27cd:	f3 0f 10 4d 80       	movss  xmm1,DWORD PTR [rbp-0x80]
+    27d2:	0f 28 d8             	movaps xmm3,xmm0
+    27d5:	66 48 0f 6e c0       	movq   xmm0,rax
+    27da:	e8 92 eb ff ff       	call   1371 <vector_subtract>
+    27df:	66 48 0f 7e c0       	movq   rax,xmm0
+    27e4:	0f 28 c1             	movaps xmm0,xmm1
+    27e7:	48 89 85 24 ff ff ff 	mov    QWORD PTR [rbp-0xdc],rax
+    27ee:	f3 0f 11 85 2c ff ff 	movss  DWORD PTR [rbp-0xd4],xmm0
+    27f5:	ff 
+    27f6:	f3 0f 10 15 a2 09 00 	movss  xmm2,DWORD PTR [rip+0x9a2]        # 31a0 <_IO_stdin_used+0x1a0>
+    27fd:	00 
+    27fe:	f3 0f 10 0d 9e 09 00 	movss  xmm1,DWORD PTR [rip+0x99e]        # 31a4 <_IO_stdin_used+0x1a4>
+    2805:	00 
+    2806:	8b 05 24 09 00 00    	mov    eax,DWORD PTR [rip+0x924]        # 3130 <_IO_stdin_used+0x130>
+    280c:	66 0f 6e c0          	movd   xmm0,eax
+    2810:	e8 74 ea ff ff       	call   1289 <vector_create>
+    2815:	66 48 0f 7e c0       	movq   rax,xmm0
+    281a:	0f 28 c1             	movaps xmm0,xmm1
+    281d:	48 89 45 c0          	mov    QWORD PTR [rbp-0x40],rax
+    2821:	f3 0f 11 45 c8       	movss  DWORD PTR [rbp-0x38],xmm0
+    2826:	f3 0f 10 05 46 09 00 	movss  xmm0,DWORD PTR [rip+0x946]        # 3174 <_IO_stdin_used+0x174>
+    282d:	00 
+    282e:	f3 0f 11 45 cc       	movss  DWORD PTR [rbp-0x34],xmm0
+    2833:	f3 0f 10 15 6d 09 00 	movss  xmm2,DWORD PTR [rip+0x96d]        # 31a8 <_IO_stdin_used+0x1a8>
+    283a:	00 
+    283b:	f3 0f 10 0d 31 09 00 	movss  xmm1,DWORD PTR [rip+0x931]        # 3174 <_IO_stdin_used+0x174>
+    2842:	00 
+    2843:	8b 05 2b 09 00 00    	mov    eax,DWORD PTR [rip+0x92b]        # 3174 <_IO_stdin_used+0x174>
+    2849:	66 0f 6e c0          	movd   xmm0,eax
+    284d:	e8 37 ea ff ff       	call   1289 <vector_create>
+    2852:	66 48 0f 7e c0       	movq   rax,xmm0
+    2857:	0f 28 c1             	movaps xmm0,xmm1
+    285a:	48 89 45 84          	mov    QWORD PTR [rbp-0x7c],rax
+    285e:	f3 0f 11 45 8c       	movss  DWORD PTR [rbp-0x74],xmm0
+    2863:	48 8b 45 84          	mov    rax,QWORD PTR [rbp-0x7c]
+    2867:	f3 0f 10 4d 8c       	movss  xmm1,DWORD PTR [rbp-0x74]
+    286c:	66 48 0f 6e c0       	movq   xmm0,rax
+    2871:	e8 bc ec ff ff       	call   1532 <vector_normalize>
+    2876:	66 48 0f 7e c0       	movq   rax,xmm0
+    287b:	0f 28 c1             	movaps xmm0,xmm1
+    287e:	48 89 85 30 ff ff ff 	mov    QWORD PTR [rbp-0xd0],rax
+    2885:	f3 0f 11 85 38 ff ff 	movss  DWORD PTR [rbp-0xc8],xmm0
+    288c:	ff 
+    288d:	8b 95 e0 fe ff ff    	mov    edx,DWORD PTR [rbp-0x120]
+    2893:	8b 85 dc fe ff ff    	mov    eax,DWORD PTR [rbp-0x124]
+    2899:	89 d6                	mov    esi,edx
+    289b:	89 c7                	mov    edi,eax
+    289d:	e8 bb fb ff ff       	call   245d <allocate_image>
+    28a2:	48 89 85 f8 fe ff ff 	mov    QWORD PTR [rbp-0x108],rax
+    28a9:	48 8b 05 70 27 00 00 	mov    rax,QWORD PTR [rip+0x2770]        # 5020 <stderr@GLIBC_2.2.5>
+    28b0:	48 89 c1             	mov    rcx,rax
+    28b3:	ba 23 00 00 00       	mov    edx,0x23
+    28b8:	be 01 00 00 00       	mov    esi,0x1
+    28bd:	48 8d 05 0c 08 00 00 	lea    rax,[rip+0x80c]        # 30d0 <_IO_stdin_used+0xd0>
+    28c4:	48 89 c7             	mov    rdi,rax
+    28c7:	e8 b4 e8 ff ff       	call   1180 <fwrite@plt>
+    28cc:	c7 85 d4 fe ff ff 00 	mov    DWORD PTR [rbp-0x12c],0x0
+    28d3:	00 00 00 
+    28d6:	e9 b6 02 00 00       	jmp    2b91 <main+0x661>
+    28db:	66 0f ef c9          	pxor   xmm1,xmm1
+    28df:	f3 0f 2a 8d d4 fe ff 	cvtsi2ss xmm1,DWORD PTR [rbp-0x12c]
+    28e6:	ff 
+    28e7:	f3 0f 10 05 bd 08 00 	movss  xmm0,DWORD PTR [rip+0x8bd]        # 31ac <_IO_stdin_used+0x1ac>
+    28ee:	00 
+    28ef:	f3 0f 59 c1          	mulss  xmm0,xmm1
+    28f3:	66 0f ef c9          	pxor   xmm1,xmm1
+    28f7:	f3 0f 2a 8d e0 fe ff 	cvtsi2ss xmm1,DWORD PTR [rbp-0x120]
+    28fe:	ff 
+    28ff:	f3 0f 5e c1          	divss  xmm0,xmm1
+    2903:	66 0f ef e4          	pxor   xmm4,xmm4
+    2907:	f3 0f 5a e0          	cvtss2sd xmm4,xmm0
+    290b:	66 48 0f 7e e2       	movq   rdx,xmm4
+    2910:	48 8b 05 09 27 00 00 	mov    rax,QWORD PTR [rip+0x2709]        # 5020 <stderr@GLIBC_2.2.5>
+    2917:	66 48 0f 6e c2       	movq   xmm0,rdx
+    291c:	48 8d 15 d1 07 00 00 	lea    rdx,[rip+0x7d1]        # 30f4 <_IO_stdin_used+0xf4>
+    2923:	48 89 d6             	mov    rsi,rdx
+    2926:	48 89 c7             	mov    rdi,rax
+    2929:	b8 01 00 00 00       	mov    eax,0x1
+    292e:	e8 fd e7 ff ff       	call   1130 <fprintf@plt>
+    2933:	c7 85 d8 fe ff ff 00 	mov    DWORD PTR [rbp-0x128],0x0
+    293a:	00 00 00 
+    293d:	e9 36 02 00 00       	jmp    2b78 <main+0x648>
+    2942:	66 0f ef c0          	pxor   xmm0,xmm0
+    2946:	f3 0f 2a 85 d8 fe ff 	cvtsi2ss xmm0,DWORD PTR [rbp-0x128]
+    294d:	ff 
+    294e:	8b 85 dc fe ff ff    	mov    eax,DWORD PTR [rbp-0x124]
+    2954:	83 e8 01             	sub    eax,0x1
+    2957:	66 0f ef c9          	pxor   xmm1,xmm1
+    295b:	f3 0f 2a c8          	cvtsi2ss xmm1,eax
+    295f:	f3 0f 5e c1          	divss  xmm0,xmm1
+    2963:	f3 0f 11 85 f0 fe ff 	movss  DWORD PTR [rbp-0x110],xmm0
+    296a:	ff 
+    296b:	66 0f ef c0          	pxor   xmm0,xmm0
+    296f:	f3 0f 2a 85 d4 fe ff 	cvtsi2ss xmm0,DWORD PTR [rbp-0x12c]
+    2976:	ff 
+    2977:	8b 85 e0 fe ff ff    	mov    eax,DWORD PTR [rbp-0x120]
+    297d:	83 e8 01             	sub    eax,0x1
+    2980:	66 0f ef c9          	pxor   xmm1,xmm1
+    2984:	f3 0f 2a c8          	cvtsi2ss xmm1,eax
+    2988:	f3 0f 5e c1          	divss  xmm0,xmm1
+[?2004hSingularity> sed -n '1,100p' /tmp/main.txt
+[?2004l0000000000002530 <main>:
+    2530:	f3 0f 1e fa          	endbr64
+    2534:	55                   	push   rbp
+    2535:	48 89 e5             	mov    rbp,rsp
+    2538:	53                   	push   rbx
+    2539:	48 81 ec 28 01 00 00 	sub    rsp,0x128
+    2540:	64 48 8b 04 25 28 00 	mov    rax,QWORD PTR fs:0x28
+    2547:	00 00 
+    2549:	48 89 45 e8          	mov    QWORD PTR [rbp-0x18],rax
+    254d:	31 c0                	xor    eax,eax
+    254f:	c7 85 dc fe ff ff 60 	mov    DWORD PTR [rbp-0x124],0x960
+    2556:	09 00 00 
+    2559:	c7 85 e0 fe ff ff 08 	mov    DWORD PTR [rbp-0x120],0x708
+    2560:	07 00 00 
+    2563:	48 8b 05 b6 2a 00 00 	mov    rax,QWORD PTR [rip+0x2ab6]        # 5020 <stderr@GLIBC_2.2.5>
+    256a:	8b 8d e0 fe ff ff    	mov    ecx,DWORD PTR [rbp-0x120]
+    2570:	8b 95 dc fe ff ff    	mov    edx,DWORD PTR [rbp-0x124]
+    2576:	48 8d 35 f3 0a 00 00 	lea    rsi,[rip+0xaf3]        # 3070 <_IO_stdin_used+0x70>
+    257d:	48 89 c7             	mov    rdi,rax
+    2580:	b8 00 00 00 00       	mov    eax,0x0
+    2585:	e8 a6 eb ff ff       	call   1130 <fprintf@plt>
+    258a:	48 8b 05 8f 2a 00 00 	mov    rax,QWORD PTR [rip+0x2a8f]        # 5020 <stderr@GLIBC_2.2.5>
+    2591:	48 89 c1             	mov    rcx,rax
+    2594:	ba 35 00 00 00       	mov    edx,0x35
+    2599:	be 01 00 00 00       	mov    esi,0x1
+    259e:	48 8d 05 f3 0a 00 00 	lea    rax,[rip+0xaf3]        # 3098 <_IO_stdin_used+0x98>
+    25a5:	48 89 c7             	mov    rdi,rax
+    25a8:	e8 d3 eb ff ff       	call   1180 <fwrite@plt>
+    25ad:	66 0f ef d2          	pxor   xmm2,xmm2
+    25b1:	66 0f ef c9          	pxor   xmm1,xmm1
+    25b5:	8b 05 75 0b 00 00    	mov    eax,DWORD PTR [rip+0xb75]        # 3130 <_IO_stdin_used+0x130>
+    25bb:	66 0f 6e c0          	movd   xmm0,eax
+    25bf:	e8 c5 ec ff ff       	call   1289 <vector_create>
+    25c4:	66 48 0f 7e c0       	movq   rax,xmm0
+    25c9:	0f 28 c1             	movaps xmm0,xmm1
+    25cc:	48 89 85 00 ff ff ff 	mov    QWORD PTR [rbp-0x100],rax
+    25d3:	f3 0f 11 85 08 ff ff 	movss  DWORD PTR [rbp-0xf8],xmm0
+    25da:	ff 
+    25db:	f3 0f 10 05 b9 0b 00 	movss  xmm0,DWORD PTR [rip+0xbb9]        # 319c <_IO_stdin_used+0x19c>
+    25e2:	00 
+    25e3:	f3 0f 11 85 e4 fe ff 	movss  DWORD PTR [rbp-0x11c],xmm0
+    25ea:	ff 
+    25eb:	66 0f ef c0          	pxor   xmm0,xmm0
+    25ef:	f3 0f 2a 85 dc fe ff 	cvtsi2ss xmm0,DWORD PTR [rbp-0x124]
+    25f6:	ff 
+    25f7:	66 0f ef c9          	pxor   xmm1,xmm1
+    25fb:	f3 0f 2a 8d e0 fe ff 	cvtsi2ss xmm1,DWORD PTR [rbp-0x120]
+    2602:	ff 
+    2603:	f3 0f 5e c1          	divss  xmm0,xmm1
+    2607:	f3 0f 10 8d e4 fe ff 	movss  xmm1,DWORD PTR [rbp-0x11c]
+    260e:	ff 
+    260f:	f3 0f 59 c1          	mulss  xmm0,xmm1
+    2613:	f3 0f 11 85 e8 fe ff 	movss  DWORD PTR [rbp-0x118],xmm0
+    261a:	ff 
+    261b:	f3 0f 10 05 51 0b 00 	movss  xmm0,DWORD PTR [rip+0xb51]        # 3174 <_IO_stdin_used+0x174>
+    2622:	00 
+    2623:	f3 0f 11 85 ec fe ff 	movss  DWORD PTR [rbp-0x114],xmm0
+    262a:	ff 
+    262b:	8b 85 e8 fe ff ff    	mov    eax,DWORD PTR [rbp-0x118]
+    2631:	66 0f ef d2          	pxor   xmm2,xmm2
+    2635:	66 0f ef c9          	pxor   xmm1,xmm1
+    2639:	66 0f 6e c0          	movd   xmm0,eax
+    263d:	e8 47 ec ff ff       	call   1289 <vector_create>
+    2642:	66 48 0f 7e c0       	movq   rax,xmm0
+    2647:	0f 28 c1             	movaps xmm0,xmm1
+    264a:	48 89 85 0c ff ff ff 	mov    QWORD PTR [rbp-0xf4],rax
+    2651:	f3 0f 11 85 14 ff ff 	movss  DWORD PTR [rbp-0xec],xmm0
+    2658:	ff 
+    2659:	f3 0f 10 85 e4 fe ff 	movss  xmm0,DWORD PTR [rbp-0x11c]
+    2660:	ff 
+    2661:	66 0f ef d2          	pxor   xmm2,xmm2
+    2665:	0f 28 c8             	movaps xmm1,xmm0
+    2668:	8b 05 c2 0a 00 00    	mov    eax,DWORD PTR [rip+0xac2]        # 3130 <_IO_stdin_used+0x130>
+    266e:	66 0f 6e c0          	movd   xmm0,eax
+    2672:	e8 12 ec ff ff       	call   1289 <vector_create>
+    2677:	66 48 0f 7e c0       	movq   rax,xmm0
+    267c:	0f 28 c1             	movaps xmm0,xmm1
+    267f:	48 89 85 18 ff ff ff 	mov    QWORD PTR [rbp-0xe8],rax
+    2686:	f3 0f 11 85 20 ff ff 	movss  DWORD PTR [rbp-0xe0],xmm0
+    268d:	ff 
+    268e:	f3 0f 10 85 ec fe ff 	movss  xmm0,DWORD PTR [rbp-0x114]
+    2695:	ff 
+    2696:	0f 28 d0             	movaps xmm2,xmm0
+    2699:	66 0f ef c9          	pxor   xmm1,xmm1
+    269d:	8b 05 8d 0a 00 00    	mov    eax,DWORD PTR [rip+0xa8d]        # 3130 <_IO_stdin_used+0x130>
+    26a3:	66 0f 6e c0          	movd   xmm0,eax
+    26a7:	e8 dd eb ff ff       	call   1289 <vector_create>
+    26ac:	66 48 0f 7e c0       	movq   rax,xmm0
+    26b1:	0f 28 c1             	movaps xmm0,xmm1
+    26b4:	48 89 85 48 ff ff ff 	mov    QWORD PTR [rbp-0xb8],rax
+    26bb:	f3 0f 11 85 50 ff ff 	movss  DWORD PTR [rbp-0xb0],xmm0
+    26c2:	ff 
+    26c3:	48 8b 85 18 ff ff ff 	mov    rax,QWORD PTR [rbp-0xe8]
+    26ca:	f3 0f 10 8d 20 ff ff 	movss  xmm1,DWORD PTR [rbp-0xe0]
+    26d1:	ff 
+    26d2:	f3 0f 10 15 9e 0a 00 	movss  xmm2,DWORD PTR [rip+0xa9e]        # 3178 <_IO_stdin_used+0x178>
+    26d9:	00 
+    26da:	66 48 0f 6e c0       	movq   xmm0,rax
+    26df:	e8 1f ed ff ff       	call   1403 <vector_multiply>
+    26e4:	66 48 0f 7e c0       	movq   rax,xmm0
+[?2004hSingularity> objdump -s -j .rodata orig | sed -n '1,40p'
+[?2004l
+orig:     file format elf64-x86-64
+
+Contents of section .rodata:
+ 3000 01000200 00000000 00000000 00000000  ................
+ 3010 77000000 00000000 4572726f 723a2043  w.......Error: C
+ 3020 6f756c64 206e6f74 206f7065 6e206669  ould not open fi
+ 3030 6c652025 7320666f 72207772 6974696e  le %s for writin
+ 3040 670a0050 330a2564 2025640a 3235350a  g..P3.%d %d.255.
+ 3050 00256420 25642025 640a0057 726f7465  .%d %d %d..Wrote
+ 3060 20696d61 67652074 6f202573 0a000000   image to %s....
+ 3070 43726561 74696e67 20686967 682d7265  Creating high-re
+ 3080 736f6c75 74696f6e 20696d61 67653a20  solution image: 
+ 3090 25647825 640a0000 54686973 2077696c  %dx%d...This wil
+ 30a0 6c206265 20646f77 6e73616d 706c6564  l be downsampled
+ 30b0 20776974 68206666 6d706567 20616674   with ffmpeg aft
+ 30c0 65722072 656e6465 72696e67 0a000000  er rendering....
+ 30d0 52656e64 6572696e 67206869 67682d72  Rendering high-r
+ 30e0 65736f6c 7574696f 6e20696d 6167652e  esolution image.
+ 30f0 2e2e0a00 0d50726f 67726573 733a2025  .....Progress: %
+ 3100 2e316625 25000a52 656e6465 72696e67  .1f%%..Rendering
+ 3110 20636f6d 706c6574 650a0069 6d616765   complete..image
+ 3120 2e70706d 00446f6e 652e0a00 00008040  .ppm.Done......@
+ 3130 00000000 00000000 00000000 00000000  ................
+ 3140 00000080 00000000 00000000 00000000  ................
+ 3150 6f12833a 00000000 00000000 00000000  o..:............
+ 3160 ffffff7f 00000000 00000000 00000000  ................
+ 3170 17b7d138 0000803f 0000003f 3333333f  ...8...?...?333?
+ 3180 0000c0bf cdcc4c3e 6666663f cdcccc3e  ......L>fff?...>
+ 3190 00000000 0000f03f 71fd7f43 00000040  .......?q..C...@
+ 31a0 0000a0c0 000000bf 000080bf 0000c842  ...............B
+[?2004hSingularity> sed -n '250,330p' /tmp/main.txt
+[?2004l    2988:	f3 0f 5e c1          	divss  xmm0,xmm1
+    298c:	f3 0f 11 85 f4 fe ff 	movss  DWORD PTR [rbp-0x10c],xmm0
+    2993:	ff 
+    2994:	f3 0f 10 05 d8 07 00 	movss  xmm0,DWORD PTR [rip+0x7d8]        # 3174 <_IO_stdin_used+0x174>
+    299b:	00 
+    299c:	f3 0f 5c 85 f4 fe ff 	subss  xmm0,DWORD PTR [rbp-0x10c]
+    29a3:	ff 
+    29a4:	48 8b 85 18 ff ff ff 	mov    rax,QWORD PTR [rbp-0xe8]
+    29ab:	f3 0f 10 8d 20 ff ff 	movss  xmm1,DWORD PTR [rbp-0xe0]
+    29b2:	ff 
+    29b3:	0f 28 d0             	movaps xmm2,xmm0
+    29b6:	66 48 0f 6e c0       	movq   xmm0,rax
+    29bb:	e8 43 ea ff ff       	call   1403 <vector_multiply>
+    29c0:	66 48 0f 7e c0       	movq   rax,xmm0
+    29c5:	0f 28 c1             	movaps xmm0,xmm1
+    29c8:	48 89 45 90          	mov    QWORD PTR [rbp-0x70],rax
+    29cc:	f3 0f 11 45 98       	movss  DWORD PTR [rbp-0x68],xmm0
+    29d1:	f3 0f 7e 95 00 ff ff 	movq   xmm2,QWORD PTR [rbp-0x100]
+    29d8:	ff 
+    29d9:	f3 0f 10 85 08 ff ff 	movss  xmm0,DWORD PTR [rbp-0xf8]
+    29e0:	ff 
+    29e1:	48 8b 45 90          	mov    rax,QWORD PTR [rbp-0x70]
+    29e5:	f3 0f 10 4d 98       	movss  xmm1,DWORD PTR [rbp-0x68]
+    29ea:	0f 28 d8             	movaps xmm3,xmm0
+    29ed:	66 48 0f 6e c0       	movq   xmm0,rax
+    29f2:	e8 7a e9 ff ff       	call   1371 <vector_subtract>
+    29f7:	66 48 0f 7e c0       	movq   rax,xmm0
+    29fc:	0f 28 c1             	movaps xmm0,xmm1
+    29ff:	48 89 45 9c          	mov    QWORD PTR [rbp-0x64],rax
+    2a03:	f3 0f 11 45 a4       	movss  DWORD PTR [rbp-0x5c],xmm0
+    2a08:	f3 0f 10 85 f0 fe ff 	movss  xmm0,DWORD PTR [rbp-0x110]
+    2a0f:	ff 
+    2a10:	48 8b 85 0c ff ff ff 	mov    rax,QWORD PTR [rbp-0xf4]
+    2a17:	f3 0f 10 8d 14 ff ff 	movss  xmm1,DWORD PTR [rbp-0xec]
+    2a1e:	ff 
+    2a1f:	0f 28 d0             	movaps xmm2,xmm0
+    2a22:	66 48 0f 6e c0       	movq   xmm0,rax
+    2a27:	e8 d7 e9 ff ff       	call   1403 <vector_multiply>
+    2a2c:	66 48 0f 7e c0       	movq   rax,xmm0
+    2a31:	0f 28 c1             	movaps xmm0,xmm1
+    2a34:	48 89 45 a8          	mov    QWORD PTR [rbp-0x58],rax
+    2a38:	f3 0f 11 45 b0       	movss  DWORD PTR [rbp-0x50],xmm0
+    2a3d:	f3 0f 7e 55 9c       	movq   xmm2,QWORD PTR [rbp-0x64]
+    2a42:	f3 0f 10 45 a4       	movss  xmm0,DWORD PTR [rbp-0x5c]
+    2a47:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    2a4b:	f3 0f 10 4d b0       	movss  xmm1,DWORD PTR [rbp-0x50]
+    2a50:	0f 28 d8             	movaps xmm3,xmm0
+    2a53:	66 48 0f 6e c0       	movq   xmm0,rax
+    2a58:	e8 82 e8 ff ff       	call   12df <vector_add>
+    2a5d:	66 48 0f 7e c0       	movq   rax,xmm0
+    2a62:	0f 28 c1             	movaps xmm0,xmm1
+    2a65:	48 89 45 b4          	mov    QWORD PTR [rbp-0x4c],rax
+    2a69:	f3 0f 11 45 bc       	movss  DWORD PTR [rbp-0x44],xmm0
+    2a6e:	f3 0f 7e 55 b4       	movq   xmm2,QWORD PTR [rbp-0x4c]
+    2a73:	f3 0f 10 45 bc       	movss  xmm0,DWORD PTR [rbp-0x44]
+    2a78:	48 8b 85 24 ff ff ff 	mov    rax,QWORD PTR [rbp-0xdc]
+    2a7f:	f3 0f 10 8d 2c ff ff 	movss  xmm1,DWORD PTR [rbp-0xd4]
+    2a86:	ff 
+    2a87:	0f 28 d8             	movaps xmm3,xmm0
+    2a8a:	66 48 0f 6e c0       	movq   xmm0,rax
+    2a8f:	e8 4b e8 ff ff       	call   12df <vector_add>
+    2a94:	66 48 0f 7e c0       	movq   rax,xmm0
+    2a99:	0f 28 c1             	movaps xmm0,xmm1
+    2a9c:	48 89 85 3c ff ff ff 	mov    QWORD PTR [rbp-0xc4],rax
+    2aa3:	f3 0f 11 85 44 ff ff 	movss  DWORD PTR [rbp-0xbc],xmm0
+    2aaa:	ff 
+    2aab:	48 8d 45 d0          	lea    rax,[rbp-0x30]
+    2aaf:	f3 0f 7e 95 3c ff ff 	movq   xmm2,QWORD PTR [rbp-0xc4]
+    2ab6:	ff 
+    2ab7:	f3 0f 10 85 44 ff ff 	movss  xmm0,DWORD PTR [rbp-0xbc]
+    2abe:	ff 
+    2abf:	48 8b 95 00 ff ff ff 	mov    rdx,QWORD PTR [rbp-0x100]
+    2ac6:	f3 0f 10 8d 08 ff ff 	movss  xmm1,DWORD PTR [rbp-0xf8]
+    2acd:	ff 
+    2ace:	0f 28 d8             	movaps xmm3,xmm0
+    2ad1:	66 48 0f 6e c2       	movq   xmm0,rdx
+    2ad6:	48 89 c7             	mov    rdi,rax
+    2ad9:	e8 e0 ea ff ff       	call   15be <ray_create>
+    2ade:	8b 85 d4 fe ff ff    	mov    eax,DWORD PTR [rbp-0x12c]
+    2ae4:	48 98                	cdqe
+    2ae6:	48 8d 14 c5 00 00 00 	lea    rdx,[rax*8+0x0]
+[?2004hSingularity> 
