@@ -207,6 +207,17 @@ def main():
               'on Llama-3.1-8B it already captures most of what is available, leaving MixFP4 '
               'little to add on top of it while still clearly beating plain NVFP4.', '']
 
+        # The test above is the load-bearing one, so it gets a negative control: the same
+        # comparison on two runs of one policy, where the true difference is zero.
+        try:
+            from analyze_run_reproducibility import build as repro_block
+            control = repro_block(MODELS)
+        except Exception as exc:                       # a control is not worth failing §1a over
+            print(f'NOTE: reproducibility control skipped: {exc!r}')
+            control = None
+        if control:
+            L += control.rstrip().split('\n') + ['']
+
     # --- other task sets, which measure the same policies on more sensitive metrics ----------
     extra = other_runs(all_runs)
     if extra:
