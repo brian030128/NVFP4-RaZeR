@@ -72,18 +72,49 @@ def main():
          '']
 
     if ppl:
+        ks = sorted({k for m, _ in MODELS if m in ppl for k in ppl[m].get('k_values', [K])})
         L += ['#### How many tiles each objective elects', '',
-              '| model | max(CE, KL) | KL only | ratio |', '|---|---:|---:|---:|']
+              'Raising k tightens the threshold, so both objectives elect fewer tiles. The '
+              f'column to compare against is the shipped rule at k = {K}.', '',
+              '| model | objective | ' + ' | '.join(f'k = {k}' for k in ks) + ' |',
+              '|---|---|' + '---:|' * len(ks)]
         for m, label in MODELS:
             if m not in ppl:
                 continue
             el = ppl[m]['election']
-            if f'k{K}' in el and f'k{K}_kl' in el:
-                a, b = el[f'k{K}']['selected'], el[f'k{K}_kl']['selected']
-                L.append(f'| {label} | {a:,} | {b:,} | {b / a:.1f}x |')
-        L += ['',
-              'CE is not a tiebreaker; it is the binding constraint. It rejects most of what KL '
-              'alone would accept, and by a factor that differs sharply by model.', '']
+            for objective, name in (('max', 'max(CE, KL)'), ('kl', 'KL only'), ('ce', 'CE only')):
+                key = (lambda k: f'k{k}') if objective == 'max' else (lambda k: f'k{k}_{objective}')
+                if not any(key(k) in el for k in ks):
+                    continue
+                cells = [f'{el[key(k)]["selected"]:,}' if key(k) in el else '—' for k in ks]
+                L.append(f'| {label} | {name} | ' + ' | '.join(cells) + ' |')
+        L.append('')
+
+        # Where does KL alone have to be set to elect as few tiles as the conjunction does at
+        # the shipped k? Computed, because it is the fair operating point to compare at.
+        matches = []
+        for m, label in MODELS:
+            if m not in ppl:
+                continue
+            el = ppl[m]['election']
+            if f'k{K}' not in el:
+                continue
+            want = el[f'k{K}']['selected']
+            cand = [(k, el[f'k{k}_kl']['selected']) for k in ks if f'k{k}_kl' in el]
+            if not cand:
+                continue
+            kk, cnt = min(cand, key=lambda kv: abs(kv[1] - want))
+            ratio = cnt / want if want else float('inf')
+            close = 0.5 <= ratio <= 2.0
+            matches.append(f'{label} comes closest at k = {kk}, electing {cnt:,} against '
+                           f'{want:,}' + ('' if close else f' -- still {ratio:.1f}x off, so the '
+                                          f'sweep does not reach a count match'))
+        if matches:
+            L += [f'KL alone is far more permissive at the same k, so comparing the two at '
+                  f'k = {K} compares two different numbers of switches as well as two '
+                  f'objectives. Matching the count instead: ' + '; '.join(matches) + '. Every '
+                  f'row of the perplexity table below therefore carries its tile count -- a row '
+                  f'electing ten times as many tiles is not a like-for-like comparison.', '']
 
         L += ['#### Perplexity', '',
               'WikiText-2 and C4 at 2048 under the report\'s own protocol '
