@@ -109,11 +109,37 @@ The same question on the multiple-choice panel of §1a, with the paired McNemar 
 | Llama-3.1-8B | KL only | 32,774 | 9.80x | 0.6601 | -0.0130 | 2.5e-09 | -0.0120 | 9.74e-08 |
 | Llama-3.1-8B | KL only | 2,950 | 0.88x | 0.6706 | -0.0012 | 0.533 | -0.0002 | 0.93 |
 | Llama-3.1-8B | KL only | 1,653 | 0.49x | 0.6701 | -0.0007 | 0.718 | +0.0003 | 0.906 |
+| Llama-3.1-8B | CE only | 22,906 | 6.85x | 0.6677 | -0.0012 | 0.505 | -0.0003 | 0.905 |
 | Qwen3-4B | KL only | 21,528 | 2.72x | 0.6412 | +0.0028 | 0.157 | +0.0161 | 9.03e-14 |
 | Qwen3-4B | KL only | 3,569 | 0.45x | 0.6345 | -0.0028 | 0.182 | +0.0105 | 1.07e-06 |
 | Qwen3-4B | KL only | 1,226 | 0.15x | 0.6287 | -0.0065 | 0.00166 | +0.0067 | 0.00148 |
+| Qwen3-4B | CE only | 125,611 | 15.88x | 0.6223 | -0.0161 | 1.14e-11 | -0.0028 | 0.284 |
 
-**None of the 6 settings beats the conjunction.** 2 are significantly worse and 4 are indistinguishable from it. The rows where a single objective elects far more tiles than the shipped rule are the ones that look closest to it, which is the tile count talking rather than the objective -- the ratio column is there to make that visible. Note also what the last two columns do not say together: a setting can beat the FourOverSix base convincingly and still not reach the conjunction, and several do exactly that.
+**None of the 8 settings beats the conjunction.** 3 are significantly worse and 5 are indistinguishable from it. The rows where a single objective elects far more tiles than the shipped rule are the ones that look closest to it, which is the tile count talking rather than the objective -- the ratio column is there to make that visible. Note also what the last two columns do not say together: a setting can beat the FourOverSix base convincingly and still not reach the conjunction, and several do exactly that.
+
+#### Is KL needed, or would CE alone do?
+
+The rule elects when **both** bounds are negative, so the elected set is the intersection: adding KL to CE can only take tiles away. That gives the question an exact form -- are the tiles CE accepts and KL vetoes worth keeping? Holding the CE threshold fixed and varying only the veto is the one comparison here where matching k is right rather than misleading, because the tile count difference *is* the effect being measured.
+
+| model | k | CE elects | KL vetoes | d WikiText from vetoing | d C4 | CE alone vs the base |
+|---|---:|---:|---:|---:|---:|---|
+| Llama-3.1-8B | 2 | 356,302 | 257,278 | -0.0308 | -0.0346 | **worse than not switching** |
+| Llama-3.1-8B | 3 | 22,906 | 19,561 | +0.0126 | +0.0044 | an improvement |
+| Llama-3.1-8B | 4 | 1,104 | 563 | -0.0016 | -0.0041 | an improvement |
+| Llama-3.1-8B | 5 | 277 | 10 | -0.0019 | +0.0023 | an improvement |
+| Llama-3.1-8B | 6 | 147 | 2 | +0.0025 | +0.0090 | an improvement |
+| Qwen3-4B | 2 | 423,120 | 356,264 | -2.2299 | -3.6547 | **worse than not switching** |
+| Qwen3-4B | 3 | 125,611 | 117,699 | +0.0585 | -0.9216 | an improvement |
+| Qwen3-4B | 4 | 51,278 | 49,441 | +1.5197 | +0.6055 | an improvement |
+| Qwen3-4B | 5 | 25,869 | 25,293 | +2.4358 | +1.4584 | an improvement |
+| Qwen3-4B | 6 | 14,474 | 14,252 | +2.8566 | +1.8487 | an improvement |
+
+Negative means the veto helps. The answer is not uniform, and the pattern is the useful part:
+
+- **At the loosest threshold the veto is essential.** CE alone is worse than not switching at all in 2 of the 10 cells, and the veto is worth up to 3.65 C4 there (Qwen3-4B, k = 2). This is KL working as the safety net the rule claims.
+- **At strict thresholds it costs.** In 3 cells the veto is harmful on both corpora, by as much as +2.86 WikiText (Qwen3-4B, k = 6), where it discards 14,252 tiles CE had accepted correctly.
+
+So KL is not selecting tiles; it is insuring against a threshold that is too loose. Where the threshold is already strict, its veto mostly destroys value. That is a narrower role than "a switch is kept only when it improves the actual task loss **and** moves the quantized model back toward its own unquantized reference" suggests, and the accuracy table above is what keeps it from being an argument for dropping KL at k = 3: on Qwen3-4B, CE alone there costs 0.0161 accuracy at p = 1e-11 while electing 15.9 times as many tiles.
 
 #### Does the budget-matched result hold on accuracy?
 
@@ -130,12 +156,14 @@ The perplexity table above compares the two objectives at an equal budget of swi
 | max(CE, KL) **(shipped)** | 3 | 3,345 | 0.6714 | +0.0010 | 0.617 |
 | KL only | 6 | 1,653 | 0.6701 | +0.0003 | 0.906 |
 | KL only | 5 | 2,950 | 0.6706 | -0.0002 | 0.93 |
+| CE only | 3 | 22,906 | 0.6677 | -0.0003 | 0.905 |
 | KL only | 3 | 32,774 | 0.6601 | -0.0120 | 9.74e-08 |
 
 Head to head against the best conjunction setting that elects no more tiles:
 
 - `k6_kl` (1,653 tiles) against `k5` (267): -0.0029, p = 0.112 -- indistinguishable
 - `k5_kl` (2,950 tiles) against `k5` (267): -0.0034, p = 0.0721 -- indistinguishable
+- `k3_ce` (22,906 tiles) against `k5` (267): -0.0034, p = 0.0622 -- indistinguishable
 - `k3_kl` (32,774 tiles) against `k5` (267): -0.0152, p = 8.57e-12 -- significantly different
 
 **Qwen3-4B**
@@ -150,14 +178,16 @@ Head to head against the best conjunction setting that elects no more tiles:
 | KL only | 5 | 1,226 | 0.6287 | +0.0067 | 0.00148 |
 | KL only | 4 | 3,569 | 0.6345 | +0.0105 | 1.07e-06 |
 | KL only | 3 | 21,528 | 0.6412 | +0.0161 | 9.03e-14 |
+| CE only | 3 | 125,611 | 0.6223 | -0.0028 | 0.284 |
 
 Head to head against the best conjunction setting that elects no more tiles:
 
 - `k5_kl` (1,226 tiles) against `k5` (576): +0.0007, p = 0.754 -- indistinguishable
 - `k4_kl` (3,569 tiles) against `k4` (1,837): +0.0044, p = 0.0335 -- significantly different
 - `k3_kl` (21,528 tiles) against `k3` (7,912): +0.0028, p = 0.157 -- indistinguishable
+- `k3_ce` (125,611 tiles) against `k3` (7,912): -0.0161, p = 1.14e-11 -- significantly different
 
-Each frontier is pooled across jobs but confined to one GPU model (Llama-3.1-8B on H100 (2 point(s) on other hardware dropped); Qwen3-4B on H100 (2 point(s) on other hardware dropped)), because §1a's control found the evaluation exact within a GPU model and 2.8% of documents flipped across two. The 8 policies measured twice on that hardware agree on every document, so the pooling is exact rather than assumed.
+Each frontier is pooled across jobs but confined to one GPU model (Llama-3.1-8B on H100 (2 point(s) on other hardware dropped); Qwen3-4B on H100 (2 point(s) on other hardware dropped)), because §1a's control found the evaluation exact within a GPU model and 2.8% of documents flipped across two. The 12 policies measured twice on that hardware agree on every document, so the pooling is exact rather than assumed.
 
 #### Reading the two together
 

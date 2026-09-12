@@ -393,6 +393,67 @@ def main():
                   f'can beat the FourOverSix base convincingly and still not reach the '
                   f'conjunction, and several do exactly that.', '']
 
+    # The conjunction is the INTERSECTION of the two thresholds, so adding KL to CE can only
+    # remove tiles. That makes "is KL needed?" a question with an exact form: do the tiles CE
+    # accepts and KL vetoes help or hurt? This is the one place a same-k comparison is the right
+    # one, because the CE threshold is held fixed and only the veto changes.
+    veto = []
+    for m, label in MODELS:
+        if m not in ppl:
+            continue
+        ev, el = ppl[m]['evaluation'], ppl[m].get('election', {})
+        base = ev.get(BASE)
+        for k in sorted(ppl[m].get('k_values', [])):
+            ce, mx = f'k{k}_ce', f'k{k}'
+            if ce not in ev or mx not in ev or ce not in el or mx not in el:
+                continue
+            n_ce, n_mx = el[ce]['selected'], el[mx]['selected']
+            dw = ev[mx]['wiki']['ppl'] - ev[ce]['wiki']['ppl']
+            dc = ev[mx]['c4']['ppl'] - ev[ce]['c4']['ppl']
+            harmful = base and (ev[ce]['wiki']['ppl'] > base['wiki']['ppl']
+                                or ev[ce]['c4']['ppl'] > base['c4']['ppl'])
+            veto.append((label, k, n_ce, n_ce - n_mx, dw, dc, harmful))
+
+    if veto:
+        L += ['#### Is KL needed, or would CE alone do?', '',
+              'The rule elects when **both** bounds are negative, so the elected set is the '
+              'intersection: adding KL to CE can only take tiles away. That gives the question '
+              'an exact form -- are the tiles CE accepts and KL vetoes worth keeping? Holding the '
+              'CE threshold fixed and varying only the veto is the one comparison here where '
+              'matching k is right rather than misleading, because the tile count difference '
+              '*is* the effect being measured.', '',
+              '| model | k | CE elects | KL vetoes | d WikiText from vetoing | d C4 | CE alone vs '
+              'the base |',
+              '|---|---:|---:|---:|---:|---:|---|']
+        for label, k, n_ce, n_veto, dw, dc, harmful in veto:
+            L.append(f'| {label} | {k} | {n_ce:,} | {n_veto:,} | {dw:+.4f} | {dc:+.4f} | '
+                     + ('**worse than not switching**' if harmful else 'an improvement') + ' |')
+        loose = [v for v in veto if v[6]]
+        strict_bad = [v for v in veto if not v[6] and v[4] > 0.1 and v[5] > 0.1]
+        L += ['',
+              'Negative means the veto helps. The answer is not uniform, and the pattern is the '
+              'useful part:', '']
+        if loose:
+            worst = max(loose, key=lambda v: abs(v[5]))
+            L.append(f'- **At the loosest threshold the veto is essential.** CE alone is worse '
+                     f'than not switching at all in {len(loose)} of the {len(veto)} cells, and '
+                     f'the veto is worth up to {abs(worst[5]):.2f} C4 there ({worst[0]}, '
+                     f'k = {worst[1]}). This is KL working as the safety net the rule claims.')
+        if strict_bad:
+            worst = max(strict_bad, key=lambda v: v[4])
+            L.append(f'- **At strict thresholds it costs.** In {len(strict_bad)} cells the veto '
+                     f'is harmful on both corpora, by as much as {worst[4]:+.2f} WikiText '
+                     f'({worst[0]}, k = {worst[1]}), where it discards {worst[3]:,} tiles CE had '
+                     f'accepted correctly.')
+        L += ['',
+              'So KL is not selecting tiles; it is insuring against a threshold that is too '
+              'loose. Where the threshold is already strict, its veto mostly destroys value. '
+              'That is a narrower role than "a switch is kept only when it improves the actual '
+              'task loss **and** moves the quantized model back toward its own unquantized '
+              'reference" suggests, and the accuracy table above is what keeps it from being an '
+              'argument for dropping KL at k = 3: on Qwen3-4B, CE alone there costs 0.0161 '
+              'accuracy at p = 1e-11 while electing 15.9 times as many tiles.', '']
+
     # The table above compares each single-objective run against the shipped rule inside its own
     # job, which answers the practical question. The fair objective comparison needs the
     # conjunction measured at the SAME budgets, which lives in its own analysis.
