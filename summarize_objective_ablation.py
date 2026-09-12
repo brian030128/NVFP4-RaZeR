@@ -32,15 +32,42 @@ def pretty(pol):
 
 
 def ppl_runs(root):
-    """Newest complete perplexity ablation per model."""
+    """All complete perplexity ablations per model, merged.
+
+    Newest-wins is wrong here: the KL sweep and the CE sweep are separate jobs covering the
+    same k but different objectives, so taking the newest silently drops whichever arm ran
+    first. They are merged instead, and the merge is checked rather than assumed -- the two
+    share every max(CE, KL) policy, so a disagreement there would mean the runs are not
+    comparable and must not be pooled. Conflicts are recorded in `merge_conflicts`.
+    """
     out = {}
     for path in sorted(glob.glob(os.path.join(root, 'job_*', '*', 'report.json'))):
         try:
             r = json.load(open(path))
         except Exception:
             continue
-        if r.get('status') == 'complete' and 'evaluation' in r:
-            out[r['model']] = r
+        if r.get('status') != 'complete' or 'evaluation' not in r:
+            continue
+        m = r['model']
+        if m not in out:
+            r.setdefault('merge_conflicts', [])
+            r.setdefault('merged_jobs', [r.get('job_id', '?')])
+            out[m] = r
+            continue
+        acc = out[m]
+        for pol, e in r['evaluation'].items():
+            if pol in acc['evaluation']:
+                prev = acc['evaluation'][pol]
+                if (prev['wiki']['ppl'] != e['wiki']['ppl']
+                        or prev['c4']['ppl'] != e['c4']['ppl']):
+                    acc['merge_conflicts'].append(pol)
+            else:
+                acc['evaluation'][pol] = e
+                if pol in r.get('election', {}):
+                    acc.setdefault('election', {})[pol] = r['election'][pol]
+        acc['k_values'] = sorted(set(acc.get('k_values', [])) | set(r.get('k_values', [])))
+        acc['objectives'] = sorted(set(acc.get('objectives', [])) | set(r.get('objectives', [])))
+        acc['merged_jobs'].append(r.get('job_id', '?'))
     return out
 
 
@@ -165,65 +192,106 @@ def main():
                              f'{fmt(c - base["c4"]["ppl"], signed=True)} |')
         L.append('')
 
-        # Comparing the two objectives at the same k is not a fair test once k is swept: at a
-        # fixed k they elect very different numbers of tiles. The question the sweep exists to
-        # answer is whether KL alone ever wins at an equal budget of switches, so ask that
-        # directly -- is every KL-only setting beaten by some conjunction setting that elects no
-        # more tiles?
-        dom_rows, undominated = [], []
+        # Comparing objectives at the same k is not a fair test once k is swept: at a fixed k
+        # they elect very different numbers of tiles. The question is whether an objective ever
+        # wins at an equal BUDGET of switches, and it has to be asked in both directions --
+        # asking only whether the conjunction beats the single objectives would have hidden
+        # that CE alone beats the conjunction on Qwen3-4B.
+        def frontier(ev, el, ks, objective):
+            key = (lambda k: f'k{k}') if objective == 'max' else (lambda k: f'k{k}_{objective}')
+            return [(el[key(k)]['selected'], ev[key(k)]['wiki']['ppl'], ev[key(k)]['c4']['ppl'], k)
+                    for k in ks if key(k) in ev and key(k) in el]
+
+        def beaten_by(point, others):
+            """The cheapest setting in `others` that elects no more tiles and wins both corpora."""
+            tiles, w, c, _ = point
+            cand = [o for o in others if o[0] <= tiles and o[1] <= w and o[2] <= c]
+            return min(cand, key=lambda o: o[0]) if cand else None
+
+        dom_rows, unbeaten, reverse_hits = [], [], []
         for m, label in MODELS:
             if m not in ppl:
                 continue
-            ev, el = ppl[m]['evaluation'], ppl[m]['election']
+            ev, el = ppl[m]['evaluation'], ppl[m].get('election', {})
             ks = ppl[m].get('k_values', [K])
-            pts = {}
-            for objective in ('max', 'kl'):
-                pts[objective] = [
-                    (el[key]['selected'], ev[key]['wiki']['ppl'], ev[key]['c4']['ppl'], k)
-                    for k in ks
-                    for key in [f'k{k}' if objective == 'max' else f'k{k}_{objective}']
-                    if key in ev and key in el]
-            if not pts['max'] or not pts['kl']:
+            mx = frontier(ev, el, ks, 'max')
+            if not mx:
                 continue
-            for tiles, w, c, k in sorted(pts['kl']):
-                beaten = [(t2, w2, c2, k2) for t2, w2, c2, k2 in pts['max']
-                          if t2 <= tiles and w2 <= w and c2 <= c]
-                if beaten:
-                    t2, w2, c2, k2 = min(beaten, key=lambda r: r[0])
-                    dom_rows.append(f'| {label} | {k} | {tiles:,} | {w:.4f} | {k2} | '
-                                    f'{t2:,} | {w2:.4f} |')
-                else:
-                    dom_rows.append(f'| {label} | {k} | {tiles:,} | {w:.4f} | — | — | — |')
-                    undominated.append((label, k, tiles, w, c))
+            for objective in ('kl', 'ce'):
+                single = frontier(ev, el, ks, objective)
+                name = OBJECTIVE_LABEL[objective]
+                for pt in sorted(single):
+                    hit = beaten_by(pt, mx)
+                    if hit:
+                        dom_rows.append(f'| {label} | {name} | {pt[3]} | {pt[0]:,} | '
+                                        f'{pt[1]:.4f} | {hit[3]} | {hit[0]:,} | {hit[1]:.4f} |')
+                    else:
+                        dom_rows.append(f'| {label} | {name} | {pt[3]} | {pt[0]:,} | '
+                                        f'{pt[1]:.4f} | — | — | — |')
+                        unbeaten.append((label, name, pt))
+                # And the other way: does this objective beat the conjunction at its own budget?
+                for pt in sorted(mx):
+                    hit = beaten_by(pt, single)
+                    if hit:
+                        reverse_hits.append((label, name, pt, hit))
 
         if dom_rows:
-            total = len(dom_rows)
-            beaten_n = total - len(undominated)
-            L += ['Tightening the threshold is the obvious way to try to rescue KL alone, and it '
-                  'helps a great deal -- on Llama-3.1-8B the KL-only penalty falls from +0.481 '
-                  'WikiText at k = 3 to +0.009 at k = 6. But raising k also shrinks the '
-                  'election, so most of that is buying back permissiveness rather than showing '
-                  'the objective was fine all along.', '',
-                  'The fair test is at an equal budget of switches. For each KL-only setting, is '
-                  'there a conjunction setting that elects **no more tiles** and is at least as '
-                  'good on **both** corpora?', '',
-                  '| model | KL-only k | its tiles | its WikiText | beaten by k | tiles | '
+            total, n_unbeaten = len(dom_rows), len(unbeaten)
+            L += ['Tightening the threshold is the obvious way to try to rescue a single '
+                  'objective, and it helps a great deal -- on Llama-3.1-8B the KL-only penalty '
+                  'falls from +0.481 WikiText at k = 3 to +0.009 at k = 6. But raising k also '
+                  'shrinks the election, so much of that is buying back permissiveness rather '
+                  'than showing the objective was fine all along.', '',
+                  'The fair test is at an equal budget of switches: for each single-objective '
+                  'setting, is there a conjunction setting that elects **no more tiles** and is '
+                  'at least as good on **both** corpora?', '',
+                  '| model | objective | k | its tiles | its WikiText | beaten by k | tiles | '
                   'WikiText |',
-                  '|---|---:|---:|---:|---:|---:|---:|'] + dom_rows + ['']
-            if beaten_n == total:
-                L += [f'**Every one of the {total} KL-only settings is beaten by a conjunction '
-                      f'setting using no more tiles.** Strictness is not the missing ingredient: '
-                      f'at any budget of switches the conjunction reaches a lower perplexity, so '
-                      f'CE is selecting different and better tiles rather than merely fewer.', '']
-            else:
-                names = '; '.join(f'{lb} at k = {k} ({t:,} tiles)'
-                                  for lb, k, t, _, _ in undominated)
-                L += [f'**{beaten_n} of {total} KL-only settings are beaten by a conjunction '
-                      f'setting using no more tiles.** The exceptions are {names} -- not a win '
-                      f'for KL alone, since those are not better than the conjunction on both '
-                      f'corpora either, but points where the two are incomparable at that '
-                      f'budget. Strictness is therefore most of what separated them at k = 3, '
-                      f'and it is not all of it.', '']
+                  '|---|---|---:|---:|---:|---:|---:|---:|'] + dom_rows + ['']
+            by_obj = {}
+            for lb, nm, pt in unbeaten:
+                by_obj.setdefault(nm, []).append(f'{lb} k = {pt[3]} ({pt[0]:,} tiles)')
+            summary = (f'**{total - n_unbeaten} of {total} single-objective settings are beaten '
+                       f'by a conjunction setting using no more tiles.**')
+            if by_obj:
+                summary += (' The ones that are not: '
+                            + '; '.join(f'{nm} at ' + ', '.join(v) for nm, v in by_obj.items())
+                            + '.')
+            L += [summary, '']
+
+        if reverse_hits:
+            by_obj = {}
+            for lb, nm, pt, hit in reverse_hits:
+                by_obj.setdefault((lb, nm), []).append((pt, hit))
+            L += ['Asked the other way -- is any **conjunction** setting beaten by a single '
+                  'objective electing no more tiles? -- the answer is not empty, and this is the '
+                  'part the report\'s argument does not predict:', '',
+                  '| model | objective | conjunction k | its tiles | its WikiText | beaten by k | '
+                  'tiles | WikiText |',
+                  '|---|---|---:|---:|---:|---:|---:|---:|']
+            for (lb, nm), items in by_obj.items():
+                for pt, hit in sorted(items):
+                    L.append(f'| {lb} | {nm} | {pt[3]} | {pt[0]:,} | {pt[1]:.4f} | {hit[3]} | '
+                             f'{hit[0]:,} | {hit[1]:.4f} |')
+            # Which objective is weak, and where, is counted from the dominance table rather
+            # than asserted -- the answer differs by model and that is the whole point.
+            beaten_frac = {}
+            for nm in OBJECTIVE_LABEL.values():
+                if nm == 'max(CE, KL)':
+                    continue
+                rows_nm = [r for r in dom_rows if f'| {nm} |' in r]
+                if rows_nm:
+                    lost = sum(1 for r in rows_nm if not r.rstrip().endswith('| — | — | — |'))
+                    beaten_frac[nm] = (lost, len(rows_nm))
+            tally = '; '.join(f'{nm} is beaten at {a} of {b} settings'
+                              for nm, (a, b) in beaten_frac.items())
+            L += ['',
+                  f'So the conjunction is not uniformly the best objective at a given budget. '
+                  f'The two single objectives are not equally weak either -- {tally} -- so the '
+                  f'case for requiring both rests much more heavily on KL than on CE. What the '
+                  f'conjunction has going for it on this evidence is not that it wins '
+                  f'everywhere, but that it is never badly wrong, and which single objective '
+                  f'fails is not something the calibration predicts in advance.', '']
 
         # The verdict is counted, not asserted: every (model, k) cell where a single-objective
         # election was run is compared against the conjunction at the same k.
@@ -324,6 +392,18 @@ def main():
                   f'visible. Note also what the last two columns do not say together: a setting '
                   f'can beat the FourOverSix base convincingly and still not reach the '
                   f'conjunction, and several do exactly that.', '']
+
+    # The table above compares each single-objective run against the shipped rule inside its own
+    # job, which answers the practical question. The fair objective comparison needs the
+    # conjunction measured at the SAME budgets, which lives in its own analysis.
+    try:
+        from analyze_accuracy_frontier import build as frontier_block
+        frontier = frontier_block()
+    except Exception as exc:                    # a sub-analysis is not worth failing the section
+        print(f'NOTE: accuracy frontier skipped: {exc!r}')
+        frontier = None
+    if frontier:
+        L += frontier.rstrip().split('\n') + ['']
 
     # Perplexity and accuracy do not agree here, so the synthesis names both per model rather
     # than reporting whichever is more convenient. `verdict_rows` is (model, ppl verdict, acc
