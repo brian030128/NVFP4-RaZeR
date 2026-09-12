@@ -34,6 +34,10 @@ KSE_JOB = {'llama8b': '336566', 'qwen4b': '336566', 'qwen27b': '336969'}
 
 # The multiple-choice panel the three models are compared on. A model may also have runs on
 # other task sets (the Llama sensitivity probes), which must not be mixed into the same table.
+# The four policies section 1a is about. A run that lacks any of them is a different
+# experiment -- an objective ablation, a budget sweep -- and must not stand in for this one.
+REQUIRED_POLICIES = {'bf16', 'nvfp4', 'four_over_six', 'k3'}
+
 PANEL = ('arc_easy', 'arc_challenge', 'hellaswag', 'openbookqa', 'boolq', 'winogrande')
 
 
@@ -54,6 +58,12 @@ def find_runs(root):
         # A run whose re-election drifted from the shipped map is still included; the drift is
         # reported with it rather than used to hide it. Only incomplete runs are skipped.
         if r.get('status') != 'complete':
+            continue
+        # A run must carry the policies this section reports before it can displace one that
+        # does. The objective-ablation runs share the model and the task set but evaluate
+        # k3_kl / k5_kl / k4 instead of bf16 and nvfp4, so keying on (model, tasks) alone let
+        # the newest of them silently delete the BF16 and NVFP4 rows from every table here.
+        if not REQUIRED_POLICIES.issubset(r.get('accuracy', {})):
             continue
         runs[(r['model'], tuple(r['tasks_evaluated']))] = (r, os.path.dirname(path))
     return runs

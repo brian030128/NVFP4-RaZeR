@@ -13,6 +13,7 @@ import argparse
 import glob
 import json
 import os
+import re
 
 from analyze_zeroshot_paired import compare, load as load_samples
 
@@ -43,8 +44,20 @@ def ppl_runs(root):
     return out
 
 
+def is_single_objective(pol):
+    """True for a policy like k3_kl or k5_ce -- one objective rather than the conjunction."""
+    return bool(re.fullmatch(r'k\d+_(kl|ce)', pol))
+
+
 def acc_runs(root):
-    """Newest complete accuracy run per model that carries a single-objective policy."""
+    """Every complete accuracy run carrying a single-objective policy, grouped by model.
+
+    All of them, not the newest: the budget-matched settings live in separate jobs from the
+    k = 3 ones, and dropping the older jobs would drop half the evidence. Comparisons stay
+    *within* a job -- section 1a's control shows the evaluation is exact on one GPU model and
+    flips 2.8% of documents across two, so a policy in job A and a policy in job B are not a
+    paired comparison even when the weights are identical.
+    """
     out = {}
     for path in sorted(glob.glob(os.path.join(root, 'job_*', '*', 'report.json'))):
         try:
@@ -53,8 +66,9 @@ def acc_runs(root):
             continue
         if r.get('status') != 'complete':
             continue
-        if any(p.startswith(f'k{K}_') for p in r.get('accuracy', {})):
-            out[r['model']] = (r, os.path.dirname(path))
+        if any(is_single_objective(p) for p in r.get('accuracy', {})):
+            job = os.path.basename(os.path.dirname(os.path.dirname(path)))
+            out.setdefault(r['model'], []).append((job, r, os.path.dirname(path)))
     return out
 
 
@@ -248,36 +262,68 @@ def main():
     if acc:
         rows = []
         for m, label in MODELS:
-            if m not in acc:
-                continue
-            r, rundir = acc[m]
-            sdir = os.path.join(os.path.dirname(rundir), f'samples_{m}')
-            for pol in (f'k{K}', f'k{K}_kl', f'k{K}_ce'):
-                if pol not in r['accuracy']:
-                    continue
-                mean = r['accuracy'][pol]['mean']
-                d = mean - r['accuracy'][BASE]['mean'] if BASE in r['accuracy'] else None
-                ref, var = (os.path.join(sdir, f'{BASE}.json'),
-                            os.path.join(sdir, f'{pol}.json'))
-                pooled = None
-                if os.path.isfile(ref) and os.path.isfile(var):
-                    _, pooled = compare(load_samples(ref), load_samples(var))
-                tiles = r.get('election', {}).get(pol, {}).get('selected')
-                rows.append((label, pol, tiles, mean, d, pooled))
+            for job, r, rundir in acc.get(m, []):
+                sdir = os.path.join(os.path.dirname(rundir), f'samples_{m}')
+                acc_d, el = r['accuracy'], r.get('election', {})
+                shipped = f'k{K}'
+                for pol in sorted(acc_d, key=lambda x: (not is_single_objective(x), x)):
+                    if pol == BASE or pol == shipped:
+                        continue
+                    if not is_single_objective(pol):
+                        continue
+                    tiles = el.get(pol, {}).get('selected')
+                    ship_tiles = el.get(shipped, {}).get('selected')
+                    tests = {}
+                    for ref in (shipped, BASE):
+                        fa = os.path.join(sdir, f'{ref}.json')
+                        fb = os.path.join(sdir, f'{pol}.json')
+                        if ref in acc_d and os.path.isfile(fa) and os.path.isfile(fb):
+                            _, tests[ref] = compare(load_samples(fa), load_samples(fb))
+                    rows.append((label, job, pol, tiles, ship_tiles,
+                                 acc_d[pol]['mean'], tests))
+
         if rows:
             L += ['#### Zero-shot accuracy', '',
-                  'The same policies on the multiple-choice panel, with the paired McNemar test '
-                  'against the FourOverSix base. Positive is better here.', '',
-                  '| model | policy | tiles | panel mean | d accuracy | pooled delta | '
-                  'McNemar p |',
-                  '|---|---|---:|---:|---:|---:|---:|']
-            for label, pol, tiles, mean, d, pooled in rows:
-                pd = fmt(pooled['delta'], 4, True) if pooled else '—'
-                pp = f"{pooled['p']:.3g}" if pooled else '—'
+                  'The same question on the multiple-choice panel of §1a, with the paired '
+                  'McNemar test on per-document outcomes. Each row is compared against the '
+                  'shipped rule **measured in the same job**: §1a\'s control shows the '
+                  'evaluation is exact on one GPU model and flips 2.8% of documents across two, '
+                  'so policies from different jobs are not a paired comparison. Positive favours '
+                  'the single objective.', '',
+                  '| model | policy | tiles | vs shipped k = 3 | panel mean | d vs shipped | p | '
+                  'd vs FourOverSix | p |',
+                  '|---|---|---:|---:|---:|---:|---:|---:|---:|']
+            for label, job, pol, tiles, ship_tiles, mean, tests in rows:
+                ratio = (f'{tiles / ship_tiles:.2f}x' if tiles and ship_tiles else '—')
+                cells = []
+                for ref in (f'k{K}', BASE):
+                    t = tests.get(ref)
+                    cells += ([fmt(t['delta'], 4, True), f"{t['p']:.3g}"] if t else ['—', '—'])
                 L.append(f'| {label} | {pretty(pol)} | '
-                         f'{f"{tiles:,}" if tiles is not None else "—"} | {fmt(mean, 4)} | '
-                         f'{fmt(d, 4, True) if d is not None else "—"} | {pd} | {pp} |')
+                         f'{f"{tiles:,}" if tiles is not None else "—"} | {ratio} | '
+                         f'{fmt(mean, 4)} | ' + ' | '.join(cells) + ' |')
             L.append('')
+
+            # Counted, not asserted: does any single objective ever beat the conjunction here?
+            better = [(lb, pretty(pol)) for lb, _, pol, *_ , t in rows
+                      if (v := t.get(f'k{K}')) and v['delta'] > 0 and v['p'] < 0.05]
+            worse = [(lb, pretty(pol)) for lb, _, pol, *_ , t in rows
+                     if (v := t.get(f'k{K}')) and v['delta'] < 0 and v['p'] < 0.05]
+            tested = [r for r in rows if r[-1].get(f'k{K}')]
+            null = len(tested) - len(better) - len(worse)
+            if better:
+                verdict = (f'{len(better)} of {len(tested)} settings beat the conjunction '
+                           f'significantly (' + ', '.join(f'{a} {b}' for a, b in better) + ').')
+            else:
+                verdict = (f'**None of the {len(tested)} settings beats the conjunction.** '
+                           f'{len(worse)} are significantly worse and {null} are indistinguishable '
+                           f'from it.')
+            L += [f'{verdict} The rows where a single objective elects far more tiles than the '
+                  f'shipped rule are the ones that look closest to it, which is the tile count '
+                  f'talking rather than the objective -- the ratio column is there to make that '
+                  f'visible. Note also what the last two columns do not say together: a setting '
+                  f'can beat the FourOverSix base convincingly and still not reach the '
+                  f'conjunction, and several do exactly that.', '']
 
     # Perplexity and accuracy do not agree here, so the synthesis names both per model rather
     # than reporting whichever is more convenient. `verdict_rows` is (model, ppl verdict, acc
@@ -293,38 +339,53 @@ def main():
                 pv = (f'costs {dw:+.3f} WikiText and {dc:+.3f} C4' if dw > 0 and dc > 0 else
                       f'gains {dw:+.3f} WikiText and {dc:+.3f} C4' if dw < 0 and dc < 0 else
                       f'is mixed ({dw:+.3f} WikiText, {dc:+.3f} C4)')
-        if m in acc:
-            r, rundir = acc[m]
+        # Every KL-only accuracy comparison for this model, each against the shipped rule in
+        # its own job. Summarising the smallest-budget one alone would flatter the objective
+        # and the largest alone would damn it, so the count of outcomes is what is reported.
+        verdicts = []
+        for job, r, rundir in acc.get(m, []):
             sdir = os.path.join(os.path.dirname(rundir), f'samples_{m}')
-            ref, var = (os.path.join(sdir, f'k{K}.json'), os.path.join(sdir, f'k{K}_kl.json'))
-            if os.path.isfile(ref) and os.path.isfile(var):
-                _, pooled = compare(load_samples(ref), load_samples(var))
-                sig = pooled['p'] < 0.05
-                direction = 'better' if pooled['delta'] > 0 else 'worse'
-                av = (f'is {pooled["delta"]:+.4f} on accuracy, '
-                      + (f'significantly {direction} (p = {pooled["p"]:.3g})' if sig else
-                         f'not distinguishable from it (p = {pooled["p"]:.2f})'))
+            for pol in sorted(r['accuracy']):
+                if not re.fullmatch(rf'k\d+_kl', pol):
+                    continue
+                ref = os.path.join(sdir, f'k{K}.json')
+                var = os.path.join(sdir, f'{pol}.json')
+                if os.path.isfile(ref) and os.path.isfile(var):
+                    _, pooled = compare(load_samples(ref), load_samples(var))
+                    verdicts.append(pooled)
+        acc_better = acc_worse = False
+        if verdicts:
+            bett = [v for v in verdicts if v['delta'] > 0 and v['p'] < 0.05]
+            wors = [v for v in verdicts if v['delta'] < 0 and v['p'] < 0.05]
+            acc_better, acc_worse = bool(bett), bool(wors)
+            span = f'{min(v["delta"] for v in verdicts):+.4f} to ' \
+                   f'{max(v["delta"] for v in verdicts):+.4f}'
+            av = (f'spans {span} on accuracy across {len(verdicts)} threshold(s), '
+                  + ('none of them significantly better' if not bett else
+                     f'{len(bett)} significantly better')
+                  + (f' and {len(wors)} significantly worse' if wors else
+                     ' and none significantly worse'))
+        ppl_worse = bool(pv and pv.startswith('costs'))
         if pv or av:
-            synth.append((label, pv, av))
+            synth.append((label, pv, av, ppl_worse, acc_better))
 
-    if synth and any(a for _, _, a in synth):
+    if synth and any(a for _, _, a, _, _ in synth):
         # Do the two metrics actually point opposite ways anywhere, or does one merely fail to
         # resolve what the other sees? Those need different lead sentences.
-        contradicts = [label for label, pv, av in synth
-                       if pv and av and 'costs' in pv and 'significantly better' in av]
+        contradicts = [label for label, _, _, ppl_worse, acc_better in synth
+                       if ppl_worse and acc_better]
         lead = ('The two metrics point in opposite directions on '
                 + ', '.join(contradicts) + ', so both are stated per model rather than '
                 'generalizing from whichever is more convenient.' if contradicts else
                 'Neither metric favours KL alone on any model. Where they differ it is in how '
                 'sharply they say so, not in which way, so both are stated per model.')
         L += ['#### Reading the two together', '', lead, '']
-        for label, pv, av in synth:
+        for label, pv, av, _, _ in synth:
             parts = [x for x in (pv, av) if x]
             L.append(f'- **{label}.** Against the shipped rule at the same k, KL alone '
                      + ' and '.join(parts) + '.')
         # Whether accuracy anywhere favours KL alone decides how the closing claim may be put.
-        wins = [label for label, _, av in synth
-                if av and 'significantly better' in av]
+        wins = [label for label, _, _, _, acc_better in synth if acc_better]
         tail = ('No model shows accuracy favouring KL alone by a significant margin, so nothing '
                 'in the accuracy numbers offsets the perplexity cost.' if not wins else
                 f'On {", ".join(wins)} accuracy does significantly favour KL alone, which the '
@@ -347,11 +408,10 @@ def main():
         note.append(f'Not run on {", ".join(missing)}, so the conclusion is a two-model '
                     f'result, not a panel-wide one.')
     if 'ce' not in objectives:
-        note.append('CE-only was not run: it is the arm that costs a second full election plus '
-                    'evaluation to test the side of the conjunction the perplexity numbers '
-                    'already favour, and the KL-only arm is the one the report\'s argument is '
-                    'weakest on. The asymmetry of the evidence is therefore real -- this shows '
-                    'that KL alone is not enough, not that CE alone would also fail.')
+        note.append('CE-only is not in these numbers yet -- its election and evaluation are '
+                    'running. Until they land the evidence is one-sided by construction: what '
+                    'is shown is that KL alone is not enough, not that CE alone would also '
+                    'fail, and the conjunction is not yet demonstrated to need both halves.')
     L += [' '.join(note), '']
 
     out = '\n'.join(L) + '\n'

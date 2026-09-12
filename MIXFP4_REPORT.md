@@ -184,13 +184,26 @@ Every conclusion above rests on an exact McNemar test over per-document outcomes
 | model | policy | jobs | GPUs | documents | b | c | delta | McNemar p |
 |---|---|---|---|---:|---:|---:|---:|---:|
 | Llama-3.1-8B | four_over_six | 337838 vs 339051 | H100 | 18627 | 0 | 0 | +0.0000 | 1 |
+| Llama-3.1-8B | four_over_six | 337838 vs 339115 | H100 | 18627 | 0 | 0 | +0.0000 | 1 |
+| Llama-3.1-8B | k3 | 337838 vs 339115 | H100 | 18627 | 0 | 0 | +0.0000 | 1 |
+| Llama-3.1-8B | four_over_six | 337838 vs 339800 | H100 | 18627 | 0 | 0 | +0.0000 | 1 |
+| Llama-3.1-8B | k3 | 337838 vs 339800 | H100 | 18627 | 0 | 0 | +0.0000 | 1 |
 | Llama-3.1-8B | bf16 | 338236 vs 338343 | H100 | 1319 | 0 | 0 | +0.0000 | 1 |
 | Llama-3.1-8B | nvfp4 | 338236 vs 338343 | H100 | 1319 | 0 | 0 | +0.0000 | 1 |
+| Llama-3.1-8B | four_over_six | 339051 vs 339115 | H100 | 18627 | 0 | 0 | +0.0000 | 1 |
+| Llama-3.1-8B | four_over_six | 339051 vs 339800 | H100 | 18627 | 0 | 0 | +0.0000 | 1 |
+| Llama-3.1-8B | four_over_six | 339115 vs 339800 | H100 | 18627 | 0 | 0 | +0.0000 | 1 |
+| Llama-3.1-8B | k3 | 339115 vs 339800 | H100 | 18627 | 0 | 0 | +0.0000 | 1 |
 | Qwen3-4B | four_over_six | 337839 vs 339082 | H200 vs H100 | 18627 | 267 | 247 | -0.0011 | 0.402 |
+| Qwen3-4B | k3 | 337839 vs 339082 | H200 vs H100 | 18627 | 238 | 213 | -0.0013 | 0.258 |
+| Qwen3-4B | four_over_six | 337839 vs 339801 | H200 vs H100 | 18627 | 267 | 247 | -0.0011 | 0.402 |
+| Qwen3-4B | k3 | 337839 vs 339801 | H200 vs H100 | 18627 | 238 | 213 | -0.0013 | 0.258 |
+| Qwen3-4B | four_over_six | 339082 vs 339801 | H100 | 18627 | 0 | 0 | +0.0000 | 1 |
+| Qwen3-4B | k3 | 339082 vs 339801 | H100 | 18627 | 0 | 0 | +0.0000 | 1 |
 
-Re-running on the same GPU model reproduces the evaluation exactly: 3 such pairs, and not one of 21,265 scored documents changes outcome. The evaluation itself is deterministic. Across GPU models it is not. Up to **2.8% of documents flip** -- where two continuations score within rounding of each other, and winogrande's differ only by a pronoun, a different GEMM kernel is enough to reverse the comparison. Aggregate accuracy still moves by well under a point, because the flips go both ways.
+Re-running on the same GPU model reproduces the evaluation exactly: 13 such pairs, and not one of 207,535 scored documents changes outcome. The evaluation itself is deterministic. Across GPU models it is not. Up to **2.8% of documents flip** -- where two continuations score within rounding of each other, and winogrande's differ only by a pronoun, a different GEMM kernel is enough to reverse the comparison. Aggregate accuracy still moves by well under a point, because the flips go both ways.
 
-The point of the table is that none of the 4 shows a significant asymmetry. That symmetry is the case McNemar conditions on: the test is computed from the *difference* between `b` and `c`, not from their size, so noise that inflates both equally cancels. The comparisons in §1a are also made within a single job, where the evaluation is exactly reproducible, so they do not carry even this term. What it does mean is that a single document's outcome is not a portable property of a policy, and that accuracies here should be read to a few tenths of a percent rather than to the digits lm-eval prints.
+The point of the table is that none of the 17 shows a significant asymmetry. That symmetry is the case McNemar conditions on: the test is computed from the *difference* between `b` and `c`, not from their size, so noise that inflates both equally cancels. The comparisons in §1a are also made within a single job, where the evaluation is exactly reproducible, so they do not carry even this term. What it does mean is that a single document's outcome is not a portable property of a policy, and that accuracies here should be read to a few tenths of a percent rather than to the digits lm-eval prints.
 
 ### What the multiple-choice panel can and cannot see
 
@@ -365,25 +378,29 @@ Held at the same k instead of the same budget -- the naive swap -- KL alone is w
 
 #### Zero-shot accuracy
 
-The same policies on the multiple-choice panel, with the paired McNemar test against the FourOverSix base. Positive is better here.
+The same question on the multiple-choice panel of §1a, with the paired McNemar test on per-document outcomes. Each row is compared against the shipped rule **measured in the same job**: §1a's control shows the evaluation is exact on one GPU model and flips 2.8% of documents across two, so policies from different jobs are not a paired comparison. Positive favours the single objective.
 
-| model | policy | tiles | panel mean | d accuracy | pooled delta | McNemar p |
-|---|---|---:|---:|---:|---:|---:|
-| Llama-3.1-8B | max(CE, KL) — shipped | 3,345 | 0.6714 | -0.0006 | +0.0010 | 0.617 |
-| Llama-3.1-8B | KL only | 32,774 | 0.6601 | -0.0119 | -0.0120 | 9.74e-08 |
-| Qwen3-4B | max(CE, KL) — shipped | 7,912 | 0.6385 | +0.0154 | +0.0133 | 6.76e-10 |
-| Qwen3-4B | KL only | 21,528 | 0.6412 | +0.0182 | +0.0161 | 9.03e-14 |
+| model | policy | tiles | vs shipped k = 3 | panel mean | d vs shipped | p | d vs FourOverSix | p |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Llama-3.1-8B | KL only | 32,774 | 9.80x | 0.6601 | -0.0130 | 2.5e-09 | -0.0120 | 9.74e-08 |
+| Llama-3.1-8B | KL only | 2,950 | 0.88x | 0.6706 | -0.0012 | 0.533 | -0.0002 | 0.93 |
+| Llama-3.1-8B | KL only | 1,653 | 0.49x | 0.6701 | -0.0007 | 0.718 | +0.0003 | 0.906 |
+| Qwen3-4B | KL only | 21,528 | 2.72x | 0.6412 | +0.0028 | 0.157 | +0.0161 | 9.03e-14 |
+| Qwen3-4B | KL only | 3,569 | 0.45x | 0.6345 | -0.0028 | 0.182 | +0.0105 | 1.07e-06 |
+| Qwen3-4B | KL only | 1,226 | 0.15x | 0.6287 | -0.0065 | 0.00166 | +0.0067 | 0.00148 |
+
+**None of the 6 settings beats the conjunction.** 2 are significantly worse and 4 are indistinguishable from it. The rows where a single objective elects far more tiles than the shipped rule are the ones that look closest to it, which is the tile count talking rather than the objective -- the ratio column is there to make that visible. Note also what the last two columns do not say together: a setting can beat the FourOverSix base convincingly and still not reach the conjunction, and several do exactly that.
 
 #### Reading the two together
 
 Neither metric favours KL alone on any model. Where they differ it is in how sharply they say so, not in which way, so both are stated per model.
 
-- **Llama-3.1-8B.** Against the shipped rule at the same k, KL alone costs +0.507 WikiText and +0.621 C4 and is -0.0130 on accuracy, significantly worse (p = 2.5e-09).
-- **Qwen3-4B.** Against the shipped rule at the same k, KL alone costs +0.144 WikiText and +0.368 C4 and is +0.0028 on accuracy, not distinguishable from it (p = 0.16).
+- **Llama-3.1-8B.** Against the shipped rule at the same k, KL alone costs +0.507 WikiText and +0.621 C4 and spans -0.0130 to -0.0007 on accuracy across 3 threshold(s), none of them significantly better and 1 significantly worse.
+- **Qwen3-4B.** Against the shipped rule at the same k, KL alone costs +0.144 WikiText and +0.368 C4 and spans -0.0065 to +0.0028 on accuracy across 3 threshold(s), none of them significantly better and 1 significantly worse.
 
 Perplexity is the metric the election is calibrated on -- the score is a teacher-forced loss -- so it is the one KL alone should do well on if the objective were sufficient, and it is the one where it does not. The accuracy panel resolves about 0.005 at best (§1a), so a null there is a weaker statement than a perplexity regression of the size seen above. No model shows accuracy favouring KL alone by a significant margin, so nothing in the accuracy numbers offsets the perplexity cost.
 
-**Coverage.** Measured on Llama-3.1-8B, Qwen3-4B. Not run on Qwen3.8-27B, so the conclusion is a two-model result, not a panel-wide one. CE-only was not run: it is the arm that costs a second full election plus evaluation to test the side of the conjunction the perplexity numbers already favour, and the KL-only arm is the one the report's argument is weakest on. The asymmetry of the evidence is therefore real -- this shows that KL alone is not enough, not that CE alone would also fail.
+**Coverage.** Measured on Llama-3.1-8B, Qwen3-4B. Not run on Qwen3.8-27B, so the conclusion is a two-model result, not a panel-wide one. CE-only is not in these numbers yet -- its election and evaluation are running. Until they land the evidence is one-sided by construction: what is shown is that KL alone is not enough, not that CE alone would also fail, and the conjunction is not yet demonstrated to need both halves.
 
 <!-- END GENERATED: objective ablation -->
 
