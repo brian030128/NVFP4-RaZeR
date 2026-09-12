@@ -30,7 +30,7 @@ def trials(run_dir, policy):
     naming the reward per task, and it drops tasks that raised before the verifier ran. Reading
     the per-trial files keeps errored tasks visible as errors instead of silently as zeros.
     """
-    out, errors = {}, {}
+    out, errors, minutes = {}, {}, {}
     root = os.path.join(run_dir, f'jobs_{policy}')
     for path in glob.glob(os.path.join(root, '*', 'result.json')):
         try:
@@ -47,7 +47,25 @@ def trials(run_dir, policy):
         rewards = (r.get('verifier_result') or {}).get('rewards') or {}
         if 'reward' in rewards:
             out[task] = float(rewards['reward'])
-    return out, errors
+            secs = _duration(r.get('agent_execution'))
+            if secs is not None:
+                minutes[task] = secs / 60.0
+    return out, errors, minutes
+
+
+def _duration(phase):
+    """Seconds a trial phase took, or None when it is missing or unparseable."""
+    if not isinstance(phase, dict):
+        return None
+    a, b = phase.get('started_at'), phase.get('finished_at')
+    if not a or not b:
+        return None
+    try:
+        from datetime import datetime
+        fix = lambda t: datetime.fromisoformat(t.replace('Z', '+00:00'))
+        return (fix(b) - fix(a)).total_seconds()
+    except Exception:
+        return None
 
 
 def sign_test(a, b):
@@ -76,14 +94,14 @@ def main():
     ap.add_argument('--out', default='results/terminal_bench/SECTION_27b.md')
     args = ap.parse_args()
 
-    got, errs, provenance = {}, {}, {}
+    got, errs, mins, provenance = {}, {}, {}, {}
     for run in args.runs:
         for path in glob.glob(os.path.join(run, 'provenance_*.json')):
             policy = os.path.basename(path)[len('provenance_'):-len('.json')]
-            rewards, errors = trials(run, policy)
+            rewards, errors, minutes = trials(run, policy)
             if not rewards and not errors:
                 continue
-            got[policy], errs[policy] = rewards, errors
+            got[policy], errs[policy], mins[policy] = rewards, errors, minutes
             provenance[policy] = json.load(open(path))
     assert got, 'no completed trials found in ' + ' '.join(args.runs)
 
@@ -103,14 +121,21 @@ def main():
           f'the activation-quantization hooks are live '
           f'({", ".join(f"{POLICY_LABEL.get(p, p)} = {prec[p]}" for p in policies)}). '
           f'{len(tasks)} tasks, 1 trial each, GPU tasks excluded.', '',
-          '| policy | precision | resolved | of | pass rate | errored |',
-          '|---|---|---:|---:|---:|---:|']
+          '| policy | precision | resolved | of | pass rate | errored | median agent min |',
+          '|---|---|---:|---:|---:|---:|---:|']
     for p in policies:
-        r, e = got[p], errs[p]
+        r, e, mm = got[p], errs[p], mins[p]
         solved = sum(1 for v in r.values() if v > 0)
+        med = '—'
+        if mm:
+            vals = sorted(mm.values())
+            med = f'{vals[len(vals) // 2]:.0f}'
         L.append(f'| {POLICY_LABEL.get(p, p)} | {prec[p]} | {solved} | {len(r)} | '
-                 f'{solved / len(r):.1%} | {len(e) or "—"} |')
-    L.append('')
+                 f'{solved / len(r):.1%} | {len(e) or "—"} | {med} |')
+    L += ['',
+          'The last column is the median minutes the agent phase ran. It separates a policy that '
+          'worked its whole turn budget and failed from one that fell over early, which matters '
+          'here because most rewards are zero either way.', '']
 
     ref = args.reference
     if ref in got:
