@@ -239,9 +239,16 @@ def main():
             synth.append((label, pv, av))
 
     if synth and any(a for _, _, a in synth):
-        L += ['#### Reading the two together', '',
-              'The metrics do not agree, so both are stated per model rather than generalizing '
-              'from whichever is more convenient.', '']
+        # Do the two metrics actually point opposite ways anywhere, or does one merely fail to
+        # resolve what the other sees? Those need different lead sentences.
+        contradicts = [label for label, pv, av in synth
+                       if pv and av and 'costs' in pv and 'significantly better' in av]
+        lead = ('The two metrics point in opposite directions on '
+                + ', '.join(contradicts) + ', so both are stated per model rather than '
+                'generalizing from whichever is more convenient.' if contradicts else
+                'Neither metric favours KL alone on any model. Where they differ it is in how '
+                'sharply they say so, not in which way, so both are stated per model.')
+        L += ['#### Reading the two together', '', lead, '']
         for label, pv, av in synth:
             parts = [x for x in (pv, av) if x]
             L.append(f'- **{label}.** Against the shipped rule at the same k, KL alone '
