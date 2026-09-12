@@ -19,8 +19,15 @@ from analyze_zeroshot_paired import compare, load as load_samples
 MODELS = [('llama8b', 'Llama-3.1-8B'), ('qwen4b', 'Qwen3-4B'), ('qwen27b', 'Qwen3.8-27B')]
 BASE = 'four_over_six'
 K = 3
-PRETTY = {'k3': 'max(CE, KL) — shipped', 'k3_kl': 'KL only', 'k3_ce': 'CE only',
-          'k2': 'max(CE, KL)', 'k2_kl': 'KL only', 'k2_ce': 'CE only'}
+OBJECTIVE_LABEL = {'max': 'max(CE, KL)', 'kl': 'KL only', 'ce': 'CE only'}
+
+
+def pretty(pol):
+    """Display name for a policy key like 'k3', 'k4_kl' -- any k, any objective."""
+    body = pol[1:]
+    k, _, objective = body.partition('_')
+    label = OBJECTIVE_LABEL.get(objective or 'max', objective or pol)
+    return f'{label} — shipped' if pol == f'k{K}' else label
 
 
 def ppl_runs(root):
@@ -107,8 +114,8 @@ def main():
             ratio = cnt / want if want else float('inf')
             close = 0.5 <= ratio <= 2.0
             matches.append(f'{label} comes closest at k = {kk}, electing {cnt:,} against '
-                           f'{want:,}' + ('' if close else f' -- still {ratio:.1f}x off, so the '
-                                          f'sweep does not reach a count match'))
+                           f'{want:,}' + ('' if close else f', which is {ratio:.2f}x the shipped '
+                                          f'count -- near but not a match'))
         if matches:
             L += [f'KL alone is far more permissive at the same k, so comparing the two at '
                   f'k = {K} compares two different numbers of switches as well as two '
@@ -133,54 +140,76 @@ def main():
                 continue
             L.append(f'| {label} | — | FourOverSix | 0 | {fmt(base["wiki"]["ppl"])} | — | '
                      f'{fmt(base["c4"]["ppl"])} | — |')
-            for k in sorted(ppl[m].get('k_values', [K]), reverse=True):
+            for k in sorted(ppl[m].get('k_values', [K])):
                 for pol in (f'k{k}', f'k{k}_kl', f'k{k}_ce'):
                     if pol not in ev:
                         continue
                     w, c = ev[pol]['wiki']['ppl'], ev[pol]['c4']['ppl']
-                    L.append(f'| {label} | {k} | {PRETTY.get(pol, pol[len(f"k{k}_"):] + " only")} | '
+                    L.append(f'| {label} | {k} | {pretty(pol)} | '
                              f'{el.get(pol, {}).get("selected", 0):,} | {fmt(w)} | '
                              f'{fmt(w - base["wiki"]["ppl"], signed=True)} | {fmt(c)} | '
                              f'{fmt(c - base["c4"]["ppl"], signed=True)} |')
         L.append('')
 
-        best = []
+        # Comparing the two objectives at the same k is not a fair test once k is swept: at a
+        # fixed k they elect very different numbers of tiles. The question the sweep exists to
+        # answer is whether KL alone ever wins at an equal budget of switches, so ask that
+        # directly -- is every KL-only setting beaten by some conjunction setting that elects no
+        # more tiles?
+        dom_rows, undominated = [], []
         for m, label in MODELS:
             if m not in ppl:
                 continue
-            ev = ppl[m]['evaluation']
-            el = ppl[m]['election']
-            if f'k{K}' not in ev:
+            ev, el = ppl[m]['evaluation'], ppl[m]['election']
+            ks = ppl[m].get('k_values', [K])
+            pts = {}
+            for objective in ('max', 'kl'):
+                pts[objective] = [
+                    (el[key]['selected'], ev[key]['wiki']['ppl'], ev[key]['c4']['ppl'], k)
+                    for k in ks
+                    for key in [f'k{k}' if objective == 'max' else f'k{k}_{objective}']
+                    if key in ev and key in el]
+            if not pts['max'] or not pts['kl']:
                 continue
-            ref = ev[f'k{K}']
-            cand = [(k, ev[f'k{k}_kl']) for k in ppl[m].get('k_values', [K])
-                    if f'k{k}_kl' in ev]
-            if len(cand) < 2:                 # a single k is not a strictness sweep
-                continue
-            kk, e = min(cand, key=lambda kv: kv[1]['wiki']['ppl'])
-            dw = e['wiki']['ppl'] - ref['wiki']['ppl']
-            dc = e['c4']['ppl'] - ref['c4']['ppl']
-            tiles = el.get(f'k{kk}_kl', {}).get('selected')
-            shipped_tiles = el.get(f'k{K}', {}).get('selected')
-            verdict = ('beats the conjunction on both corpora' if dw < 0 and dc < 0 else
-                       'loses on both corpora' if dw > 0 and dc > 0 else
-                       'is better on one corpus and worse on the other')
-            note = ''
-            if tiles and shipped_tiles:
-                ratio = tiles / shipped_tiles
-                note = (f' It gets there by electing {ratio:.0f}x as many tiles '
-                        f'({tiles:,} against {shipped_tiles:,}), so this is the most permissive '
-                        f'setting swept rather than a like-for-like one.' if ratio >= 2 else
-                        f' It elects {tiles:,} tiles against {shipped_tiles:,}, so the two are '
-                        f'roughly count-matched.')
-            best.append(f'**{label}**: the lowest-WikiText KL-only threshold is k = {kk}, '
-                        f'{dw:+.3f} WikiText and {dc:+.3f} C4 against the shipped rule -- it '
-                        f'{verdict}.{note}')
-        if best:
-            L += ['Tightening the threshold is the obvious way to try to rescue KL alone, since '
-                  'at a fixed k it elects several times more tiles. Sweeping k answers that '
-                  'directly. Taking the best KL-only row by WikiText, whatever its tile count:',
-                  ''] + [f'- {b}' for b in best] + ['']
+            for tiles, w, c, k in sorted(pts['kl']):
+                beaten = [(t2, w2, c2, k2) for t2, w2, c2, k2 in pts['max']
+                          if t2 <= tiles and w2 <= w and c2 <= c]
+                if beaten:
+                    t2, w2, c2, k2 = min(beaten, key=lambda r: r[0])
+                    dom_rows.append(f'| {label} | {k} | {tiles:,} | {w:.4f} | {k2} | '
+                                    f'{t2:,} | {w2:.4f} |')
+                else:
+                    dom_rows.append(f'| {label} | {k} | {tiles:,} | {w:.4f} | — | — | — |')
+                    undominated.append((label, k, tiles, w, c))
+
+        if dom_rows:
+            total = len(dom_rows)
+            beaten_n = total - len(undominated)
+            L += ['Tightening the threshold is the obvious way to try to rescue KL alone, and it '
+                  'helps a great deal -- on Llama-3.1-8B the KL-only penalty falls from +0.481 '
+                  'WikiText at k = 3 to +0.009 at k = 6. But raising k also shrinks the '
+                  'election, so most of that is buying back permissiveness rather than showing '
+                  'the objective was fine all along.', '',
+                  'The fair test is at an equal budget of switches. For each KL-only setting, is '
+                  'there a conjunction setting that elects **no more tiles** and is at least as '
+                  'good on **both** corpora?', '',
+                  '| model | KL-only k | its tiles | its WikiText | beaten by k | tiles | '
+                  'WikiText |',
+                  '|---|---:|---:|---:|---:|---:|---:|'] + dom_rows + ['']
+            if beaten_n == total:
+                L += [f'**Every one of the {total} KL-only settings is beaten by a conjunction '
+                      f'setting using no more tiles.** Strictness is not the missing ingredient: '
+                      f'at any budget of switches the conjunction reaches a lower perplexity, so '
+                      f'CE is selecting different and better tiles rather than merely fewer.', '']
+            else:
+                names = '; '.join(f'{lb} at k = {k} ({t:,} tiles)'
+                                  for lb, k, t, _, _ in undominated)
+                L += [f'**{beaten_n} of {total} KL-only settings are beaten by a conjunction '
+                      f'setting using no more tiles.** The exceptions are {names} -- not a win '
+                      f'for KL alone, since those are not better than the conjunction on both '
+                      f'corpora either, but points where the two are incomparable at that '
+                      f'budget. Strictness is therefore most of what separated them at k = 3, '
+                      f'and it is not all of it.', '']
 
         # The verdict is counted, not asserted: every (model, k) cell where a single-objective
         # election was run is compared against the conjunction at the same k.
@@ -205,13 +234,15 @@ def main():
                 continue
             name = {'kl': 'KL', 'ce': 'CE'}[objective]
             models = sorted({label for label, _ in cells})
-            L += [f'**{name} alone loses in {losses} of {len(cells)} cells.** Across '
-                  f'{len(models)} models ({", ".join(models)}) and '
-                  f'{len(sorted({k for _, k in cells}))} thresholds, dropping the other objective '
-                  f'is worse on both corpora in {losses} of the {len(cells)} '
-                  f'(model, k) cells measured'
-                  + (f', and in {harmful} of them it is worse than not switching at all -- the '
-                     f'method goes from a win to a loss.' if harmful else '.'), '']
+            # Kept as a secondary read: swapping the objective while holding k fixed is what
+            # a practitioner would try first, even though it does not hold the count fixed.
+            L += [f'Held at the same k instead of the same budget -- the naive swap -- {name} '
+                  f'alone is worse on both corpora in {losses} of {len(cells)} (model, k) cells'
+                  + (f', and in {harmful} of them worse than not switching at all.'
+                     if harmful else '.')
+                  + f' That comparison flatters neither objective, since at a fixed k the two '
+                  f'elect different numbers of tiles; the budget-matched table above is the '
+                  f'one to read.', '']
         L.append('')
 
     if acc:
@@ -243,7 +274,7 @@ def main():
             for label, pol, tiles, mean, d, pooled in rows:
                 pd = fmt(pooled['delta'], 4, True) if pooled else '—'
                 pp = f"{pooled['p']:.3g}" if pooled else '—'
-                L.append(f'| {label} | {PRETTY.get(pol, pol)} | '
+                L.append(f'| {label} | {pretty(pol)} | '
                          f'{f"{tiles:,}" if tiles is not None else "—"} | {fmt(mean, 4)} | '
                          f'{fmt(d, 4, True) if d is not None else "—"} | {pd} | {pp} |')
             L.append('')

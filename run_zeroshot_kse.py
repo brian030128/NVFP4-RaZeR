@@ -48,6 +48,24 @@ K = 3
 # MIXFP4_REPORT.md argues against on theoretical grounds but never measured. Evaluating them in
 # the same run as k3 keeps the comparison paired on identical documents.
 POLICY_OBJECTIVE = {f'k{K}': 'max', f'k{K}_kl': 'kl', f'k{K}_ce': 'ce'}
+
+
+def parse_policy(pol):
+    """('k5_kl') -> (5, 'kl'); ('k3') -> (3, 'max'); anything else -> None.
+
+    Sweeping k matters here because KL alone elects several times more tiles than the
+    conjunction at the same k, so a same-k comparison confounds the objective with how
+    permissive the threshold is. Allowing any k lets the accuracy run be budget-matched the way
+    the perplexity sweep is.
+    """
+    if not pol.startswith('k') or len(pol) < 2:
+        return None
+    body = pol[1:]
+    kpart, _, objective = body.partition('_')
+    if not kpart.isdigit():
+        return None
+    objective = objective or 'max'
+    return (int(kpart), objective) if objective in ('max', 'kl', 'ce') else None
 DEFAULT_POLICIES = ('bf16', 'nvfp4', 'four_over_six', f'k{K}')
 
 # Script-based loaders are gone from datasets 4.x, so a task can fail to download for reasons
@@ -155,23 +173,27 @@ def main():
           f'(informational -- covers 20 maps, 19 unused here)', flush=True)
     print(f'frozen map for validation taken from: {frozen_source}', flush=True)
 
-    # Re-elect. k = 2 is asserted inside elect_k to equal the shipped score exactly.
-    uppers, slices, names = elect_k(calib, prior, (2, K))
+    # Re-elect. k = 2 is asserted inside elect_k to equal the shipped score exactly, so it is
+    # always elected whatever the requested policies are.
+    wanted = [pol for pol in args.policies if parse_policy(pol)]
+    parsed = {pol: parse_policy(pol) for pol in wanted}
+    kset = tuple(sorted({2, K} | {k for k, _ in parsed.values()}))
+    uppers, slices, names = elect_k(calib, prior, kset)
     r['shipped_score_identical_at_k2'] = True
     r['total_tiles'] = int(uppers[2].numel())
     maps = {}
-    wanted = [pol for pol in args.policies if pol in POLICY_OBJECTIVE]
-    if any(POLICY_OBJECTIVE[pol] != 'max' for pol in wanted):
+    if any(objective != 'max' for _, objective in parsed.values()):
         # Single-objective variants need the per-objective bounds, which elect_k does not keep.
-        obj_upper, obj_slices, obj_names = scores_for(calib, prior, (K,))
+        obj_ks = tuple(sorted({k for k, o in parsed.values() if o != 'max'}))
+        obj_upper, obj_slices, obj_names = scores_for(calib, prior, obj_ks)
         assert obj_names == names and obj_slices == slices
     for pol in wanted:
-        objective = POLICY_OBJECTIVE[pol]
-        flat = (uppers[K] < 0) if objective == 'max' else (obj_upper[(objective, K)] < 0)
+        k, objective = parsed[pol]
+        flat = (uppers[k] < 0) if objective == 'max' else (obj_upper[(objective, k)] < 0)
         maps[pol] = {n: flat[lo:hi].clone() for n, (lo, hi) in slices.items()}
-        r['election'][pol] = dict(k=K, objective=objective, selected=int(flat.sum()),
+        r['election'][pol] = dict(k=k, objective=objective, selected=int(flat.sum()),
                                   fraction=float(flat.sum()) / flat.numel())
-        print(f'ELECT {pol} (objective={objective}, k={K}): '
+        print(f'ELECT {pol} (objective={objective}, k={k}): '
               f'{int(flat.sum()):,} of {flat.numel():,} tiles', flush=True)
 
     # The 256-tile prefix of the k = 2 ranking must be the frozen map, bitwise.
@@ -294,7 +316,7 @@ def main():
                     w = nvfp4_w[n]
                 elif policy == 'four_over_six':
                     w = base[n]
-                elif policy in POLICY_OBJECTIVE:
+                elif parse_policy(policy):
                     b = base[n].to(m.weight.device)
                     if target:
                         a = quant_mix_4_6(pristine[n].to(m.weight.device), 4, 16,
