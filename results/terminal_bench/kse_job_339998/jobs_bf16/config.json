@@ -1,0 +1,42 @@
+{
+    "job_name": "bf16",
+    "jobs_dir": "/tmp/u4320956/tbkse_339998/jobs",
+    "agent_timeout_multiplier": 0.25,
+    "n_concurrent_trials": 1,
+    "quiet": true,
+    "environment": {
+        "type": "singularity",
+        "kwargs": {
+            "singularity_image_cache_dir": "/tmp/u4320956/tbkse_339998/sif"
+        }
+    },
+    "agents": [
+        {
+            "name": "terminus-2",
+            "model_name": "openai/qmodel",
+            "extra_allowed_hosts": [
+                "127.0.0.1"
+            ],
+            "kwargs": {
+                "max_turns": 15
+            },
+            "env": {
+                "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+                "OPENAI_API_BASE": "http://127.0.0.1:18127/v1",
+                "OPENAI_BASE_URL": "http://127.0.0.1:18127/v1"
+            }
+        }
+    ],
+    "datasets": [
+        {
+            "name": "terminal-bench",
+            "version": "2.0",
+            "exclude_task_names": [
+                "fp8-rmsnorm-gemm",
+                "jax-speedrun-gpu",
+                "math-eval-grader"
+            ],
+            "n_tasks": 20
+        }
+    ]
+}

@@ -72,6 +72,23 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--model', choices=sorted(MODELS), required=True)
     ap.add_argument('--out', required=True)
+    ap.add_argument('--calib', default=None,
+                    help='Calibration directory to elect from. Defaults to the shipped one for '
+                         'this model, which no longer carries its score shards, so a freshly '
+                         'regenerated directory has to be passed explicitly.')
+    ap.add_argument('--k-values', default=None,
+                    type=lambda v: tuple(int(x) for x in v.split(',') if x.strip()),
+                    help='Restrict which k are evaluated. k = 2 is always elected anyway, '
+                         'because the frozen-map check depends on it.')
+    ap.add_argument('--objectives', default='max',
+                    type=lambda v: tuple(x.strip() for x in v.split(',') if x.strip()),
+                    help="Election objectives to evaluate: 'max' is the shipped rule, which "
+                         "requires both CE and KL to be confidently negative; 'kl' and 'ce' "
+                         'threshold one alone. The report argues for the conjunction but never '
+                         'measured the alternatives.')
+    ap.add_argument('--skip-n256', action='store_true',
+                    help='Skip the fixed-256 row, which is a reference point rather than part '
+                         'of the k-SE rule.')
     ap.add_argument('--stage-root', default='/home/u4320956/NVFP4-RaZeR')
     args = ap.parse_args()
     torch.set_num_threads(4)
@@ -79,7 +96,9 @@ def main():
     torch.manual_seed(0)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=False)
-    old = Path(args.stage_root) / f'results/math_code_adaptive/calibration_{MODELS[args.model]}_{args.model}'
+    old = Path(args.calib) if args.calib else (
+        Path(args.stage_root)
+        / f'results/math_code_adaptive/calibration_{MODELS[args.model]}_{args.model}')
     prior = json.loads((old / 'report.json').read_text())
     bundle = json.loads((old / 'maps.json').read_text())
     assert prior['status'] == 'complete' and prior['maps_frozen']
@@ -100,17 +119,29 @@ def main():
         (out / 'report.json').write_text(json.dumps(r, indent=2) + '\n')
 
     save()
-    uppers, slices, names = elect_k(old, prior, K_VALUES)
+    # k = 2 is always elected: the frozen-map cross-check is defined on its ranking.
+    k_values = tuple(sorted(set(args.k_values or K_VALUES) | {2}))
+    r['k_values'] = list(k_values)
+    r['objectives'] = list(args.objectives)
+    uppers, slices, names = elect_k(old, prior, k_values)
     r['shipped_score_identical_at_k2'] = True
     r['total_tiles'] = int(uppers[2].numel())
 
     maps = {}
-    for k in K_VALUES:
-        flat = uppers[k] < 0
-        maps[f'k{k}'] = {n: flat[lo:hi].clone() for n, (lo, hi) in slices.items()}
-        r['election'][f'k{k}'] = dict(k=k, selected=int(flat.sum()),
-                                      fraction=float(flat.sum()) / flat.numel())
-        print(f'ELECT k={k}: {int(flat.sum()):,} tiles', flush=True)
+    obj_upper = None
+    if any(o != 'max' for o in args.objectives):
+        # Per-objective bounds; elect_k only keeps the maximum of the two.
+        from analyze_objective_ablation import scores_for
+        obj_upper, obj_slices, obj_names = scores_for(old, prior, k_values)
+        assert obj_names == names and obj_slices == slices
+    for k in k_values:
+        for objective in args.objectives:
+            flat = (uppers[k] < 0) if objective == 'max' else (obj_upper[(objective, k)] < 0)
+            name = f'k{k}' if objective == 'max' else f'k{k}_{objective}'
+            maps[name] = {n: flat[lo:hi].clone() for n, (lo, hi) in slices.items()}
+            r['election'][name] = dict(k=k, objective=objective, selected=int(flat.sum()),
+                                       fraction=float(flat.sum()) / flat.numel())
+            print(f'ELECT {name} (objective={objective}): {int(flat.sum()):,} tiles', flush=True)
     order = torch.argsort(uppers[2], stable=True)[:256]
     flat = torch.zeros(uppers[2].numel(), dtype=torch.bool)
     flat[order[uppers[2][order] < 0]] = True
@@ -192,7 +223,14 @@ def main():
         t = torch.tensor(values, dtype=torch.float32) * LENGTH
         return float(torch.exp(t.sum() / (len(values) * LENGTH)))
 
-    policies = ['four_over_six', 'n256', *[f'k{k}' for k in K_VALUES]]
+    policies = ['four_over_six']
+    if not args.skip_n256:
+        policies.append('n256')
+    for k in k_values:
+        for objective in args.objectives:
+            policies.append(f'k{k}' if objective == 'max' else f'k{k}_{objective}')
+    r['policies'] = policies
+    print(f'POLICIES {policies}', flush=True)
     with torch.no_grad():
         for policy in policies:
             install(policy)

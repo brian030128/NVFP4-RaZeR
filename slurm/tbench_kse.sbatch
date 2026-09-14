@@ -1,0 +1,203 @@
+#!/bin/bash
+#SBATCH --account=gov113008
+#SBATCH --partition=taide_h200
+#SBATCH --job-name=tbench_kse
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=12
+#SBATCH --gres=gpu:H200:1
+#SBATCH --mem=200G
+#SBATCH --time=20:00:00
+#SBATCH --output=slurm/logs/%x_%j.out
+#SBATCH --error=slurm/logs/%x_%j.err
+#
+# MIXFP4_REPORT.md's policies on Terminal-Bench.
+#
+# Perplexity and multiple choice both score the model on a fixed corpus. Terminal-Bench scores
+# what it DOES: an agent works in a container and the trial passes only if the task's own tests
+# pass. A quantization error has to survive a long chain of the model's own decisions, which is
+# the failure mode neither other measurement can see.
+#
+# The model is served in-process by serve_quantized.py rather than exported to a checkpoint,
+# because these policies cannot survive save_pretrained: MixFP4 (k=3) is a per-tile map, and
+# every policy here is W4A4 whose activation half lives in forward hooks. A checkpoint would
+# quietly become W4A16 -- a different method from the one being reported.
+#
+# Expect low absolute scores. Terminal-Bench 4.0 is built for frontier agents, and a capped
+# 4B-class model is near the floor; the point is the comparison BETWEEN policies at an
+# identical budget, and a floor that swallows all three is itself the finding.
+#
+#   sbatch slurm/tbench_kse.sbatch qwen4b
+#   NTASKS=30 POLICIES="four_over_six,k3" sbatch slurm/tbench_kse.sbatch qwen4b
+
+set -uo pipefail
+cd "${SLURM_SUBMIT_DIR:?}"
+mkdir -p slurm/logs
+
+MODEL=${1:-qwen4b}
+POLICIES=${POLICIES:-"bf16,four_over_six,k3"}
+# Serving is one request at a time through HF generate, and the W4A4 hooks re-quantize every
+# linear's input on every token, so the 24B target is far slower than the 4B. Its task count
+# and turn cap are correspondingly smaller; both are identical across policies, which is what
+# the comparison needs.
+if [[ "${1:-qwen4b}" == "qwen27b" ]]; then
+    : "${NTASKS:=8}" "${MAX_TURNS:=15}"
+fi
+DATASET=${DATASET:-terminal-bench/terminal-bench@4.0.0}
+NTASKS=${NTASKS:-15}
+AGENT=${AGENT:-terminus-2}
+MAX_TURNS=${MAX_TURNS:-20}
+AGENT_TMULT=${AGENT_TMULT:-0.25}
+PORT=${PORT:-18127}
+
+# Three of the 66 tasks declare a GPU inside the container (scripts/list_gpu_tasks.py reads it
+# out of each task.toml). harbor's singularity environment has no GPU capability, so they raise
+#     RuntimeError: Task requires 1 GPU(s) but EnvironmentType.SINGULARITY ...
+# before the agent runs. They fail identically for every policy and say nothing about
+# quantization, so they are excluded by name rather than discovered one failure at a time.
+GPU_TASKS=${GPU_TASKS:-"fp8-rmsnorm-gemm jax-speedrun-gpu math-eval-grader"}
+EXCLUDE_ARGS=()
+for t in $GPU_TASKS; do EXCLUDE_ARGS+=(-x "$t"); done
+
+PROJECT="$PWD"
+SCRATCH="/tmp/$USER/tbkse_$SLURM_JOB_ID"
+mkdir -p "$SCRATCH"/{sif,cache,tmp,jobs}
+trap 'rm -rf "$SCRATCH"' EXIT
+
+export UV_CACHE_DIR="$SCRATCH/cache/uv" TMPDIR="$SCRATCH/tmp"
+export SINGULARITY_CACHEDIR="$SCRATCH/cache/singularity" APPTAINER_CACHEDIR="$SCRATCH/cache/singularity"
+export SINGULARITY_TMPDIR="$SCRATCH/tmp" APPTAINER_TMPDIR="$SCRATCH/tmp"
+export HARBOR_HOME="$SCRATCH/harbor"
+export HF_HOME="$SCRATCH/hf"; mkdir -p "$HF_HOME"
+export HF_TOKEN="${HF_TOKEN:-$(cat "$HOME/.cache/huggingface/token" 2>/dev/null || true)}"
+export PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false
+export PYTORCH_ALLOC_CONF=expandable_segments:True
+export PATH="$HOME/.local/bin:$PATH"
+
+# See scripts/singularity-no-fakeroot: harbor's --fakeroot cannot work for this account.
+SHIM="$SCRATCH/bin"; mkdir -p "$SHIM"
+ln -sf "$PROJECT/scripts/singularity-no-fakeroot" "$SHIM/singularity"
+export PATH="$SHIM:$PATH"
+
+PYTHON=${PYTHON:-/home/u4320956/beam_engine-v3/.venv/bin/python}
+UV=/home/u4320956/.local/bin/uv
+"$UV" pip install --python "$PYTHON" --target "$SCRATCH/deps" \
+  fastapi uvicorn loguru || exit 1
+rm -rf "$SCRATCH"/deps/{transformers,tokenizers,torch,nvidia,triton}
+# NOT exported: these are built for the venv's Python 3.11, while harbor runs on its own
+# uv-managed 3.13. A global PYTHONPATH hands harbor binary extensions built for the wrong
+# interpreter -- "ModuleNotFoundError: No module named 'pydantic_core._pydantic_core'" -- so the
+# path is applied per command instead.
+PYPATH="$PROJECT:$SCRATCH/deps"
+
+# Qwen3.8-27B is a Qwen3.5-family model and its calibration origin pins transformers 5.16.1.
+# Serving is in-process (serve_quantized.py) rather than through an inference server. That is
+# the faithful route: it keeps the W4A4 activation hooks, which no checkpoint export carries,
+# and it is fast enough -- the 27B measures 1.85-2.0 tok/s, about 0.6 h for a 10-turn trial.
+# If an external server is ever needed here, use sglang, not vLLM.
+# huggingface_hub is pinned, not left to the resolver. transformers 5.16.1 needs hub >=1.5,
+# and unpinned that resolved to 1.31, whose URI handling breaks the datasets lm-eval loads:
+# four of the six tasks died with HfUriError ("Invalid HF URI hf://datasets/...huggingface.yaml")
+# and the run silently evaluated two, which would not be comparable with the other models.
+# 1.5.0 satisfies transformers and loads all six.
+if [[ "$MODEL" == "qwen27b" ]]; then
+    "$UV" pip install --python "$PYTHON" --target "$SCRATCH/deps27" --no-deps \
+      transformers==5.16.1 'huggingface_hub==1.5.0' tokenizers safetensors hf-xet loguru || exit 1
+    PYPATH="$PROJECT:$SCRATCH/deps27:$SCRATCH/deps"
+fi
+
+OUT="$PROJECT/results/terminal_bench/kse_job_$SLURM_JOB_ID"
+mkdir -p "$OUT"
+
+echo "=== tbench_kse $MODEL  policies=$POLICIES  tasks=$NTASKS  $(date -Iseconds) on $(hostname) ==="
+singularity --version; harbor --version
+
+# --- the calibration the k=3 election needs (its shipped score shards are gone) --------------
+# The scoring pass is only needed for k3, which is the one policy built from an election.
+# Skipping it elsewhere saves ~25 minutes and, for Qwen3.8-27B, avoids a hard failure: that
+# model's calibration spreads over two GPUs with device_map='balanced', so on a single-GPU
+# allocation it dies with "CUDA error: invalid device ordinal". Serving the model needs one GPU;
+# only calibrating it needs two.
+SHIPPED_CALIB=${SHIPPED_CALIB:-}
+if [[ -z "$SHIPPED_CALIB" ]]; then
+    case "$MODEL" in
+        qwen27b) SHIPPED_CALIB=results/math_code_adaptive/calibration_333787_qwen27b ;;
+        *)       SHIPPED_CALIB=results/math_code_adaptive/calibration_333779_$MODEL ;;
+    esac
+fi
+# The k=3 election is a pure function of the frozen calibration, so it is computed once and
+# reused. results/kse_maps/<model>_k3.pt is written the first time and loaded thereafter, which
+# removes both the 25-minute scoring pass and (on the 27B) the two-GPU requirement that only
+# the calibration had. Nothing upstream stored this map: the published PPL run recorded that
+# k=3 elects 3,785 tiles and not which ones, and the score shards it read are gone.
+MAP_CACHE=${MAP_CACHE:-$PROJECT/results/kse_maps/${MODEL}_k${KVAL:-3}.pt}
+MAP_ARGS=()
+if [[ ",$POLICIES," == *",k3,"* && -f "$MAP_CACHE" ]]; then
+    MAP_ARGS=(--map "$MAP_CACHE")
+    echo "--- reusing the cached k=3 election: $MAP_CACHE"
+elif [[ ",$POLICIES," == *",k3,"* ]]; then
+    MAP_ARGS=(--save-map "$MAP_CACHE")
+    echo "--- no cached election yet; it will be written to $MAP_CACHE"
+fi
+
+if [[ ",$POLICIES," == *",k3,"* && ! -f "$MAP_CACHE" ]]; then
+    CALIB="$SCRATCH/calibration_$MODEL"
+    echo "--- calibration -> $CALIB (k3 needs the election)"
+    env PYTHONPATH="$PYPATH" "$PYTHON" run_math_code_calibration.py \
+        --model "$MODEL" --out "$CALIB" --allow-source-drift \
+        > "$OUT/calibration_$MODEL.log" 2>&1 || { tail -20 "$OUT/calibration_$MODEL.log"; exit 1; }
+    env PYTHONPATH="$PYPATH" "$PYTHON" "$PROJECT/scripts/check_map_digest.py" "$CALIB" "$MODEL" || \
+        echo 'NOTE: maps.json differs; serve_quantized.py checks the frozen map itself.'
+else
+    CALIB="$PROJECT/$SHIPPED_CALIB"
+    echo "--- no scoring pass needed for '$POLICIES'; using the shipped calibration: $CALIB"
+fi
+
+IFS=',' read -ra LIST <<< "$POLICIES"
+for POLICY in "${LIST[@]}"; do
+    echo "########## policy $POLICY"
+    env PYTHONPATH="$PYPATH" "$PYTHON" serve_quantized.py \
+        --model "$MODEL" --calib "$CALIB" --policy "$POLICY" \
+        --port "$PORT" --served-name qmodel \
+        --provenance "$OUT/provenance_$POLICY.json" "${MAP_ARGS[@]}" ${SERVE_ARGS:-} \
+        > "$OUT/serve_$POLICY.log" 2>&1 &
+    SRV=$!
+    READY=0
+    for i in $(seq 1 90); do
+        curl -sf "http://127.0.0.1:$PORT/health" > /dev/null && { READY=1; break; }
+        kill -0 "$SRV" 2>/dev/null || { echo "server died"; break; }
+        sleep 10
+    done
+    if [[ "$READY" != "1" ]]; then
+        echo "FATAL: server never became ready for $POLICY"; tail -25 "$OUT/serve_$POLICY.log"
+        kill "$SRV" 2>/dev/null; wait "$SRV" 2>/dev/null; continue
+    fi
+    echo "server ready for $POLICY after ${i}0s"
+
+    # harbor resolves the provider key and base URL from the host environment before forwarding.
+    export OPENAI_API_KEY=local
+    export OPENAI_BASE_URL="http://127.0.0.1:$PORT/v1"
+    export OPENAI_API_BASE="http://127.0.0.1:$PORT/v1"
+
+    timeout "${HARBOR_TIMEOUT:-43200}" harbor run \
+        -d "$DATASET" -e singularity \
+        --ek "singularity_image_cache_dir=$SCRATCH/sif" \
+        -a "$AGENT" -m "openai/qmodel" \
+        --ak "max_turns=$MAX_TURNS" \
+        --agent-timeout-multiplier "$AGENT_TMULT" \
+        --ae "OPENAI_API_KEY=local" \
+        --ae "OPENAI_API_BASE=http://127.0.0.1:$PORT/v1" \
+        --ae "OPENAI_BASE_URL=http://127.0.0.1:$PORT/v1" \
+        --allow-agent-host 127.0.0.1 \
+        "${EXCLUDE_ARGS[@]}" \
+        -l "$NTASKS" -k 1 -n 1 -q \
+        -o "$SCRATCH/jobs" --job-name "$POLICY" -y \
+        > "$OUT/harbor_$POLICY.log" 2>&1
+    echo "harbor exit=$? for $POLICY"
+    tail -20 "$OUT/harbor_$POLICY.log"
+
+    kill "$SRV" 2>/dev/null; wait "$SRV" 2>/dev/null
+    cp -r "$SCRATCH/jobs/$POLICY" "$OUT/jobs_$POLICY" 2>/dev/null
+done
+
+echo "=== done $(date -Iseconds) ==="
