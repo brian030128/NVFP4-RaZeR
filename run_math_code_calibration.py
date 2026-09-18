@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import time
 from pathlib import Path
 import torch
@@ -80,6 +81,10 @@ def main():
     ap.add_argument('--model', choices=ORIGINS, required=True)
     ap.add_argument('--out', required=True)
     ap.add_argument('--adaptive-only', action='store_true')
+    ap.add_argument('--reorder-modules', default=None,
+        help='Regex selecting modules whose CE/KL scores are additionally streamed as 1x16 '
+             'atoms to reorder_scores/. Required for genuine column regrouping; historical '
+             '8x64 shards cannot be split into these atoms. Start with a few pilot modules.')
     ap.add_argument('--allow-source-drift', action='store_true',
         help='Proceed when quantizer sources differ from the origin job, recording exactly which '
              'files differ. Intended for a re-run whose output is itself checked against the '
@@ -95,6 +100,8 @@ def main():
     files = ('run_math_code_calibration.py', 'quantize/adaptive_prefix.py',
              'quantize/causal_four_over_six.py', 'quantize/quantizer.py',
              'results/math_code_adaptive/PROTOCOL.md')
+    if args.reorder_modules:
+        files += ('quantize/task_reorder.py',)
     r = dict(status='running', model=args.model, source=prior['source'], revision=prior['revision'],
         job_id=os.environ['SLURM_JOB_ID'], torch_version=torch.__version__, transformers_version=transformers.__version__,
         origin=str(old), source_sha256={f:digest_file(f) for f in files}, matrices={},
@@ -117,6 +124,17 @@ def main():
         print('SOURCE DRIFT ALLOWED: ' + ', '.join(sorted(drift)), flush=True)
     save(out, r)
     model, modules = load_model(prior,target)
+    reorder_dirs = {}
+    if args.reorder_modules:
+        pattern = re.compile(args.reorder_modules)
+        chosen = [name for name in modules if pattern.search(name)]
+        if not chosen:
+            raise ValueError('--reorder-modules matched no quantized modules')
+        for index, name in enumerate(chosen):
+            directory = out / 'reorder_scores' / f'{index:03d}'
+            directory.mkdir(parents=True)
+            reorder_dirs[name] = directory
+        r['reorder_modules'] = {name: str(path) for name, path in reorder_dirs.items()}
     for name,m in modules.items():
         assert sha(m.weight) == prior['matrices'][name]['source_sha256']
         r['matrices'][name] = prior['matrices'][name]
@@ -124,6 +142,9 @@ def main():
     tok = AutoTokenizer.from_pretrained(r['source'], revision=r['revision'])
     fit,r['fit'] = math_code_data(tok,prior['fit'])
     batches = [b for values in fit.values() for b in values]
+    sequence_ids = [digest for meta in r['fit'].values() for digest in meta['token_sha256']]
+    sequence_sources = [source for source, values in fit.items() for _ in values]
+    fine_pending = {}
     device = model.get_input_embeddings().weight.device
     r['bf16_fit_nll'] = []
     with torch.no_grad():
@@ -172,6 +193,17 @@ def main():
                 value=(grad*d).reshape(o//8,8,k//64,64).sum((1,3)).flatten()
                 assert torch.isfinite(value).all(),name
                 tables[name][phase][sequence].copy_(value.cpu()); hits[name][phase]+=1
+                if name in reorder_dirs and phase in (0, 1):
+                    from quantize.task_reorder import scale_block_scores
+                    fine = scale_block_scores(grad, d).cpu()
+                    if not torch.isfinite(fine).all():
+                        raise ValueError(f'Nonfinite fine score: {name}')
+                    if phase == 0:
+                        fine_pending[name] = fine
+                    else:
+                        torch.save(dict(ce=fine_pending.pop(name), kl=fine,
+                                        sequence_id=sequence_ids[sequence]),
+                                   reorder_dirs[name] / f'{sequence:03d}.pt')
             output.register_hook(backward)
         return forward
 
@@ -202,6 +234,17 @@ def main():
     del directions,model,modules,base,alt
     torch.cuda.empty_cache()
     r['score_seconds']=time.perf_counter()-start
+    for name, directory in reorder_dirs.items():
+        manifest = dict(schema='mixfp4_reorder_scores_v1', status='complete', name=name,
+                        atom_shape=[1, 16], weight_shape=r['matrices'][name]['shape'],
+                        sequence_ids=sequence_ids, sequence_sources=sequence_sources,
+                        source=r['source'], revision=r['revision'],
+                        baseline='canonical FourOverSix', alternative='E0M3 alpha1',
+                        activation_convention=r['activation_convention'],
+                        source_sha256=r['source_sha256'],
+                        weight_sha256=r['matrices'][name]['source_sha256'],
+                        calibration_report=str(out / 'report.json'))
+        (directory / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     for i,(name,values) in enumerate(tables.items()):
         torch.save(dict(name=name,ce=values[0],kl=values[1],fisher=values[2]),score_dir/f'{i:03d}.pt')
     maps,stats=derive_maps(((n,r['matrices'][n]['shape'],*values) for n,values in tables.items()),

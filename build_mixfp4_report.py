@@ -170,6 +170,10 @@ def main():
 
     head = f"""# MixFP4: choosing the FP4 element type per tile
 
+**GB200 follow-up:** [Weight reordering and rotation plan](MIXFP4_GB200_PLAN.md)
+targets `m256n256k64` with 256x64 weight type tiles and fixed E2M1 activations.
+This is proposed work; the measured 8x64 results below remain the reference.
+
 NVFP4 hardware can already read a weight operand tile as either E2M1 or E0M3 at
 no cost. This report is about how to set that one bit per 8x64 tile, and what it
 buys. Every number is the released 2048-token evaluation: WikiText-2 raw test in
