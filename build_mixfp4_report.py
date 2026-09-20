@@ -161,6 +161,10 @@ def main():
     ap.add_argument('--update-arranging', action='store_true',
                     help='Update only the 256x64 follow-up, preserving curated report sections.')
     args = ap.parse_args()
+    report_path = Path(args.report)
+    if report_path.exists() and '<!-- CURATED MIXFP4 SUMMARY:' in report_path.read_text():
+        ap.error('The main report is a curated five-section summary. Edit it directly; '
+                 'use --report <separate-output.md> for the legacy detailed generator.')
     if args.update_arranging:
         path = Path(args.report)
         text = path.read_text()
