@@ -1,0 +1,86 @@
+{
+  "status": "complete",
+  "scope": "Same GEMM and BF16 consumer for each pipeline; fused/separate include packed input gather. Up consumer also produces down-column order. Excludes activation quantization, global-factor selection, full MLP/full model. Fixed E2M1 GEMM format isolates permutation cost.",
+  "measurements": [
+    {
+      "projection": "up_proj",
+      "m": 1,
+      "base_us": 18.074239,
+      "fused_us": 20.43808,
+      "separate_us": 23.311999,
+      "overhead_percent": 13.078509142210649,
+      "speedup_vs_separate": 1.1406158993408384,
+      "raw_sha256": "b39e4ec0bbc77f7ed2afc6762091786e1525a95fc9147748690ddd9a456a9b00"
+    },
+    {
+      "projection": "up_proj",
+      "m": 128,
+      "base_us": 21.030719,
+      "fused_us": 25.203519,
+      "separate_us": 37.80576,
+      "overhead_percent": 19.84145192563316,
+      "speedup_vs_separate": 1.5000191044750537,
+      "raw_sha256": "40ff05a97cc43a9624b471501652fba1499186fb80fb6b09bfbb9f19a9483396"
+    },
+    {
+      "projection": "up_proj",
+      "m": 512,
+      "base_us": 51.866241,
+      "fused_us": 63.400960000000005,
+      "separate_us": 104.458876,
+      "overhead_percent": 22.23935796696739,
+      "speedup_vs_separate": 1.6475913929378987,
+      "raw_sha256": "f358ebdd769db1f6810bbc3962d471e0660ae2ca8343df28ec675485c12df6b6"
+    },
+    {
+      "projection": "up_proj",
+      "m": 2048,
+      "base_us": 191.468163,
+      "fused_us": 241.361599,
+      "separate_us": 417.905273,
+      "overhead_percent": 26.058345794021132,
+      "speedup_vs_separate": 1.7314488913375154,
+      "raw_sha256": "f63609308c0c5f8f005ab857c55f10a44fdedacc96fe7263e70f7c3e4898ec47"
+    },
+    {
+      "projection": "down_proj",
+      "m": 1,
+      "base_us": 25.394239,
+      "fused_us": 27.729919,
+      "separate_us": 28.98016,
+      "overhead_percent": 9.197676685645128,
+      "speedup_vs_separate": 1.0450863560041412,
+      "raw_sha256": "e6b96bdf08430118d41d3b6e177ccc0e249db46bf719daf55e35d103c644ba88"
+    },
+    {
+      "projection": "down_proj",
+      "m": 128,
+      "base_us": 25.020160999999998,
+      "fused_us": 28.3584,
+      "separate_us": 30.82304,
+      "overhead_percent": 13.342196319200351,
+      "speedup_vs_separate": 1.0869104039720152,
+      "raw_sha256": "c9a5e8a6f9ee5b4a518d3344233119439359da653a185a04611eedf9b72bb822"
+    },
+    {
+      "projection": "down_proj",
+      "m": 512,
+      "base_us": 30.292799,
+      "fused_us": 37.908161,
+      "separate_us": 45.379200000000004,
+      "overhead_percent": 25.1391824175772,
+      "speedup_vs_separate": 1.1970826018175877,
+      "raw_sha256": "bf20880a1159cd66d1cea55fa7f73786eee07ba6f1854da63e4de034d4c0d7cc"
+    },
+    {
+      "projection": "down_proj",
+      "m": 2048,
+      "base_us": 104.627523,
+      "fused_us": 127.91359899999999,
+      "separate_us": 151.262083,
+      "overhead_percent": 22.256166764074116,
+      "speedup_vs_separate": 1.1825332426148059,
+      "raw_sha256": "f82ebddcf3c32b8fe41c2653224cf1b00a5d466d1a083cd1c020235107e0ab91"
+    }
+  ]
+}

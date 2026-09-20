@@ -1,7 +1,12 @@
 # Accepted-arrangement follow-up, 2026-09-20
 
-The requested report update and tests are complete. See root `MIXFP4_REPORT.md`
-for the algorithm and full tables. Qwen's accepted PPL remains unchanged.
+The initial follow-up and renewed research are complete. See root `MIXFP4_REPORT.md`
+for the algorithm and full tables. Qwen's accepted PPL remains unchanged. The refined
+Llama candidate passes fresh confirmation and scores 6.864886/9.796946 PPL. Final
+GB200 producer/consumer fusion measures 1.4–5.1% permutation overhead in the
+matched per-projection prototype. These are separate quality and runtime tests.
+
+## Initial follow-up evidence
 
 - `llama_calibration/summary.json`: historical calibration-map identity audit;
   regenerated raw/fine counts187/3345. Fine atom scores remain on `/work`.
@@ -34,7 +39,7 @@ not establish fused cost, full-model latency, or native execution of the entire
 identical columns; the separate distinct-bit check removes that weakness from
 the permutation correctness evidence without repeating timings.
 
-All jobs used `gov113008`, at most two concurrent GPUs (limit four), and attached
+The initial follow-up jobs used `gov113008`, at most two concurrent GPUs (limit four), and attached
 completion monitoring. No jobs remain. Allocated GPU time, including CPU search
 on H200 workers and failed preflights, was1683seconds =0.4675GPU-hours.
 
@@ -46,3 +51,31 @@ that those compute artifacts are present in this checkout.
 Permutation text is formatted16indices per line for review; its parsed integer
 sequences are unchanged from the measurement inputs. Source snapshots preserve
 original bytes, including preexisting trailing whitespace, to retain their hashes.
+
+## Renewed research evidence
+
+- `renewed_llama/`: failed development/confirmation reports, the successful
+  `joint192` search and frozen layouts, fresh `joint192_confirm`, and final PPL.
+- `renewed_source/`: execution-source snapshots and local Python import closure.
+  These preserve the running checkout's dependencies without overwriting its
+  preexisting edits; reconstruct those paths in an isolated checkout to replay.
+- `fused_405618/`: correct but slow direct-scatter epilogue.
+- `consumer_405635/`, `consumer_vector_405650/`: consumer microbenchmarks.
+- `consumer_pipeline_405651/`, `consumer_vector_pipeline_405668/`: GEMM plus
+  consumer, with input gather still included.
+- `quantperm_405676/`: isolated packed-producer fusion before signed-zero fix.
+- `quant_audit_405694/`: first Python oracle failure, numerically equal but
+  negative-zero signs differed; `quant_audit_405697/` preserves the fix and
+  successful independent bitwise oracle.
+- `full_pipeline_405766/`: alpha=1 diagnostic;
+  **`full_pipeline_405810/`** is the final scaled producer/GEMM/consumer result.
+- `renewed_job_ledger.json`: all 28 renewed jobs including failures,
+  **2,093 GPU-seconds = 0.5814 GPU-hours**, peak concurrency **two GPUs**.
+  This adds to the initial follow-up's 0.4675 GPU-hours, not to all earlier
+  Qwen study spending. No jobs remain.
+
+The final native prototype uses Qwen maps, synthetic weights, fixed E2M1 GEMM
+format, and a common precomputed tensor-amax. It does not measure a complete
+MLP/model or native Llama latency. Quantizer throughput is not claimed optimal.
+Every submitted batch was handled using an attached monitor because same-session
+queue delivery had failed; terminal receipts are retained locally.

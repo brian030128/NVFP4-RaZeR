@@ -1,6 +1,21 @@
 # MixFP4 256×64 reordering: accepted study result
 
-The user accepted the measured both-axis result on 2026-09-20. The requested report, Llama transfer, and GB200 permutation follow-up are now complete; no GPU jobs remain. The earlier 90% recovery target was not reached: the accepted result recovers **43.2% of the 8×64 WikiText gain and 54.6% of its C4 gain** over FourOverSix. This is an experimental endpoint, not a proof that reordering cannot do better.
+The accepted Qwen result remains unchanged. The renewed Llama and GB200 work is now complete: Llama passes the frozen fresh-data gate and improves both PPLs, while producer/consumer fusion reduces measured GB200 permutation overhead to 1.4–5.1% in the matched per-projection prototype. All jobs are complete. The historical 90% target was not reached and remains recorded as not achieved.
+
+## Renewed result — 2026-09-20
+
+| Llama-3.1-8B policy | E0M3 tiles | WikiText | C4 |
+|---|---:|---:|---:|
+| FourOverSix | 0 | 6.875525 | 9.823733 |
+| Published MixFP4 8×64 | 3,345 | 6.849275 | 9.773040 |
+| Supplied raw MixFP4 256×64 | 187 | 6.866879 | 9.801361 |
+| **Refined both-axis 256×64** | **147** | **6.864886** | **9.796946** |
+
+The new Llama map improves raw by 0.001993/0.004415 PPL, recovering 40.5%/52.8% of the published fine-tile gain over FourOverSix. It retains the learned permutations and refines format selection using actual joint CE on 192 observed development documents; four tile flips yield 3 gate, 6 up, and 10 down E0M3 tiles in the last MLP. A frozen independent 64-document gate passes versus raw and matched identity before PPL. Earlier failed candidates remain failures.
+
+On **GB200 with the compacted Qwen maps**, the final native prototype fuses column addressing into the FourOverSix producer and row addressing into SiLU/multiply or residual-add. The original fast GEMM epilogue is preserved. Correctness passes on eight shapes; the corrected native quantizer also matches 22,528 Python-reference BF16 values bitwise. Overhead is 1.4–5.1% relative to the same quantizer + GEMM + consumer without reordering. This is not a native Llama or full-model speed measurement; common tensor-amax computation is excluded.
+
+See [the full report](MIXFP4_REPORT.md#continued-llama-research-independent-gate-passed-both-ppls-improved), [fresh gate](results/task_reorder/transfer_20260920/renewed_llama/joint192_confirm/report.json), [PPL](results/task_reorder/transfer_20260920/renewed_llama/joint192_ppl/report.json), [native timings](results/task_reorder/transfer_20260920/full_pipeline_405810/summary.json), and [job/spending ledger](results/task_reorder/transfer_20260920/renewed_job_ledger.json).
 
 ## Measured Qwen3.8-27B comparison
 

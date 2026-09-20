@@ -1,0 +1,97 @@
+{
+  "status": "complete",
+  "checks": [
+    "CORRECT silu_mul m=1 bitwise; negative_differences=2892",
+    "CORRECT silu_mul m=128 bitwise; negative_differences=370230",
+    "CORRECT silu_mul m=512 bitwise; negative_differences=1480923",
+    "CORRECT silu_mul m=2048 bitwise; negative_differences=5923668",
+    "CORRECT residual m=1 bitwise; negative_differences=3075",
+    "CORRECT residual m=128 bitwise; negative_differences=393597",
+    "CORRECT residual m=512 bitwise; negative_differences=1574413",
+    "CORRECT residual m=2048 bitwise; negative_differences=6297594"
+  ],
+  "scope": "Consumer-only microbenchmark; exact accepted Qwen compact maps. BF16 SiLU-round-multiply-round and residual-add. No GEMM, activation quantization, RMSNorm, or end-to-end timing claimed.",
+  "measurements": [
+    {
+      "op": "silu_mul",
+      "m": 1,
+      "n": 17408,
+      "base_us": 1.62656,
+      "fused_us": 1.9504,
+      "separate_us": 4.8192,
+      "increment_us": 0.3238399999999999,
+      "speedup_vs_separate": 2.4708777686628385
+    },
+    {
+      "op": "silu_mul",
+      "m": 128,
+      "n": 17408,
+      "base_us": 5.178559999999999,
+      "fused_us": 6.30464,
+      "separate_us": 14.3024,
+      "increment_us": 1.1260800000000009,
+      "speedup_vs_separate": 2.2685514160998883
+    },
+    {
+      "op": "silu_mul",
+      "m": 512,
+      "n": 17408,
+      "base_us": 16.038719,
+      "fused_us": 19.477119000000002,
+      "separate_us": 47.723521999999996,
+      "increment_us": 3.4384000000000015,
+      "speedup_vs_separate": 2.450235170817614
+    },
+    {
+      "op": "silu_mul",
+      "m": 2048,
+      "n": 17408,
+      "base_us": 74.032001,
+      "fused_us": 85.262718,
+      "separate_us": 199.28480100000002,
+      "increment_us": 11.230717000000013,
+      "speedup_vs_separate": 2.337302934677733
+    },
+    {
+      "op": "residual",
+      "m": 1,
+      "n": 5120,
+      "base_us": 1.3152000000000001,
+      "fused_us": 1.6195199999999998,
+      "separate_us": 2.8864,
+      "increment_us": 0.3043199999999997,
+      "speedup_vs_separate": 1.7822564710531517
+    },
+    {
+      "op": "residual",
+      "m": 128,
+      "n": 5120,
+      "base_us": 1.66144,
+      "fused_us": 2.41408,
+      "separate_us": 4.12096,
+      "increment_us": 0.7526399999999998,
+      "speedup_vs_separate": 1.7070519618239663
+    },
+    {
+      "op": "residual",
+      "m": 512,
+      "n": 5120,
+      "base_us": 3.8432000000000004,
+      "fused_us": 5.2544,
+      "separate_us": 8.872,
+      "increment_us": 1.4112,
+      "speedup_vs_separate": 1.6884896467722288
+    },
+    {
+      "op": "residual",
+      "m": 2048,
+      "n": 5120,
+      "base_us": 11.99104,
+      "fused_us": 16.012800000000002,
+      "separate_us": 29.9472,
+      "increment_us": 4.021760000000002,
+      "speedup_vs_separate": 1.8702038369304552
+    }
+  ],
+  "raw_sha256": "72a03a52b3915856abc430940811a8cd028b810264d969049a9e751a62e7f5e4"
+}
