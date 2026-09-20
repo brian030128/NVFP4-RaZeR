@@ -1,0 +1,46 @@
+{
+  "hardware": "NVIDIA GB200, SM100; not a separately measured B200 system",
+  "scope": "GEMM only, same mixed executable and default launch configuration, E2M1 activation fixed; uniform E2M1 versus uniform E0M3 weight codebook. Excludes permutations, quantization, consumers, heterogeneous format maps and full-model execution.",
+  "latencies": "Derived as 2*M*N*K/(reported median TFLOP/s * 1e6), in microseconds; source throughput rounded to0.1TFLOP/s.",
+  "measurements": [
+    {
+      "timing": "graph",
+      "shape": [
+        8192,
+        8192,
+        8192
+      ],
+      "nvfp4_same_kernel_us": 136.4547734187175,
+      "mixfp4_uniform_weight_e0m3_us": 136.32788123989485,
+      "delta_us": -0.1268921788226578,
+      "overhead_percent": -0.09299211426871956,
+      "nvfp4_tflops": 8057.7,
+      "mixfp4_tflops": 8065.2,
+      "repetitions": 3,
+      "historical_job": "400605",
+      "historical_account": "mst114554"
+    },
+    {
+      "timing": "launch",
+      "shape": [
+        8192,
+        8192,
+        8192
+      ],
+      "nvfp4_same_kernel_us": 136.6905725870857,
+      "mixfp4_uniform_weight_e0m3_us": 136.67358141607002,
+      "delta_us": -0.016991171015689588,
+      "overhead_percent": -0.012430389817019716,
+      "nvfp4_tflops": 8043.8,
+      "mixfp4_tflops": 8044.8,
+      "repetitions": 3,
+      "historical_job": "400605",
+      "historical_account": "mst114554"
+    }
+  ],
+  "source_sha256": {
+    "sm100_graph.json": "1aba331ed99eba5be49e5988474f8a58b62d7f9a5f0bc148a64f7e6f82416cbe",
+    "sm100_launch.json": "4d7620dddeb70289d315338ebb09ec65b1ffc8bd1ceff3d130965080fe31b02e",
+    "sm100_tuning.md": "ee33dc703a4a2ad364de4812c8463704b33ce1d9f55b1be390815193c4752e82"
+  }
+}

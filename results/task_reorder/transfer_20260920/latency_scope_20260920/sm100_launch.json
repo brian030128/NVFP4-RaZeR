@@ -1,0 +1,395 @@
+{
+  "build": "/work/u4320956/b200/bld",
+  "timing": "launch",
+  "cutlass_pdl": true,
+  "repetitions": 3,
+  "slurm_job": "400605",
+  "slurm_account": "mst114554",
+  "results": [
+    {
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "config": "256x128x256_2sm_fast",
+      "raster": 1,
+      "swizzle": 1,
+      "tuning_output": "  128x64x256_1sm_static      718.1 TFLOP/s   (raster=heur swizzle=1)\n  256x128x256_2sm_static     704.8 TFLOP/s   (raster=alongM swizzle=1)\n  128x64x256_1sm_fast        642.1 TFLOP/s   (raster=heur swizzle=0)\n  128x128x256_1sm_fast       655.9 TFLOP/s   (raster=alongM swizzle=1)\n  256x128x256_2sm_fast       730.5 TFLOP/s   (raster=alongM swizzle=1)\n  256x256x256_2sm_fast       505.6 TFLOP/s   (raster=heur swizzle=0)\n  128x128x256_1sm            619.8 TFLOP/s   (raster=heur swizzle=0)\n  128x256x256_1sm            375.7 TFLOP/s   (raster=alongN swizzle=4)\n  256x128x256_2sm            652.0 TFLOP/s   (raster=alongM swizzle=0)\n  256x256x256_2sm            407.8 TFLOP/s   (raster=heur swizzle=1)\n  128x128x256_1sm_c2x2       620.9 TFLOP/s   (raster=alongM swizzle=2)\n  128x256x256_1sm_c2x1       377.7 TFLOP/s   (raster=heur swizzle=0)\n  128x128x256_1sm_c4x4       624.3 TFLOP/s   (raster=alongN swizzle=1)\n  256x128x256_2sm_c2x2       650.2 TFLOP/s   (raster=alongN swizzle=1)\n  256x256x256_2sm_c2x2       401.9 TFLOP/s   (raster=alongM swizzle=0)\n  256x128x256_2sm_c2x4       650.7 TFLOP/s   (raster=alongN swizzle=1)\n  256x128x256_2sm_c4x2       647.8 TFLOP/s   (raster=heur swizzle=1)\n  256x256x256_2sm_c4x2       403.3 TFLOP/s   (raster=heur swizzle=4)\nProblem size: 1024x1024x1024\nTiming: launch; PDL=on\nBest config: 256x128x256_2sm_fast raster=alongM swizzle=1\nThroughput: 730.5 TFLOP/s (nvfp4 sm100)\nAvg latency: 0.002940 ms\n",
+      "samples": [
+        {
+          "bf16": 563.2,
+          "fp8": 503.6,
+          "nvfp4": 538.1,
+          "cutlass": 713.5,
+          "mixed": {
+            "e2m1/e2m1": 498.5,
+            "e2m1/e0m3": 496.6,
+            "e0m3/e2m1": 498.3,
+            "e0m3/e0m3": 497.7
+          }
+        },
+        {
+          "bf16": 555.8,
+          "fp8": 553.3,
+          "nvfp4": 541.3,
+          "cutlass": 713.3,
+          "mixed": {
+            "e2m1/e2m1": 498.5,
+            "e2m1/e0m3": 499.3,
+            "e0m3/e2m1": 496.6,
+            "e0m3/e0m3": 496.8
+          }
+        },
+        {
+          "bf16": 542.9,
+          "fp8": 546.3,
+          "nvfp4": 524.3,
+          "cutlass": 714.0,
+          "mixed": {
+            "e2m1/e2m1": 496.4,
+            "e2m1/e0m3": 498.4,
+            "e0m3/e2m1": 499.8,
+            "e0m3/e0m3": 497.6
+          }
+        }
+      ],
+      "median": {
+        "bf16": 555.8,
+        "fp8": 546.3,
+        "nvfp4": 538.1,
+        "cutlass": 713.5
+      }
+    },
+    {
+      "shape": [
+        2048,
+        2048,
+        2048
+      ],
+      "config": "256x128x256_2sm_fast",
+      "raster": 2,
+      "swizzle": 0,
+      "tuning_output": "  128x64x256_1sm_static     2248.5 TFLOP/s   (raster=heur swizzle=4)\n  256x128x256_2sm_static    3452.5 TFLOP/s   (raster=heur swizzle=1)\n  128x64x256_1sm_fast       2185.5 TFLOP/s   (raster=alongN swizzle=0)\n  128x128x256_1sm_fast      2816.7 TFLOP/s   (raster=alongN swizzle=4)\n  256x128x256_2sm_fast      3491.4 TFLOP/s   (raster=alongN swizzle=0)\n  256x256x256_2sm_fast      3089.7 TFLOP/s   (raster=alongN swizzle=0)\n  128x128x256_1sm           2801.2 TFLOP/s   (raster=alongM swizzle=0)\n  128x256x256_1sm           2187.9 TFLOP/s   (raster=alongM swizzle=2)\n  256x128x256_2sm           3170.2 TFLOP/s   (raster=alongN swizzle=1)\n  256x256x256_2sm           2490.2 TFLOP/s   (raster=alongN swizzle=1)\n  128x128x256_1sm_c2x2      2729.3 TFLOP/s   (raster=heur swizzle=0)\n  128x256x256_1sm_c2x1      2152.9 TFLOP/s   (raster=heur swizzle=2)\n  128x128x256_1sm_c4x4      2269.2 TFLOP/s   (raster=alongN swizzle=1)\n  256x128x256_2sm_c2x2      3074.0 TFLOP/s   (raster=alongM swizzle=1)\n  256x256x256_2sm_c2x2      2435.8 TFLOP/s   (raster=alongM swizzle=0)\n  256x128x256_2sm_c2x4      2522.1 TFLOP/s   (raster=alongM swizzle=0)\n  256x128x256_2sm_c4x2      2495.0 TFLOP/s   (raster=alongM swizzle=1)\n  256x256x256_2sm_c4x2      1786.1 TFLOP/s   (raster=alongN swizzle=1)\nProblem size: 2048x2048x2048\nTiming: launch; PDL=on\nBest config: 256x128x256_2sm_fast raster=alongN swizzle=0\nThroughput: 3491.4 TFLOP/s (nvfp4 sm100)\nAvg latency: 0.004921 ms\n",
+      "samples": [
+        {
+          "bf16": 1581.1,
+          "fp8": 2555.6,
+          "nvfp4": 3181.6,
+          "cutlass": 3471.7,
+          "mixed": {
+            "e2m1/e2m1": 3089.5,
+            "e2m1/e0m3": 3093.6,
+            "e0m3/e2m1": 3097.7,
+            "e0m3/e0m3": 3094.0
+          }
+        },
+        {
+          "bf16": 1579.0,
+          "fp8": 2547.3,
+          "nvfp4": 3177.5,
+          "cutlass": 3462.6,
+          "mixed": {
+            "e2m1/e2m1": 3100.8,
+            "e2m1/e0m3": 3087.2,
+            "e0m3/e2m1": 3094.9,
+            "e0m3/e0m3": 3083.7
+          }
+        },
+        {
+          "bf16": 1573.6,
+          "fp8": 2553.9,
+          "nvfp4": 3169.6,
+          "cutlass": 3467.5,
+          "mixed": {
+            "e2m1/e2m1": 3095.1,
+            "e2m1/e0m3": 3098.1,
+            "e0m3/e2m1": 3098.5,
+            "e0m3/e0m3": 3097.2
+          }
+        }
+      ],
+      "median": {
+        "bf16": 1579.0,
+        "fp8": 2553.9,
+        "nvfp4": 3177.5,
+        "cutlass": 3467.5
+      }
+    },
+    {
+      "shape": [
+        4096,
+        4096,
+        4096
+      ],
+      "config": "256x128x256_2sm_fast",
+      "raster": 2,
+      "swizzle": 1,
+      "tuning_output": "  128x64x256_1sm_static     3742.8 TFLOP/s   (raster=alongN swizzle=2)\n  256x128x256_2sm_static    6193.3 TFLOP/s   (raster=heur swizzle=0)\n  128x64x256_1sm_fast       3676.6 TFLOP/s   (raster=alongN swizzle=0)\n  128x128x256_1sm_fast      5029.4 TFLOP/s   (raster=alongM swizzle=1)\n  256x128x256_2sm_fast      6314.0 TFLOP/s   (raster=alongN swizzle=1)\n  256x256x256_2sm_fast      6094.7 TFLOP/s   (raster=heur swizzle=1)\n  128x128x256_1sm           5049.0 TFLOP/s   (raster=alongM swizzle=1)\n  128x256x256_1sm           3836.9 TFLOP/s   (raster=alongM swizzle=0)\n  256x128x256_2sm           6007.7 TFLOP/s   (raster=alongN swizzle=0)\n  256x256x256_2sm           5218.5 TFLOP/s   (raster=heur swizzle=1)\n  128x128x256_1sm_c2x2      4708.9 TFLOP/s   (raster=alongM swizzle=1)\n  128x256x256_1sm_c2x1      3786.7 TFLOP/s   (raster=alongM swizzle=1)\n  128x128x256_1sm_c4x4      4040.0 TFLOP/s   (raster=alongM swizzle=1)\n  256x128x256_2sm_c2x2      5391.0 TFLOP/s   (raster=alongM swizzle=1)\n  256x256x256_2sm_c2x2      5127.1 TFLOP/s   (raster=heur swizzle=0)\n  256x128x256_2sm_c2x4      4841.3 TFLOP/s   (raster=alongM swizzle=1)\n  256x128x256_2sm_c4x2      4895.2 TFLOP/s   (raster=heur swizzle=0)\n  256x256x256_2sm_c4x2      4269.0 TFLOP/s   (raster=alongN swizzle=1)\nProblem size: 4096x4096x4096\nTiming: launch; PDL=on\nBest config: 256x128x256_2sm_fast raster=alongN swizzle=1\nThroughput: 6314.0 TFLOP/s (nvfp4 sm100)\nAvg latency: 0.021767 ms\n",
+      "samples": [
+        {
+          "bf16": 2029.2,
+          "fp8": 3921.7,
+          "nvfp4": 6164.6,
+          "cutlass": 6288.8,
+          "mixed": {
+            "e2m1/e2m1": 6119.1,
+            "e2m1/e0m3": 6124.5,
+            "e0m3/e2m1": 6121.4,
+            "e0m3/e0m3": 6123.0
+          }
+        },
+        {
+          "bf16": 2026.3,
+          "fp8": 3930.7,
+          "nvfp4": 6173.8,
+          "cutlass": 6307.0,
+          "mixed": {
+            "e2m1/e2m1": 6135.5,
+            "e2m1/e0m3": 6105.8,
+            "e0m3/e2m1": 6111.7,
+            "e0m3/e0m3": 6119.8
+          }
+        },
+        {
+          "bf16": 2026.0,
+          "fp8": 3924.6,
+          "nvfp4": 6160.3,
+          "cutlass": 6300.6,
+          "mixed": {
+            "e2m1/e2m1": 6117.8,
+            "e2m1/e0m3": 6121.9,
+            "e0m3/e2m1": 6118.2,
+            "e0m3/e0m3": 6118.0
+          }
+        }
+      ],
+      "median": {
+        "bf16": 2026.3,
+        "fp8": 3924.6,
+        "nvfp4": 6164.6,
+        "cutlass": 6300.6
+      }
+    },
+    {
+      "shape": [
+        8192,
+        8192,
+        8192
+      ],
+      "config": "256x256x256_2sm_fast",
+      "raster": 2,
+      "swizzle": 2,
+      "tuning_output": "  128x64x256_1sm_static     4020.8 TFLOP/s   (raster=alongM swizzle=4)\n  256x128x256_2sm_static    6617.1 TFLOP/s   (raster=alongN swizzle=1)\n  128x64x256_1sm_fast       4128.3 TFLOP/s   (raster=alongN swizzle=0)\n  128x128x256_1sm_fast      5631.7 TFLOP/s   (raster=heur swizzle=0)\n  256x128x256_2sm_fast      7112.8 TFLOP/s   (raster=alongN swizzle=1)\n  256x256x256_2sm_fast      8039.8 TFLOP/s   (raster=alongN swizzle=2)\n  128x128x256_1sm           5670.4 TFLOP/s   (raster=alongN swizzle=1)\n  128x256x256_1sm           4459.8 TFLOP/s   (raster=alongN swizzle=4)\n  256x128x256_2sm           6794.9 TFLOP/s   (raster=alongN swizzle=0)\n  256x256x256_2sm           6305.9 TFLOP/s   (raster=heur swizzle=2)\n  128x128x256_1sm_c2x2      5575.0 TFLOP/s   (raster=alongN swizzle=0)\n  128x256x256_1sm_c2x1      4414.4 TFLOP/s   (raster=alongN swizzle=2)\n  128x128x256_1sm_c4x4      4335.4 TFLOP/s   (raster=alongN swizzle=0)\n  256x128x256_2sm_c2x2      6660.2 TFLOP/s   (raster=alongN swizzle=1)\n  256x256x256_2sm_c2x2      5916.2 TFLOP/s   (raster=heur swizzle=2)\n  256x128x256_2sm_c2x4      5411.9 TFLOP/s   (raster=heur swizzle=2)\n  256x128x256_2sm_c4x2      5393.6 TFLOP/s   (raster=alongN swizzle=1)\n  256x256x256_2sm_c4x2      4628.2 TFLOP/s   (raster=heur swizzle=0)\nProblem size: 8192x8192x8192\nTiming: launch; PDL=on\nBest config: 256x256x256_2sm_fast raster=alongN swizzle=2\nThroughput: 8039.8 TFLOP/s (nvfp4 sm100)\nAvg latency: 0.136758 ms\n",
+      "samples": [
+        {
+          "bf16": 2294.4,
+          "fp8": 4593.7,
+          "nvfp4": 7581.4,
+          "cutlass": 8045.0,
+          "mixed": {
+            "e2m1/e2m1": 8048.2,
+            "e2m1/e0m3": 8048.4,
+            "e0m3/e2m1": 8058.2,
+            "e0m3/e0m3": 8046.0
+          }
+        },
+        {
+          "bf16": 2297.8,
+          "fp8": 4590.3,
+          "nvfp4": 7567.5,
+          "cutlass": 8047.2,
+          "mixed": {
+            "e2m1/e2m1": 8037.9,
+            "e2m1/e0m3": 8039.4,
+            "e0m3/e2m1": 8060.4,
+            "e0m3/e0m3": 8059.1
+          }
+        },
+        {
+          "bf16": 2297.9,
+          "fp8": 4594.7,
+          "nvfp4": 7569.9,
+          "cutlass": 8042.5,
+          "mixed": {
+            "e2m1/e2m1": 8043.8,
+            "e2m1/e0m3": 8044.8,
+            "e0m3/e2m1": 8051.9,
+            "e0m3/e0m3": 8042.0
+          }
+        }
+      ],
+      "median": {
+        "bf16": 2297.8,
+        "fp8": 4593.7,
+        "nvfp4": 7569.9,
+        "cutlass": 8045.0
+      }
+    },
+    {
+      "shape": [
+        4096,
+        4096,
+        16384
+      ],
+      "config": "256x256x256_2sm_fast",
+      "raster": 2,
+      "swizzle": 2,
+      "tuning_output": "  128x64x256_1sm_static     4075.9 TFLOP/s   (raster=alongN swizzle=0)\n  256x128x256_2sm_static    6870.8 TFLOP/s   (raster=heur swizzle=0)\n  128x64x256_1sm_fast       4041.9 TFLOP/s   (raster=alongN swizzle=1)\n  128x128x256_1sm_fast      5394.2 TFLOP/s   (raster=heur swizzle=1)\n  256x128x256_2sm_fast      6973.8 TFLOP/s   (raster=alongN swizzle=1)\n  256x256x256_2sm_fast      7101.1 TFLOP/s   (raster=alongN swizzle=2)\n  128x128x256_1sm           5397.3 TFLOP/s   (raster=alongN swizzle=0)\n  128x256x256_1sm           3507.9 TFLOP/s   (raster=alongM swizzle=4)\n  256x128x256_2sm           6411.3 TFLOP/s   (raster=alongN swizzle=0)\n  256x256x256_2sm           4971.1 TFLOP/s   (raster=alongM swizzle=4)\n  128x128x256_1sm_c2x2      5453.6 TFLOP/s   (raster=alongN swizzle=2)\n  128x256x256_1sm_c2x1      3479.3 TFLOP/s   (raster=alongM swizzle=4)\n  128x128x256_1sm_c4x4      4082.2 TFLOP/s   (raster=alongN swizzle=0)\n  256x128x256_2sm_c2x2      6421.0 TFLOP/s   (raster=alongN swizzle=2)\n  256x256x256_2sm_c2x2      4943.5 TFLOP/s   (raster=alongN swizzle=4)\n  256x128x256_2sm_c2x4      5138.4 TFLOP/s   (raster=alongN swizzle=1)\n  256x128x256_2sm_c4x2      5042.0 TFLOP/s   (raster=alongM swizzle=4)\n  256x256x256_2sm_c4x2      3955.3 TFLOP/s   (raster=alongN swizzle=2)\nProblem size: 4096x4096x16384\nTiming: launch; PDL=on\nBest config: 256x256x256_2sm_fast raster=alongN swizzle=2\nThroughput: 7101.1 TFLOP/s (nvfp4 sm100)\nAvg latency: 0.077418 ms\n",
+      "samples": [
+        {
+          "bf16": 1989.9,
+          "fp8": 3923.1,
+          "nvfp4": 7180.4,
+          "cutlass": 7109.0,
+          "mixed": {
+            "e2m1/e2m1": 7114.7,
+            "e2m1/e0m3": 7118.7,
+            "e0m3/e2m1": 7112.8,
+            "e0m3/e0m3": 7111.6
+          }
+        },
+        {
+          "bf16": 1992.0,
+          "fp8": 3924.8,
+          "nvfp4": 7187.7,
+          "cutlass": 7114.5,
+          "mixed": {
+            "e2m1/e2m1": 7119.8,
+            "e2m1/e0m3": 7110.8,
+            "e0m3/e2m1": 7120.9,
+            "e0m3/e0m3": 7116.2
+          }
+        },
+        {
+          "bf16": 1989.7,
+          "fp8": 3919.0,
+          "nvfp4": 7181.5,
+          "cutlass": 7129.6,
+          "mixed": {
+            "e2m1/e2m1": 7113.8,
+            "e2m1/e0m3": 7119.7,
+            "e0m3/e2m1": 7118.6,
+            "e0m3/e0m3": 7112.7
+          }
+        }
+      ],
+      "median": {
+        "bf16": 1989.9,
+        "fp8": 3923.1,
+        "nvfp4": 7181.5,
+        "cutlass": 7114.5
+      }
+    },
+    {
+      "shape": [
+        8192,
+        8192,
+        2048
+      ],
+      "config": "256x256x256_2sm_fast",
+      "raster": 2,
+      "swizzle": 2,
+      "tuning_output": "  128x64x256_1sm_static     3329.8 TFLOP/s   (raster=alongN swizzle=4)\n  256x128x256_2sm_static    5343.0 TFLOP/s   (raster=alongN swizzle=4)\n  128x64x256_1sm_fast       3310.7 TFLOP/s   (raster=alongN swizzle=0)\n  128x128x256_1sm_fast      4335.7 TFLOP/s   (raster=alongN swizzle=4)\n  256x128x256_2sm_fast      5284.9 TFLOP/s   (raster=alongN swizzle=4)\n  256x256x256_2sm_fast      5886.1 TFLOP/s   (raster=alongN swizzle=2)\n  128x128x256_1sm           4467.5 TFLOP/s   (raster=heur swizzle=4)\n  128x256x256_1sm           3546.7 TFLOP/s   (raster=alongN swizzle=4)\n  256x128x256_2sm           5069.7 TFLOP/s   (raster=alongN swizzle=1)\n  256x256x256_2sm           4498.3 TFLOP/s   (raster=heur swizzle=4)\n  128x128x256_1sm_c2x2      4504.8 TFLOP/s   (raster=alongN swizzle=2)\n  128x256x256_1sm_c2x1      3517.5 TFLOP/s   (raster=heur swizzle=4)\n  128x128x256_1sm_c4x4      3697.6 TFLOP/s   (raster=alongN swizzle=2)\n  256x128x256_2sm_c2x2      5039.4 TFLOP/s   (raster=alongN swizzle=2)\n  256x256x256_2sm_c2x2      4368.0 TFLOP/s   (raster=heur swizzle=4)\n  256x128x256_2sm_c2x4      4224.6 TFLOP/s   (raster=alongN swizzle=4)\n  256x128x256_2sm_c4x2      4198.5 TFLOP/s   (raster=heur swizzle=4)\n  256x256x256_2sm_c4x2      3543.1 TFLOP/s   (raster=alongN swizzle=2)\nProblem size: 8192x8192x2048\nTiming: launch; PDL=on\nBest config: 256x256x256_2sm_fast raster=alongN swizzle=2\nThroughput: 5886.1 TFLOP/s (nvfp4 sm100)\nAvg latency: 0.046699 ms\n",
+      "samples": [
+        {
+          "bf16": 2212.9,
+          "fp8": 4091.9,
+          "nvfp4": 5146.6,
+          "cutlass": 5851.1,
+          "mixed": {
+            "e2m1/e2m1": 5847.4,
+            "e2m1/e0m3": 5843.6,
+            "e0m3/e2m1": 5841.0,
+            "e0m3/e0m3": 5840.7
+          }
+        },
+        {
+          "bf16": 2208.2,
+          "fp8": 4099.4,
+          "nvfp4": 5166.5,
+          "cutlass": 5847.4,
+          "mixed": {
+            "e2m1/e2m1": 5856.8,
+            "e2m1/e0m3": 5859.3,
+            "e0m3/e2m1": 5854.5,
+            "e0m3/e0m3": 5839.4
+          }
+        },
+        {
+          "bf16": 2211.3,
+          "fp8": 4092.4,
+          "nvfp4": 5151.7,
+          "cutlass": 5870.3,
+          "mixed": {
+            "e2m1/e2m1": 5839.4,
+            "e2m1/e0m3": 5844.6,
+            "e0m3/e2m1": 5852.2,
+            "e0m3/e0m3": 5845.4
+          }
+        }
+      ],
+      "median": {
+        "bf16": 2211.3,
+        "fp8": 4092.4,
+        "nvfp4": 5151.7,
+        "cutlass": 5851.1
+      }
+    },
+    {
+      "shape": [
+        16384,
+        16384,
+        2048
+      ],
+      "config": "256x256x256_2sm_fast",
+      "raster": 0,
+      "swizzle": 0,
+      "tuning_output": "  128x64x256_1sm_static     3479.0 TFLOP/s   (raster=alongN swizzle=2)\n  256x128x256_2sm_static    5479.5 TFLOP/s   (raster=alongN swizzle=0)\n  128x64x256_1sm_fast       3459.2 TFLOP/s   (raster=alongN swizzle=1)\n  128x128x256_1sm_fast      4651.4 TFLOP/s   (raster=heur swizzle=0)\n  256x128x256_2sm_fast      5592.2 TFLOP/s   (raster=alongN swizzle=0)\n  256x256x256_2sm_fast      6491.3 TFLOP/s   (raster=heur swizzle=0)\n  128x128x256_1sm           4792.9 TFLOP/s   (raster=alongN swizzle=4)\n  128x256x256_1sm           3842.2 TFLOP/s   (raster=alongN swizzle=2)\n  256x128x256_2sm           5412.1 TFLOP/s   (raster=alongN swizzle=0)\n  256x256x256_2sm           4902.8 TFLOP/s   (raster=heur swizzle=0)\n  128x128x256_1sm_c2x2      4731.1 TFLOP/s   (raster=heur swizzle=1)\n  128x256x256_1sm_c2x1      3788.9 TFLOP/s   (raster=alongN swizzle=1)\n  128x128x256_1sm_c4x4      3734.2 TFLOP/s   (raster=heur swizzle=1)\n  256x128x256_2sm_c2x2      5309.0 TFLOP/s   (raster=alongN swizzle=1)\n  256x256x256_2sm_c2x2      4653.0 TFLOP/s   (raster=alongN swizzle=1)\n  256x128x256_2sm_c2x4      4401.6 TFLOP/s   (raster=alongN swizzle=2)\n  256x128x256_2sm_c4x2      4291.0 TFLOP/s   (raster=alongN swizzle=0)\n  256x256x256_2sm_c4x2      3763.6 TFLOP/s   (raster=heur swizzle=0)\nProblem size: 16384x16384x2048\nTiming: launch; PDL=on\nBest config: 256x256x256_2sm_fast raster=heur swizzle=0\nThroughput: 6491.3 TFLOP/s (nvfp4 sm100)\nAvg latency: 0.169383 ms\n",
+      "samples": [
+        {
+          "bf16": 2335.5,
+          "fp8": 4380.8,
+          "nvfp4": 5850.5,
+          "cutlass": 6486.8,
+          "mixed": {
+            "e2m1/e2m1": 6382.2,
+            "e2m1/e0m3": 6390.9,
+            "e0m3/e2m1": 6386.7,
+            "e0m3/e0m3": 6389.1
+          }
+        },
+        {
+          "bf16": 2335.1,
+          "fp8": 4382.1,
+          "nvfp4": 5848.6,
+          "cutlass": 6483.6,
+          "mixed": {
+            "e2m1/e2m1": 6388.5,
+            "e2m1/e0m3": 6356.2,
+            "e0m3/e2m1": 6385.7,
+            "e0m3/e0m3": 6389.9
+          }
+        },
+        {
+          "bf16": 2336.0,
+          "fp8": 4382.8,
+          "nvfp4": 5851.5,
+          "cutlass": 6477.2,
+          "mixed": {
+            "e2m1/e2m1": 6389.4,
+            "e2m1/e0m3": 6385.1,
+            "e0m3/e2m1": 6391.1,
+            "e0m3/e0m3": 6392.7
+          }
+        }
+      ],
+      "median": {
+        "bf16": 2335.5,
+        "fp8": 4382.1,
+        "nvfp4": 5850.5,
+        "cutlass": 6483.6
+      }
+    }
+  ]
+}

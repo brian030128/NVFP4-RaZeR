@@ -134,6 +134,7 @@ includes failed builds and rejected candidates. All work used `gov113008`, with
 Slurm workers for heavy compute and attached completion monitors; the measured
 peak concurrency remained below the four-GPU limit.
 '''
+text+='\n'+(B/'latency_scope_20260920/report_section.md').read_text()
 p=B/'report_section.md';old=p.read_text();heading='### Continued Llama research: independent gate passed, both PPLs improved';old=old.split(heading)[0].rstrip()
 old=old.replace('a fused epilogue remains unimplemented.','those initial jobs did not implement fusion; the follow-up below does.').replace('No fused-kernel latency is claimed.','Those initial jobs make no fused-kernel latency claim.')
 p.write_text(old+'\n\n'+text)
