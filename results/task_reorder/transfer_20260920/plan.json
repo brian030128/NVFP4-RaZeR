@@ -1,0 +1,87 @@
+{
+  "status": "complete",
+  "purpose": "Llama transfer of accepted Qwen arranging method and GB200 permutation overhead",
+  "max_concurrent_gpus": 4,
+  "account": "gov113008",
+  "llama": {
+    "model": "meta-llama/Llama-3.1-8B",
+    "revision": "d04e592bb4f6aa9cfee91e2e20afa771667e1d4b",
+    "scope": "last MLP gate/up/down, layer 31",
+    "search": {
+      "starts": 4,
+      "rounds": 6,
+      "swap_samples": 4096,
+      "swap_passes": 2,
+      "scratch_mb": 32,
+      "axes": "both",
+      "seed": 0,
+      "k": 3,
+      "atom_rows": 1,
+      "atom_cols": 16,
+      "tile_rows": 256,
+      "tile_cols": 64
+    },
+    "calibration": "original 128 math/code documents, 64 fit / 64 election",
+    "fresh_gate": "Before candidate PPL: fresh64 pooled CE mean+2SE<0 versus raw256 and matched identity, domain CE means <=0 versus raw256; KL diagnostic",
+    "controls": "Reuse published controls after provenance and map audit; distinguish locally regenerated raw mask if different",
+    "historical_calibration_maps_identical": true,
+    "regenerated_counts": {
+      "raw256": 187,
+      "fine8x64": 3345
+    }
+  },
+  "hardware": {
+    "partition": "gb200-dev",
+    "device": "GB200; query on worker",
+    "scope": "existing SM100 256x64 kernel plus exact compacted Qwen permutations; measure explicit unfused overhead first",
+    "no_native_fused_claim": true
+  },
+  "jobs": {
+    "405426": {
+      "phase": "Llama calibration",
+      "state": "COMPLETED",
+      "elapsed_seconds": 452
+    },
+    "405441": {
+      "phase": "GB200 full permutation benchmark",
+      "state": "COMPLETED",
+      "elapsed_seconds": 133
+    },
+    "405458": {
+      "phase": "GB200 sparse output benchmark",
+      "state": "COMPLETED",
+      "elapsed_seconds": 136
+    },
+    "405455": {
+      "phase": "All3 Llama searches completed; intentional boundary before fresh data",
+      "state": "FAILED at planned boundary",
+      "elapsed_seconds": 806
+    },
+    "405476": {
+      "phase": "GB200 distinct-output correctness and negative control",
+      "state": "COMPLETED",
+      "elapsed_seconds": 8
+    },
+    "405477": {
+      "phase": "Missing compacted-layout metadata; no fresh/model work",
+      "state": "FAILED",
+      "elapsed_seconds": 17
+    },
+    "405480": {
+      "phase": "Llama fresh64 confirmation; candidate rejected",
+      "state": "COMPLETED",
+      "elapsed_seconds": 131
+    }
+  },
+  "outcome": {
+    "qwen_accepted_ppl_unchanged": true,
+    "llama_fresh_gate_passed": false,
+    "llama_ppl_promoted": false,
+    "native_permutation_benchmarks_complete": true,
+    "fused_kernel_measured": false,
+    "active_jobs": [],
+    "max_observed_concurrent_gpus": 2
+  },
+  "total_allocated_gpu_seconds": 1683,
+  "total_allocated_gpu_hours": 0.4675
+}

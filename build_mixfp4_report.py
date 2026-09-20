@@ -1,8 +1,8 @@
 """Rebuild MIXFP4_REPORT.md: the k-SE element-type rule and its 2048-token results.
 
-The report carries only paper-aligned 2048-token measurements and the method that
-produced them. Everything measured under other protocols lives under results/ and
-is not summarised here.
+The main quality tables use the released 2048-token protocol. The 256x64
+follow-up separately documents arranging, fresh confirmation, and native
+permutation overhead, with each measurement protocol stated explicitly.
 """
 import argparse
 import json
@@ -158,7 +158,23 @@ def main():
     ap.add_argument('--baseline-job', default='335962')
     ap.add_argument('--zeroshot', default='results/zeroshot_check/job_336108/qwen4b')
     ap.add_argument('--report', default='MIXFP4_REPORT.md')
+    ap.add_argument('--update-arranging', action='store_true',
+                    help='Update only the 256x64 follow-up, preserving curated report sections.')
     args = ap.parse_args()
+    if args.update_arranging:
+        path = Path(args.report)
+        text = path.read_text()
+        section = Path('results/task_reorder/transfer_20260920/report_section.md').read_text()
+        heading = '## Arranging weights for 256×64 MixFP4 tiles'
+        if heading in text:
+            before, tail = text.split(heading, 1)
+            assert '\n## ' not in tail, 'Follow-up must be the final top-level section'
+            text = before + section
+        else:
+            text = text.rstrip() + '\n\n' + section
+        path.write_text(text)
+        print(f'updated arranging section in {path}')
+        return
     qwen = kse(Path('results/kse_paper/job_336566'), 'qwen4b')
     _, qwen_bf16 = released('qwen3-4b', 'bf16')
     adaptive = json.loads(Path('results/adaptive_paper/job_335993/qwen4b/report.json').read_text())
@@ -172,15 +188,15 @@ def main():
 
 **GB200 follow-up:** [Weight reordering and rotation plan](MIXFP4_GB200_PLAN.md)
 targets `m256n256k64` with 256x64 weight type tiles and fixed E2M1 activations.
-This is proposed work; the measured 8x64 results below remain the reference.
+The arranging results below extend the measured 8x64 reference to 256x64 tiles.
 
 NVFP4 hardware can already read a weight operand tile as either E2M1 or E0M3 at
 no cost. This report is about how to set that one bit per 8x64 tile, and what it
-buys. Every number is the released 2048-token evaluation: WikiText-2 raw test in
-141 full nonoverlapping windows, C4 as 256 seed-0 crops from validation shard
+buys. The main PPL tables use the released 2048-token evaluation: WikiText-2 raw test in
+full nonoverlapping windows (141 for Llama-3.1-8B, 145 for Qwen3.8-27B), C4 as 256 seed-0 crops from validation shard
 00000, tensor-wide activation factors, SDPA, WikiText cached per window with C4
-uncached, and the released float32 perplexity aggregation. Measurements taken
-under any other protocol are not reported here.
+uncached, and the released float32 perplexity aggregation. The 256x64 follow-up explicitly separates fresh calibration checks and native
+permutation timings from these PPL measurements.
 
 {results_section()}
 ## 2. How the element type is chosen
@@ -317,11 +333,13 @@ hashes and frozen map hashes are checked; and the C4 evaluation documents have
 zero hash overlap with the calibration documents.
 
 {accuracy}
+{Path('results/task_reorder/transfer_20260920/report_section.md').read_text()}
 ## 6. Limits
 
 - Simulated W4A4 on text linear weights and their inputs. No KV-cache
-  quantization, generation accuracy, or native FP4 kernel throughput is measured,
-  and no speedup is claimed.
+  quantization or generation accuracy is measured by that simulator. The 256x64
+  follow-up measures native permutation overhead separately; it does not establish
+  an end-to-end model speedup.
 - Tensor-wide activation factors span the whole teacher-forced window, so these
   are reference-text perplexities, not causal generation likelihoods.
 - k = {K} is prespecified from the calibration score distribution and was fixed

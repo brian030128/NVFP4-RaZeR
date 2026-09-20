@@ -1,0 +1,51 @@
+{
+  "protocol_family": "ce_primary_after_positive_control",
+  "candidate": "llama last-MLP both-axis transfer",
+  "criterion": "Pooled CE mean+2SE<0 vs raw256 and identity; domain CE means <=0 vs raw; KL diagnostic",
+  "source_sha256": {
+    "run_llama_arrange_transfer.py": "6b374d9f94a8f170e7ae78742b10a7a233a15fb92443b57ed04ca267c6c08d50",
+    "quantize/task_reorder.py": "92284f1b8b23982fcd26cd9748e6ea71f6907fdb23cf45d3a593b505569614f8",
+    "quantize/compact_both.py": "1f273e8f5d28bbade6679fcbb19274435d492b9f77cf985147757cf7fee4438e",
+    "quantize/compact_rows.py": "33e87449f8f032528014389cdf9c462114d675dea59869bd27aaa633530a4ae7",
+    "quantize/quantizer.py": "af6246545b0e9918c4232e4e59f64e249a6d1316186dc90f2768ed85700dc007",
+    "run_fine_row_research.py": "605a3535f35a1305e8bd0af949d4569bde3f40f6a345aabc241ec4628d02decd",
+    "scripts/ce_confirmation_gate.py": "4cd0eaed0c0e699693b72cbd567be029088a3696f3bbde888edf3f2db3e3a355"
+  },
+  "layout_sha256": {
+    "/work/u4320956/task_reorder/transfer_20260920/llama8b/compacted/000/layout.pt": "cdc7c9ca2f1fe7dcb098f06033398e4915dafe0f5c60132c3dc38b40f25807f0",
+    "/work/u4320956/task_reorder/transfer_20260920/llama8b/compacted/001/layout.pt": "d32df7798285e7786b9778cb7ab9d24ab9b3bdcc80f5bc264fa015eecc20a365",
+    "/work/u4320956/task_reorder/transfer_20260920/llama8b/compacted/002/layout.pt": "97bf00e7a166e5ef9ffd1dcfd8bf47ddd405987bb76154e4f1d7393c06360c53"
+  },
+  "calibration_report_sha256": "47e0d54c6ce647f68e076e46356b9d812ceb59094db8e92c935d925117583d32",
+  "expected_modules": [
+    "model.layers.31.mlp.gate_proj",
+    "model.layers.31.mlp.up_proj",
+    "model.layers.31.mlp.down_proj"
+  ],
+  "expected_total_tiles": 178,
+  "search": {
+    "tile_rows": 256,
+    "tile_cols": 64,
+    "atom_rows": 1,
+    "atom_cols": 16,
+    "k": 3.0,
+    "seed": 0,
+    "starts": 4,
+    "rounds": 6,
+    "swap_samples": 4096,
+    "swap_passes": 2,
+    "scratch_mb": 32,
+    "axes": "both"
+  },
+  "exclude_manifest_list_sha256": "5d7420f26cb0c52279e280f1eb448ff770dcc4d9507761c201d13e831ead477b",
+  "exclude_manifests": {
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/ce_target_combinations_confirm/fresh_manifest.json": "90c4f54f74e2108906bbcf12aacd81cec06c9769910cd4d086fdf9ea7342ee90",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/fisher_subset_validate_v2_confirm/fresh_manifest.json": "a7e5f1bf25eb7584d64f8e5ff8b00a54f8f7e4f7a32d2e835b69eccdf0a6e149",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/fresh_manifest.json": "0c2076550835a82dbe367d0dbc454972701c9856249a4c6d4edaafe480078dbf",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/preserved_row_confirm/fresh_manifest.json": "a2f229f6001ece7b53b680e8db987145158f136f7acbb43e6bf86352eb0d81c0",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/suffix_ce_restore_confirm/fresh_manifest.json": "855e224ea7a9e121cdcb9971d41cf4df9dcdcc9c6e8d389ea1f8b102d885ad09",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/tile_prune_confirm/fresh_manifest.json": "babfdedb1621721cf93121a11ac4aeec45517699719da772905f5b5c82d8e3ba"
+  },
+  "excluded_document_count": 743,
+  "excluded_token_count": 640
+}

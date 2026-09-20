@@ -1,6 +1,6 @@
 # MixFP4 256×64 reordering: accepted study result
 
-The user accepted the measured both-axis result on 2026-09-20. Further GPU experiments are stopped. The earlier 90% recovery target was not reached: the accepted result recovers **43.2% of the 8×64 WikiText gain and 54.6% of its C4 gain** over FourOverSix. This is an experimental endpoint, not a proof that reordering cannot do better.
+The user accepted the measured both-axis result on 2026-09-20. The requested report, Llama transfer, and GB200 permutation follow-up are now complete; no GPU jobs remain. The earlier 90% recovery target was not reached: the accepted result recovers **43.2% of the 8×64 WikiText gain and 54.6% of its C4 gain** over FourOverSix. This is an experimental endpoint, not a proof that reordering cannot do better.
 
 ## Measured Qwen3.8-27B comparison
 
@@ -52,7 +52,7 @@ After selecting the type map, exact compaction reassigns active groups to preser
 | Down | 5,119 | 3,080 | 17,376 | 1,104 |
 | **Total** | **39,934** | **5,001** | **27,216** | **1,392** |
 
-That is 87.5% fewer moved rows and 94.9% fewer moved columns. These are movement reductions, not latency reductions. The user verified equal GEMM speed for raw 256×64 MixFP4 and NVFP4; native B200 permutation and full-MLP overhead remain unmeasured.
+That is 87.5% fewer moved rows and 94.9% fewer moved columns. These are movement reductions, not latency reductions. The user verified equal GEMM speed for raw 256×64 MixFP4 and NVFP4; standalone permutation overhead has now been measured on GB200 (see the follow-up below). Fused and full-MLP overhead remain unmeasured.
 
 ## What later experiments established
 
@@ -72,3 +72,27 @@ A known-good 8×64 positive control had failed the earlier strict CE/KL confirma
 The accepted both-axis result is supported by measured held-out PPL. It is not claimed to have passed the later independent CE/KL confirmation gate; exact compaction preserves its existing quality and trade-offs rather than adding new validation evidence.
 
 No GPUs are allocated at this endpoint. Future work is limited to at most four concurrent GPUs and must use monitored H200 Slurm jobs for heavy computation.
+
+## Requested follow-up: report, Llama, and GB200
+
+[MIXFP4_REPORT.md](MIXFP4_REPORT.md) now explains the arranging algorithm, exact
+compaction, the full quality comparison, and native permutation measurements.
+
+- Llama transfer: 178 tiles, but fresh64 CE **+0.005206 vs raw256** and
+  **+0.005148 vs matched identity**, with both domains regressing. The frozen
+  gate failed, so no full PPL promotion was run. Existing Llama PPL controls
+  are retained in the report; this is a negative transfer result.
+- GB200: full input/output permutation passes add 27–204% per-projection
+  graph-timed overhead. Sparse output restoration helps the up projection at
+  larger token counts (2,048-token pipeline 174.27→92.17µs), but hurts down.
+  These are separate passes around the existing mixed kernel's E2M1 path,
+  not fused costs or full-model latency. Exact code/scale and distinct-output
+  checks passed, including an unchanged-output negative control.
+- All jobs completed and were handled through attached monitors. The follow-up
+  used 0.4675 allocated GPU-hours, including search and failed preflights;
+  at most two GPUs ran concurrently. No PPL or timing job was repeated.
+
+[Frozen plan and job ledger](results/task_reorder/transfer_20260920/plan.json),
+[Llama fresh confirmation](results/task_reorder/transfer_20260920/llama_confirmation/report.json),
+[full gather timings](results/task_reorder/transfer_20260920/gb200_405441/SUMMARY.md),
+and [sparse output timings](results/task_reorder/transfer_20260920/gb200_405458/SUMMARY.md).
