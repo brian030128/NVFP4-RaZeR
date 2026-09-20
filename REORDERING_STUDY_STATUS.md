@@ -2,6 +2,22 @@
 
 The accepted Qwen result remains unchanged. The renewed Llama and GB200 work is now complete: Llama passes the frozen fresh-data gate and improves both PPLs, while producer/consumer fusion reduces measured GB200 permutation overhead to 1.4–5.1% in the matched per-projection prototype. All jobs are complete. The historical 90% target was not reached and remains recorded as not achieved.
 
+## Native full-model timing update — 2026-09-20
+
+The full Llama model now runs the native GB200 packed kernel for all224 transformer
+projections. Diagnostic measurement406828 (batch1,128-token prompt,32cached decode
+steps) gives arranged request overhead **+0.53% ±0.53% (2SE)** versus FourOverSix,
+with medians915.747ms and911.380ms. At2048tokens, large variation across all policies
+makes overhead **inconclusive**. Actual heterogeneous GEMM-only timings and all
+raw samples are in the [full report](MIXFP4_REPORT.md#full-model-native-llama-31-8b-latency-on-gb200-diagnostic).
+
+**Native accuracy is not established:** operator and exact activation-encoding
+checks pass, but mixed-policy full-output reference equivalence fails and native
+PPL is unmeasured. Earlier quality results remain fake-quantized evaluations.
+No quality gate was changed. Qwen native full-model timing is still outstanding.
+All jobs are terminal; maximum concurrency in this phase was one GPU.
+See [implementation and limitations](results/task_reorder/full_model_20260920/IMPLEMENTATION.md).
+
 ## Renewed result — 2026-09-20
 
 | Llama-3.1-8B policy | E0M3 tiles | WikiText | C4 |
@@ -67,7 +83,7 @@ After selecting the type map, exact compaction reassigns active groups to preser
 | Down | 5,119 | 3,080 | 17,376 | 1,104 |
 | **Total** | **39,934** | **5,001** | **27,216** | **1,392** |
 
-That is 87.5% fewer moved rows and 94.9% fewer moved columns. These are movement reductions, not latency reductions. The user verified equal GEMM speed for raw 256×64 MixFP4 and NVFP4; standalone permutation overhead has now been measured on GB200 (see the follow-up below). Fused and full-MLP overhead remain unmeasured.
+That is 87.5% fewer moved rows and 94.9% fewer moved columns. These are movement reductions, not latency reductions. The user verified equal GEMM speed for raw 256×64 MixFP4 and NVFP4; standalone permutation overhead has now been measured on GB200 (see the follow-up below). Fused projection costs and later diagnostic full-model Llama measurements are described above; Qwen full-model latency remains unmeasured.
 
 ## What later experiments established
 

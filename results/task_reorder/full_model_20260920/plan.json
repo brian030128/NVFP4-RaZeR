@@ -1,0 +1,63 @@
+{
+  "scope": "Native GB200 full-model latency of frozen Llama-3.1-8B policies; Qwen follow-up after Llama pilot",
+  "model_revision": "d04e592bb4f6aa9cfee91e2e20afa771667e1d4b",
+  "policies": [
+    "FourOverSix native E2M1",
+    "raw256 native MixFP4",
+    "accepted147 native arranged MixFP4"
+  ],
+  "quality_maps": "Reuse calibration compact masks and joint192/layouts, fresh CE gate405692. No fitting or selection on benchmark inputs.",
+  "batch": 1,
+  "prompt_lengths": [
+    128,
+    2048
+  ],
+  "decode_tokens": 32,
+  "paired_repetitions": 5,
+  "timing": "CUDA events and synchronized host wall clock; alternating policy order; actual cached autoregressive decode; fixed supplied tokens shared across policies; last-token LM head for generation",
+  "included": [
+    "all model layers",
+    "attention",
+    "normalization",
+    "KV cache",
+    "dynamic activation amax",
+    "FourOverSix activation quantization",
+    "native packed mixed-format GEMM",
+    "permutation work",
+    "BF16 embeddings and vocabulary head"
+  ],
+  "excluded": [
+    "offline weight packing",
+    "model loading",
+    "tokenization",
+    "sampling",
+    "network and serving scheduler"
+  ],
+  "first_integration": "column permutation fused into packed activation store; separate output row restoration. Do not label this as fully consumer-fused latency.",
+  "kernel_gate": "relative Frobenius error <0.005 vs exact decoded FP32 reference, nonuniform N256/K64 masks and different M tails; wrong-format reference error >0.05",
+  "weight_gate": "source SHA256 for every matrix; packed dequant BF16 equals frozen fake-quantized weights for every matrix and policy",
+  "full_model_pilot_gate": "finite full logits, native-vs-matched fake-quantized reference relative Frobenius <0.02 on fixed32-token prompt, both baseline and arranged; thresholds frozen before pilot",
+  "account": "gov113008",
+  "max_concurrent_gpu": 4,
+  "spending": "Setup10min, compile+kernel pilot5min; full-model pilot8min; full timing only after gates, cap10min. Jobs stop on errors; reuse successful builds.",
+  "notification": "codex queue failed previously; attached watchers and active tool waits until terminal reports handled",
+  "gemm_only": "Also measure the actual frozen final-MLP projections, M1/128/2048: prepare quantized activation once, CUDA Graph of100 GEMM calls,5 paired repetitions. Excludes quantization and restoration, reports independently of full-model timing.",
+  "engineering_gate_revision_after_406553": {
+    "reason": "Native FP4 applies FP4 and FP8 scales in tensor-core arithmetic and globals in the epilogue; the earlier quality simulator additionally rounded dequantized operands to BF16. Engineering conformance must compare identical arithmetic. The old BF16-reference failure remains a failure and its gap is still reported. No quality gate or PPL claim is changed.",
+    "prospective_gate": "After shared-scale election fix and >3million bitwise activation checks, compare all224 native operators on actual inputs against exact decoded FP32, relative<.005; compare full-model native logits against exact-decoded FP32/BF16-output reference, relative<.02. Only then latency. Also report old BF16-fake comparison without relabeling failures."
+  },
+  "reference_operation_order_correction_406704": "Use FP4*FP8 normalized FP32 operands; apply float32(globalA*globalW) AFTER GEMM, then BF16 output. Two-layer proof is bitwise exact; putting globals on operands first diverges5.816%. Thresholds unchanged. BF16 fake quality-simulator discrepancy still reported; no native PPL claim.",
+  "prospective_diagnostic_latency_arm_20260920_0918": {
+    "scope": "Measure actual full native model using frozen maps, explicitly without native-accuracy or free-running reference-equivalence claim. Previous full-output gates remain failed. No PPL promotion or quality gate changed.",
+    "required": "For base/raw/arranged, all224 actual projections agree with FP64 dot reference torelative<.005; activation codes/scales/global match independently encoded Python exactly; repeated native full-model logits bitwise equal. These gates precede any timing.",
+    "reason": "406741 reproduces first divergent layer with identical inputs: all activation encoding exact, only0-4BF16GEMMoutputs differ versusFP32/FP64 accumulation; tiny layererror4.586e-6 amplifies through quantization tolarge free-running logit gap. Latency can be measured but must be qualified as diagnostic, with nativePPLunmeasured."
+  },
+  "steady_state_latency_followup": {
+    "reason": "406751 warms onlyone decodeposition; first32stepbase request atbothcontexts was~2x slower. Retainrawdata, do notclaimnegativeoverhead.",
+    "audits": "Reuse406751 onlyafter library/layout/revision/input/torch/numeric-source hashes match and PolicyLinearASTidentical; recomputeall224weight hash+bitwiseencodingaudits.",
+    "warmup": "Two completeprefill+32cacheddecode requests for EACHpolicy/context beforetiming. DisablePythonGC forwarmup/timing; noCUDAgraphsforwholemodel.",
+    "repetitions": 6,
+    "order": "all6permutations, eachpolicyoccupieseachpositiontwice",
+    "scope": "diagnosticnativeperformanceonly; full-outputequivalence and nativePPLremainunverified."
+  }
+}

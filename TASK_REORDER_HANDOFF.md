@@ -1,3 +1,125 @@
+# Native full-model measurement update — 2026-09-20 09:35 UTC
+
+No active jobs. Latest question: why final MLP only? Practical cheap cached-suffix
+search and limited permutation scope, not proven optimality. Wider Qwen scopes
+had mixed PPL / failed subsequent gates; no exhaustive Llama scope search.
+Other layers retain raw256 MixFP4. Rationale added to MIXFP4_REPORT/source.
+
+Full native Llama diagnostic timing completed in406751 and406828, oneGB200 at a
+time, gov113008. Monitors handled; receipt406828 recorded. Same-session queue
+failed earlier; attached monitor output is the completion mechanism used here.
+406751 cold decode pilot retained.406828 uses two full-request warmups perpolicy,
+all6policy orders, GCdisabled, and reuses672 passed operator+activation audits
+with hash/AST guards; repeats224 weight audits. Prompt128+32decode arranged
+request overhead+0.531%±0.526%(2SE), median915.747ms vsbase911.380ms. Prompt2048
+varies substantially across ALL policies (decode27–53ms/token): INCONCLUSIVE.
+Do not cherry-pick samples or claim reliable long-context overhead. Actual
+heterogeneous finalMLP GEMM-only timings are also saved, with run variability.
+
+IMPORTANT: This is explicitly a prospective DIAGNOSTIC latency arm. Original
+full-model output gates FAILED for mixed policies, remain failed, and native
+PPL is UNMEASURED. No quality candidate/gate changed. Corrected activation
+producer passes all actual codes/scales; native repeat forwards bitwise.
+Native vsFP64 dot all672 operators relative<.005. Baseline matches epilogue-order
+FP32 fullreference bitwise, mixed policies diverge ~10.8% final logits: tinyGEMM
+rounding differences amplified through laterFP4quantization. Single-layer2 replay
+406741 proves identical inputs, only0–4 projectionBF16diffs, layerrel4.586e-6.
+Don't imply old fakequantPPL is demonstrated by native backend.
+
+Evidence: results/task_reorder/full_model_20260920/{plan.json,IMPLEMENTATION.md,
+llama_406751, llama_406828, kernel_406633, layerdiff_406741}; see directory
+for exact names. Library ~/.cache/mixfp4-model-runtime/build/libmixfp4_model.so,
+ARMvenv under same runtime root. Original calibration/layouts unchanged. Sibling
+../mixfp4 unchanged. No Qwen fullmodel integration (HF5/N48 support needed).
+No new job justified merely by notification replay. Further timing work needs
+addressing measured host/eager variability; don't rerun blindly.
+
+Historical entries below are superseded by this update.
+
+# Active native full-model debugging — 2026-09-20 08:45 UTC
+
+Latest user asks why final MLP only; answered in commentary, added rationale to
+report (not pushed). Continue earlier full-model latency request, no new quality
+search. Native full-model timing STILL UNMEASURED: gates stopped every attempt.
+
+ACTIVE406633 kernelcompile+extendedcheck, oneGB200gov113008, attachedmonitor
+63661, outputs results/task_reorder/full_model_20260920/kernel_406633. Native
+library /home/u4320956/.cache/mixfp4-model-runtime/build/libmixfp4_model.so.
+ARM env ready torch2.9.0+cu130/transformers4.57.3 at runtime/venv. Workquota issue
+resolved by moving ONLY new env/cache to home, hardlinkinstall. Maxactual1GPU.
+No other jobs active. Keep attached monitor; prior codex queue delivery failed.
+
+CRITICAL root cause now identified using reusable2-layer case406608 (12sec):
+/work/u4320956/b200/activation_case_406608/layers_1_self_attn_{q,v}_proj.pt.
+Input32x4096 and packedweights/scales captured; don't reload model for debugging.
+Native activation has133 differingcodebytes/37scales/478decodedvalues vsPython;
+GEMM agrees with actual native dumped operands (rel.00166), soGEMM iscorrect.
+PyTorch scalar division multiplies rounded reciprocal (official v2.9.0
+aten/src/ATen/native/cuda/BinaryDivTrueKernel.cu). Native division gaveglobalbit
+0x3b018618 instead ofreference0x3b018619, crossingFP8thresholds. FIX in406633:
+global=max*(1.f/2688.f), scale6=mx*(1.f/6.f), sum errors ascendingXOR1,2,4,8
+matchingTorchadjacenttree; broadcast one lane0 election to16codes/sharedscale.
+Both native/quantize_permutation.cu and duplicateaudit fixed; modelalpha fixed.
+Small checks include3millionBF16values AND savedrealcase bitwise codes/scales +
+GEMM numeric. Do NOTrun another fullmodel until406633passes.
+
+Prior406525 passed smallrandomkernel8checks.406530 failed tokenizerremotequery
+(workarounduseexactcachedpath).406546 packed224weightsbitwisepassed but fullmodel
+native-vsBF16fake failed12.412%.406553 diagnostic448operatorchecks43failed,
+max2.145%; no timings.406575 broadcast-only quantfix passed3million synthetic
+values but DIDNOTfix realinput.406591 same12.412%BF16/12.666%exact-reference
+fullmodel failure, no timings.406587 snapshotmissingimportance failedbeforeload,
+fixedclosure inbatch. Receipts recorded all terminals. Don't relabel failedgates.
+
+scripts/benchmark_native_llama.py now requires --kernel-gate directory with
+passed report.json and library.json SHA256. After406633passes write library.json
+using currentlibraryhash, then submit NATIVE_KERNEL_GATE=absolute/kernel_406633
+sbatch slurm/gb200_full_llama.sbatch. It snapshots importclosure perjob.
+Frozen engineering gate now uses SAME native arithmetic: every224 operator<.005
+relative toexactdecodedFP32, fullmodellogits<.02 vsFP32decode/BF16outputreference;
+BF16fakegap reportedseparately (oldfailurepreserved), NOquality/PPLpromotion.
+Oldfullmodelgate protocol+prospectiverevision in plan.json. Fullrun thenmeasures
+actualheterogeneousGEMMonly (3finalMLPprojsxM1/128/2048) andwholemodelprefill128/2048
++32cacheddecode,3policiesbase/raw/arranged,5pairedreps. Columnsproducerfused;
+rowsrestoredseparatekernel. Iffailsagain, save reusableinput cases beforemorejobs.
+
+scripts/summarize_native_llama.py prepared for completed report; not run.
+Need update MIXFP4_REPORT+source, status,handoff,costledger andpush when finished.
+All new scripts/nativefiles uncommitted; many unrelatedpreexisting dirtyfiles,
+stageexplicitpaths. Reportedit uses python3 build_mixfp4_report.py --update-arranging.
+Qwenfullmodel notintegratedyet (HF5.16.1 +N48linears; canpad48to256forfixedtile,
+sharedbaselinecostlabel); don'tclaimQwenlatency. Usercurrentquestionanswer: scope
+practical/cheapcachedsuffix, smalloverhead, broaderQwentradeoffs/failedgates;
+noexhaustiveLlamalayersearch, notprovenoptimal; otherlayersstillrawMixFP4.
+
+# Active native full-model benchmark — 2026-09-20 08:14 UTC
+
+User explicitly requested full-model latency measurement; latest question asks why
+only final MLP rearranged. Explained scope is practical, not proven optimal;
+matched wider Qwen scope traded Wiki/C4 and later extensions failed gates.
+Added scope rationale to report source and MIXFP4_REPORT (not yet pushed).
+
+GB200 ARM setup406442 failed work quota (78s);406471 moved downloaded cache to
+/home successfully but failed uv refusing partial venv (55s); dependent406483
+cancelled with zero allocation. Receipts recorded. Repaired setup406496 PENDING,
+attached monitor session96877; compile+kernel audit406498 depends afterok,
+attached monitor48665. ALWAYS handle monitors; queue delivery failed previously.
+At most4 GPUs, gov113008; currently at most1 for this sequence. No model job yet.
+
+New plan results/task_reorder/full_model_20260920/plan.json. Runtime now targets
+/home/u4320956/.cache/mixfp4-model-runtime, hardlink uv cache; explicit clear only
+unready venv. New sources native/model_runtime.cu; scripts/build_native_model_runtime.py,
+native_model_runtime.py, check_native_model_runtime.py, benchmark_native_llama.py.
+Build-local override adds true per-N256/K64 type selection to sibling CUTLASS;
+no sibling edits. C ABI packed-GEMM + dynamic amax/activation quant included;
+columns fused into producer, row restoration currently separate (label clearly).
+Not compiled/tested yet. Full Llama harness preserves all224 projection policies,
+checks source hashes and bitwise packed weight decoding, compares native logits to
+fake-quant BF16 reference before matched prefill128/2048 +32 cached decode timings.
+slurm/gb200_full_llama.sbatch prepared, NOT submitted. First run after kernel gate.
+Qwen needs transformers5 and N48 projections support; not integrated yet.
+Do not call microbenchmarks full model. Keep all prior quality gates/status intact.
+
 # Renewed follow-up COMPLETE — 2026-09-20
 
 All GPUjobs complete andmonitored, noactiveallocations. Llama147tile candidatepassed independent64CEgate405692; PPL405707 Wiki6.8648862839/C4 9.7969455719, improvesrawboth. Finalmaps ROOT/joint192/layouts (3gate6up10down+128background), ROOT=/work/u4320956/task_reorder/transfer_20260920/llama8b. Freshmanifest ROOT/joint192_confirm/fresh_manifest.json mustbeexcludedfuture. GB200final405810 correctlyreappliesglobalscale, all8checks pass; matchedquant+GEMM+consumer overhead1.4–5.1%, notfullmodeltiming. Pythonquantoracle405709 exact22528BF16values aftersigned-zero fix. See MIXFP4_REPORT.md, REORDERING_STUDY_STATUS.md andrenewed_job_ledger.json. Publishingcurrentresults; priorentriesbelowhistorical. User requestedgoodresultsnowachievedmodestLlamaimprovement+lowoverhead, no90%claim.

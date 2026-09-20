@@ -1,0 +1,62 @@
+{
+  "updated_utc": "2026-09-20T08:40:41.114477+00:00",
+  "watcher": "complete",
+  "jobs": {
+    "406591": {
+      "name": "gb200_full_llama",
+      "state": "FAILED",
+      "elapsed": "00:01:56",
+      "exit_code": "1:0",
+      "recent_output": [
+        "PACKED 80 224 5.97",
+        "PACKED 96 224 7.33",
+        "PACKED 112 224 8.79",
+        "PACKED 128 224 9.9",
+        "PACKED 144 224 11.13",
+        "PACKED 160 224 12.64",
+        "PACKED 176 224 14.2",
+        "PACKED 192 224 15.29",
+        "PACKED 208 224 16.68",
+        "PACKED 224 224 18.47",
+        "OPERATOR_FAIL {'name': 'model.layers.1.self_attn.v_proj', 'policy': 'base', 'relative_frobenius': 0.008250581100583076}",
+        "OPERATOR_FAIL {'name': 'model.layers.2.mlp.gate_proj', 'policy': 'base', 'relative_frobenius': 0.005729421973228455}",
+        "OPERATOR_FAIL {'name': 'model.layers.2.mlp.up_proj', 'policy': 'base', 'relative_frobenius': 0.006972892675548792}",
+        "OPERATOR_FAIL {'name': 'model.layers.3.self_attn.v_proj', 'policy': 'base', 'relative_frobenius': 0.008313481695950031}",
+        "OPERATOR_FAIL {'name': 'model.layers.5.self_attn.v_proj', 'policy': 'base', 'relative_frobenius': 0.006752918008714914}",
+        "OPERATOR_FAIL {'name': 'model.layers.6.mlp.up_proj', 'policy': 'base', 'relative_frobenius': 0.005748692434281111}",
+        "OPERATOR_FAIL {'name': 'model.layers.6.mlp.down_proj', 'policy': 'base', 'relative_frobenius': 0.005213766824454069}",
+        "OPERATOR_FAIL {'name': 'model.layers.7.mlp.down_proj', 'policy': 'base', 'relative_frobenius': 0.005015368573367596}",
+        "OPERATOR_FAIL {'name': 'model.layers.8.mlp.down_proj', 'policy': 'base', 'relative_frobenius': 0.021449919790029526}",
+        "OPERATOR_FAIL {'name': 'model.layers.10.self_attn.o_proj', 'policy': 'base', 'relative_frobenius': 0.013369380496442318}",
+        "OPERATOR_FAIL {'name': 'model.layers.11.mlp.down_proj', 'policy': 'base', 'relative_frobenius': 0.00566036906093359}",
+        "OPERATOR_FAIL {'name': 'model.layers.12.mlp.down_proj', 'policy': 'base', 'relative_frobenius': 0.007755005732178688}",
+        "OPERATOR_FAIL {'name': 'model.layers.16.mlp.down_proj', 'policy': 'base', 'relative_frobenius': 0.01225394755601883}",
+        "OPERATOR_FAIL {'name': 'model.layers.20.mlp.down_proj', 'policy': 'base', 'relative_frobenius': 0.007579108700156212}",
+        "OPERATOR_FAIL {'name': 'model.layers.22.self_attn.o_proj', 'policy': 'base', 'relative_frobenius': 0.009059743024408817}",
+        "OPERATOR_FAIL {'name': 'model.layers.25.mlp.gate_proj', 'policy': 'base', 'relative_frobenius': 0.010399114340543747}",
+        "OPERATOR_FAIL {'name': 'model.layers.25.mlp.up_proj', 'policy': 'base', 'relative_frobenius': 0.014480352401733398}",
+        "OPERATOR_FAIL {'name': 'model.layers.29.mlp.gate_proj', 'policy': 'base', 'relative_frobenius': 0.005880646873265505}",
+        "OPERATOR_FAIL {'name': 'model.layers.29.mlp.up_proj', 'policy': 'base', 'relative_frobenius': 0.00781233562156558}",
+        "PILOT {'policy': 'base', 'relative_frobenius': 0.12665987014770508, 'reference': 'exact FP32 decoded operands, BF16 projection outputs', 'bf16_fake_relative_frobenius': 0.12412092089653015, 'bf16_fake_old_gate_passed': False, 'max_abs': 5.28515625, 'max_operator_relative': 0.021449919790029526}"
+      ],
+      "recent_stderr": [
+        "                            ^^^^^^",
+        "  File \"/home/u4320956/.cache/mixfp4-model-runtime/venv/lib/python3.11/site-packages/torch/utils/_contextlib.py\", line 120, in decorate_context",
+        "    return func(*args, **kwargs)",
+        "           ^^^^^^^^^^^^^^^^^^^^^",
+        "  File \"/home/u4320956/NVFP4-RaZeR/results/task_reorder/full_model_20260920/source_406591/benchmark_native_llama.py\", line 124, in main",
+        "    assert rel<.02 and report['pilot'][-1]['max_operator_relative']<.005,(policy,report['pilot'][-1])",
+        "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "AssertionError: ('base', {'policy': 'base', 'relative_frobenius': 0.12665987014770508, 'reference': 'exact FP32 decoded operands, BF16 projection outputs', 'bf16_fake_relative_frobenius': 0.12412092089653015, 'bf16_fake_old_gate_passed': False, 'max_abs': 5.28515625, 'max_operator_relative': 0.021449919790029526})"
+      ],
+      "ppl_results": [],
+      "error_markers": [
+        "Traceback (most recent call last):",
+        "AssertionError: ('base', {'policy': 'base', 'relative_frobenius': 0.12665987014770508, 'reference': 'exact FP32 decoded operands, BF16 projection outputs', 'bf16_fake_relative_frobenius': 0.12412092089653015, 'bf16_fake_old_gate_passed': False, 'max_abs': 5.28515625, 'max_operator_relative': 0.021449919790029526})"
+      ]
+    }
+  },
+  "watcher_pid": 2193673,
+  "poll_seconds": 60.0,
+  "completion_delivery": "attached_tool_result"
+}

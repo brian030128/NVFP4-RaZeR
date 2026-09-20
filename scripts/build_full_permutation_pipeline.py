@@ -52,7 +52,7 @@ body=body.replace('launch(', 'quant_launch(')
 needle='    auto columns=read(prefix+"_col.txt",k);'
 assert needle in body
 body=body.replace(needle,'''    float host_maximum;CUDA_CHECK(cudaMemcpy(&host_maximum,maximum,4,cudaMemcpyDeviceToHost));
-    arguments.epilogue.thread.alpha=host_maximum/(6.f*448.f);
+    arguments.epilogue.thread.alpha=std::max(host_maximum*(1.f/(6.f*448.f)),1.17549435e-38f);
     CUTLASS_CHECK(gemm_op.initialize(arguments,workspace.get()));
     mixfp4::Sm100GemmLaunch<Gemm> quant_launch(gemm_op);
 '''+needle)
