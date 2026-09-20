@@ -1,0 +1,41 @@
+{
+  "source_sha256": {
+    "run_raw_context_fisher.py": "60e7aba47d65824b4293408c7279475cc65865a7636c90a6270ac402daa36472",
+    "quantize/fisher_row_search.py": "98414cc003845e4bbba01a4cee8cb130c933e8ab45f1e0ad57ecd7e027599b93",
+    "quantize/quantizer.py": "af6246545b0e9918c4232e4e59f64e249a6d1316186dc90f2768ed85700dc007",
+    "run_fine_row_research.py": "605a3535f35a1305e8bd0af949d4569bde3f40f6a345aabc241ec4628d02decd",
+    "slurm/raw_context_fisher.sbatch": "d4988e5284d70837ee69f87d2ed80b379da622050e02c85090f3174df18f8f3a",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/raw_context_search/report.json": "a50a245d8299c994fcee48858a4ccb3d6e36b627e485e40ef51ce49e2cefb769",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/raw256_masks.pt": "cb1bfcf4407034a67cc1ea60b7199196ba66d0889e268a918321253c16c1a9f7",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/calibration/report.json": "49f20f5af8a9ff87c6c838dbb19cb26ad99fadb0e4ab3c9e47e2a721f408a804"
+  },
+  "modules": [
+    "model.language_model.layers.46.linear_attn.in_proj_qkv",
+    "model.language_model.layers.47.self_attn.o_proj",
+    "model.language_model.layers.48.linear_attn.in_proj_qkv",
+    "model.language_model.layers.48.mlp.up_proj",
+    "model.language_model.layers.50.linear_attn.in_proj_qkv",
+    "model.language_model.layers.51.self_attn.o_proj",
+    "model.language_model.layers.63.self_attn.q_proj",
+    "model.language_model.layers.63.self_attn.o_proj"
+  ],
+  "budget": {
+    "gpus": 1,
+    "max_minutes": 8,
+    "pilot_documents": 2,
+    "max_documents": 128,
+    "probes_per_document": 1
+  },
+  "probe_seed": 2026092001,
+  "pilot_max_projected_seconds": 450,
+  "search_reserve_seconds": 60,
+  "column_seeds": 8,
+  "max_groups_per_matrix": 4,
+  "refine_rounds": 4,
+  "protocol_family": "ce_primary_after_positive_control",
+  "purpose": "Newcurvaturefeaturesonly; reuseall128CE/KLscores, noteacherregeneration. Differentfromearliergradient-disagreementpenalty. RademacherlogitnoiseCov=(diag(p)-ppT)/511; atombackwardprojections sumwithcross-rowterms; penalty=.5*sum(h)^2.",
+  "pilot_gate": "ExacttinysoftmaxFishercovarianceaudit; 2math/codeSTEforwardbitwiseaudits, finite8modulefeatures,projectedruntime<=450s. Stopbefore126remainingifanyfailure.",
+  "search": "64fit64electionoriginalcalibration; preserveallrawtiles; atmost4groups/matrix; jointcorrectedCE/KL3SEbothsplits; finite64developmentthenNEWfreshCEgatebeforePPL",
+  "limitations": "LocalGaussNewtonviaSTE, notexactquantizerHessian. Oneprobeperdocument introducesvariance. Noqualityclaimfromsurrogate.",
+  "native_latency_measured": false
+}

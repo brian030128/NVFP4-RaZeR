@@ -1,0 +1,30 @@
+{
+  "source_sha256": {
+    "run_cached_rotation_ablation.py": "a97264a1367d8a7c6c082c406cd370fbc239173dc9ea316e8fa7998bc7fd2677",
+    "quantize/tile_only_rotation.py": "f6af2f956e6f38425eb9174ff47a286be9f4704ffae0f836cf6171c9c8b810ef",
+    "quantize/selective_rotation.py": "8bc6ff1e334db14d9d125522ca10f3afb8bf92f6c5c6a21495a464359ff5b5fe",
+    "quantize/quantizer.py": "af6246545b0e9918c4232e4e59f64e249a6d1316186dc90f2768ed85700dc007",
+    "slurm/cached_rotation_ablation.sbatch": "e57803a4779622c0c1884743871d2de8de6b8189b582c622b3cb6ceaf102781b",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/suffix_rotation_cache/report.json": "a64b232d5f28ea4b0d56f61e23bc8be0d1686b236ff9ca2286c61bc128b3ccd0",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/cached_tile_rotation_precise/report.json": "7a85e2eb15c20a1cfda601755f32431bcc0295293e03f4c0c5613f804b09420d",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/fresh_math_code.pt": "35ac8b915039bc9ad703060614f3755a5621fdad5ee289c884776741568f02f1",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/both_exact_compaction/frozen/002/layout.pt": "9ed819a259109007000dc00d341dd557c95d1a350f2e846b621e5dad66021a8e",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/both_exact_compaction/frozen/000/layout.pt": "2864d11123a9398122d281ed364cc53231fc9c99d4f4cc91b6b04173108461a4",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/both_exact_compaction/frozen/001/layout.pt": "5dbd2dd2a7e14029ddd3d12a7de1ff5e97ee36baaa152a71d19e8b631d2d3975"
+  },
+  "budget": {
+    "gpus": 1,
+    "max_minutes": 4,
+    "fit_documents": 32,
+    "final_development_documents": 64,
+    "single_tiles": 20,
+    "max_joint_candidates": 3,
+    "max_rotated_tiles": 4
+  },
+  "protocol_family": "ce_primary_after_positive_control",
+  "fit": "first16math+first16code ofreuseddevelopment; singlesrequirepooledCE1SE<0anddomainmeans<=0vsbestboth. RankpooledCE; testtop1,top2,top4uniquecombinations.",
+  "selection": "All64pooledCE2SE<0vsraw_precise,domainCEmeans<=0vsraw_precise,incrementCE1SE<0vsBBB_precise. SinglewinnerfrozenbeforeNEWfreshconfirmation.",
+  "arithmetic": "FP64accumulation, BF16output; candidate-specific unrotatedexpandedreference bitwiseauditfirstmath/code; reuseidenticaltop1fitlosses",
+  "rotation": "onlysubsetof20E0tiles, H16,requiresadditionalrotationmetadataanddualactivationview. Nofreshk3electionclaim.",
+  "native_latency_measured": false
+}

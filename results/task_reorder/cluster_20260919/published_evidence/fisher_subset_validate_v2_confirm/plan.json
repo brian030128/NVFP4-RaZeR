@@ -1,0 +1,47 @@
+{
+  "protocol_family": "ce_primary_after_positive_control",
+  "candidate": "Raw-preserving wider row packing (both) plus the frozen final-MLP layout",
+  "source_sha256": {
+    "run_ce_wide_confirm.py": "34de5b0d9eed37d33ce209978e90ccb03c7dedca5ac1c4c2b1931d7585d12869",
+    "scripts/ce_confirmation_gate.py": "4cd0eaed0c0e699693b72cbd567be029088a3696f3bbde888edf3f2db3e3a355",
+    "slurm/ce_wide_confirm.sbatch": "84a23e0229850fce14c0e3761145d318d26cec1432cd6a379001d347327ca680",
+    "run_fine_row_research.py": "605a3535f35a1305e8bd0af949d4569bde3f40f6a345aabc241ec4628d02decd",
+    "quantize/task_reorder.py": "92284f1b8b23982fcd26cd9748e6ea71f6907fdb23cf45d3a593b505569614f8",
+    "quantize/quantizer.py": "af6246545b0e9918c4232e4e59f64e249a6d1316186dc90f2768ed85700dc007",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/fisher_subset_validate_v2/report.json": "a25fb5ac48edfbedbdf484892c8db64ea2a78018cb9eb3dca33bd3ceb159c0e1"
+  },
+  "layout_sha256": {
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/fisher_subset_validate_v2_confirm/layouts/000/layout.pt": "2864d11123a9398122d281ed364cc53231fc9c99d4f4cc91b6b04173108461a4",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/fisher_subset_validate_v2_confirm/layouts/001/layout.pt": "5dbd2dd2a7e14029ddd3d12a7de1ff5e97ee36baaa152a71d19e8b631d2d3975",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/fisher_subset_validate_v2_confirm/layouts/002/layout.pt": "9ed819a259109007000dc00d341dd557c95d1a350f2e846b621e5dad66021a8e",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/fisher_subset_validate_v2_confirm/layouts/003/layout.pt": "801d0e45ff4f21bf600f150ed7bb80af26bea11e8ff28071c25ec30b64483d54",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/fisher_subset_validate_v2_confirm/layouts/004/layout.pt": "9e52c9a9df7cff920429d76f3bb261cfb289c2b3cf038333b147c92a924428a6",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/fisher_subset_validate_v2_confirm/layouts/005/layout.pt": "d8be2ae6509db87284dda4b25eb0d57bd99ce753937d9cf48504147673a4551e",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/fisher_subset_validate_v2_confirm/layouts/006/layout.pt": "633c4b01d6ce2257e2d830f4b7bc2c64a3a25a005cc7cd0fd1b47318afed93c6"
+  },
+  "expected_modules": [
+    "model.language_model.layers.63.mlp.gate_proj",
+    "model.language_model.layers.63.mlp.up_proj",
+    "model.language_model.layers.63.mlp.down_proj",
+    "model.language_model.layers.46.linear_attn.in_proj_qkv",
+    "model.language_model.layers.48.linear_attn.in_proj_qkv",
+    "model.language_model.layers.48.mlp.up_proj",
+    "model.language_model.layers.51.self_attn.o_proj"
+  ],
+  "expected_e0m3_tiles": 45,
+  "exclude_manifests": [
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/fresh_manifest.json",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/ce_target_combinations_confirm/fresh_manifest.json",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/preserved_row_confirm/fresh_manifest.json",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/suffix_ce_restore_confirm/fresh_manifest.json",
+    "/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2/tile_prune_confirm/fresh_manifest.json"
+  ],
+  "criterion": "Pooled CE mean+2SE<0 against BOTH raw256 and matched identity; mean CE<=0 vs raw256 in each math/code domain. KL is reported as diagnostic, not a superiority gate.",
+  "budget": {
+    "gpus": 1,
+    "max_minutes": 10,
+    "candidates": 1,
+    "no_ppl": true
+  },
+  "fixed_before_fresh_data": true
+}
