@@ -60,6 +60,26 @@ Some python command parameters for evaluation are described below.
 - `--v_dtype`: Value data format, e.g., "nvfp4".
 
 
+## MixFP4 research
+
+The [N16K64 research overview](research/n16k64/README.md) indexes five completed
+quality/mechanism campaigns, their source code, results, failures and limitations.
+The frozen method selects E0M3 weight format blocks using both CE and KL
+first-order scores at k=3, with causal per-token FourOverSix activations.
+Its primary quality gate passed on the specified confirmatory panel. Boundary
+and corruption analyses provide `power_limited_support` for group-level ranking;
+they do not establish individual-tile causality or native performance.
+
+See [claims and evidence](research/n16k64/CLAIM_EVIDENCE_MATRIX.md),
+[reproduction entry points](research/n16k64/software/README.md), and the
+[proposed next experiments](research/n16k64/TODO_EXPERIMENTS.md). Historical
+outcomes retain their original code/config hashes. The separate 256x64 reordering
+and native diagnostic program remains documented in [MIXFP4_REPORT.md](MIXFP4_REPORT.md).
+
+CPU-only review: `python3 research/n16k64/tools/verify_public_snapshot.py`.
+Exact GPU replay additionally needs the pinned external models, datasets and
+excluded raw artifacts; the branch does not publish those large inputs.
+
 ## Inference Artifact
 The public inference-focused artifact lives in [`inference/`](inference/).
 

@@ -1,0 +1,64 @@
+{
+  "artifact_audit_passed": true,
+  "attempt_accounting": {
+    "failed_attempts": 3,
+    "gpu_attempts": 6,
+    "registry_events": 30,
+    "run_directory_status_counts": {
+      "complete": 7,
+      "failed": 3
+    },
+    "superseded_attempts": 1,
+    "total_run_directories_with_launch_records": 10
+  },
+  "authoritative_runs": {
+    "analysis": "V40_mechanism_analysis_attempt2",
+    "llama_full": "V22_full_llama8b_attempt1",
+    "llama_screen": "V20_screen_llama8b_attempt2",
+    "maps": "V10_derive_maps_attempt2",
+    "mistral_one_shot": "V30_mistral_one_shot_attempt1",
+    "qwen_full": "V21_full_qwen4b_attempt2"
+  },
+  "claims_prohibited": [
+    "individual-tile causality",
+    "native FP4/E0M3 Tensor Core execution",
+    "latency or speedup",
+    "area",
+    "power"
+  ],
+  "gpu_hours": {
+    "all_attempts": 7.924664057890574,
+    "failed_attempts": 0.003744932413101196,
+    "valid_complete_attempts": 7.920919125477473
+  },
+  "hypothesis_classification": {
+    "attention_mlp_interaction": {
+      "classification": "not_supported_under_strict_gate",
+      "gate": "actual interaction residual has one sign in all 4 development endpoints and >=3 are Holm-significant",
+      "passed": false
+    },
+    "ce_kl_veto": {
+      "classification": "not_supported_under_strict_gate",
+      "gate": "for both veto classes, actual add-back worse than full and matched random in >=3/4 development endpoints, with >=2 Holm-significant endpoints",
+      "passed": false,
+      "per_class_passed": {
+        "ce_vetoed_kl_approved": true,
+        "kl_vetoed_ce_approved": false
+      }
+    },
+    "ranking_not_calibration": {
+      "classification": "supported",
+      "gate": "all 4 marginal strongest-minus-weakest estimates negative; >=3 Holm-significant; >=3/4 group-only directions negative",
+      "passed": true
+    }
+  },
+  "input_gate": {
+    "decision": "continue both development models; no calibration GPU work",
+    "input_provenance_sha256": "80f625f907a13f60800eb247188a75721869068f6b9998260e25ba9bd21ef821",
+    "power_analysis_sha256": "9310ca2af0ef707cb83cd1874677b49814a8861c2e30db07746304e1d56a1da4",
+    "score_regeneration_performed": false
+  },
+  "map_manifest_sha256": "3e6719faf0341c708198ef9e9f8a7a7de70c2f07e6e840503a1661c74bf43a01",
+  "protocol_sha256": "9e7c3d1dcb6199ab9bbedf9e0947f6198304f26466f2fd2c58e5533fb747926c",
+  "schema": "mixfp4-mechanism-campaign-summary/v1"
+}

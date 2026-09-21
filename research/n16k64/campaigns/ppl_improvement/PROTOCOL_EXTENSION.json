@@ -1,0 +1,785 @@
+{
+ "anchor_reproduction": {
+  "acceptance": {
+   "each_policy_relative_ppl": 0.005,
+   "failure": "stop large matrix; diagnose; do not widen",
+   "paired_effect": "same sign and |new-parent dlogPPL| <= max(0.25*abs(parent dlogPPL),0.002)"
+  },
+  "device": "one clean NVIDIA RTX A6000",
+  "map_regeneration": "forbidden",
+  "models": {
+   "llama8b": {
+    "evaluation_manifest_sha256": "8d72dbf23db218671856f620bd49c2226db829880673f106078e375a8ca35197",
+    "map_logical_path": "parent:runs/V30_calib_llama8b_seed0_attempt1/maps/llama8b_seed0_n16_k3.mixfp4map",
+    "map_sha256": "0920f55ddc053a5f5a8b0d046d0b74a62d4abafcad5e36051d7682da961e1f2b",
+    "parent": {
+     "first4": {
+      "dlogppl": -0.0017251443981618486,
+      "four_over_six": {
+       "mean_nll": 2.0610900399817313,
+       "raw_ppl": 7.854526894041561
+      },
+      "n16_k3": {
+       "mean_nll": 2.0593648955835695,
+       "raw_ppl": 7.840988382271653
+      }
+     },
+     "full": {
+      "dlogppl": -0.004689015657251883,
+      "four_over_six": {
+       "mean_nll": 1.9279499304938719,
+       "raw_ppl": 6.8754007343996815
+      },
+      "n16_k3": {
+       "mean_nll": 1.92326091483662,
+       "raw_ppl": 6.843237338969587
+      }
+     }
+    },
+    "selected_tiles": 1781,
+    "selected_weights": 1823744
+   },
+   "mistral7b": {
+    "evaluation_manifest_sha256": "f15f8bad484a93abafa08985a924e255d5f2cdd535bfb9c1d8785487b258cafe",
+    "map_logical_path": "parent:runs/V61_calib_mistral7b_seed0_attempt2/maps/mistral7b_seed0_n16_k3.mixfp4map",
+    "map_sha256": "0c3d822a18d0480ca2aeff0abd78cf6e4ca3155bb207156a400fde124e1cf13d",
+    "parent": {
+     "first4": {
+      "dlogppl": -0.0016172722822780372,
+      "four_over_six": {
+       "mean_nll": 1.8626170782621378,
+       "raw_ppl": 6.440570210901774
+      },
+      "n16_k3": {
+       "mean_nll": 1.8609998059798598,
+       "raw_ppl": 6.430162473558694
+      }
+     },
+     "full": {
+      "dlogppl": -0.0038889705376015105,
+      "four_over_six": {
+       "mean_nll": 1.708977147744794,
+       "raw_ppl": 5.5233090581954585
+      },
+      "n16_k3": {
+       "mean_nll": 1.7050881772071924,
+       "raw_ppl": 5.50187078542319
+      }
+     }
+    },
+    "selected_tiles": 4179,
+    "selected_weights": 4279296
+   }
+  },
+  "order": [
+   "first_four_wikitext_windows",
+   "full_wikitext"
+  ],
+  "policies": [
+   "four_over_six",
+   "n16_k3_exact_map"
+  ]
+ },
+ "calibration": {
+  "canonical": {
+   "code_sequences": 64,
+   "draws": [
+    "seed0",
+    "draw1",
+    "draw2",
+    "draw3",
+    "draw4"
+   ],
+   "math_sequences": 64
+  },
+  "domains": [
+   "OpenWebMath",
+   "CodeParrot-clean"
+  ],
+  "draw_rule": "parent campaign/data.keyed_draw deterministic SHA-256 keyed ordering; documents/crops are mutually exclusive across seed0 and draw1-draw4 and excluded from evaluation",
+  "larger_nested_draws": {
+   "128+128": "the exact seed0 64+64 prefix plus deterministic key size128_v1, excluding seed0 and draw1-draw4, until 128 per domain",
+   "256+256": "the exact 128+128 prefix plus deterministic key size256_v1, excluding every preceding calibration sample, until 256 per domain"
+  },
+  "sequence_length": 512,
+  "stored_statistics": "float64 per-sequence sums, sums of squares and cross-products sufficient to recompute means, sample variances and SE; raw retained where feasible"
+ },
+ "campaign_name": "mixfp4_n16k64_ppl_improvement_20260914T162041Z",
+ "carryover_bundle_repairs": {
+  "finite_monte_carlo_plus_one": "fixed and tested in extension source",
+  "independent_accuracy_rng": "fixed and tested in extension source",
+  "parent_mutation": "forbidden",
+  "required_in_new_bundle": [
+   "repair redacted protocol-freeze sidecar",
+   "repair redacted amendment-chain entries 10,11,32,37,52",
+   "replace Windows-unsafe angle-bracket lock filenames with safe logical names",
+   "state that evaluation CIs are conditional on the stored map and separately report draw variability"
+  ]
+ },
+ "claim_classification": {
+  "hierarchy": [
+   "general positive MixFP4 selection method",
+   "robust post-hoc k2 quality extension without new mechanism",
+   "density-driven PPL improvement",
+   "N16/N8 engineering trade-off study without measured deployment benefit",
+   "map-level robustness plus tile-level negative result",
+   "workshop/negative-result study"
+  ],
+  "native_or_performance_claims": "prohibited",
+  "selection_rule": "choose the narrowest classification supported by all gates; never omit contrary evidence"
+ },
+ "claim_label_required": "k=2 was selected after the completed parent sweep and is post-hoc; only the prospectively reserved held-out validation after winner freeze may be called held-out",
+ "detached_hash_rule": {
+  "authoritative_hash_file": "freeze/PROTOCOL_EXTENSION.sha256",
+  "overwrite": "forbidden; any scientifically necessary change is a hash-chained amendment and cannot retroactively change an opened endpoint",
+  "rule": "SHA-256 is over the exact bytes of freeze/PROTOCOL_EXTENSION.json; the digest is detached to avoid a self-referential field"
+ },
+ "development_search": {
+  "density_controls": {
+   "deterministic": [
+    "weight_mse",
+    "magnitude",
+    "change_norm",
+    "activation_weighted"
+   ],
+   "eligibility_and_ties": "exact same module/weight eligibility mask; finite scores before nonfinite; score then module name,row,K; no repeated random draw",
+   "n8_matching": "one N16K64 tile equals 1024 weights and one N8K64 tile equals 512; select exactly twice the N8 tile count where divisible",
+   "random_seeds": [
+    2026091401,
+    2026091402,
+    2026091403,
+    2026091404,
+    2026091405
+   ],
+   "rounding": "floor each stratum then allocate remaining tiles by largest fractional remainder; ties by module name then row then K index; report residual",
+   "target": "exact selected-weight count of N16 k2, both globally and separately per layer/module"
+  },
+  "draw_aggregation": {
+   "candidates": [
+    "seed0",
+    "pooled_per_sequence_moments",
+    "draw_mean",
+    "draw_median",
+    "consensus_3_of_5"
+   ],
+   "eligibility": "median six-cell dlogPPL versus seed0 <= -0.0005 and worst cell <= +0.001",
+   "forms": [
+    "natural_density",
+    "fixed_budget_matched_to_seed0_k2"
+   ],
+   "pooled_rule": "pool per-sequence sufficient statistics then recompute mean/sample variance/SE; never average masks",
+   "selection": [
+    "smallest median dlogPPL",
+    "if within 0.0001, smallest worst cell",
+    "if tied, highest median leave-one-draw-out map Jaccard",
+    "if tied, fewer selected weights",
+    "if none eligible, seed0"
+   ]
+  },
+  "format_preserving_quantizer": {
+   "activation_candidates": [
+    "baseline_absmax",
+    "row_mse_grid_0.90_0.95_1.00",
+    "row_percentile_99.9",
+    "row_percentile_99.99",
+    "row_percentile_100"
+   ],
+   "activation_rule": "causal per-token row only; MSE grid chooses among [0.90,0.95,1.00] times row absmax using that row; percentiles use only the current row; four-bit FourOverSix values retained",
+   "combination": "combine only independently passing best weight and activation choices with the frozen selector; evaluate baseline plus single-axis screens before the combination",
+   "independent_pass": "median six-cell dlogPPL versus existing scale <= -0.0005 and worst cell <= +0.001",
+   "local_transform": "P62 stopped_by_gate unless a pre-result algebraic/folding/MMA-scope proof shows no hidden high-precision state and accounts for every metadata bit and operation",
+   "selection": [
+    "smallest median dlogPPL",
+    "if within 0.0001, smallest worst cell",
+    "least extra metadata/operations"
+   ],
+   "weight_rule": "multiply the existing per-scale-block absmax-derived dequantization scale; identical E2M1/E0M3 codes, scope and scale-block count",
+   "weight_scale_multipliers": [
+    0.95,
+    1.0,
+    1.05
+   ]
+  },
+  "k": {
+   "anchors": [
+    2.0,
+    3.0,
+    "all_e0m3"
+   ],
+   "candidates": [
+    0.5,
+    1.0,
+    1.5,
+    2.0,
+    2.5
+   ],
+   "eligibility": "all six cells dlogPPL(candidate minus N16 k2 seed0) <= +0.001",
+   "fallback": "N16 k2 seed0",
+   "lexicographic_selection": [
+    "smallest median dlogPPL versus N16 k2",
+    "if within 0.0001, smallest worst-cell dlogPPL",
+    "if still tied, fewer total selected weights",
+    "if still tied, larger k"
+   ],
+   "panel": [
+    "llama8b",
+    "qwen4b",
+    "mistral7b"
+   ],
+   "per_model_tuning": "forbidden",
+   "tile_shape": [
+    16,
+    64
+   ]
+  },
+  "selector_candidates": {
+   "activation_weighted_error": "per-tile L1 E0M3-minus-E2M1 weight error weighted by calibration input-channel RMS, averaged across development calibration only",
+   "combined": "not primary; may be attempted only after component results, with frozen coefficients fit on development tile interventions and no evaluation-window outcomes",
+   "diagonal_hessian_gptq_proxy": "per-tile squared quantization-error change weighted by the diagonal empirical input Gram/Hessian proxy E[x_j^2] with damping 0.01*mean(diagonal)",
+   "fixed_budget": true,
+   "layer_output_reconstruction": "per-tile change in mean squared linear-layer output reconstruction error on cached development calibration inputs",
+   "old": "first_order_ce_kl",
+   "staging": "derive/store scores first; evaluate one map per named candidate plus old selector and strongest deterministic heuristic, not a Cartesian product with scale/clipping"
+  },
+  "tile_fidelity": {
+   "freeze_before_effects": true,
+   "models": [
+    "llama8b",
+    "qwen4b",
+    "mistral7b"
+   ],
+   "outcomes": [
+    "CE",
+    "KL",
+    "layer reconstruction"
+   ],
+   "sample_tiles_per_model": 60,
+   "sampling": "deterministic weighted allocation without replacement; redistribute empty-stratum quota lexicographically and store inclusion probabilities",
+   "strata": [
+    "layer quartile",
+    "module type",
+    "old/candidate score quintile",
+    "predicted sign"
+   ]
+  }
+ },
+ "evaluation": {
+  "accuracy": {
+   "batch_size": 16,
+   "harness": "lm-eval 0.4.11 HFLM with parent offline documents and seeds (0,1234,1234,1234)",
+   "log_samples": true,
+   "macro": "unweighted mean of the eight task-level accuracy differences; MMLU is one task after pooling its frozen 57 subjects",
+   "num_fewshot": 0,
+   "tasks": {
+    "arc_challenge": "acc_norm",
+    "arc_easy": "acc_norm",
+    "boolq": "acc",
+    "hellaswag": "acc_norm",
+    "mmlu": "acc over 57 subjects",
+    "openbookqa": "acc_norm",
+    "piqa": "acc_norm",
+    "winogrande": "acc"
+   }
+  },
+  "gsm8k": {
+   "decoding": "greedy do_sample=false; until [Question:, </s>, <|im_end|>]; max_gen_toks=256",
+   "num_fewshot": 5,
+   "primary_metric": "exact_match,flexible-extract",
+   "retain": "all prompts, generations, extracted answers and paired item outcomes",
+   "secondary_metric": "exact_match,strict-match",
+   "task": "lm-eval gsm8k v3.0"
+  },
+  "pg19": {
+   "corpus": "emozilla/pg19-test revision c5e39bf32e33f9111323aa68d7d9000d22722035",
+   "inference": "resample source books; fewer than 20 valid books is exploratory point-estimate-only",
+   "lengths": [
+    4096,
+    8192
+   ],
+   "minimum_documents": 20,
+   "selection": "for each tokenizer take the first 20 books in frozen file order with at least 8193 tokens; use nested prefix windows at both lengths; do not replace based on quality"
+  },
+  "portability": {
+   "aggregate_ppl_relative_tolerance": 0.005,
+   "devices": [
+    "NVIDIA RTX A6000",
+    "NVIDIA RTX 6000 Ada Generation"
+   ],
+   "map": "generate/freeze on clean A6000 and evaluate the byte-identical map on both devices; no Ada regeneration substitution",
+   "models": [
+    "llama8b",
+    "granite8b"
+   ],
+   "paired_effect_tolerance": "same sign and absolute A6000-vs-Ada dlogPPL difference <= max(0.25*abs(A6000 effect),0.002)",
+   "per_window_portability_claim": "forbidden",
+   "windows": "first 16 frozen WikiText windows and first 16 frozen C4 windows"
+  },
+  "ppl": {
+   "aggregation": "raw PPL=exp(total token NLL/total predicted tokens); store per-window token count, NLL sum, source cluster and pairing key",
+   "c4": "parent-pinned allenai/c4 en validation shard revision 1588ec454efa1a09f29cd18ddd04fe05fc8653a2; exact parent Random(0) 256-document 2048-token crops",
+   "clusters": {
+    "c4": "document SHA-256",
+    "wikitext": "article containing first token"
+   },
+   "corpora": [
+    "wikitext",
+    "c4"
+   ],
+   "sequence_length": 2048,
+   "wikitext": "parent-pinned Salesforce/wikitext wikitext-2-raw-v1 test revision b08601e04326c79dfdd32d625aee71d232d685c3; all full non-overlapping windows of joined text"
+  }
+ },
+ "gates_and_thresholds": {
+  "G0_integrity": "input hashes, exact authoritative attempt resolution, model/map/evaluator identities, GPU preflight, and both exact-map anchors must pass; no tolerance widening",
+  "G1_k2_breadth": "Holm over six N16 k2-vs-FourOverSix endpoints; beneficial point estimates on both corpora for at least two of three breadth models; no cell >= practical material-regression threshold; report aggregate with and without Qwen",
+  "G2_k2_vs_k3": "Holm over six breadth endpoints and frozen aggregate; no family-level material regression; differences smaller than the practical threshold are scientifically equivalent even if statistically detectable",
+  "G3_density_selector": "at equal selected-weight budget N16 candidate must beat median random and show consistent advantage over deterministic controls; otherwise classify natural gain as density-driven",
+  "G4_n16_vs_n8": "report natural and selected-weight-matched contrasts; worse N16 quality can only support an unmeasured engineering trade-off, never a favorable overhead claim",
+  "G5_calibration_256_continuation": {
+   "continue_if": "at least 2 of 3 model averages <= -0.0005 and every individual model/corpus cell <= +0.001",
+   "estimand": "for N16 k2, per development model average of WikiText and C4 dlogPPL(128+128 minus 64+64)",
+   "otherwise": "all P32 cells stopped_by_gate; report P31 fully"
+  },
+  "G6_selector_replacement": {
+   "claim": "causal selector replacement requires all full-map, sign and rank conditions; PPL-only success is empirical selection quality only",
+   "full_map": "at equal budget, median across six development cells dlogPPL(candidate minus old selector) <= -0.0005 and worst cell <= +0.001",
+   "tile_rank": "cluster/stratum bootstrap 95% lower bound for Spearman rho > 0; also report Kendall tau",
+   "tile_sign": "exact-binomial 95% lower confidence bound > 0.5 and sign-accuracy point gain over old selector >= 0.15"
+  },
+  "G7_quantizer": "candidate must retain exact four-bit E2M1/E0M3 value formats and W4A4 scope and fully disclose scale metadata/high-precision exceptions/unfused operations; hidden high-precision work, noncausal calibration, or incompatible MMA scope is rejected or separately labeled",
+  "G8_heldout_downstream": "global winner hash-frozen before held-out quality; evaluate both reserved families; positive general-quality claim also requires frozen accuracy non-inferiority after correction",
+  "G9_sota": "only if one frozen method beats the strongest fair baseline on a broad non-cherry-picked panel with corrected inference; any missing baseline cells or material RaZeR wins prohibit broad SOTA wording",
+  "development_meaningful_gain_dlogppl": -0.0005,
+  "development_safety_cell_dlogppl": 0.001,
+  "practical_ppl_definition": "log(1.005); a >=0.5% relative PPL regression is material",
+  "practical_ppl_material_regression_dlogppl": 0.004987541511038968
+ },
+ "gpu_policy": {
+  "allowed_models": [
+   "NVIDIA RTX A6000",
+   "NVIDIA RTX 6000 Ada Generation"
+  ],
+  "campaign_max_concurrent_gpus": 3,
+  "checks": [
+   "host prelaunch PID/owner/index/UUID/model/memory/process snapshot",
+   "in-container visible UUID cross-check",
+   "20-second host sidecar",
+   "every phase boundary",
+   "immediately before result finalization",
+   "host and container postflight"
+  ],
+  "fail_closed": true,
+  "foreign_compute_process_allowed": false,
+  "foreign_process_action": "stop only this campaign run, preserve evidence, mark invalid_cotenancy, safely release and requeue; never signal another user's process",
+  "maximum_allowed_interval_seconds": 60,
+  "mixed_gpu_models_within_run": false,
+  "no_gpu_lease_for_cpu_jobs": true,
+  "ownership_check_interval_seconds": 20
+ },
+ "input_locks": {
+  "agent_handoff_zip_sha256": "810483fcc621b4801081a8afbb0d12ebb9a0d317110bc91984b76b472d188e4a",
+  "claim_and_stopping_gates_sha256": "9256c0d1db7d17493904b0cb58513145449dc6c0dd60d17b60d6488e0463d533",
+  "experiment_matrix_rows": 28,
+  "experiment_matrix_sha256": "923a3d8f08f1a9e16d797af08e22784b68cd95226aed152ce64f1259ec291a2c",
+  "fair_comparison_protocol_sha256": "1e5c0769c4292ac2681bef70f24da56cdd67af57a18e24823aad3abc34a9da3a",
+  "gpu_resource_policy_sha256": "083acf554be39da8a379b1a689b935169c5e0ba5e6acf5364425effea2e3b2ea",
+  "heldout_compatibility_passed": true,
+  "heldout_input_audit": {
+   "bytes": 10994,
+   "path": "runs/P00_heldout_input_audit_attempt2/heldout_input_audit/HELDOUT_INPUT_AUDIT.json",
+   "sha256": "1368e7a37bb3c0221bf23a85b1968baa4b006a4a8351e3314ddd7ab7ddca7095"
+  },
+  "heldout_reservation_sha256": "b52a6a5aa1db681ced683f5c1efb956c27157f80b2d3dd1288d8272b859f3812",
+  "original_implementation_handoff_sha256": "b4ba1a4b1af25dfa1dfc5e07429760af7ae0974918c5b43a8a12670bd48c2ce4",
+  "paper_risk_register_sha256": "48284fca779081dadefc2dc08cb734e5c6ea8972fea8c5fcf516db37625173f0",
+  "parent_input_fetch_manifest_sha256": "151115d748d6841bb166f3d30702161794a9c22463c45ad6c9e5e2871600cd72",
+  "read_only_input_audit": {
+   "bytes": 84189,
+   "path": "runs/P00_input_audit_attempt3/input_audit/READ_ONLY_INPUT_AUDIT.json",
+   "sha256": "f46f6c046fb75888e2e6cf97aedc861a772b0f019b4007ee0bd147ccf032f799"
+  },
+  "read_only_input_audit_passed": true,
+  "result_schema_sha256": "ecaf14a3dee4e575923f0a3dc5916a8f1f5eef34fbc2158d8f02565f87eacf8b",
+  "statistical_analysis_plan_sha256": "0e3684ba3b8288ce9e7d805e4cf1dc22a4d9723f5cf8cd828c43c3ec42e52285"
+ },
+ "locked_at_utc": "2026-09-14T17:25:54Z",
+ "matrix": [
+  {
+   "gate": "G0",
+   "matrix_id": "P00_INPUT_AUDIT",
+   "phase": 0,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G0",
+   "matrix_id": "P01_ANCHOR_REPRO",
+   "phase": 0,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G0",
+   "matrix_id": "P02_CARRYOVER_FIXES",
+   "phase": 0,
+   "requiredness": "required_if_unresolved"
+  },
+  {
+   "gate": "G1",
+   "matrix_id": "P10_K2_BREADTH",
+   "phase": 1,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G1",
+   "matrix_id": "P11_BASELINE_COMPLETION",
+   "phase": 1,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G1",
+   "matrix_id": "P12_EXISTING_K2_PROVENANCE",
+   "phase": 1,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G3",
+   "matrix_id": "P20_K2_DENSITY_DEV",
+   "phase": 2,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G1+G3",
+   "matrix_id": "P21_K2_DENSITY_BREADTH",
+   "phase": 2,
+   "requiredness": "conditional"
+  },
+  {
+   "gate": "G1",
+   "matrix_id": "P30_K2_DRAWS",
+   "phase": 3,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G5",
+   "matrix_id": "P31_CAL_SIZE_128",
+   "phase": 3,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G5",
+   "matrix_id": "P32_CAL_SIZE_256",
+   "phase": 3,
+   "requiredness": "conditional"
+  },
+  {
+   "gate": "G2",
+   "matrix_id": "P40_LOWER_K_SEARCH",
+   "phase": 4,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G2+G3",
+   "matrix_id": "P41_DRAW_AGG_DEV",
+   "phase": 4,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G2+G3",
+   "matrix_id": "P42_DRAW_AGG_BREADTH",
+   "phase": 4,
+   "requiredness": "conditional"
+  },
+  {
+   "gate": "G6",
+   "matrix_id": "P50_SELECTOR_DEV",
+   "phase": 5,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G6",
+   "matrix_id": "P51_TILE_FIDELITY",
+   "phase": 5,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G6",
+   "matrix_id": "P52_SELECTOR_BREADTH",
+   "phase": 5,
+   "requiredness": "conditional"
+  },
+  {
+   "gate": "G7",
+   "matrix_id": "P60_WEIGHT_SCALE",
+   "phase": 6,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G7",
+   "matrix_id": "P61_ACT_SCALE_CLIP",
+   "phase": 6,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G7",
+   "matrix_id": "P62_K64_LOCAL_TRANSFORM",
+   "phase": 6,
+   "requiredness": "conditional"
+  },
+  {
+   "gate": "G8",
+   "matrix_id": "P70_WINNER_FREEZE",
+   "phase": 7,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G8+G9",
+   "matrix_id": "P71_HELDOUT_PPL",
+   "phase": 7,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G8",
+   "matrix_id": "P72_ACCURACY",
+   "phase": 7,
+   "requiredness": "conditional"
+  },
+  {
+   "gate": "G8",
+   "matrix_id": "P73_GSM8K",
+   "phase": 7,
+   "requiredness": "conditional"
+  },
+  {
+   "gate": "G8",
+   "matrix_id": "P74_PG19",
+   "phase": 7,
+   "requiredness": "conditional"
+  },
+  {
+   "gate": "G8",
+   "matrix_id": "P75_PORTABILITY",
+   "phase": 7,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G0-G9",
+   "matrix_id": "P80_FINAL_ANALYSIS",
+   "phase": 8,
+   "requiredness": "required"
+  },
+  {
+   "gate": "G0-G9",
+   "matrix_id": "P81_ARTIFACT_BUNDLE",
+   "phase": 8,
+   "requiredness": "required"
+  }
+ ],
+ "parent_campaign": {
+  "artifact_manifest_entries": 78705,
+  "artifact_manifest_sha256": "432d922a49751603740622a084a665983fb337295048112e68311cd8110e19ee",
+  "authoritative_artifact_validation_attempt": "V83_validate_artifacts_attempt7",
+  "authoritative_final_reports_attempt": "V90_final_reports_attempt7",
+  "current_runs_with_problems": 0,
+  "identities": {
+   "artifact_validation": {
+    "bytes": 27114,
+    "path": "parent:runs/V83_validate_artifacts_attempt7/artifact_validation/ARTIFACT_VALIDATION.json",
+    "sha256": "94aa7414544f3b60b660f8e409f390d655a188bd850c7883717cf3069e808b4f"
+   },
+   "decision": {
+    "bytes": 17352,
+    "path": "parent:runs/V90_final_reports_attempt7/final/N16_DECISION.md",
+    "sha256": "f5f2a66b39032634d851370f25ba26197f92713c843c562ee59cdff55281867e"
+   },
+   "deliverable_index": {
+    "bytes": 3174,
+    "path": "parent:runs/V90_final_reports_attempt7/final/deliverable_index.json",
+    "sha256": "e2438c2050f19ffd49ea0bb78513f1d38ab91d5443a582895518e3689b883fce"
+   },
+   "reproduction": {
+    "bytes": 25825,
+    "path": "parent:runs/V90_final_reports_attempt7/final/REPRODUCTION_REPORT.md",
+    "sha256": "b0f092f4481c152fe08403297baee8ae4dab5a85159073fe7d19ba6168fc1e9e"
+   },
+   "risk_audit": {
+    "bytes": 96593,
+    "path": "parent:runs/V90_final_reports_attempt7/final/FINAL_SUBMISSION_RISK_AUDIT.md",
+    "sha256": "9fe489724b4a328bd867955829bb04d2086a1b2bab4c37b47bae7dada217602c"
+   },
+   "statistics": {
+    "bytes": 25411,
+    "path": "parent:runs/V90_final_reports_attempt7/final/STATISTICAL_VALIDITY_REPORT.md",
+    "sha256": "b17d5b00bdcae06ecd67eb195d7b9a67316c6dee3b70a924cd06bc088cd71338"
+   }
+  },
+  "logical_path": "research_runs/mixfp4_n16k64_full_validation_20260911T065444Z",
+  "matrix_coverage": {
+   "complete": 39,
+   "missing": 0,
+   "partial": 0
+  },
+  "preservation": "read-only mount; all negative, OOM, failed, superseded, and invalid/co-tenancy attempts remain in the parent and are included in final disclosure",
+  "protocol_freeze_sha256": "df78f1fbbd034cb8d2bc8e6f6a264e7e221e1b5f2b2ff99a3fe821369c5ac88f",
+  "run_directories": 338
+ },
+ "primary_k2_rule": {
+  "criterion": "max(mean_CE + k*SE_CE, mean_KL + k*SE_KL) < 0",
+  "k": 2.0,
+  "n16_construction": "sum the two adjacent N8-row per-sequence CE and KL scores first, then recompute mean, sample SD, SE, and the election; never OR/AND N8 masks",
+  "role": "post-hoc robustness extension",
+  "tile_shape": [
+   16,
+   64
+  ]
+ },
+ "quality_results_opened_before_lock": {
+  "extension_results": [],
+  "heldout_quality": [],
+  "known_parent_development_and_posthoc_results": "the parent reports and handoff EXISTING_*.csv tables were already viewed; they remain development/post-hoc and cannot become prospective"
+ },
+ "quantization_semantics": {
+  "activation": "same causal per-token FourOverSix row quantizer unless a separately labeled activation-ablation arm is used",
+  "comparators": [
+   "bf16",
+   "nvfp4",
+   "four_over_six",
+   "all_e0m3",
+   "n8_k3",
+   "n16_k3",
+   "n8_k2",
+   "n16_k2",
+   "razer_wonly_shared_act",
+   "razer_native_rows",
+   "nover6_wonly_shared_act",
+   "nover6_native_rows"
+  ],
+  "fake_quant_path": "BF16-dequantized fake-quant matmul",
+  "identity_match_required": [
+   "model repository/revision and all weight/config/tokenizer hashes",
+   "calibration document/crop/token hashes and order",
+   "evaluation document/window/token hashes",
+   "module scope, exclusions, padding and tile layout",
+   "attention backend, dtype, batch, cache and runtime",
+   "quantizer source identity",
+   "exact map hash and pre-map model checksum"
+  ],
+  "missing_cell_labels": [
+   "not_run",
+   "unsupported",
+   "OOM",
+   "invalid_cotenancy",
+   "resource_blocked",
+   "stopped_by_gate",
+   "unexpected_failure"
+  ],
+  "scope": "all text-model torch.nn.Linear weights except lm_head; embeddings, norms, KV cache and lm_head excluded",
+  "shared_w4a4_arms": [
+   "four_over_six",
+   "all_e0m3",
+   "n8",
+   "n16"
+  ],
+  "weights": "same scale and module scope except selected E2M1/E0M3 tile format"
+ },
+ "relationship_to_prior_campaign": "post_hoc_robustness_and_method_development_extension",
+ "research_roles": {
+  "breadth_replication_models": [
+   "qwen27b",
+   "phi4",
+   "olmo2_13b"
+  ],
+  "development_models": [
+   "llama8b",
+   "qwen4b",
+   "mistral7b"
+  ],
+  "heldout_no_swap_rule": "Neither model, revision, tokenizer, family, or quantized scope may be replaced after any held-out quality result is opened. Unsupported or OOM outcomes remain terminal evidence rather than permission to swap.",
+  "new_held_out_exact_revisions": {
+   "falcon3_10b": {
+    "family": "Falcon (TII)",
+    "repository": "tiiuae/Falcon3-10B-Base",
+    "revision": "34bb99a889fe0426412da3dd2b46e6f64c8fd003"
+   },
+   "granite8b": {
+    "family": "Granite (IBM)",
+    "repository": "ibm-granite/granite-3.3-8b-base",
+    "revision": "cfb7adb44a974653cbb2ff883653971c54dba578"
+   }
+  },
+  "new_held_out_models": [
+   "granite8b",
+   "falcon3_10b"
+  ],
+  "qwen_family_reporting": "qwen4b is a known large-effect development outlier; always report non-Qwen aggregates and never treat Qwen models as exchangeable independent families"
+ },
+ "schema_version": "1.1",
+ "scope": {
+  "allowed": "software BF16-dequantized fake-quant quality experiments for W4A4 methods on A6000 and RTX 6000 Ada",
+  "forbidden_claim_rule": "no fake-quant timing or A6000/Ada result may be presented as native execution or deployment overhead evidence",
+  "out_of_scope": [
+   "native FP4 or E0M3 Tensor Core execution",
+   "N8 approximately 13 percent overhead",
+   "N16 approximately 1.5 percent overhead",
+   "kernel speedup",
+   "latency or throughput claims",
+   "area",
+   "power",
+   "SM120-specific claims"
+  ]
+ },
+ "source_state_at_lock": {
+  "analysis_fixes": {
+   "accuracy_rng": "stable named NumPy SeedSequence task streams; Python hash() forbidden",
+   "campaign/stats.py": "08f28055e74ff11ba4f8308b7fba711fac65dd63a90b86fc4489338621ec0070",
+   "finite_monte_carlo_pvalue": "(extreme_count+1)/(B+1)"
+  },
+  "exact_parent_identical_anchor_files": {
+   "campaign/data.py": "9c6eb4c6378b67f5ab6e43a0025907d767cbc854a8e2eb389d2cf37be16bce4e",
+   "campaign/evaluate_ppl.py": "64dbd39d6b4491cdcd835ffea8338af37a70ac18cdeedd1a9122cb6ffda2b763",
+   "campaign/quant.py": "c19623d141e6fb4f473efceccbda72b83cb6524b1997e834e7dbc5ae19838451"
+  },
+  "per_run_identity": "every attempt records its own immutable source manifest; later implementation work cannot alter this lock or prior run manifests",
+  "source_manifest_sha256": "fa17d774ef4269f6a15e7be9109013d6ae6b24f40fdab8d9ff0babef0f825c74"
+ },
+ "statistics": {
+  "accuracy": {
+   "noninferiority": "paired macro lower 95% CI > -0.5 percentage points after frozen correction",
+   "rng_stream": "independent deterministic stable task-name SeedSequence",
+   "sesoi_pp": -0.5
+  },
+  "bootstrap": {
+   "interval": "paired cluster percentile 95%",
+   "master_seed": 20260914,
+   "replicates": 10000,
+   "rng": "numpy PCG64 via stable named SeedSequence streams"
+  },
+  "draws": "report every draw, mean, median, range, worst, between-draw sample SD, t_4 interval, beneficial fraction, pairwise map Jaccard and count variability; within-evaluation and between-draw uncertainty remain separate",
+  "finite_mc_pvalue": "(extreme_count+1)/(B+1); exact p=0 forbidden",
+  "multiplicity": {
+   "families": {
+    "accuracy": "eight task-level paired winner-vs-FourOverSix endpoints for each tested model; model panels reported separately",
+    "breadth_quality": "six N16 k2-vs-FourOverSix endpoints on qwen27b, phi4, olmo2_13b",
+    "heldout_quality": "four winner-vs-FourOverSix endpoints on granite8b and falcon3_10b",
+    "strongest_baseline": "opened only after preceding gates, baseline selected without N16/winner outcome peeking",
+    "threshold_improvement": "six N16 k2-vs-N16 k3 endpoints on the same panel",
+    "tile_shape": "six selected-weight-matched N16-vs-N8 endpoints on the same panel"
+   },
+   "method": "Holm within each frozen family"
+  },
+  "post_selection": "no naive development winner confidence interval is labeled confirmatory; confirmatory inference starts only after winner hash freeze on unopened held-out endpoints",
+  "ppl_estimand": "paired token-weighted dlogPPL = mean_NLL(method)-mean_NLL(comparator)",
+  "tile_fidelity": "exact binomial sign CI; Spearman and Kendall with stratified bootstrap; predicted-vs-observed calibration; sampling weights"
+ },
+ "status": "LOCKED",
+ "winner_freeze": {
+  "candidate_changes_after_opening_heldout": "forbidden",
+  "contents": "exact source manifest, maps/hashes, model-independent configuration, scale/clip/selector/aggregation/k, module scope, calibration manifests, evaluation plan, comparators and analysis hash",
+  "fallback": "N16 k2 seed0 with existing scale and activation if no development candidate passes its frozen gate",
+  "required_before": [
+   "P71_HELDOUT_PPL",
+   "P72_ACCURACY",
+   "P73_GSM8K",
+   "P74_PG19",
+   "P75_PORTABILITY"
+  ]
+ }
+}

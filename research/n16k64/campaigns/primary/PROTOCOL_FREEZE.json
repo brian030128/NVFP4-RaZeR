@@ -1,0 +1,1207 @@
+{
+ "calibration": {
+  "domain": {
+   "models": [
+    "qwen4b",
+    "mistral7b"
+   ],
+   "settings": [
+    "math64 only",
+    "code64 only",
+    "balanced 32+32",
+    "held-out mixture: 32 arXiv + 32 GovReport test documents (keyed draw heldout)"
+   ]
+  },
+  "independent_draws": {
+   "ids": [
+    "draw1",
+    "draw2",
+    "draw3",
+    "draw4"
+   ],
+   "models": [
+    "llama8b",
+    "qwen4b",
+    "mistral7b"
+   ],
+   "resolutions": [
+    "n8_k3",
+    "n16_k3"
+   ],
+   "rule": "campaign/data.keyed_draw: sha256(drawN:doc) order over the same pinned OpenWebMath/CodeParrot files, excluding seed0 and all lower draws, >=512 tokens, keyed offset"
+  },
+  "seed0": {
+   "confirmatory": "archived builder rule run_pooled_scale.shared_data applied to each tokenizer",
+   "development": "archived manifests (document SHA-256 + token offsets), token hashes verified",
+   "manifest_sha256": {
+    "llama8b": "9fa00fa12842f886dd26285a9de516446149aaee3ed6868135b5c802b0c99696",
+    "mistral7b": "4018df383c3cc951b8905b77b1b3bcdf60da1c5d6f85669ee62431b9720e7953",
+    "olmo2_13b": "ad9b25211b5c485e459ea80a7359ec585beb4ee642ccbcbcf2bd64976defbdf2",
+    "phi4": "ad9b25211b5c485e459ea80a7359ec585beb4ee642ccbcbcf2bd64976defbdf2",
+    "qwen27b": "a0b8161bd1b18d3beee82042d1357337e0806b12ca61d2f290cbdf00c758a98c",
+    "qwen4b": "7722a6ee8af07883d2193a6693d4bc6852c547e0c306ea378bf0c1c597f88a5d"
+   }
+  },
+  "size": {
+   "models": [
+    "qwen4b",
+    "mistral7b"
+   ],
+   "settings": [
+    "16+16 (math16+code16 prefixes of seed0)",
+    "32+32",
+    "64+64 (primary)"
+   ]
+  },
+  "storage": {
+   "full_raw": "qwen4b seed0 if /home free >= 80 GiB at launch",
+   "moments": "float64 sums/squares/cross for full set; math/code prefix moments for size/domain models",
+   "raw_sample": "per module keyed-random 1% of N16 parents (cap 4096, floor 32) with both N8 children, all sequences"
+  }
+ },
+ "campaign_root": "<USER_HOME>/mixfp4/research_runs/mixfp4_n16k64_full_validation_20260911T065444Z",
+ "created_utc": "2026-09-11T09:09:16Z",
+ "endpoints": {
+  "exploratory": "everything else",
+  "primary": [
+   "mistral7b:wiki:dlogppl(n16_k3 - four_over_six)",
+   "mistral7b:c4:dlogppl(n16_k3 - four_over_six)",
+   "phi4:wiki:dlogppl(n16_k3 - four_over_six)",
+   "phi4:c4:dlogppl(n16_k3 - four_over_six)",
+   "olmo2_13b:wiki:dlogppl(n16_k3 - four_over_six)",
+   "olmo2_13b:c4:dlogppl(n16_k3 - four_over_six)"
+  ],
+  "primary_estimator": "token-weighted mean NLL difference with 95% paired cluster-bootstrap percentile CI (B=10000, seed 20260911)",
+  "secondary": [
+   "per-task and 8-task macro accuracy difference (n16_k3 - four_over_six), paired example bootstrap",
+   "gsm8k exact_match difference",
+   "retained fraction R = sum(dlogppl n16_k3) / sum(dlogppl n8_k3) over confirmatory model x dataset (only if the N8 sum < 0)",
+   "same endpoints on the development panel (labelled development)"
+  ]
+ },
+ "evaluation": {
+  "accuracy": {
+   "harness": "lm-eval 0.4.11 HFLM on the in-memory model, batch_size 16, log_samples, seeds (0,1234,1234,1234)",
+   "num_fewshot": 0,
+   "offline_docs_equal_online": true,
+   "representative_suite": [
+    "arc_challenge",
+    "piqa",
+    "winogrande",
+    "boolq"
+   ],
+   "task_documents": {
+    "arc_challenge": {
+     "dataset_name": "ARC-Challenge",
+     "dataset_path": "allenai/ai2_arc",
+     "docs": 1172,
+     "docs_sha256": "7a0561fcc254d9f69ccb3066cfd93b7a6d2815ff48af28001bc9d04678df847b",
+     "hub_revision_at_fetch": "210d026faf9955653af8916fad021475a3f00453",
+     "split": "test",
+     "version": 1.0
+    },
+    "arc_easy": {
+     "dataset_name": "ARC-Easy",
+     "dataset_path": "allenai/ai2_arc",
+     "docs": 2376,
+     "docs_sha256": "3858d2f2955c47c3ed98e2471bffa68ae4d62fdcc16e232320e665bc28c3ac43",
+     "hub_revision_at_fetch": "210d026faf9955653af8916fad021475a3f00453",
+     "split": "test",
+     "version": 1.0
+    },
+    "boolq": {
+     "dataset_name": "boolq",
+     "dataset_path": "aps/super_glue",
+     "docs": 3270,
+     "docs_sha256": "17b7214a901c698b4df18533c7422ab063c11add7affa806c3654c545244248e",
+     "hub_revision_at_fetch": "3de24cf8022e94f4ee4b9d55a6f539891524d646",
+     "split": "validation",
+     "version": 2.0
+    },
+    "gsm8k": {
+     "dataset_name": "main",
+     "dataset_path": "openai/gsm8k",
+     "docs": 1319,
+     "docs_sha256": "048b3d633c9dbc9092b811621176a17a998b112684f6baff9a819f80bb726373",
+     "hub_revision_at_fetch": "740312add88f781978c0658806c59bc2815b9866",
+     "split": "test",
+     "version": 3.0
+    },
+    "hellaswag": {
+     "dataset_name": null,
+     "dataset_path": "Rowan/hellaswag",
+     "docs": 10042,
+     "docs_sha256": "2b9a8457e78e65555f5674a1df7b91ea4e15390b5f7ea8beb6c2c5f71f9789ac",
+     "hub_revision_at_fetch": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+     "split": "validation",
+     "version": 1.0
+    },
+    "mmlu_abstract_algebra": {
+     "dataset_name": "abstract_algebra",
+     "dataset_path": "cais/mmlu",
+     "docs": 100,
+     "docs_sha256": "45ee8146e7d11d1aaf2f4380cd797569d2df193992f43bc0229d81d4370bb2a1",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_anatomy": {
+     "dataset_name": "anatomy",
+     "dataset_path": "cais/mmlu",
+     "docs": 135,
+     "docs_sha256": "9e209b369b5daa4c6ad3aa5a9b18bc06eb5044a858788ab68161ad8027219ef9",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_astronomy": {
+     "dataset_name": "astronomy",
+     "dataset_path": "cais/mmlu",
+     "docs": 152,
+     "docs_sha256": "a3c784ba4537131a28c769632d9b28a790ea4aec5ae2bd8ac201cb25febeb431",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_business_ethics": {
+     "dataset_name": "business_ethics",
+     "dataset_path": "cais/mmlu",
+     "docs": 100,
+     "docs_sha256": "e288551e7f0ca40afcf530039370bcbfff4ae950dc5cd4f0de5cabef6f672f6d",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_clinical_knowledge": {
+     "dataset_name": "clinical_knowledge",
+     "dataset_path": "cais/mmlu",
+     "docs": 265,
+     "docs_sha256": "ba0dba1da2fa56369e039c10409e42b92d09db39e72c496c243b0e4cb366525f",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_college_biology": {
+     "dataset_name": "college_biology",
+     "dataset_path": "cais/mmlu",
+     "docs": 144,
+     "docs_sha256": "c7005ad2091ec11889de4e5345a048fe79b67f91ef28f2f288a83d176773cd1e",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_college_chemistry": {
+     "dataset_name": "college_chemistry",
+     "dataset_path": "cais/mmlu",
+     "docs": 100,
+     "docs_sha256": "1c56f117d0a235395c8491323116c5e32ee830543f0881df9477277e3644d2d4",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_college_computer_science": {
+     "dataset_name": "college_computer_science",
+     "dataset_path": "cais/mmlu",
+     "docs": 100,
+     "docs_sha256": "e04c582fc5fdf4fb296cdde690bb12abb75466314db45600385af6288b78827b",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_college_mathematics": {
+     "dataset_name": "college_mathematics",
+     "dataset_path": "cais/mmlu",
+     "docs": 100,
+     "docs_sha256": "9835968442f6a62b637d0a619cf81a5d4271184182be4ba47d716fceba7f3fd2",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_college_medicine": {
+     "dataset_name": "college_medicine",
+     "dataset_path": "cais/mmlu",
+     "docs": 173,
+     "docs_sha256": "1c7b155642837d7fae9d9c95ad34eb07a4838214b184c51a1597960b33a082cb",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_college_physics": {
+     "dataset_name": "college_physics",
+     "dataset_path": "cais/mmlu",
+     "docs": 102,
+     "docs_sha256": "d8a0ea4d6ceaf682fea7465f7832b08755be5df5c67817829e1cdab1229dfe6a",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_computer_security": {
+     "dataset_name": "computer_security",
+     "dataset_path": "cais/mmlu",
+     "docs": 100,
+     "docs_sha256": "27748fad622d24df259705981215ef17b87b7da16ca4ae471d23188b384620db",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_conceptual_physics": {
+     "dataset_name": "conceptual_physics",
+     "dataset_path": "cais/mmlu",
+     "docs": 235,
+     "docs_sha256": "bb7178fd01584bd67208317fb8ba344518575043462c9c56214093c3543b8ac0",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_econometrics": {
+     "dataset_name": "econometrics",
+     "dataset_path": "cais/mmlu",
+     "docs": 114,
+     "docs_sha256": "c33c3a36d3968e2dc774f07e9ba626dce26f57703fd7e6291ca53d309fb3de3c",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_electrical_engineering": {
+     "dataset_name": "electrical_engineering",
+     "dataset_path": "cais/mmlu",
+     "docs": 145,
+     "docs_sha256": "c5e93cdeb684a65147a0b3d57dc6ad8d307a606e9a3b511e53ebcd87ae52f242",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_elementary_mathematics": {
+     "dataset_name": "elementary_mathematics",
+     "dataset_path": "cais/mmlu",
+     "docs": 378,
+     "docs_sha256": "228417bfb2281dc8cb5e7eb821501a6e2ab5f3728b4c9e5115405b18c21a00f5",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_formal_logic": {
+     "dataset_name": "formal_logic",
+     "dataset_path": "cais/mmlu",
+     "docs": 126,
+     "docs_sha256": "f506114e2fee678ee84a7afc4d02647322157df05a0116cf2e8b58341cde38b7",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_global_facts": {
+     "dataset_name": "global_facts",
+     "dataset_path": "cais/mmlu",
+     "docs": 100,
+     "docs_sha256": "72c21b57aad33b0709016ead20736126d0368d670d7184666a76dfcbdaf3173b",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_high_school_biology": {
+     "dataset_name": "high_school_biology",
+     "dataset_path": "cais/mmlu",
+     "docs": 310,
+     "docs_sha256": "2cc481e34fb19a7d246372c366eaf6e7c61713c5509c960480ba8929bdadc845",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_high_school_chemistry": {
+     "dataset_name": "high_school_chemistry",
+     "dataset_path": "cais/mmlu",
+     "docs": 203,
+     "docs_sha256": "84e443c99fdbc34eb5d921ab28742dd90cc04d93c92c4fbf4af6d6f24719abcc",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_high_school_computer_science": {
+     "dataset_name": "high_school_computer_science",
+     "dataset_path": "cais/mmlu",
+     "docs": 100,
+     "docs_sha256": "188c11f3c4a4574f491d57b7a5c95ea3b087e2d8fee7c68c9bf00767e89822da",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_high_school_european_history": {
+     "dataset_name": "high_school_european_history",
+     "dataset_path": "cais/mmlu",
+     "docs": 165,
+     "docs_sha256": "d7587a7603dacbe2611190c1385c33b86fca47b5d6ebfff0f602232b40c41fcc",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_high_school_geography": {
+     "dataset_name": "high_school_geography",
+     "dataset_path": "cais/mmlu",
+     "docs": 198,
+     "docs_sha256": "f3c0d57f907f61ea3cfe1976e6905edf2488f800de500f864dcedd01b6ae8d4d",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_high_school_government_and_politics": {
+     "dataset_name": "high_school_government_and_politics",
+     "dataset_path": "cais/mmlu",
+     "docs": 193,
+     "docs_sha256": "f3ff62cbc0cb11efa452abd932f4437239aa6a39afa5a819638bb822d12b830a",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_high_school_macroeconomics": {
+     "dataset_name": "high_school_macroeconomics",
+     "dataset_path": "cais/mmlu",
+     "docs": 390,
+     "docs_sha256": "34798589348a01cdd5e375a7586d46ba73064a17c74f8a24ca37dd6d673bbbae",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_high_school_mathematics": {
+     "dataset_name": "high_school_mathematics",
+     "dataset_path": "cais/mmlu",
+     "docs": 270,
+     "docs_sha256": "633fdfe2661905d1a574d999c5420fd1070839c0b1fe8e2d70a2e18a3f06fb51",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_high_school_microeconomics": {
+     "dataset_name": "high_school_microeconomics",
+     "dataset_path": "cais/mmlu",
+     "docs": 238,
+     "docs_sha256": "0ac554bbbc6cab4e944fe18fca2e55dc7740b06b79cfd67c821603158f2ace6b",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_high_school_physics": {
+     "dataset_name": "high_school_physics",
+     "dataset_path": "cais/mmlu",
+     "docs": 151,
+     "docs_sha256": "8ecc607096e589109b64baffcd556eb78fda42006de13932bbbcae23f9b04d28",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_high_school_psychology": {
+     "dataset_name": "high_school_psychology",
+     "dataset_path": "cais/mmlu",
+     "docs": 545,
+     "docs_sha256": "45d206db655be48aa414f4089b544c8271852d59765069d2f9af7d1275d7e6e8",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_high_school_statistics": {
+     "dataset_name": "high_school_statistics",
+     "dataset_path": "cais/mmlu",
+     "docs": 216,
+     "docs_sha256": "e97002abc315674d455a4e0e1200fadcdcbc0fceb08a62e192e698c3e907b3a1",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_high_school_us_history": {
+     "dataset_name": "high_school_us_history",
+     "dataset_path": "cais/mmlu",
+     "docs": 204,
+     "docs_sha256": "37969d85c12f63bc1feb2923122fcfd1a7033328496b3c6bacdb8f8bf845ab20",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_high_school_world_history": {
+     "dataset_name": "high_school_world_history",
+     "dataset_path": "cais/mmlu",
+     "docs": 237,
+     "docs_sha256": "765a6b2e5bdc8e9645c142fab0d4718b1ccf111b53e0d957bb4f2c065977b41c",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_human_aging": {
+     "dataset_name": "human_aging",
+     "dataset_path": "cais/mmlu",
+     "docs": 223,
+     "docs_sha256": "73bf7504647c15d8f937770de7680b57e9a1e05f2f823050ca71304514fc0b83",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_human_sexuality": {
+     "dataset_name": "human_sexuality",
+     "dataset_path": "cais/mmlu",
+     "docs": 131,
+     "docs_sha256": "47f752679ddfca4df2edf950b6d786c7715656bd5c37fb8e6df211fa8e3edb43",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_international_law": {
+     "dataset_name": "international_law",
+     "dataset_path": "cais/mmlu",
+     "docs": 121,
+     "docs_sha256": "6c4891c3242e1296700bc8d07f5005e015e0816d61497e348b73cc7fcab3389c",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_jurisprudence": {
+     "dataset_name": "jurisprudence",
+     "dataset_path": "cais/mmlu",
+     "docs": 108,
+     "docs_sha256": "5ae9d5646bbb1da4a824f7f72c6f5fec5e8423c25a045e80f849be45ade272dd",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_logical_fallacies": {
+     "dataset_name": "logical_fallacies",
+     "dataset_path": "cais/mmlu",
+     "docs": 163,
+     "docs_sha256": "47f46f89d605c9b3b06aba3793151df6c75411f087372bab24f1d88ceee8afb4",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_machine_learning": {
+     "dataset_name": "machine_learning",
+     "dataset_path": "cais/mmlu",
+     "docs": 112,
+     "docs_sha256": "72a73262cf726af466b9804e98c41db47d3ee590cdb76ade15d310e2f32b9969",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_management": {
+     "dataset_name": "management",
+     "dataset_path": "cais/mmlu",
+     "docs": 103,
+     "docs_sha256": "1590548a0c21da21a1cd8f3248b6d74f8da98e56159627a33cbd9429de4f6da4",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_marketing": {
+     "dataset_name": "marketing",
+     "dataset_path": "cais/mmlu",
+     "docs": 234,
+     "docs_sha256": "61eaff2df89d76d4e97431255f0acdc4f36fa96efde67ee0e3d222580f36b5c4",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_medical_genetics": {
+     "dataset_name": "medical_genetics",
+     "dataset_path": "cais/mmlu",
+     "docs": 100,
+     "docs_sha256": "477ddc76fa690c8a07464f292ff9ba48ddf7244d30b46724d05939102d5ca592",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_miscellaneous": {
+     "dataset_name": "miscellaneous",
+     "dataset_path": "cais/mmlu",
+     "docs": 783,
+     "docs_sha256": "7252d5ff9c1b230c743fa23b15e436f82824f3ee1bfb20e45f8201b6b7f947e9",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_moral_disputes": {
+     "dataset_name": "moral_disputes",
+     "dataset_path": "cais/mmlu",
+     "docs": 346,
+     "docs_sha256": "39449eb9971435967ed4aa882a3338368503de3f5b4c6704f70b67981359d6d7",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_moral_scenarios": {
+     "dataset_name": "moral_scenarios",
+     "dataset_path": "cais/mmlu",
+     "docs": 895,
+     "docs_sha256": "e611d25261cd45a27dac531df0d6de66da2c7cb6818a8207c5a007e3dd44acbb",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_nutrition": {
+     "dataset_name": "nutrition",
+     "dataset_path": "cais/mmlu",
+     "docs": 306,
+     "docs_sha256": "741072aeb29195ee3660566eae8cb210afc41d7d6410e816e48ec2ce679b1211",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_philosophy": {
+     "dataset_name": "philosophy",
+     "dataset_path": "cais/mmlu",
+     "docs": 311,
+     "docs_sha256": "60a57975ced21de0c28ba889039a2ff932bf6df7f800765b90d9544f84513118",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_prehistory": {
+     "dataset_name": "prehistory",
+     "dataset_path": "cais/mmlu",
+     "docs": 324,
+     "docs_sha256": "cd1ffc216b9607ab1ee5792bc3a812fe37d899aa59ac94da479f8379b40c96d1",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_professional_accounting": {
+     "dataset_name": "professional_accounting",
+     "dataset_path": "cais/mmlu",
+     "docs": 282,
+     "docs_sha256": "1fe4e21260486266fceb8ce8e25dbcff97187c4e6bf9021ee6f06474202601a0",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_professional_law": {
+     "dataset_name": "professional_law",
+     "dataset_path": "cais/mmlu",
+     "docs": 1534,
+     "docs_sha256": "7cdf4f63878656af59c5f1188459425398e678c6e21d173a6976723e80c7a24d",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_professional_medicine": {
+     "dataset_name": "professional_medicine",
+     "dataset_path": "cais/mmlu",
+     "docs": 272,
+     "docs_sha256": "412acfb5742df0370d1d454262c81bb8a6640f42304b99e3318cff4661e4ef30",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_professional_psychology": {
+     "dataset_name": "professional_psychology",
+     "dataset_path": "cais/mmlu",
+     "docs": 612,
+     "docs_sha256": "be4f50b83d3ce85d60a7509c05bec204228e05fa2ade3269afc57f88b02e1e59",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_public_relations": {
+     "dataset_name": "public_relations",
+     "dataset_path": "cais/mmlu",
+     "docs": 110,
+     "docs_sha256": "a530133f8c13f886b9e3e0de6615096ff3f2776b1c74c0e617e2d8a6ea0a0ce5",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_security_studies": {
+     "dataset_name": "security_studies",
+     "dataset_path": "cais/mmlu",
+     "docs": 245,
+     "docs_sha256": "7b1e329d1b0707fde706d11140f791bea0d5ca7421d6a8aea47ad37c93c6c8ed",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_sociology": {
+     "dataset_name": "sociology",
+     "dataset_path": "cais/mmlu",
+     "docs": 201,
+     "docs_sha256": "d5772e67c8df07adcab8fa587cb294aebc53498f3bd4da0b236b25910a06b918",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_us_foreign_policy": {
+     "dataset_name": "us_foreign_policy",
+     "dataset_path": "cais/mmlu",
+     "docs": 100,
+     "docs_sha256": "270acb708de7c4515bff050a1ed9486d3aad75f47ff32419bdb26a3b2f790ec8",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_virology": {
+     "dataset_name": "virology",
+     "dataset_path": "cais/mmlu",
+     "docs": 166,
+     "docs_sha256": "ab61f851810910b475f3182828b7f718deb93341c35889956243dd0ba843c4fc",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "mmlu_world_religions": {
+     "dataset_name": "world_religions",
+     "dataset_path": "cais/mmlu",
+     "docs": 171,
+     "docs_sha256": "4f81282029dbbcd97eef62c321fedba51c557320d6cb98893582ebea60113d17",
+     "hub_revision_at_fetch": "c30699e8356da336a370243923dbaf21066bb9fe",
+     "split": "test",
+     "version": 1.0
+    },
+    "openbookqa": {
+     "dataset_name": "main",
+     "dataset_path": "allenai/openbookqa",
+     "docs": 500,
+     "docs_sha256": "957acb94861ddc91bf105650e4ecc3134e93f6404689a5e9a85db2732b012a08",
+     "hub_revision_at_fetch": "388097ea7776314e93a529163e0fea805b8a6454",
+     "split": "test",
+     "version": 1.0
+    },
+    "piqa": {
+     "dataset_name": null,
+     "dataset_path": "baber/piqa",
+     "docs": 1838,
+     "docs_sha256": "d82bc2d775ca19c38e52881aba14c9457d415a68063457d410029b983cbc7b89",
+     "hub_revision_at_fetch": "142f6d7367fd9877f0fb3b5734ea6a545f54cdd1",
+     "split": "validation",
+     "version": 1.0
+    },
+    "winogrande": {
+     "dataset_name": "winogrande_xl",
+     "dataset_path": "allenai/winogrande",
+     "docs": 1267,
+     "docs_sha256": "dae51b8724e82f870c6ce629fb23dc621f9d9b8035fe2d17cc67cee88ff630a3",
+     "hub_revision_at_fetch": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+     "split": "validation",
+     "version": 1.0
+    }
+   },
+   "tasks": {
+    "arc_challenge": "acc_norm",
+    "arc_easy": "acc_norm",
+    "boolq": "acc",
+    "hellaswag": "acc_norm",
+    "mmlu": "acc (57 subjects, lm-eval group aggregate)",
+    "openbookqa": "acc_norm",
+    "piqa": "acc_norm",
+    "winogrande": "acc"
+   }
+  },
+  "generation": {
+   "decoding": "task defaults: greedy (do_sample false), until [Question:, </s>, <|im_end|>], max_gen_toks 256",
+   "models": [
+    "qwen4b",
+    "llama8b",
+    "mistral7b"
+   ],
+   "num_fewshot": 5,
+   "policies": [
+    "bf16",
+    "four_over_six",
+    "n8_k3",
+    "n16_k3"
+   ],
+   "primary_metric": "exact_match,flexible-extract",
+   "secondary_metric": "exact_match,strict-match",
+   "task": "lm-eval gsm8k v3.0"
+  },
+  "long_context": {
+   "clusters": "book",
+   "corpus": "emozilla/pg19-test @c5e39bf3 books in file order",
+   "models": [
+    "llama8b",
+    "qwen4b",
+    "mistral7b"
+   ],
+   "policies": [
+    "bf16",
+    "four_over_six",
+    "n8_k3",
+    "n16_k3"
+   ],
+   "windows": {
+    "4096": 64,
+    "8192": 32
+   }
+  },
+  "ppl": {
+   "aggregation": "PPL = exp(sum token NLL / tokens); per-window and per-token arrays saved",
+   "c4": "allenai/c4 en/c4-validation.00000-of-00008 @1588ec45, 256 documents Random(0) with replacement, 2048-token crops",
+   "clusters": {
+    "c4": "document SHA-256",
+    "wikitext": "article containing the first token of the window; sensitivity: contiguous blocks of 5 windows"
+   },
+   "teacher_diagnostics": "KL(teacher||student), top-1 agreement, entropy, confidence, token accuracy, ECE (10 bins)",
+   "teacher_mode": {
+    "cache_first_16_windows_per_corpus": [
+     "qwen27b"
+    ],
+    "cache_first_32_windows_per_corpus": [
+     "phi4",
+     "olmo2_13b"
+    ],
+    "instance": [
+     "qwen4b",
+     "llama8b",
+     "mistral7b"
+    ],
+    "note": "NLL, entropy, confidence and token accuracy on every window; KL/top-1 agreement on all windows (instance) or the predeclared cached subset"
+   },
+   "wikitext": "Salesforce/wikitext wikitext-2-raw-v1 test @b08601e0, all full non-overlapping 2048-token windows of the joined text"
+  }
+ },
+ "first_order_fidelity": {
+  "actual": "float64 mean over the 128 seed0 calibration sequences of CE/KL with only those tiles switched, W4A4 causal eval mode (no STE)",
+  "batched_prefix_sizes": [
+   1,
+   2,
+   4,
+   8,
+   16,
+   32,
+   64,
+   128,
+   256,
+   512,
+   "all selected"
+  ],
+  "layer_strata": "early/middle/late thirds reported",
+  "metrics": [
+   "Pearson",
+   "Spearman",
+   "sign precision/recall",
+   "binned calibration",
+   "false-positive rate among selected",
+   "interaction error vs sum of singles and vs predicted"
+  ],
+  "models": [
+   "llama8b",
+   "qwen4b",
+   "mistral7b"
+  ],
+  "near_threshold_definition": "0 <= U3 < 10th percentile of positive U3",
+  "rejected_definition": "U3 > median of positive U3",
+  "resolutions": [
+   "n8",
+   "n16"
+  ],
+  "sampling_seed": 20260912,
+  "strata": {
+   "near_threshold": 40,
+   "random": 40,
+   "rejected": 40,
+   "selected_k3": 40
+  }
+ },
+ "freeze_version": 1,
+ "gpu_policy": {
+  "homogeneous": true,
+  "max_gpus": 3,
+  "preflight": "before/phase/after; fail closed; co-tenancy invalidates and reschedules",
+  "scheduler": "campaign_local_lease + docker device cgroup (D01)"
+ },
+ "input_zip_sha256": "b4ba1a4b1af25dfa1dfc5e07429760af7ae0974918c5b43a8a12670bd48c2ce4",
+ "numerical_tolerances": {
+  "cross_gpu": {
+   "map": "tierA identical map SHA; tierB Jaccard >= 0.9 with every flipped tile |U3| reported",
+   "paired_effect": "sign equal and |difference| <= max(0.25*|A6000 effect|, 0.002)",
+   "ppl_rel_w4a4": 0.005
+  },
+  "determinism": {
+   "tierA": "identical score-stream SHA-256 and map SHA-256 on repeat",
+   "tierB": "map Jaccard >= 0.99; all threshold flips reported"
+  },
+  "historical": {
+   "basis": "cross-architecture (archived H100/H200 vs A6000); W4A4 fake quantization amplifies kernel noise (V14 causality diagnostic)",
+   "on_failure": "stop runs that would be compared with archived numbers for that model; investigate; never widen; aligned protocol is not compared with archived numbers and proceeds",
+   "required_anchors": [
+    "four_over_six PPL (3 development models)",
+    "archived fixed-256 map PPL",
+    "N8 k3 PPL",
+    "N8 k2 score identity",
+    "fixed-256 map reconstruction"
+   ],
+   "tierA": "bitwise equality",
+   "tierB": {
+    "bf16_fit_nll_max_abs": 0.002,
+    "bf16_fit_nll_mean_abs": 0.0005,
+    "fit_kl_max_abs": 0.02,
+    "fit_kl_mean_abs": 0.005,
+    "fixed256_jaccard": 0.8,
+    "k3_count_rel": 0.05,
+    "ppl_rel_bf16": 0.001,
+    "ppl_rel_w4a4": 0.005,
+    "w4a4_fit_ce_max_abs": 0.05,
+    "w4a4_fit_ce_mean_abs": 0.01
+   },
+   "tierC": "archived paired effect sign reproduced and |regenerated - archived dlogppl| <= max(0.25*|archived|, 0.002)"
+  }
+ },
+ "owner_decisions": {
+  "decisions": [
+   {
+    "answer": "Local lease + Docker (Recommended)",
+    "context": "<RESEARCH_HOST> has no Slurm/PBS/LSF/HTCondor/Kubernetes scheduler and no passwordless sudo; other users (e.g. <REDACTED_USER> on GPU0-1, <REDACTED_USER> on GPU5-6 at 2026-09-11T06:57Z) start GPU jobs directly. GPU_RESOURCE_POLICY.md rule 4 requires scheduler allocation.",
+    "id": "D01_gpu_allocation",
+    "implementation": "campaign-local atomic flock lease allocator over physical GPU UUIDs; each GPU run executes inside a Docker container started with --gpus device=<UUID,...> (cgroup device isolation, 1-3 same-model GPUs); fail-closed host-side preflight before model load, at phase boundaries and after completion; ~30 s co-tenancy sidecar invalidates the run on any foreign compute PID; start only on GPUs with zero compute processes. Records disclose scheduler_kind=campaign_local_lease (not Slurm).",
+    "question": "How should GPU runs be allocated?",
+    "residual_limitation": "The allocator cannot prevent other users from later starting processes on a leased GPU; it detects co-tenancy and invalidates/reschedules affected runs."
+   },
+   {
+    "answer": "Replace: OLMo-2-13B (Recommended)",
+    "context": "google/gemma-2-9b (preferred confirmatory candidate) returns HTTP 403 on file access for the available HF token (gated license not accepted). Checked 2026-09-11 before any quantized quality result for any confirmatory model was produced or viewed.",
+    "id": "D02_confirmatory_replacement",
+    "mixfp4_quality_inspected_before_choice": false,
+    "objective_reason": "inaccessible license (HTTP 403)",
+    "question": "Replace gemma-2-9b before the freeze?",
+    "replacement": {
+     "model_id": "allenai/OLMo-2-1124-13B",
+     "revision_at_check": "3fefddc1bf18a30e1d9b91000271630718f2aa8b"
+    }
+   }
+  ],
+  "recorded_utc": "2026-09-11T07:05:00Z"
+ },
+ "panels": {
+  "after_first_confirmatory_quality_result": "no replacement; failures are reported as missing endpoints",
+  "compatibility_smoke": {
+   "llama8b": {
+    "calibration_manifest_file_sha256": "66c7956bfb6b9948bb2b546852953e5fcea6821b4338027e9f6c1050a023a951",
+    "calibration_manifest_sha256": "9fa00fa12842f886dd26285a9de516446149aaee3ed6868135b5c802b0c99696",
+    "max_position_embeddings": 131072,
+    "module_manifest_sha256": "9db41d9890235d0c229f5ffcd2b407a30cc35d1a37673fef850dc4eac7f58e37",
+    "modules": 224,
+    "n16_total": 6815744,
+    "n8_total": 13631488,
+    "quality_values_recorded": false,
+    "run": "V14_smoke_llama8b_a6000_attempt1",
+    "windows": {
+     "c4": 256,
+     "c4_unique_documents": 231,
+     "wiki": 141,
+     "wiki_articles": 62
+    }
+   },
+   "mistral7b": {
+    "calibration_manifest_file_sha256": "02e7a729f70cf91b760464fc00cecaf4e88ed973aafaebb83f32f36a5189b64c",
+    "calibration_manifest_sha256": "4018df383c3cc951b8905b77b1b3bcdf60da1c5d6f85669ee62431b9720e7953",
+    "max_position_embeddings": 32768,
+    "module_manifest_sha256": "4fcd3a4c4f18d70c4503f62ee98c2bd1df9a6737ec9c6a1a5bb906d7a50724b6",
+    "modules": 224,
+    "n16_total": 6815744,
+    "n8_total": 13631488,
+    "quality_values_recorded": false,
+    "run": "V14_smoke_mistral7b_a6000_attempt1",
+    "windows": {
+     "c4": 256,
+     "c4_unique_documents": 235,
+     "wiki": 163,
+     "wiki_articles": 62
+    }
+   },
+   "olmo2_13b": {
+    "calibration_manifest_file_sha256": "3bfabefd4e8f7da5c183e8181cb63099fc5ba4396b0ee2c044131c78be0bbc71",
+    "calibration_manifest_sha256": "ad9b25211b5c485e459ea80a7359ec585beb4ee642ccbcbcf2bd64976defbdf2",
+    "max_position_embeddings": 4096,
+    "module_manifest_sha256": "7df82f99a13e2a81dda7aa1a5ee1cd96395997e5f0d88500cd662e94abde2a4c",
+    "modules": 280,
+    "n16_total": 12390400,
+    "n8_total": 24780800,
+    "quality_values_recorded": false,
+    "run": "V14_smoke_olmo2_13b_attempt1",
+    "windows": {
+     "c4": 256,
+     "c4_unique_documents": 231,
+     "wiki": 141,
+     "wiki_articles": 62
+    }
+   },
+   "phi4": {
+    "calibration_manifest_file_sha256": "3bfabefd4e8f7da5c183e8181cb63099fc5ba4396b0ee2c044131c78be0bbc71",
+    "calibration_manifest_sha256": "ad9b25211b5c485e459ea80a7359ec585beb4ee642ccbcbcf2bd64976defbdf2",
+    "max_position_embeddings": 16384,
+    "module_manifest_sha256": "cf45ed77b87194721dc419115b1aafca5dce2412274d0350c2c5e2dec0ded0d9",
+    "modules": 160,
+    "n16_total": 13312000,
+    "n8_total": 26624000,
+    "quality_values_recorded": false,
+    "run": "V14_smoke_phi4_a6000_attempt2",
+    "windows": {
+     "c4": 256,
+     "c4_unique_documents": 231,
+     "wiki": 141,
+     "wiki_articles": 62
+    }
+   },
+   "qwen27b": {
+    "calibration_manifest_file_sha256": "6755a91dfa2921aa25bf80c85a24a612482257ec5f8950ee1909850b043f6b79",
+    "calibration_manifest_sha256": "a0b8161bd1b18d3beee82042d1357337e0806b12ca61d2f290cbdf00c758a98c",
+    "max_position_embeddings": 262144,
+    "module_manifest_sha256": "5b4f1a68ec3bad3845b5f27ac868d05ad68ae441aefc39bb11edb7fcc03bb956",
+    "modules": 496,
+    "n16_total": 23779840,
+    "n8_total": 47559680,
+    "quality_values_recorded": false,
+    "run": "V14_smoke_qwen27b_attempt1",
+    "windows": {
+     "c4": 256,
+     "c4_unique_documents": 233,
+     "wiki": 145,
+     "wiki_articles": 62
+    }
+   },
+   "qwen4b": {
+    "calibration_manifest_file_sha256": "381052bf2cdcdc3b346ef0d924963ea032344af6f9190aef04a748f2516c40ff",
+    "calibration_manifest_sha256": "7722a6ee8af07883d2193a6693d4bc6852c547e0c306ea378bf0c1c597f88a5d",
+    "max_position_embeddings": 40960,
+    "module_manifest_sha256": "d24d88d3a37088e9d520632fb83490dbcb079296a1b0a79cfe5e4df861ba26eb",
+    "modules": 252,
+    "n16_total": 3548160,
+    "n8_total": 7096320,
+    "quality_values_recorded": false,
+    "run": "V14_smoke_qwen4b_a6000_attempt1",
+    "windows": {
+     "c4": 256,
+     "c4_unique_documents": 231,
+     "wiki": 146,
+     "wiki_articles": 62
+    }
+   }
+  },
+  "confirmatory": {
+   "mistral7b": {
+    "family": "Mistral (Mistral AI)",
+    "model_id": "mistralai/Mistral-7B-v0.3",
+    "revision": "caa1feb0e54d415e2df31207e5f4e273e33509b1",
+    "tokenizer_revision": "caa1feb0e54d415e2df31207e5f4e273e33509b1"
+   },
+   "olmo2_13b": {
+    "family": "OLMo (AI2)",
+    "model_id": "allenai/OLMo-2-1124-13B",
+    "revision": "3fefddc1bf18a30e1d9b91000271630718f2aa8b",
+    "tokenizer_revision": "3fefddc1bf18a30e1d9b91000271630718f2aa8b"
+   },
+   "phi4": {
+    "family": "Phi (Microsoft)",
+    "model_id": "microsoft/phi-4",
+    "revision": "2db69c1c3e91a05d2c64a3185acfbaf36f744e25",
+    "tokenizer_revision": "2db69c1c3e91a05d2c64a3185acfbaf36f744e25"
+   }
+  },
+  "development": {
+   "llama8b": {
+    "family": "Llama (Meta)",
+    "model_id": "meta-llama/Llama-3.1-8B",
+    "revision": "d04e592bb4f6aa9cfee91e2e20afa771667e1d4b",
+    "role": "development / transfer evidence, not independent confirmation",
+    "tokenizer_revision": "d04e592bb4f6aa9cfee91e2e20afa771667e1d4b"
+   },
+   "qwen27b": {
+    "family": "Qwen (Alibaba)",
+    "model_id": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "role": "development / transfer evidence, not independent confirmation",
+    "tokenizer_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+   },
+   "qwen4b": {
+    "family": "Qwen (Alibaba)",
+    "model_id": "Qwen/Qwen3-4B",
+    "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+    "role": "development / transfer evidence, not independent confirmation",
+    "tokenizer_revision": "1cfa9a7208912126459214e8b04321603b3df60c"
+   }
+  },
+  "portability_and_determinism_model": "qwen4b",
+  "replacement_rule_if_compatibility_fails_before_first_quality_result": [
+   "ibm-granite/granite-3.3-8b-base@cfb7adb44a974653cbb2ff883653971c54dba578",
+   "tiiuae/Falcon3-10B-Base@34bb99a889fe0426412da3dd2b46e6f64c8fd003",
+   "01-ai/Yi-1.5-9B@80d5471b1eae28beae33e06eadbd4b48e74d4ce1"
+  ],
+  "replacements": [
+   {
+    "decided_before_quality": true,
+    "decision": "provenance/01_owner_decisions.json#D02",
+    "original": "google/gemma-2-9b",
+    "reason": "HTTP 403: gated license not accepted for the available token",
+    "replacement": "allenai/OLMo-2-1124-13B"
+   }
+  ],
+  "representative_confirmatory_model": "mistral7b"
+ },
+ "policies": {
+  "accuracy": [
+   "bf16",
+   "four_over_six",
+   "n8_k3",
+   "n16_k3"
+  ],
+  "baselines": [
+   "razer_wonly_shared_act",
+   "razer_native_rows",
+   "nover6_wonly_shared_act",
+   "nover6_native_rows"
+  ],
+  "baselines_note": "released RaZeR W4A4 = nvfp4_razer_e3m3 (outlier 8) weights + nvfp4_razer_e4m3 activations; released e4m3 selection expression preserved, not corrected",
+  "objective_ablation": [
+   "n16_k3_ce_only",
+   "n16_k3_kl_only",
+   "n16_k3_mean_only (k irrelevant: both means < 0)",
+   "n16_k3 (CE intersect KL)"
+  ],
+  "primary_evaluation": [
+   "bf16",
+   "nvfp4",
+   "four_over_six",
+   "all_e0m3",
+   "n8_k3",
+   "n16_k3"
+  ],
+  "secondary_sensitivity": [
+   "n16_k2",
+   "n16_k4",
+   "n16_k5",
+   "n16_k6",
+   "n8_k2",
+   "n8_k4",
+   "n8_k5",
+   "n8_k6"
+  ],
+  "selector_controls": [
+   "n16_random_s0..s4 (per-layer count-matched to n16_k3, Generator(1000+s))",
+   "n16_weight_mse (per-layer count-matched)",
+   "n16_magnitude (per-layer count-matched tile sum w^2)",
+   "n16_change_norm (extra heuristic)",
+   "n16_density_matched_n8k3 (global ascending U3, round(N8k3 tiles/2))",
+   "all-false == four_over_six checksum",
+   "all-true == all_e0m3 checksum"
+  ]
+ },
+ "primary_policy": {
+  "alternative": "E0M3 signed uniform alpha=1",
+  "calibration": "seed0: 64 OpenWebMath + 64 CodeParrot sequences, 512 tokens",
+  "count_cap": null,
+  "k": 3,
+  "name": "n16_k3",
+  "rule": "elect tile iff max(mean_CE + 3 SE_CE, mean_KL + 3 SE_KL) < 0",
+  "scale_block": 16,
+  "type_block": [
+   16,
+   64
+  ],
+  "weight_baseline": "FourOverSix E2M1 (quant_nvfp4_4over6)"
+ },
+ "protocols": {
+  "aligned-primary": {
+   "calibration": {
+    "attention": "sdpa (PyTorch default kernel dispatch) in calibration, PPL, accuracy and generation",
+    "dtype": "bfloat16",
+    "n16": "float64 per-sequence sum of vertically adjacent N8 children, then float64 moments; child SEs never combined; masks never OR/AND-ed",
+    "objectives": [
+     "mean next-token CE",
+     "batchmean KL(teacher || student)"
+    ],
+    "score": "per sequence, per N8 tile float32 <dLoss/dW, E0M3 - FourOverSix>",
+    "student": "FourOverSix weights on every scoped Linear; causal per-token FourOverSix activations (quantize_rows) with identity STE",
+    "teacher": "pristine BF16, no activation quantization",
+    "tf32": false
+   },
+   "environment": {
+    "datasets": "4.8.5",
+    "image": "ubuntu@sha256:829f6df217bcbae2b371026e81711d1a787c61b2967ad09d015063663ebafbf7",
+    "lm_eval": "0.4.11",
+    "lock": "env/main.lock.txt",
+    "lock_sha256": "030ac0bb23566ee08904f45cfa5f9d824890b80a6ab22e9fbd01ab934f39f77e",
+    "torch": "2.9.0+cu128",
+    "transformers": "5.16.1"
+   },
+   "evaluation": {
+    "bf16": "pristine weights, no activation quantization",
+    "kv_cache": "unquantized",
+    "lm_head": "unquantized",
+    "map_installation": "maps re-read from disk; SHA-256, model/tokenizer revision, module names/shapes, type block, protocol id, policy name and archived source manifest verified",
+    "nvfp4": "quant_nvfp4 weights + per-token NVFP4 activations (nvfp4_rows)",
+    "w4a4_mixfp4_family": "FourOverSix / E0M3 / exact maps with causal per-token FourOverSix activations"
+   }
+  },
+  "historical": {
+   "calibration": "archived run_math_code_calibration: eager attention, causal per-token FourOverSix activations with STE, CE/KL/sampled-label backwards",
+   "deviations": "campaign/historical.py D-H1..D-H5",
+   "environments": {
+    "llama8b": "hist (transformers 4.57.3)",
+    "qwen27b": "main (transformers 5.16.1)",
+    "qwen4b": "hist (transformers 4.57.3)"
+   },
+   "evaluation": "archived run_kse_paper: SDPA, tensor-wide FourOverSix activation factor, WikiText use_cache=True, C4 use_cache=False",
+   "purpose": "provenance and anchors only"
+  }
+ },
+ "quality_results_opened_before_freeze": {
+  "confirmatory_models": "none (compatibility/memory/cost smoke tests only; no quantized quality value stored or printed)",
+  "development_models": "archived historical reports only, plus two cost-planning timing runs on Qwen3-4B with plain FourOverSix (no MixFP4 map): V14_lmeval_timing_qwen4b (40 examples per task) and V14_gsm8k_timing_qwen4b (48 examples); their metrics were not inspected; no aligned-protocol MixFP4 map or MixFP4 quality result exists before this freeze"
+ },
+ "scope": {
+  "claim": "fake-quantized (BF16 dequantized matmul) algorithmic results for tile-aligned FourOverSix/E0M3 type selection under N8K64/N16K64 granularity",
+  "excluded": [
+   "native FP4/E0M3 Tensor Core or kernels",
+   "SM120",
+   "kernel throughput / latency / speedup",
+   "N8 ~13% and N16 ~1.5% overhead re-measurement (external team estimates only)",
+   "area / power / RTL / hardware co-design",
+   "KV-cache quantization",
+   "lm_head / embedding / norm quantization"
+  ],
+  "hardware": "RTX A6000 (primary) and RTX 6000 Ada (portability only); at most 3 homogeneous GPUs per run; campaign-local lease + Docker device isolation (D01)"
+ },
+ "source_state_at_freeze": "9ac236691f6d02d1420a26229984a2d76ea466a609d947ae250d6aa610bf4617",
+ "statistics": {
+  "bootstrap": {
+   "B_exploratory": 2000,
+   "B_primary": 10000,
+   "seed": 20260911,
+   "type": "paired percentile over clusters"
+  },
+  "calibration_vs_evaluation_variance": "between-draw variance of endpoints over 5 draws vs mean within-draw bootstrap variance",
+  "ce_kl_correlation": "per-tile Pearson over sequences (distribution) and across-tile correlation of t statistics",
+  "selection_multiplicity": {
+   "fdr": [
+    "BH q=0.05,0.10",
+    "BY q=0.05,0.10 (arbitrary dependence)"
+   ],
+   "iut": "per tile p_IUT = max(p_CE, p_KL), one-sided, normal and t(n-1)",
+   "null_bounds": [
+    "m*Phi(-3) (IUT, any dependence)",
+    "sum Phi2(-3,-3; rho_hat_tile)"
+   ],
+   "sign_flip": {
+    "R": 1000,
+    "sample": "stored stratified tile sample",
+    "unit": "calibration sequence (same flip for CE, KL and every sampled tile)"
+   }
+  }
+ },
+ "success_criteria": {
+  "investigate": "pooled mean of primary endpoints < 0 but minimum_pass fails",
+  "k_rule": "k=3 is primary; k in {2,4,5,6} is sensitivity only and may not replace k=3",
+  "minimum_pass": "all 6 primary endpoints have upper 95% CI < margin AND each confirmatory model: 8-task macro accuracy difference lower 95% CI > -0.5 pp AND fewer than 3 tasks with a paired-bootstrap CI entirely below 0",
+  "multiplicity": "Holm across the 6 primary one-sided non-inferiority tests (H0: dlogppl >= margin), family alpha 0.05; unadjusted CIs also reported",
+  "qwen_smoothing_rule": {
+   "applies_to": [
+    "qwen4b n8_k3 vs four_over_six",
+    "qwen4b n16_k3 vs four_over_six"
+   ],
+   "capability_gain": "mean NLL difference CI < 0 AND (8-task macro accuracy difference lower CI > 0 OR GSM8K difference lower CI > 0) AND top-1 agreement with BF16 does not decrease (CI upper >= 0)",
+   "confidence_smoothing": "mean NLL difference CI < 0 AND macro accuracy and GSM8K differences have CIs including 0 or below 0 AND mean predictive entropy increases (CI > 0)",
+   "ece": "10 equal-width confidence bins, top-1 token confidence vs token accuracy",
+   "otherwise": "mixed / inconclusive; PPL below BF16 is never reported as capability exceeding BF16"
+  },
+  "sesoi": {
+   "accuracy_macro_margin_pp": -0.5,
+   "note": "campaign-defined margins (not team-agreed engineering tolerances); fixed before any aligned or confirmatory quality result",
+   "ppl_margin_meaning": "log(1.005): +0.5% perplexity",
+   "ppl_noninferiority_margin_dlogppl": 0.004987541511038968
+  },
+  "stop_redirect": "R <= 0 on at least 2 of 3 confirmatory models, or pooled primary upper 95% CI >= margin",
+  "strong_pass_quality_only": "minimum_pass AND R >= 0.5 AND pooled N8 k3 dlogppl < 0 (overhead component out of scope)"
+ }
+}

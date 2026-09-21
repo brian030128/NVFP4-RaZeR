@@ -1,0 +1,174 @@
+{
+ "schema": "mixfp4-n16k64-followup-protocol/v1",
+ "protocol_id": "aligned-followup",
+ "created_utc": "2026-09-17T09:24:13.883742Z",
+ "campaign_start_utc": "2026-09-17T09:04:38Z",
+ "append_only": true,
+ "outcome_status_at_freeze": "no new follow-up PPL outcome exists or has been read",
+ "input_gate": {
+  "path": "INPUT_PROVENANCE.json",
+  "sha256": "edeed4ce0e0634debca89ba66250ba7c1ba906f9627bb09253e9ce4f31f1c827",
+  "passed": true,
+  "score_regeneration_required": false,
+  "failed_gpu_snapshot_retained": "e6edf44794dde2240607c589f3886b4bf780acf28e195d4df3c45446ac8f6960",
+  "passing_gpu_snapshot": "c460d587187e4eb09a6f5a6dab3cde2e36646d213549b3a5d9d244239d481255"
+ },
+ "frozen_scientific_configuration": {
+  "type_tile": [16, 64],
+  "k": 3,
+  "weight_baseline": "FourOverSix-E2M1",
+  "weight_alternative": "E0M3-alpha1",
+  "scale_block_k": 16,
+  "block_scale": "UE4M3",
+  "calibration": "seed0 direct-N16; 64 OpenWebMath plus 64 CodeParrot sequences; 512 tokens",
+  "activation": "causal-per-token-FourOverSix",
+  "scope": "non-head Linear weights only; excludes lm_head, embeddings, norms, and KV cache",
+  "execution": "fake-quantized/dequantized BF16 quality evaluation only",
+  "corpora": ["c4", "wiki"],
+  "models": {
+   "development": ["llama8b", "qwen4b"],
+   "one_shot_validation": ["mistral7b"]
+  },
+  "model_revisions": {
+   "llama8b": "d04e592bb4f6aa9cfee91e2e20afa771667e1d4b",
+   "qwen4b": "1cfa9a7208912126459214e8b04321603b3df60c",
+   "mistral7b": "caa1feb0e54d415e2df31207e5f4e273e33509b1"
+  }
+ },
+ "map_definitions": {
+  "dose_response": {
+   "source_set": "exact reconstructed k=3 CE-and-KL conjunction, required to match the frozen primary map tile-for-tile",
+   "stratum": "one exact (layer,module/projection) module name",
+   "rank": "stable descending -max(U_CE,U_KL), with ascending flat tile index as tie break",
+   "remainder": "retain first 8*floor(n_stratum/8) ranked tiles; record each excluded weakest remainder tile",
+   "bins": 8,
+   "allocation": "split retained ordered tiles into eight contiguous equal-count bins per stratum; bin01 strongest, bin08 weakest",
+   "maps": "for every bin, group-only and full-conjunction-minus-bin",
+   "invariants": ["equal tile counts in every stratum", "pairwise disjoint bins", "bin union plus recorded remainder equals frozen conjunction"]
+  },
+  "objective_ablation": {
+   "ce_natural": "U_CE=mean_CE+3*SE_CE < 0",
+   "kl_natural": "U_KL=mean_KL+3*SE_KL < 0",
+   "conjunction": "U_CE < 0 and U_KL < 0; exact frozen primary anchor",
+   "ce_matched_k": "within each conjunction module quota, lowest U_CE among CE-pass tiles; stable flat-index ties",
+   "kl_matched_k": "within each conjunction module quota, lowest U_KL among KL-pass tiles; stable flat-index ties",
+   "random_matched_k": "SHA-256 keyed order with seed 20260917 from the union of CE-pass or KL-pass candidates, using each conjunction module quota",
+   "natural_interpretation": "descriptive complete rules with unequal counts",
+   "matched_interpretation": "per-stratum equal budgets isolate objective information"
+  },
+  "mistral_veto_completion": {
+   "class": "CE-vetoed/KL-approved: U_KL < 0 and U_CE >= 0",
+   "source": "the outcome-blind class and controls frozen by the completed mechanism map run",
+   "selection": "strongest approving KL margins up to floor(0.25*conjunction_count)",
+   "matching": "exact module and one of five global approving-KL-margin quantile bins; disjoint common support; seed 20260917",
+   "required_reproduction": "newly reconstructed masks must match both previously frozen, unevaluated Mistral masks tile-for-tile"
+  }
+ },
+ "evaluation_plan": {
+  "reuse": {
+   "policies": ["four_over_six", "full_conjunction"],
+   "source": "completed mechanism campaign",
+   "conditions": ["same model/tokenizer revisions", "same activation convention", "same token/window hashes", "same evaluation manifest", "same exact conjunction mask", "artifact hashes match the 3154-entry mechanism manifest"]
+  },
+  "new_policies": {
+   "llama8b": 21,
+   "qwen4b": 21,
+   "mistral7b": 23
+  },
+  "all_valid_required_arms_enter_full_evaluation": true,
+  "screening_selects_arms": false,
+  "teacher": "none",
+  "sequence_length": 2048,
+  "save_per_token_arrays": true,
+  "optional_qwen27b": {
+   "promotion_decision": "not promoted",
+   "reason": "optional within-family scale replication is not required for any frozen gate; the 24-hour budget is reserved for complete required evidence and audit",
+   "may_replace_qwen4b": false
+  }
+ },
+ "statistics": {
+  "bootstrap_replicates": 10000,
+  "bootstrap_seed_root": 20260917,
+  "seed_derivation": "first 64 bits of SHA-256 over colon-separated seed root and endpoint label",
+  "unit": "paired natural document cluster for C4 and article cluster for WikiText",
+  "p_value": "finite Monte Carlo plus-one, using centered bootstrap noise",
+  "confidence_interval": "centered paired-cluster bootstrap 2.5 and 97.5 percentiles",
+  "relative_ppl": "exp(delta_log_ppl)-1",
+  "holm_families": {
+   "A_development": "2 development models * 2 corpora * 8 signed dose statistics = 32",
+   "A_validation": "1 validation model * 2 corpora * 8 signed dose statistics = 16",
+   "B_development": "2 development models * 2 corpora * 6 matched-budget contrasts = 24",
+   "B_validation": "1 validation model * 2 corpora * 6 matched-budget contrasts = 12",
+   "C_mistral": "2 corpora * (2 mean contrasts + q90/q95/q99, regression probability, worst-cluster differences) = 14"
+  },
+  "dose_statistics": {
+   "observed": "NLL(full)-NLL(full-minus-bin)",
+   "secondary": "NLL(group-only)-NLL(FourOverSix)",
+   "predictors": ["sum frozen CE first-order means", "mean combined election margin"],
+   "metrics_per_predictor": ["Pearson", "Spearman", "Kendall tau", "fixed inverse-bootstrap-variance weighted slope", "intercept", "R-squared"],
+   "joint_bootstrap": "all eight observed bin effects recomputed from the same resampled clusters",
+   "calibration_weights": "inverse marginal variance of the 10000 joint bootstrap bin-effect estimates, then held fixed across regression replicates",
+   "expected_ce_direction": "positive",
+   "expected_margin_direction": "negative"
+  },
+  "pooled_analysis": {
+   "standardize": "predictor and observed effect separately within model and corpus",
+   "model": "OLS slope with model and corpus fixed-effect indicators",
+   "required": ["all three models", "leave-Qwen3-4B-out"],
+   "interpretation": "sensitivity only; per-model panels remain primary"
+  }
+ },
+ "frozen_gates": {
+  "dose_response": "for each of CE-sum and margin predictors, all four development Spearman estimates have the expected direction and at least three of four paired-bootstrap 95% CIs exclude zero in that direction; overall pass requires both predictor gates",
+  "objective_conjunction": "for each CE-matched and KL-matched comparison, single-objective minus conjunction is positive in all four development endpoints and Holm-significant in at least three; overall pass requires both",
+  "objective_information_vs_random": "for each scored matched selector separately, selector-minus-random is negative in all four development endpoints and Holm-significant in at least three",
+  "mistral_veto_symmetry": "actual add-back is worse than conjunction and matched random in both corpora and all four mean contrasts are Holm-significant within C-Mistral",
+  "negative_result_policy": "never change k, bins, models, endpoints, seeds, matching, or gates after outcomes"
+ },
+ "gpu_policy": {
+  "maximum_concurrent_physical_gpus": 3,
+  "preferred_device": "NVIDIA RTX A6000",
+  "homogeneous_per_run": true,
+  "share_with_other_users": false,
+  "unresolved_owner_is_foreign": true,
+  "preflight_before_every_process": true,
+  "phase_checks": true,
+  "monitor_interval_seconds": 20,
+  "required_maximum_interval_seconds": 60,
+  "co_tenancy_action": "stop only this campaign container at a safe boundary, mark invalid, retain evidence, rerun",
+  "failed_invalid_oom_superseded_retention": true
+ },
+ "time_gates": {
+  "stop_optional_launches_utc": "2026-09-18T01:04:38Z",
+  "stop_all_new_gpu_launches_utc": "2026-09-18T05:04:38Z",
+  "campaign_deadline_utc": "2026-09-18T09:04:38Z"
+ },
+ "code_hashes_at_freeze": {
+  "followup_input_gate.py": "52c660e30f45350f71ca5c17788f5ebff35a0b335ec41ffe1ef8ab51812f2ebe",
+  "followup_maps.py": "3ae2b6b7862d368192801a67f9eaf0e75a61089485606177cac6a2e23626291f",
+  "followup_plans.py": "a77eee97d57bc5711b1b74f2b0862c14ee54d582291382d1ad01eb9a37af4599",
+  "followup_analyze.py": "7a7fac9739acc527ee79dd170131876a72b1039d094e946752ffa106fddb6e9e",
+  "followup_render.py": "721a1585474fef93340dfb8ed5ee3a03d4e9f746d5e1d97db950ef49cd01ff10",
+  "evaluate_ppl.py": "de657a20cc33da25a8cad3bf26bd0b08b195bfb8c20d1ed0ed41ffd93122ab4b",
+  "launcher.py": "b3b0f3f003f121b5bed4962dc3c4a32974d79c1961b50292eb9b2054aa2df872",
+  "mapio.py": "c8627a8345e70cb1727082f9ec26009d4d6eaa18a8cfa01d21b6564feed53afe",
+  "stats.py": "2d554a8fc38faa3b2b179c425faca254bfd2bf55c8186219f4b4ff6c03315cba",
+  "test_followup_campaign.py": "eb9580cf6ed37a2d66de0d51c3b30a61aab3b7af5f6836538fcf2e9c0f149315"
+ },
+ "claim_boundaries": {
+  "qwen4b": "predeclared high-response/outlier development case; never removed from primary per-model reporting",
+  "mistral7b": "one-shot analysis validation, not a fully independent confirmatory family",
+  "dose_response": "aggregate group ranking only; no individual-tile causality",
+  "prohibited": [
+   "reliable individual-tile causal signs or magnitudes",
+   "k=3 as a simultaneous per-tile confidence guarantee",
+   "universal CE or KL superiority",
+   "native FP4/E0M3 Tensor Core execution",
+   "latency or speedup",
+   "runtime overhead",
+   "area",
+   "power",
+   "Blackwell performance inferred from fake quantization"
+  ]
+ }
+}

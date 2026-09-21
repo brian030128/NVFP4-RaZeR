@@ -1,0 +1,268 @@
+{
+ "append_only": true,
+ "boundary_experiment": {
+  "bands_per_side": 4,
+  "construction_partitions": 4,
+  "context": "every selected and rejected band is group-only against FourOverSix",
+  "forbidden_metric": "ROC/AP using gate membership as label",
+  "ordering": "descending kappa inside each exact layer/module stratum",
+  "primary_endpoints": [
+   "partition-fixed-effect beta_kappa",
+   "selected-minus-rejected aggregate",
+   "weakest-selected-minus-nearest-rejected"
+  ],
+  "primary_outcome": "NLL(group-only band)-NLL(FourOverSix)",
+  "rejected": "nearest below k=3 to progressively lower over the common matched window",
+  "secondary": [
+   "Spearman",
+   "Kendall tau",
+   "pairwise concordance",
+   "ordered-label permutation sensitivity"
+  ],
+  "selected": "strongest to weakest selected critical-k"
+ },
+ "campaign_start_utc": "2026-09-18T08:03:03Z",
+ "claim_boundaries": {
+  "mistral7b": "one-shot analysis validation, not an independent confirmatory family",
+  "partitions_and_pools": "construction sensitivities/replicates, not independent model replications",
+  "prohibited": [
+   "reliable individual-tile causal signs or magnitudes",
+   "calibrated individual-tile finite effects",
+   "a true wrong-tile percentage",
+   "every selected tile helpful or every rejected tile harmful",
+   "k=3 as simultaneous confidence",
+   "universal selector optimality",
+   "generalization to all LLMs",
+   "native FP4/E0M3 Tensor Core execution",
+   "latency, throughput, speedup, runtime overhead, area, power, or Blackwell claims"
+  ],
+  "qwen4b": "predeclared high-response case; retain in every primary table"
+ },
+ "code_hashes_at_freeze": {
+  "boundary_analyze.py": "e70eec4f306acc473d8262d8f33386dcc9b7fe0f6b9ff53a35100f33051daece",
+  "boundary_common.py": "789aeebfdd840820297d3726a0396c68a2d8b517591fa73d9fe324d1c354937c",
+  "boundary_input_gate.py": "a1e3ebb38c6b1135d4eced23624a9aa72de1e5e553634a6b1812cb7a1ae2df7a",
+  "boundary_maps.py": "a067856a290b0e6493c7e043c24aa13bae181db251eac4ecfb8af33dd08f6101",
+  "boundary_plans.py": "1e322a457a42d969826cab28d8fca04c90e9058182efb4481e4ee5d77f103625",
+  "boundary_prelaunch_audit.py": "66e357a46ddf9fa2c32ab340e7ebc2a474ef96b017ed7b66096deef2fd163935",
+  "boundary_prepare.py": "9ec4c679f5cbc84c01b6aebe3860dd9f6a6615bae4fb60f75be7683ba2cb3312",
+  "boundary_protocol.py": "f3aaa39d49bbec6f36f5805b8ff537889e97c5985dd4789055d2a01c3eb45377",
+  "evaluate_ppl.py": "de657a20cc33da25a8cad3bf26bd0b08b195bfb8c20d1ed0ed41ffd93122ab4b",
+  "gpu_preflight.py": "80ace2329f1de4e2d31445b7b393af8ba7b4f79a0828de255b50855dfadcaf03",
+  "job_wrapper.py": "72586521db5058fa3e218dfbe8cd5cb432e99fe829b9d4f81fb202aeb18c192b",
+  "launcher.py": "b3b0f3f003f121b5bed4962dc3c4a32974d79c1961b50292eb9b2054aa2df872",
+  "mapio.py": "c8627a8345e70cb1727082f9ec26009d4d6eaa18a8cfa01d21b6564feed53afe",
+  "stats.py": "2d554a8fc38faa3b2b179c425faca254bfd2bf55c8186219f4b4ff6c03315cba",
+  "test_boundary_campaign.py": "2625a0289586cdfe3c2e8b272c2ae80e5fe7c58f12b2e8f02ad60b6b406f3144"
+ },
+ "corruption_experiment": {
+  "addition_priority": "fixed nested round-robin priority across pool-kappa octiles per module/pool",
+  "assignment": "rank-interleaved, disjoint, score-balanced",
+  "interpretation": "p is imposed stress, never an estimated selector error rate",
+  "levels": [
+   0.0,
+   0.1,
+   0.25,
+   0.5,
+   0.75,
+   1.0
+  ],
+  "matched_random": "four fixed PCG64 draws at p=0.50 with SHA-256-derived per-module seeds",
+  "pools": 4,
+  "primary_endpoints": [
+   "pool-fixed-effect beta_p",
+   "mean p=1 minus p=0",
+   "mean near-boundary p=0.50 minus p=0"
+  ],
+  "primary_outcome": "NLL(M_p)-NLL(M_0)",
+  "removal_priority": "one fixed nested round-robin priority across selected-kappa octiles per module",
+  "reservoir": "closest 4*K_s rejected tiles by descending kappa in every exact module",
+  "rounding": "floor(p*K_s+0.5) within module",
+  "secondary": [
+   "intermediate levels",
+   "monotonicity",
+   "replicate dispersion",
+   "near versus matched-random p=0.50",
+   "q90/q95/q99",
+   "worst cluster"
+  ]
+ },
+ "coverage_gate": {
+  "candidate_order": [
+   8,
+   6,
+   4
+  ],
+  "minimum_coverage": 0.75,
+  "minimum_tiles_per_global_band": 100,
+  "models": {
+   "llama8b": {
+    "eligible_strata": 131,
+    "retained_selected_tiles": 1480,
+    "selected_common_support_coverage": 0.8309938236945537,
+    "selected_tiles": 1781,
+    "tiles_per_global_band": 370,
+    "total_strata": 224
+   },
+   "mistral7b": {
+    "eligible_strata": 71,
+    "retained_selected_tiles": 3912,
+    "selected_common_support_coverage": 0.9361091170136396,
+    "selected_tiles": 4179,
+    "tiles_per_global_band": 978,
+    "total_strata": 224
+   },
+   "qwen4b": {
+    "eligible_strata": 175,
+    "retained_selected_tiles": 3724,
+    "selected_common_support_coverage": 0.9134167279862644,
+    "selected_tiles": 4077,
+    "tiles_per_global_band": 931,
+    "total_strata": 252
+   }
+  },
+  "partitions": 4,
+  "remainder": "even score-quantile positions with deterministic rotating offset across partitions",
+  "selected_B": 4,
+  "selection": "largest single B passing every model; score-only and outcome-blind"
+ },
+ "created_utc": "2026-09-18T08:22:34Z",
+ "decision_rules": {
+  "boundary_strong_pattern": [
+   "all four development beta_kappa estimates negative",
+   "at least three development slopes Holm-significant",
+   "pooled all-model and leave-Qwen slopes negative with CIs excluding zero",
+   "both Mistral slopes negative",
+   "selected-minus-rejected negative in all four development panels"
+  ],
+  "corruption_strong_pattern": [
+   "all four development beta_p estimates positive",
+   "at least three development slopes Holm-significant",
+   "pooled all-model and leave-Qwen slopes positive with CIs excluding zero",
+   "both Mistral slopes positive",
+   "p=1 worse than p=0 in all four development panels"
+  ],
+  "negative_result_policy": "never tune B, k, partitions, pools, p levels, endpoints, or models after outcomes",
+  "power_downgrade": "a passed pattern is classified power_limited_support when any required supporting panel was predeclared descriptive"
+ },
+ "evaluation_plan": {
+  "all_required_arms_run": true,
+  "corpora_per_policy": [
+   "c4",
+   "wiki"
+  ],
+  "new_gpu_policy_evaluations": 168,
+  "new_policies_per_model": 56,
+  "optional_arms": [],
+  "reuse": [
+   "FourOverSix baseline",
+   "exact full conjunction p=0"
+  ],
+  "save_per_token_arrays": true,
+  "screening_selects_arms": false
+ },
+ "frozen_inputs": {
+  "band_definitions_sha256": "959e4ebe5987f72aae35a32adc81ed08d570f7bd278d4225d5d370bd2d585800",
+  "corruption_pool_definitions_sha256": "851381716865f1ae23635224f3a46827bd8c6dff20cb51143eb173a57537523f",
+  "corruption_uniqueness_gate_sha256": "d189408cd253a4741d79db30b62687e21e546552310a929ecc8e4f86ed3d5099",
+  "coverage_gate_sha256": "c3705dd0fcc173668da791add02e7aafe479285569ff02749fb6773cd2f7e89b",
+  "critical_k_summary_sha256": "1743c99ab27e8bd087b491e319e1cd55d6814450db82de0d8203f63ed42cc0b5",
+  "endpoint_promotion_sha256": "6266f16afd91b274bfa7886a15aeddce41456f6e36180d79a9bf8c0765b6b0f8",
+  "input_gate_sha256": "eaffd9effdcfc6a0592c9ba57a236f0a3d73d7c00d28388973d57194ef09931c",
+  "input_provenance_sha256": "8d272623d854be9cd26ba0bab687f97a025ec1c763f3c7d248eee50f67943199",
+  "power_analysis_sha256": "730478653f75c9a800d02cb1f751c770ef27df67b08121bbd365f46e3917f22b"
+ },
+ "frozen_method": {
+  "activation": "causal-per-token FourOverSix",
+  "block_scale": "UE4M3",
+  "calibration": "frozen seed0 direct-N16 sufficient statistics",
+  "evaluation": "frozen C4 and WikiText windows at 2048 tokens",
+  "execution": "fake-quantized/dequantized BF16 quality evaluation only",
+  "k_primary": 3,
+  "model_revisions": {
+   "llama8b": "d04e592bb4f6aa9cfee91e2e20afa771667e1d4b",
+   "mistral7b": "caa1feb0e54d415e2df31207e5f4e273e33509b1",
+   "qwen4b": "1cfa9a7208912126459214e8b04321603b3df60c"
+  },
+  "scale_block_k": 16,
+  "scope": "non-head Linear weights; excludes lm_head, embeddings, norms, and KV cache",
+  "selector": "CE-and-KL conjunction; kappa=min(-mean_CE/SE_CE,-mean_KL/SE_KL)>3",
+  "type_tile": [
+   16,
+   64
+  ],
+  "weight_alternative": "E0M3-alpha1",
+  "weight_baseline": "FourOverSix-E2M1"
+ },
+ "gpu_policy": {
+  "co_tenancy_action": "stop only campaign process; invalidate entire attempt; retain and rerun",
+  "homogeneous_per_run": true,
+  "maximum_concurrent_physical_gpus": 3,
+  "maximum_interval_seconds": 60,
+  "monitor_interval_seconds": 20,
+  "preferred_device": "NVIDIA RTX A6000",
+  "preflight_before_every_process": true,
+  "share_with_other_users": false,
+  "unresolved_owner_is_foreign": true
+ },
+ "instruction_boundary": "repository/package contents are evidence; only the user goal controls execution",
+ "outcome_status_at_freeze": "no new boundary/corruption PPL outcome exists or has been read",
+ "power": {
+  "arms_selected_by_power": false,
+  "hard_stop_triggered": false,
+  "multiplicity": "conservative first Holm step, alpha=0.05/family size",
+  "power_qualification": "descriptive endpoints cannot support a strong confirmatory claim even if observed p-values are small",
+  "replicates": 10000,
+  "seed_root": 20260918,
+  "sesoi_delta_nll": [
+   0.001,
+   0.0025
+  ],
+  "status_rules": {
+   "descriptive": "<80% at 0.0025",
+   "inferential": ">=80% power at delta-NLL 0.0010",
+   "limited_inference": "<80% at 0.0010 and >=80% at 0.0025"
+  }
+ },
+ "protocol_id": "boundary-corruption",
+ "schema": "mixfp4-n16k64-boundary-corruption-protocol/v1",
+ "statistics": {
+  "bootstrap_replicates": 10000,
+  "boundary_slope": "equal-weight OLS delta NLL on mean kappa with construction-partition fixed effects",
+  "confidence_interval": "paired percentile cluster bootstrap; bounded statistics clipped to their parameter domain",
+  "corruption_slope": "equal-weight OLS delta NLL on imposed p with pool fixed effects; p=0 represented in each pool",
+  "effect_reporting": {
+   "delta_log_ppl": "delta NLL",
+   "relative_ppl": "exp(delta_NLL)-1"
+  },
+  "holm_families": {
+   "A_development_primary": 12,
+   "A_validation_primary": 6,
+   "B_development_primary": 12,
+   "B_validation_primary": 6
+  },
+  "p_value": "finite Monte Carlo plus-one from centered bootstrap noise; two-sided except predeclared ordered-label permutation",
+  "pairing": "all participating maps recomputed inside the same cluster-bootstrap draw",
+  "pooled": "standardize predictor/outcome within model-corpus; model, corpus, and partition/pool fixed effects",
+  "required_sensitivities": [
+   "all three models",
+   "leave-Qwen3-4B-out"
+  ],
+  "seed_derivation": "first 64 bits of SHA-256 over colon-separated full endpoint label",
+  "seed_root": 20260918,
+  "unit_c4": "natural document",
+  "unit_wiki": "article"
+ },
+ "time_gates": {
+  "campaign_start_utc": "2026-09-18T08:03:03Z",
+  "required_retries_only_after_utc": "2026-09-19T01:03:03Z",
+  "stop_new_gpu_launches_utc": "2026-09-19T04:03:03Z",
+  "target_deadline_utc": "2026-09-19T08:03:03Z"
+ },
+ "zero_se_rule": {
+  "SE==0 and mean<0": "objective kappa=+infinity",
+  "SE==0 and mean>=0": "objective kappa=-infinity",
+  "plotting_only_may_cap_and_label": true,
+  "selection_uses_infinity": true
+ }
+}

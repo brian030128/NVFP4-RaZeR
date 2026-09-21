@@ -1,0 +1,810 @@
+# Final submission risk audit
+
+Protocol freeze `df78f1fbbd034cb8d2bc8e6f6a264e7e221e1b5f2b2ff99a3fe821369c5ac88f`. Classes follow `PAPER_RISK_REGISTER.md`; the mechanical rule for each row is in `campaign/risk_audit.py` (recorded in `provenance/PROTOCOL_AMENDMENTS.jsonl` before the graded exploratory results existed). Evidence files are listed with SHA-256; "missing" evidence never counts as support.
+
+| ID | P0 | claim | classification | mechanical | recommendation |
+|---|---|---|---|---|---|
+| C01 |  | Quantizer arithmetic is correct | **supported** | supported | Keep; state explicitly that correctness evidence covers the simulated quantizer, not a hardware datapath. |
+| C02 | yes | N8/N16 map layout is correct | **supported** | supported | Keep as supported, and ship the checksum controls in the artifact: they re-run in 3-9 minutes per model and let a reviewer confirm the map path without a full e |
+| C03 | yes | Archived N8 results are reproducible | **partially_supported** | partially_supported | Narrow: present archived numbers as historical context only, make the aligned-protocol maps (hash-verified, reloaded from disk) the paper's evidence, add an exp |
+| C04 | yes | k=3 is confirmatory for N16 | **supported** | supported | Ship PROTOCOL_FREEZE.json, its SHA-256 and the amendments log in the artifact; describe the provenance of k=3 honestly rather than as an independent discovery;  |
+| C05 | yes | N16 improves or preserves PPL | **supported** | supported | Claim 'preserves and slightly improves perplexity at the coarser N16K64 type-block granularity', always paired with the retained-fraction R and with the overhea |
+| C06 | yes | N16 preserves downstream accuracy | **supported** | supported | Claim 'no measurable downstream accuracy regression at N16K64 granularity', always reporting the CI and the absolute W4A4-vs-BF16 gap alongside it. |
+| C07 |  | PPL gains reflect capability | **supported** | supported | Claim 'no measurable downstream degradation, and on the single model with a large perplexity effect, significant accuracy and GSM8K gains'. Report per model, ne |
+| C08 |  | Proposed selector adds value | **supported** | supported | Claim precisely: at matched per-layer switch counts the directional-score selector significantly outperforms random, weight-MSE, magnitude and change-norm selec |
+| C09 |  | Results are calibration-stable | **supported** | supported | Report the five-draw spread or between-draw standard deviation next to every headline effect, and never present one draw's tile set as canonical. State explicit |
+| C10 |  | Results are not domain-specific | **partially_supported** | partially_supported | Claim robustness to calibration-domain shift - even arXiv/GovReport calibration transfers to math and code text - and explicitly do not claim that domain-matche |
+| C11 |  | Rule generalizes | **supported** | supported | Keep the generalization claim scoped to base decoder-only models in this size range, and report R per model rather than only pooled. |
+| C12 |  | First-order scores predict actual changes | **unsupported** | unsupported | Narrow the mechanism claim and report the negative result rather than omitting it. Do not claim the first-order score identifies individually beneficial tiles - |
+| C13 | yes | Multiplicity argument is valid | **unsupported** | unsupported | Narrow: drop the Phi(-3)^2 argument entirely, describe k=3 as a conservative screening threshold, and report the sign-flip FDP together with BH/BY sensitivity.  |
+| C14 |  | Evaluation uncertainty is valid | **supported** | supported | State the cluster definition and count next to every interval, report the between-draw spread alongside headline effects, and keep the confirmatory/exploratory  |
+| C15 | yes | Activation/backend mismatch is not driving results | **supported** | supported | Add a limitation: the selection is protocol-conditional, and both protocols must be reported with their Jaccard overlap rather than presenting one map as canoni |
+| C16 | yes | Result generation is deterministic/auditable | **unsupported** | unsupported | Narrow the claim rather than dropping it. Do not claim deterministic regeneration of maps. Claim what is evidenced: under a fixed configuration the exact-map ev |
+| C17 |  | Results port across available GPUs | **partially_supported** | partially_supported | Report both halves explicitly and never just the favourable one. State that exact-map evaluation ports across GPU generations within the frozen tolerance and th |
+| C18 |  | Data leakage does not explain results | **partially_supported** | partially_supported | State the audit method and both limits explicitly, report the single cross-model overlap rather than rounding it to zero, and confine leakage claims to calibrat |
+| C19 |  | Baseline comparison is fair | **supported** | supported | Keep RaZeR and nover6 in the main table with these numbers. Claim only: within the NVFP4-compatible E2M1/E0M3 family, at the same scale block and MMA operand-ti |
+| C20 |  | Compute disclosure is complete | **supported** | supported | Report 172.5 GPU-hours on RTX A6000 plus 0.8 h on RTX 6000 Ada, 173.3 GPU-hours in total, state explicitly that this counts leased-device-hours across all attem |
+| H01 | yes | Native E0M3/MixFP4 executes as claimed | **out_of_scope** | out_of_scope |  |
+| H02 |  | N8 overhead is ~13% and N16 is ~1.5% | **out_of_scope** | out_of_scope |  |
+| H03 |  | Mixed-format hardware has acceptable area/power | **out_of_scope** | out_of_scope |  |
+
+## C01 — Quantizer arithmetic is correct
+
+**Classification: supported**
+
+Basis:
+
+- independent scalar/reference quantizer tests all_passed=True
+- archived repository tests all_passed=True
+
+Evidence:
+
+- `runs/V10_cpu_quantizer_attempt1/tests/QUANTIZER_CORRECTNESS.json` sha256 `664361512e84eee1b5e55b9be5c7008d003c2ce8199feb6967d6832ca270a6f8`
+- `runs/V10_cpu_archived_repo_tests_main_attempt1/tests/ARCHIVED_REPOSITORY_TESTS.json` sha256 `9e2591878652540fc517d64ccc61920d9c40dd70cd60a2aac1f9c40143a1d553`
+
+Scalar reference implementations (E2M1 grid and tie handling, FourOverSix alpha search, E0M3 alpha=1, NVFP4 with the saturation clamp) are independent re-derivations, not calls into the same vectorised code, and are exercised on boundary, random, non-contiguous and degenerate inputs. The archived repository's own MixFP4 tests also pass in this environment.
+
+Remaining rejection risks:
+
+- Correctness here is fake-quantization arithmetic only; a reviewer expecting native E0M3/FP4 kernel correctness (packed operands, scale semantics, accumulation order) will find none, and none is claimed (H01).
+
+Recommendation: Keep; state explicitly that correctness evidence covers the simulated quantizer, not a hardware datapath.
+
+## C02 — N8/N16 map layout is correct
+
+**Classification: supported**
+
+Basis:
+
+- V11 tile layout all_passed=True; V12 aggregation all_passed=True; V13 serialization all_passed=True
+- real-model all-false/all-true checksum controls: {'qwen4b': True, 'llama8b': True, 'mistral7b': True, 'phi4': True, 'olmo2_13b': True}
+
+Evidence:
+
+- `runs/V11_cpu_tiles_attempt1/tests/TILE_LAYOUT_TESTS.json` sha256 `2677bae479b14bd86c59a65bb569600650d4b333c1c34b6a055f045074d21827`
+- `runs/V13_cpu_maps_attempt1/tests/MAP_SERIALIZATION_TESTS.json` sha256 `b2ebbdf569109f1c2dd8bd8083ce33e27b3e9960f6f1698413605c24ebb84f84`
+- `runs/V12_cpu_scores_attempt1/tests/SCORE_AGGREGATION_TESTS.json` sha256 `96a6e411894a176628798a92ffbbc39fe69d3ae30a90b0dfd2a0be311128b2f6`
+- `runs/V42_checksum_controls_qwen4b_attempt2/checksum/CHECKSUM_CONTROLS.json` sha256 `fe6bc4fc2a9fea56f21f3b7ce41154d64db6ca5239398110b70b80b38bd2985c`
+- `runs/V42_checksum_controls_llama8b_attempt2/checksum/CHECKSUM_CONTROLS.json` sha256 `a34ca2d71c20599d4611ed76aed225d566915bd9d28794258ca3d7a94c056ef4`
+- `runs/V42_checksum_controls_mistral7b_attempt2/checksum/CHECKSUM_CONTROLS.json` sha256 `d79a87ac3b670918866a322a2ce61cbdcb0241d751ef3dc559465d77184a6e29`
+- `runs/V42_checksum_controls_phi4_attempt2/checksum/CHECKSUM_CONTROLS.json` sha256 `d6ed2ee1af1fc4019e715ac2ea397de87a29453e82fe0c03b798759abaaedc84`
+- `runs/V42_checksum_controls_olmo2_13b_attempt2/checksum/CHECKSUM_CONTROLS.json` sha256 `3a76db4287fede6c98b6784abaadb39315e80bdf46a43569dde78fcaa25082b8`
+
+Three layers of evidence. (1) Synthetic unit tests: N8/N16 mask expansion and flatten order, all-false/all-true application, tile totals (V11); direct N16 score vs aggregated N8 children including the SE identity (V12); canonical map write/hash/reload round trip (V13). (2) Real-model checksum controls on five models (50 checks, all passed): constant all-false and all-true maps at N8K64 and N16K64, written in the canonical format, reloaded from disk, digest- and model-verified and installed through the evaluation path; all-false reproduces FourOverSix and all-true reproduces all-E0M3, compared by installed-weight SHA-256 and by bitwise-equal logits on a fixed 512-token crop. (3) Every headline evaluation reloads its map from disk and verifies digest, model/tokenizer revision, module names/shapes, type block, protocol id and source manifest before installing. The same runs show the CPU-cache and GPU-recomputation install paths are byte-identical on the three models where both fit.
+
+Remaining rejection risks:
+
+- These checks prove the map is applied as declared; they say nothing about whether the selected tiles are the right ones (that is C08/C12).
+- The tile geometry is verified against this campaign's own reference implementations, so a shared conceptual error in both would not be caught; the independent scalar references (C01) and the archived repository's own tests are the only cross-checks.
+- That an N16K64 tile is hardware-realizable rests on the published MMA operand-tile contract, not on any measurement here (H01).
+
+Recommendation: Keep as supported, and ship the checksum controls in the artifact: they re-run in 3-9 minutes per model and let a reviewer confirm the map path without a full evaluation.
+
+## C03 — Archived N8 results are reproducible
+
+**Classification: partially_supported**
+
+Basis:
+
+- archived score shards present: False (regenerated instead)
+- failed anchor checks: {'llama8b': ['bf16_fit_nll_max_abs (tierB <= 0.002)', 'bf16_fit_nll_mean_abs (tierB <= 0.0005)', 'fit_kl_max_abs (tierB <= 0.02)', 'fit_kl_mean_abs (tierB <= 0.005)', 'fixed256_jaccard (tierB >= 0.8)', 'fixed256_map_bitwise_vs_archived (tierA)', 'w4a4_fit_ce_max_abs (tierB <= 0.05)', 'w4a4_fit_ce_mean_abs (tierB <= 0.01)'], 'qwen27b': ['N8_k2_score_identity (tierA)', 'bf16_fit_nll_max_abs (tierB <= 0.002)', 'bf16_fit_nll_mean_abs (tierB <= 0.0005)', 'fit_kl_max_abs (tierB <= 0.02)', 'fixed256_jaccard (tierB >= 0.8)', 'fixed256_map_bitwise_vs_archived (tierA)', 'k3_count_relative (tierB <= 0.05)', 'w4a4_fit_ce_max_abs (tierB <= 0.05)', 'w4a4_fit_ce_mean_abs (tierB <= 0.01)'], 'qwen4b': ['bf16_fit_nll_max_abs (tierB <= 0.002)', 'bf16_fit_nll_mean_abs (tierB <= 0.0005)', 'fit_kl_max_abs (tierB <= 0.02)', 'fit_kl_mean_abs (tierB <= 0.005)', 'fixed256_jaccard (tierB >= 0.8)', 'fixed256_map_bitwise_vs_archived (tierA)', 'k3_count_relative (tierB <= 0.05)', 'w4a4_fit_ce_max_abs (tierB <= 0.05)', 'w4a4_fit_ce_mean_abs (tierB <= 0.01)']}
+- models without anchor run: []
+- PPL anchor tier-B/C failures: {'llama8b': ['hist_n8_k2:c4', 'hist_n8_k2:wiki', 'hist_n8_k5:c4'], 'qwen27b': ['archived_fixed256:wiki'], 'qwen4b': ['hist_n8_k6:wiki']}
+- N8 k3 paired effect reproduces (tier C) on every completed model/dataset: True
+
+Evidence:
+
+- `runs/V90_analyze_historical_attempt3/analysis_historical/N8_ANCHOR_RESULTS.json` sha256 `ddff22e6f00c3995e6db80a996dcaa9f4860857c76fcd4588636bd03e85c2e2e`
+- `runs/V90_analyze_historical_attempt3/analysis_historical/HISTORICAL_PPL_ANCHORS.json` sha256 `2beb2ed3f8045e2edfeef0a5929392c8c58e0afb0b675cb90b8bd1df303f325b`
+- `runs/V00_inventory_attempt2/inventory/INVENTORY.json` sha256 `f2f58d7ffeb3863bfebda2cf4671b8c8ff69030e75cc6f80df0f209faa47fe23`
+
+Two separate claims must not be conflated. Effect-level reproduction holds on all three development models now that the Qwen3.8-27B row has completed: the paired PPL effects of the archived maps reproduce within the frozen tier-B/C tolerances, and the N8 k=3 paired effect - the historical quantity the paper leans on - reproduces within tier C on every model and corpus. The archived fixed-256 map file, evaluated directly, reproduces its own effect on Llama-3.1-8B and Qwen3-4B on both corpora and on Qwen3.8-27B's C4 (see HISTORICAL_PPL_ANCHORS.json for the per-model table). It has one exception, and it is a disagreement about the sign of approximately zero rather than about a reproducible effect: on Qwen3.8-27B WikiText the archived effect is +0.00074 and the regenerated -0.00158, so the sign flips and the difference 0.00232 clears tier C's absolute floor of 0.002 by 16% - the floor binds only because the archived effect is too small for the frozen 25%-relative term to apply, and both values lie inside the V14/V20 kernel-noise band. Some exact identities also hold on every model tested: source weights verify against the archived per-matrix hashes, calibration tokens equal the archived per-sequence SHA-256 lists, and the weight-MSE map is bitwise identical.
+Tile-level reproduction fails on all three development models. Archived score shards are absent from the handoff, so every comparison is regeneration-based. Regenerated selections differ from the archive (fixed-256 Jaccard 0.528 on Qwen3-4B and 0.631 on Llama-3.1-8B against a 0.8 tolerance; on Qwen3.8-27B the archived maps.json and fixed-256 prefix do not reproduce and only 159 of 256 archived tiles fall within the regenerated top 256). The k=3 election count misses the +/-5% tier-B tolerance on two of three models (Qwen3-4B +6.9%, Qwen3.8-27B -5.5%; Llama-3.1-8B passes at -1.2%), and per-sequence fit losses miss tier B by 2-5x. The V20/V21 same-GPU controls show that a kernel variant or attention-backend change alone moves these quantities as much as the archive-versus-A6000 difference, so the failures are not evidence of a coding error, and no tolerance was widened.
+
+Remaining rejection risks:
+
+- Missing score shards mean the archived selector cannot be audited from the delivered artifact; only a regeneration path exists.
+- Selected tile identities are not portable across kernels or GPUs, so any per-tile or per-layer figure derived from the archived campaign is not reproducible as such; the k=3 count itself misses the frozen tolerance on two of three development models.
+- The archived Llama-3.1-8B k=2 regression does not reproduce (sign flip on both corpora), which removes the historical motivation for 'k=3 is the first uniformly positive threshold'.
+- The k=2 directional-score identity was verified bitwise only on Llama-3.1-8B and Qwen3-4B; on Qwen3.8-27B it is not bitwise testable because that model is scored in streaming mode with float64 moments, so the strongest internal check is unavailable on the largest model.
+
+Recommendation: Narrow: present archived numbers as historical context only, make the aligned-protocol maps (hash-verified, reloaded from disk) the paper's evidence, add an explicit limitation that tile-level selections are kernel-sensitive, and do not cite the archived k=2 regression as motivation for k=3.
+
+## C04 — k=3 is confirmatory for N16
+
+**Classification: supported**
+
+Basis:
+
+- freeze sha256 df78f1fbbd034cb8d2bc8e6f6a264e7e221e1b5f2b2ff99a3fe821369c5ac88f created 2026-09-11T09:09:16Z; first confirmatory run created 2026-09-11T09:25:53.024339Z
+- primary k fixed: k=3 is primary; k in {2,4,5,6} is sensitivity only and may not replace k=3
+- amendments affecting confirmatory endpoints: none
+- quality results opened before freeze: {"confirmatory_models": "none (compatibility/memory/cost smoke tests only; no quantized quality value stored or printed)", "development_models": "archived historical reports only, plus two cost-planning timing runs on Qwen3-4B with plain FourOverSix (no MixFP4 map): V14_lmeval_timing_qwen4b (40 exam
+
+Evidence:
+
+- `freeze/PROTOCOL_FREEZE.json` sha256 `df78f1fbbd034cb8d2bc8e6f6a264e7e221e1b5f2b2ff99a3fe821369c5ac88f`
+
+PROTOCOL_FREEZE.json was hashed at 2026-09-11T09:09:16Z, before the first confirmatory run was created (09:25:53Z). It fixes the confirmatory families, revisions, primary policy, calibration draws, tasks, activation path, backend, k, statistics, tolerances and success gates. Every post-freeze change is in the hash-chained provenance/PROTOCOL_AMENDMENTS.jsonl and none alters a confirmatory endpoint, margin or gate; pre-freeze timing runs are disclosed in the freeze itself.
+
+Remaining rejection risks:
+
+- The freeze is self-administered: there is no third-party pre-registration, so a sceptical reviewer must trust the campaign's own hash chain and timestamps.
+- k=3 was inherited from development-panel evidence that includes the archived k=2 data point which this campaign could not reproduce (see C03).
+- The k sweep shows k=3 is not the perplexity-optimal threshold: dlogPPL improves as k decreases in four of the six model x corpus cells - the exceptions are reversals of about 8e-05 at the k=5 -> k=4 step on Llama-3.1-8B C4 and Mistral-7B C4 - and k=2 beats k=3 in all six cells (V40). A reviewer will ask why the primary is not k=2; the answer must be pre-registration plus selection reliability (k=2 selects 7-28x more tiles, with an already substantial sign-flip FDP at k=3), not performance.
+
+Recommendation: Ship PROTOCOL_FREEZE.json, its SHA-256 and the amendments log in the artifact; describe the provenance of k=3 honestly rather than as an independent discovery; and state explicitly that k=3 is conservative rather than optimal, citing the k sweep as sensitivity evidence that was not allowed to redefine the primary.
+
+## C05 — N16 improves or preserves PPL
+
+**Classification: supported**
+
+Basis:
+
+- mistral7b/wiki: -0.00389 [-0.00486, -0.00296] Holm p=0
+- mistral7b/c4: -0.00247 [-0.00361, -0.00150] Holm p=0
+- phi4/wiki: -0.00532 [-0.00661, -0.00412] Holm p=0
+- phi4/c4: -0.00391 [-0.00474, -0.00309] Holm p=0
+- olmo2_13b/wiki: -0.00170 [-0.00301, -0.00044] Holm p=0
+- olmo2_13b/c4: -0.00095 [-0.00158, -0.00030] Holm p=0
+- all non-inferior (Holm, margin log 1.005): True; all upper CI < 0: True
+- development panel N16k3-4/6 CIs: {'llama8b': {'wiki': [-0.00631869284378494, -0.0031335877317158725], 'c4': [-0.0066590039786766165, -0.0034971028481107355]}, 'qwen27b': {'wiki': [-0.00894003779733377, -0.00034884489344343817], 'c4': [-0.003952128775734511, -0.0025283163729469924]}, 'qwen4b': {'wiki': [-0.16169654558574614, -0.14406551318901312], 'c4': [-0.07844758434770868, -0.07213543606576384]}}
+
+Evidence:
+
+- `runs/V90_analyze_ppl_attempt5/analysis_ppl/CONFIRMATORY_PPL.json` sha256 `f68cba72f8632910b67b7606cebfd68cd5a37f0b2bd7104d1f8b3364935ab5b1`
+- `runs/V90_analyze_ppl_attempt5/analysis_ppl/LEGACY_PANEL_PPL.json` sha256 `ea5f6e743d720e5b9ded9b30c035427dfb21770f625736b5cde0f941570fe009`
+
+All six frozen confirmatory endpoints are non-inferior after Holm and every upper 95% CI is below zero, on three families unseen at freeze time, with maps reloaded from disk and hash-verified. The development panel agrees in sign. The effects are small in absolute terms (0.1-0.5% perplexity) and rest on 53-57 WikiText article clusters and 231-235 C4 document clusters.
+
+Remaining rejection risks:
+
+- Effect sizes of 0.1-0.5% PPL invite the question of practical significance, especially without any measured runtime benefit (overhead is out of scope, H02).
+- N16 is significantly worse than N8 on four of six models (Qwen3-4B both corpora, Phi-4 both, OLMo-2 Wiki, Qwen3.8-27B C4); retained fraction ranges 0.63-0.97, so 'N16 is as good as N8' is not supportable.
+- Measured, not hypothetical: RaZeR attains better perplexity than N16 k3 on Llama-3.1-8B (razer_native_rows -0.01688/-0.01601 against N16 k3's -0.00469/-0.00502) and Mistral-7B (razer_wonly_shared_act -0.00532/-0.00512 against -0.00389/-0.00247), losing decisively only on Qwen3-4B (C19). The arms are named deliberately: the two RaZeR variants differ and which one is better differs by model - on Mistral-7B razer_native_rows is -0.00513/-0.00482 - so an unlabelled figure invites an apparent mismatch against findings_log item 30, which quotes both arms. No state-of-the-art or best-quality framing is available; the claim must stay inside the NVFP4-compatible E2M1/E0M3 family.
+
+Recommendation: Claim 'preserves and slightly improves perplexity at the coarser N16K64 type-block granularity', always paired with the retained-fraction R and with the overhead figures labelled as unverified external estimates.
+
+## C06 — N16 preserves downstream accuracy
+
+**Classification: supported**
+
+Basis:
+
+- mistral7b: macro +0.24 pp [-0.17, +0.64], tasks CI<0 [], pass=True
+- phi4: macro +0.31 pp [-0.11, +0.74], tasks CI<0 [], pass=True
+- olmo2_13b: macro +0.08 pp [-0.33, +0.52], tasks CI<0 [], pass=True
+- development llama8b: macro -0.11 pp [-0.60, +0.37], tasks CI<0 []
+- development qwen27b: macro +0.61 pp [+0.19, +1.04], tasks CI<0 []
+- development qwen4b: macro +0.65 pp [+0.10, +1.19], tasks CI<0 []
+
+Evidence:
+
+- `runs/V90_analyze_accuracy_attempt11/analysis_accuracy/CONFIRMATORY_ACCURACY.json` sha256 `82fc2d241685a192d066439cedb864b84db3f9f2741bbd8c75e89e97a582db67`
+- `runs/V90_analyze_accuracy_attempt11/analysis_accuracy/LEGACY_PANEL_ACCURACY.json` sha256 `db6bb68eb50f690f208682e6544f8b3dcc104b5d46981e260514b62bdb357c71`
+
+Exact frozen maps were reloaded and hash-verified for every accuracy run, and per-example outputs were saved for all 8 tasks (64 sample files per policy per model). On all three confirmatory families the N16 k3 minus FourOverSix macro accuracy CI lies well inside the frozen -0.5 pp margin (Mistral +0.24 [-0.17,+0.64], Phi-4 +0.31 [-0.11,+0.74], OLMo-2 +0.08 [-0.33,+0.52] pp) and no task has a CI entirely below zero. N16 k3 versus N8 k3 is indistinguishable on all three. On the development panel the picture is more mixed and must be reported rather than omitted: Qwen3-4B +0.65 pp [+0.10, +1.19] and Qwen3.8-27B +0.61 pp [+0.19, +1.04] both have macro CIs entirely above zero, while Llama-3.1-8B is -0.11 pp [-0.60, +0.37], a lower bound that breaches the frozen -0.5 pp SESOI margin. The frozen minimum_pass criterion binds only the three confirmatory models, so this is not a gate failure and decision_gate.json still reads 'strong pass (quality component only)'; but had Llama-3.1-8B been inside the gate it would have failed that criterion, and the asymmetry - the two models that significantly gain are both Qwen, the one that numerically loses is Llama - is a family confound a reviewer will notice.
+
+Remaining rejection risks:
+
+- On the three confirmatory families every CI includes zero, so the confirmatory evidence supports preservation rather than improvement, and the suite cannot resolve differences of the size the PPL endpoints show (~0.1-0.5%). Two development models do have CIs entirely above zero - Qwen3-4B +0.65 pp [+0.10, +1.19] and Qwen3.8-27B +0.61 pp [+0.19, +1.04] - but both are Qwen-family, both sit outside the frozen accuracy gate, and neither is corrected for multiplicity across six models and five policy pairs, so they must not be presented as a general accuracy gain.
+- Quantization itself costs about 1 pp macro accuracy versus BF16 on all three models, with several tasks individually significant; the paper must not let the N16-vs-FourOverSix comparison obscure that absolute cost.
+- 0-shot multiple-choice accuracy is a blunt instrument; a reviewer may ask for generative or instruction-following evidence beyond the single GSM8K task.
+
+Recommendation: Claim 'no measurable downstream accuracy regression at N16K64 granularity', always reporting the CI and the absolute W4A4-vs-BF16 gap alongside it.
+
+## C07 — PPL gains reflect capability
+
+**Classification: supported**
+
+Basis:
+
+- macro accuracy N16k3-4/6: CI>0 ['development:qwen27b', 'development:qwen4b'], CI includes 0 ['confirmatory:mistral7b', 'confirmatory:olmo2_13b', 'confirmatory:phi4', 'development:llama8b'], CI<0 []
+- V70 Qwen3-4B verdicts: {'n16_k3-four_over_six': 'mixed_or_inconclusive (datasets disagree)', 'n8_k3-four_over_six': 'mixed_or_inconclusive'}
+- GSM8K mistral7b: -1.36 pp [-3.71, +0.99]
+- GSM8K llama8b: +1.29 pp [-1.29, +3.87]
+- GSM8K qwen4b: +6.44 pp [+3.56, +9.33]
+- confirmatory:mistral7b:wiki dKL(BF16||.) -0.0032 CI [-0.0035, -0.0028], dTop1 +0.0015, dEntropy -0.018
+- confirmatory:mistral7b:c4 dKL(BF16||.) -0.0030 CI [-0.0038, -0.0025], dTop1 +0.0002, dEntropy -0.020
+- confirmatory:olmo2_13b:wiki dKL(BF16||.) -0.0030 CI [-0.0056, -0.0002], dTop1 +0.0016, dEntropy +0.016
+- confirmatory:olmo2_13b:c4 dKL(BF16||.) -0.0002 CI [-0.0005, 0.0001], dTop1 -0.0002, dEntropy +0.014
+- confirmatory:phi4:wiki dKL(BF16||.) +0.0003 CI [-0.0005, 0.0013], dTop1 +0.0003, dEntropy +0.031
+- confirmatory:phi4:c4 dKL(BF16||.) -0.0003 CI [-0.0009, 0.0003], dTop1 +0.0004, dEntropy +0.022
+- development:llama8b:wiki dKL(BF16||.) -0.0047 CI [-0.0053, -0.0041], dTop1 +0.0021, dEntropy +0.010
+- development:llama8b:c4 dKL(BF16||.) -0.0052 CI [-0.0066, -0.004], dTop1 +0.0013, dEntropy +0.012
+- development:qwen27b:wiki dKL(BF16||.) -0.0007 CI [-0.0021, 0.0009], dTop1 -0.0027, dEntropy +0.044
+- development:qwen27b:c4 dKL(BF16||.) -0.0001 CI [-0.0008, 0.0006], dTop1 +0.0010, dEntropy +0.038
+- development:qwen4b:wiki dKL(BF16||.) +0.0037 CI [0.0021, 0.0052], dTop1 +0.0003, dEntropy +0.250
+- development:qwen4b:c4 dKL(BF16||.) +0.0078 CI [0.007, 0.0087], dTop1 -0.0028, dEntropy +0.212
+
+Evidence:
+
+- `runs/V90_analyze_accuracy_attempt11/analysis_accuracy/CONFIRMATORY_ACCURACY.json` sha256 `82fc2d241685a192d066439cedb864b84db3f9f2741bbd8c75e89e97a582db67`
+- `runs/V90_analyze_accuracy_attempt11/analysis_accuracy/LEGACY_PANEL_ACCURACY.json` sha256 `db6bb68eb50f690f208682e6544f8b3dcc104b5d46981e260514b62bdb357c71`
+- `runs/V90_analyze_accuracy_attempt11/analysis_accuracy/CONFIRMATORY_GENERATION.json` sha256 `eda9f0293d1e5a24fefff80b81c45b9c6892f502842a678cee7e010a9a6ced44`
+- `runs/V90_analyze_accuracy_attempt11/analysis_accuracy/LEGACY_GENERATION.json` sha256 `1f9100deddc2823aba8e24f12d55da4b4f2840a246395022b0baa8d89af2c967`
+- `runs/V90_assemble_deliverables_attempt4/deliverables/QWEN_SMOOTHING_DIAGNOSTIC.json` sha256 `8ddfd9e10e388ac640fc8d14bcfeb73673d4f205fc6ab22ebd45dbd20802e15f`
+- `runs/V90_analyze_ppl_attempt5/analysis_ppl/CONFIRMATORY_PPL.json` sha256 `f68cba72f8632910b67b7606cebfd68cd5a37f0b2bd7104d1f8b3364935ab5b1`
+- `runs/V90_analyze_ppl_attempt5/analysis_ppl/LEGACY_PANEL_PPL.json` sha256 `ea5f6e743d720e5b9ded9b30c035427dfb21770f625736b5cde0f941570fe009`
+
+Downstream evidence now exists on five models for accuracy and three for generation. Macro accuracy (N16 k3 minus FourOverSix): Qwen3-4B +0.65 pp [+0.10, +1.19] (CI above zero), Phi-4 +0.31 [-0.11, +0.74], Mistral-7B +0.24 [-0.17, +0.64], OLMo-2 +0.08 [-0.33, +0.52], Llama-3.1-8B -0.11 [-0.60, +0.37]. GSM8K: Qwen3-4B +6.44 pp [+3.56, +9.33], Llama-3.1-8B +1.29 [-1.29, +3.87], Mistral-7B -1.36 [-3.71, +0.99]. The frozen V70 rule returns 'mixed' for Qwen3-4B (capability_gain on WikiText, mixed on C4) and explicitly rules out the smoothing branch, because smoothing requires the task CIs to include or fall below zero and both are strictly positive. Token diagnostics show the selected maps raise predictive entropy and improve ECE while moving the model away from BF16's top-1 predictions.
+
+Remaining rejection risks:
+
+- Capability improvement is demonstrated on exactly one of six models. That model also has a 30x larger perplexity effect and the largest W4A4 damage, so the gain may be repair of a badly damaged model rather than a general capability effect.
+- On the other five models the claim rests on preservation, and the evaluation cannot do better: an 8-task suite resolves about +/-0.5 pp macro and GSM8K about +/-2.5 pp, while those models' perplexity effects are 0.1-0.5%. Absence of accuracy movement is not evidence of absence.
+- Mistral-7B's GSM8K point estimate is negative (-1.36 pp); the interval still admits a ~1.4 pp generation loss.
+- Top-1 agreement with BF16 decreases on C4 while task scores rise, so the method does not restore BF16 behaviour and must not be described as recovering the unquantized model.
+
+Recommendation: Claim 'no measurable downstream degradation, and on the single model with a large perplexity effect, significant accuracy and GSM8K gains'. Report per model, never pool across models, always state the suite's resolution limit, and keep the frozen statement that perplexity below BF16 is never reported as capability exceeding BF16.
+
+## C08 — Proposed selector adds value
+
+**Classification: supported**
+
+Basis:
+
+- llama8b: N16k3 better than all 5 random count-matched maps on Wiki and C4: True; N16k3 minus heuristic CIs {'n16_weight_mse': {'wiki': [-0.00595055952820707, -0.003413529677096402], 'c4': [-0.006669493120512718, -0.00370031391465791]}, 'n16_magnitude': {'wiki': [-0.004974737629756894, -0.0022061316612263754], 'c4': [-0.0040883133787987455, -0.0014035398036267265]}, 'n16_change_norm': {'wiki': [-0.005066372854074524, -0.002470956489197193], 'c4': [-0.003566664462823984, -0.000542971770080948]}}
+- qwen4b: N16k3 better than all 5 random count-matched maps on Wiki and C4: True; N16k3 minus heuristic CIs {'n16_weight_mse': {'wiki': [-0.15725710439331692, -0.13959266328466977], 'c4': [-0.07574798764620722, -0.06946823975140197]}, 'n16_magnitude': {'wiki': [-0.16702185450243712, -0.147324648644877], 'c4': [-0.07654179399433195, -0.07018304578800375]}, 'n16_change_norm': {'wiki': [-0.1714726563048507, -0.15216649428636964], 'c4': [-0.07917573721922887, -0.07239182247858095]}}
+- mistral7b: N16k3 better than all 5 random count-matched maps on Wiki and C4: True; N16k3 minus heuristic CIs {'n16_weight_mse': {'wiki': [-0.004801436315228055, -0.0027927537719526874], 'c4': [-0.002932977617025601, -0.0012980390560091864]}, 'n16_magnitude': {'wiki': [-0.004090388538194766, -0.0021740618806032784], 'c4': [-0.0035380239307640196, -0.0015844039766526972]}, 'n16_change_norm': {'wiki': [-0.004488914103728445, -0.0023774529774392675], 'c4': [-0.003237077589465811, -0.0018378102167090438]}}
+
+Evidence:
+
+- `runs/V90_assemble_deliverables_attempt4/deliverables/SELECTOR_CONTROLS.json` sha256 `5d82d452354fd63299a34df967f530ebfabce45c499299d86edf3169039c1b11`
+
+Controls are exactly per-module count matched to N16 k3 (verified module by module, 8/8 on every model) and their maps overlap the primary by Jaccard 0.001-0.038, so they are genuinely different tile sets rather than near-copies. At that matched budget N16 k3 significantly outperforms all five random seeds, weight-MSE, magnitude and change-norm on all three representative models and both corpora, every CI entirely below zero. The density-matched N8 k3 control - the same directional scores at a different density - is indistinguishable from N16 k3, which is the expected negative control. Cross-run pairing is exact: the shared FourOverSix anchor is bitwise equal between the primary and control runs.
+
+Remaining rejection risks:
+
+- Value is established at a matched switch budget only. The k sweep shows perplexity also improves monotonically by switching more tiles, so the campaign shows the selector beats alternatives at a fixed budget, not that the budget or threshold is optimal.
+- The heuristic controls are simple (random, weight-MSE, magnitude, change-norm). No competing gradient- or Hessian-based selector (GPTQ/OBQ-style, Fisher weighting) was implemented, so no claim of being the best selector is supportable.
+- The advantage is measured in perplexity; the downstream suite can only resolve it on Qwen3-4B, so 'adds value' is a perplexity statement on five of six models.
+
+Recommendation: Claim precisely: at matched per-layer switch counts the directional-score selector significantly outperforms random, weight-MSE, magnitude and change-norm selection on every model tested. Do not claim threshold optimality or superiority over selectors that were not run.
+
+## C09 — Results are calibration-stable
+
+**Classification: supported**
+
+Basis:
+
+- llama8b wiki: N16k3 effects seed0+draws [-0.00469, -0.00527, -0.0044, -0.00393, -0.00528], sd 0.0005777342154023985, draw upper CIs [-0.0038548611177335913, -0.0028817532905372535, -0.0017579807891278606, -0.0038183819033905425]
+- llama8b c4: N16k3 effects seed0+draws [-0.00502, -0.0061, -0.0049, -0.00459, -0.00489], sd 0.0005822351090978384, draw upper CIs [-0.004121229879028034, -0.003271239571073023, -0.0031901002625533983, -0.0032611087799847005]
+- llama8b: N16k3 counts {'draw1': 2463, 'draw2': 1923, 'draw3': 1309, 'draw4': 1777, 'seed0': 1781}, mean pairwise Jaccard 0.11079390606851718, tiles in every draw 221
+- qwen4b wiki: N16k3 effects seed0+draws [-0.15251, -0.16781, -0.14756, -0.12887, -0.12467], sd 0.01770839637205, draw upper CIs [-0.15923139796896327, -0.14047372152604587, -0.12147546527869563, -0.11898989135908807]
+- qwen4b c4: N16k3 effects seed0+draws [-0.07523, -0.08413, -0.07812, -0.06949, -0.06319], sd 0.008037264433746213, draw upper CIs [-0.08052815846811867, -0.0748551996243273, -0.06636153683330186, -0.060241212270238056]
+- qwen4b: N16k3 counts {'draw1': 3925, 'draw2': 4278, 'draw3': 3433, 'draw4': 2512, 'seed0': 4077}, mean pairwise Jaccard 0.17780044880756438, tiles in every draw 439
+- mistral7b wiki: N16k3 effects seed0+draws [-0.00389, -0.0044, -0.00361, -0.00377, -0.00328], sd 0.00041033358465375437, draw upper CIs [-0.003549694839444952, -0.0028086308395803305, -0.0029229958370670904, -0.002250415671179684]
+- mistral7b c4: N16k3 effects seed0+draws [-0.00247, -0.00184, -0.00237, -0.00241, -0.00241], sd 0.0002572313892803356, draw upper CIs [-0.001048075735283508, -0.0016026618070731301, -0.001706182501205646, -0.0017536791220323991]
+- mistral7b: N16k3 counts {'draw1': 3800, 'draw2': 4508, 'draw3': 3411, 'draw4': 3355, 'seed0': 4179}, mean pairwise Jaccard 0.3817937544619733, tiles in every draw 1401
+
+Evidence:
+
+- `runs/V90_assemble_deliverables_attempt4/deliverables/CALIBRATION_SEED_STABILITY.json` sha256 `4e06891a7607b3e40547929ea53d3388da065ada080c786c3e2466c876b71293`
+
+seed0 plus four independent keyed draws on Llama-3.1-8B, Qwen3-4B and Mistral-7B, with every draw's documents disjoint from the others. All 30 model x draw x corpus effects of N16 k3 versus FourOverSix are negative. Between-draw standard deviation is 0.00058/0.00058 (Llama Wiki/C4), 0.00041/0.00026 (Mistral) and 0.0177/0.0080 (Qwen3-4B), against within-draw bootstrap standard deviations of roughly 0.00081, 0.00048 and 0.0045 on Wiki: evaluation noise dominates on Llama, the two sources are comparable on Mistral, and calibration-draw variance is about four times evaluation noise on Qwen3-4B. Representative accuracy is now measured for every draw on all three models (24 V50_acc_rep jobs complete; CALIBRATION_SEED_STABILITY_ACCURACY.json at 27 of 27 cells, each versus the same FourOverSix run rather than paired draw-against-draw). The direction survives but the individual number does not: 23 of 24 draw cells are positive (the exception is Mistral-7B n16_k3_draw2 at -0.149 pp), yet the spread across a model's eight draw cells is 0.400 pp on Llama-3.1-8B, 0.878 pp on Mistral-7B and 0.813 pp on Qwen3-4B - on Mistral-7B larger than any point estimate it contains. Only 5 of 27 cells exclude zero, and which ones do is draw-dependent: Mistral-7B draw1 is +0.729 [+0.061, +1.395] while draw2 is -0.149 [-0.786, +0.490]. A single draw can thus yield a downstream-significant accuracy result its sibling draws do not reproduce (findings_log item 31).
+
+Remaining rejection risks:
+
+- The selected tile sets are far less stable than the effect: counts vary 11.5-20% across draws (CV 0.115-0.200) and mean pairwise Jaccard is only 0.111 (Llama), 0.178 (Qwen3-4B), 0.382 (Mistral); just 221 of the 7,375 tiles Llama ever selects appear in all five draws. No per-tile or per-layer interpretation is supportable.
+- On Qwen3-4B - the model carrying the largest headline effect - the result depends more on which documents were drawn than on which windows were scored, so a single-draw number (as the archived campaign reported) materially understates uncertainty.
+- All five draws use the same recipe (64 OpenWebMath + 64 CodeParrot documents, 512-token crops); this measures sampling variability within that design, not robustness to a different calibration size, corpus mix or crop length. Read that precisely: calibration SIZE and CORPUS MIX are tested elsewhere in this campaign - V51 varies the document count (16+16, 32+32, 64+64) and V52 the domain (math-only, code-only, balanced, held-out), both reported under C10 - so the gap specific to this row is that all draws share one recipe. CROP LENGTH, by contrast, is varied nowhere in the campaign and remains genuinely untested.
+
+Recommendation: Report the five-draw spread or between-draw standard deviation next to every headline effect, and never present one draw's tile set as canonical. State explicitly that draw variance exceeds evaluation variance on Qwen3-4B.
+
+## C10 — Results are not domain-specific
+
+**Classification: partially_supported**
+
+Basis:
+
+- qwen4b N16k3[math64] wiki: -0.06925 CI [-0.07339, -0.06534]
+- qwen4b N16k3[math64] c4: -0.0401 CI [-0.04209, -0.03816]
+- qwen4b N16k3[math64] held-out math_eval: -0.03024 CI [-0.03358, -0.02697]
+- qwen4b N16k3[math64] held-out code_eval: -0.02399 CI [-0.02729, -0.02061]
+- qwen4b N16k3[code64] wiki: -0.14531 CI [-0.15381, -0.13738]
+- qwen4b N16k3[code64] c4: -0.06992 CI [-0.07302, -0.06662]
+- qwen4b N16k3[code64] held-out math_eval: -0.05341 CI [-0.05929, -0.04769]
+- qwen4b N16k3[code64] held-out code_eval: -0.07073 CI [-0.07879, -0.06242]
+- qwen4b N16k3[heldout] wiki: -0.17704 CI [-0.18677, -0.16764]
+- qwen4b N16k3[heldout] c4: -0.07185 CI [-0.0754, -0.06831]
+- qwen4b N16k3[heldout] held-out math_eval: -0.04633 CI [-0.05178, -0.04121]
+- qwen4b N16k3[heldout] held-out code_eval: -0.03937 CI [-0.04433, -0.03399]
+- qwen4b off-domain penalty on math_eval (n16_k3_code64-n16_k3_math64): -0.02317 (lower CI -0.02812)
+- qwen4b off-domain penalty on code_eval (n16_k3_math64-n16_k3_code64): +0.04674 (lower CI +0.03994)
+- mistral7b N16k3[math64] wiki: -0.00363 CI [-0.00454, -0.00272]
+- mistral7b N16k3[math64] c4: -0.0018 CI [-0.00255, -0.00109]
+- mistral7b N16k3[math64] held-out math_eval: -0.00304 CI [-0.00444, -0.00174]
+- mistral7b N16k3[math64] held-out code_eval: -0.00177 CI [-0.0028, -0.00063]
+- mistral7b N16k3[code64] wiki: -0.00313 CI [-0.00411, -0.00219]
+- mistral7b N16k3[code64] c4: -0.00277 CI [-0.00346, -0.00204]
+- mistral7b N16k3[code64] held-out math_eval: -0.00373 CI [-0.00496, -0.00247]
+- mistral7b N16k3[code64] held-out code_eval: -0.00176 CI [-0.00279, -0.0007]
+- mistral7b N16k3[heldout] wiki: -0.00154 CI [-0.00259, -0.00063]
+- mistral7b N16k3[heldout] c4: -0.00183 CI [-0.00253, -0.00114]
+- mistral7b N16k3[heldout] held-out math_eval: -0.00166 CI [-0.00309, -0.00029]
+- mistral7b N16k3[heldout] held-out code_eval: -0.00087 CI [-0.00192, 0.00031]
+- mistral7b off-domain penalty on math_eval (n16_k3_code64-n16_k3_math64): -0.00069 (lower CI -0.00179)
+- mistral7b off-domain penalty on code_eval (n16_k3_math64-n16_k3_code64): -0.00001 (lower CI -0.00113)
+- qwen4b calibration size N16 counts {mc32: 1125, mc64: 1919, full: 4077}
+- mistral7b calibration size N16 counts {mc32: 1190, mc64: 2193, full: 4179}
+
+Evidence:
+
+- `runs/V90_assemble_deliverables_attempt4/deliverables/CALIBRATION_DOMAIN.json` sha256 `c389a725c5976b74c3fed3870ccae251cf31c8bea7e078ad14c7dba1f78acf72`
+- `runs/V90_assemble_deliverables_attempt4/deliverables/CALIBRATION_SIZE.json` sha256 `8a356b5547d21011af4232aaf971eb834e92a6f40bfbd54f734fe87167258e87`
+
+Two axes were tested with cluster-bootstrap CIs. Size: maps derived from 16+16, 32+32 and the full 64+64 documents (Qwen3-4B 1,125 / 1,919 / 4,077 selected N16 tiles; Mistral 1,190 / 2,193 / 4,179). Domain: math-only, code-only, balanced and a held-out mixture (32 arXiv + 32 GovReport), each evaluated on WikiText and C4 and additionally on held-out in-domain corpora - 64 OpenWebMath and 64 CodeParrot documents disjoint from every calibration draw of the evaluated model (post-freeze exploratory addition, amendment 5). Every map improves both held-out corpora on both models, with one exception whose CI includes zero (Mistral, held-out-calibrated map on code, -0.00087 [-0.00192, +0.00031]). There is no domain specialisation: the math-calibrated map is never best on math, the balanced map is best or tied on math for both models, and on Mistral the code-calibrated map is best on math despite selecting 2,000 tiles against math64's 3,403. The mechanical class is partially_supported, and that is left standing rather than overridden: the rule flags the large math64-versus-code64 contrast as an off-domain penalty, but the honest reading is that the math-only map is weaker on *both* corpora (Qwen3-4B -0.03024 math / -0.02399 code against code64's -0.05341 / -0.07073), i.e. calibrating on one domain costs quality generally rather than transferring poorly to the other domain specifically. Either way the campaign cannot certify the absence of domain effects, so the conservative class is the right one. Representative accuracy is now measured for every size and domain variant on both models (20 V52_acc_rep jobs complete; CALIBRATION_SIZE_DOMAIN_ACCURACY.json at 22 of 22 cells, each versus the same FourOverSix run rather than paired size-against-size or domain-against-domain). It resolves essentially nothing, which is itself the result: only 2 of 22 cells exclude zero - Qwen3-4B's primary n16_k3 (+1.30 pp [+0.36, +2.20]) and its n8_k3_mc32 (+0.95 [+0.02, +1.91]) - while all 20 others span zero, every Mistral-7B cell included. Point estimates run -0.04 to +0.54 pp on Mistral-7B and +0.13 to +1.30 pp on Qwen3-4B. The perplexity conclusion above is therefore neither corroborated nor contradicted downstream; at this effect size the four-task suite cannot separate these maps (C07). The eight mc32/mc64 cells were unreachable until amendment 35 corrected a resolver that built a V51_acc_rep_* job id which never existed (findings_log item 32).
+
+Remaining rejection risks:
+
+- The held-out in-domain evaluation is exploratory and was added after the freeze; it is not part of the frozen endpoint set and carries no multiplicity control.
+- One held-out math document is also a calibration document of two other models' draws (C18). No model was evaluated on text its own calibration saw, but the held-out sets exclude only the evaluated model's documents.
+- Domain coverage is English math, code, arXiv and government reports. Multilingual, dialogue, instruction and long-form domains are untested, so 'not domain-specific' is a claim about these corpora only.
+- Calibration size was varied only downward from the frozen 64+64; nothing establishes that more than 128 documents would not change the selection.
+
+Recommendation: Claim robustness to calibration-domain shift - even arXiv/GovReport calibration transfers to math and code text - and explicitly do not claim that domain-matched calibration helps, since this campaign found no evidence for it. Report the size trend (more calibration data selects more tiles) as a description, not as a tuning recommendation.
+
+## C11 — Rule generalizes
+
+**Classification: supported**
+
+Basis:
+
+- frozen gate classification on 3 unseen families (Mistral, Phi-4, OLMo-2): strong pass (quality component only; overhead out of scope)
+- details: {"accuracy": {"mistral7b": {"macro_ci95": [-0.0016544477843997874, 0.00643733462379693], "macro_diff": 0.002378833644065171, "ok": true, "tasks_ci_below_zero": []}, "olmo2_13b": {"macro_ci95": [-0.0033268592763874803, 0.005213335231969365], "macro_diff": 0.0008462983927443098, "ok": true, "tasks_ci_below_zero": []}, "phi4": {"macro_ci95": [-0.0010908788620540358, 0.007401267275546142], "macro_diff": 0.0031374779816266732, "ok": true, "tasks_ci_below_zero": []}}, "all_primary_upper_ci_below_margin": true, "holm_noninferior": [true, true, true, true, true, true], "pooled_mean_primary_dlogppl": -
+- families: {'mistral7b': {'family': 'Mistral (Mistral AI)', 'model_id': 'mistralai/Mistral-7B-v0.3', 'revision': 'caa1feb0e54d415e2df31207e5f4e273e33509b1', 'tokenizer_revision': 'caa1feb0e54d415e2df31207e5f4e273e33509b1'}, 'olmo2_13b': {'family': 'OLMo (AI2)', 'model_id': 'allenai/OLMo-2-1124-13B', 'revision': '3fefddc1bf18a30e1d9b91000271630718f2aa8b', 'tokenizer_revision': '3fefddc1bf18a30e1d9b91000271630718f2aa8b'}, 'phi4': {'family': 'Phi (Microsoft)', 'model_id': 'microsoft/phi-4', 'revision': '2db69c1c3e91a05d2c64a3185acfbaf36f744e25', 'tokenizer_revision': '2db69c1c3e91a05d2c64a3185acfbaf36f744e25'}}; replacement: [{'decided_before_quality': True, 'decision': 'provenance/01_owner_decisions.json#D02', 'original': 'google/gemma-2-9b', 'reason': 'HTTP 403: gated license not accepted for the available token', 'replacement': 'allenai/OLMo-2-1124-13B'}]
+
+Evidence:
+
+- `runs/V90_final_reports_attempt7/final/decision_gate.json` sha256 `5345c1f12c0275f56656639629571bed599ee376400e4ca610bddad4c4cc93c1`
+
+The three confirmatory families (Mistral-7B-v0.3, Phi-4, OLMo-2-1124-13B) were frozen with revisions and success criteria before any quantized quality result on them existed, and they are architecturally distinct from the Llama/Qwen development panel. Applying the frozen gate mechanically gives a strong pass on the quality component: 6/6 endpoints non-inferior after Holm with upper CI < 0, all three accuracy criteria met, pooled retained fraction 0.78.
+
+Remaining rejection risks:
+
+- Generalization is shown for base pretrained decoder-only models at 7-14B under one calibration recipe; instruction-tuned models, other sizes and other architectures are untested.
+- The retained fraction varies from 0.63 to 0.97 across models, so how much of the N8 gain survives at N16 is model-dependent and not predictable in advance.
+- OLMo-2-13B replaced the gated gemma-2-9b (owner decision D02), so family coverage was constrained by access, not chosen for diversity.
+
+Recommendation: Keep the generalization claim scoped to base decoder-only models in this size range, and report R per model rather than only pooled.
+
+## C12 — First-order scores predict actual changes
+
+**Classification: unsupported**
+
+Basis:
+
+- llama8b n8: Spearman CE 0.17 KL 0.01; sign precision CE 0.25742574257425743; selected FPR(any) 0.65; batched actual/pred CE ratios [-2.328, -1.211, -0.158, 0.024, 0.352, 0.505, 0.64, 0.723, 0.934, 0.608, 0.362]
+- llama8b n16: Spearman CE 0.04 KL 0.03; sign precision CE 0.30097087378640774; selected FPR(any) 0.725; batched actual/pred CE ratios [-0.267, 0.678, -0.099, -0.397, 0.904, 0.451, 0.505, 0.633, 0.688, 0.694, 0.739]
+- qwen4b n8: Spearman CE 0.18 KL -0.02; sign precision CE 0.23853211009174313; selected FPR(any) 0.675; batched actual/pred CE ratios [0.542, 0.528, 0.137, 0.347, 0.309, 0.487, 0.615, 0.678, 0.697, 0.686, 0.578]
+- qwen4b n16: Spearman CE 0.24 KL -0.02; sign precision CE 0.3010752688172043; selected FPR(any) 0.7; batched actual/pred CE ratios [0.545, -0.274, 0.034, 0.272, 0.577, 0.617, 0.647, 0.705, 0.676, 0.691, 0.664]
+- mistral7b n8: Spearman CE -0.07 KL -0.16; sign precision CE 0.5333333333333333; selected FPR(any) 0.5; batched actual/pred CE ratios [1.093, 1.79, 1.097, 1.072, 0.942, 1.123, 0.849, 1.151, 0.685, 0.807, 0.632]
+- mistral7b n16: Spearman CE -0.13 KL -0.20; sign precision CE 0.5816326530612245; selected FPR(any) 0.675; batched actual/pred CE ratios [0.795, 2.222, 1.701, 1.668, 1.082, 1.052, 0.914, 1.026, 1.039, 0.974, 0.791]
+
+Evidence:
+
+- `runs/V90_analyze_misc_attempt7/analysis_misc/FIRST_ORDER_FIDELITY.json` sha256 `3e28f8f8fd387201d5b50b995e4e11be2bb90aaee46e3f13382c4145aa8b4103`
+
+The row is answered in opposite directions at two scales, and both must be stated. Single-tile arm: across three models and both type blocks the predicted per-tile effect has median magnitude 2.4e-07 to 1.3e-06 while the measurement's own across-sequence SE is 5.1e-04 to 1.4e-03, a predicted-to-SE ratio of 0.0004 to 0.0009 in every cell; only 0 to 2.5 percent of the 160 sampled tiles per cell clear their own 3 SE; Spearman(predicted, actual) runs -0.196 to +0.239; and the selected-stratum false-positive rate at N16 (either objective failing to improve) is 0.675 (Mistral-7B), 0.700 (Qwen3-4B) and 0.725 (Llama-3.1-8B). Critically this is not a noise problem: the three V43 noise controls show the evaluation is bitwise deterministic (24 identical baselines per model, end-of-run drift exactly 0.0, on three different A6000 cards, and reproducing bitwise across cards in two independent checks), so a single-tile measurement is exact. Nine N16 tiles were re-measured with four bitwise-identical replicates each, three per model. The predicted CE sign was correct in only 3 of 9 (KL 7 of 9); the tile the k=3 rule REJECTS bears no relation to its prediction on any model, helping on Llama-3.1-8B (-8.24e-04) and Mistral-7B (-5.31e-04) and hurting on Qwen3-4B (+1.12e-03), always by two to three orders of magnitude more than predicted; and near the median prediction the measured effect is 41x to 1,657x larger with arbitrary sign. Prediction is sane only where the predicted effect is unusually large (top-tile ratio 0.80 on Mistral-7B and 0.54 on Qwen3-4B, though -0.27 on Llama-3.1-8B). Decisively, Qwen3-4B has the highest single-tile rank correlation of all six cells (+0.239) and still mispredicts its median and rejected tiles by -146x and -1,657x, so the failure is not an artifact of the models where the score looks worst. Batched arm: the full k=3 map realises a stable fraction of its predicted first-order CE sum with the correct sign in every model x type-block cell - N8 0.632 / 0.362 / 0.578 and N16 0.791 / 0.739 / 0.664 for Mistral-7B / Llama-3.1-8B / Qwen3-4B - and above roughly 16 tiles the prefixes track the predicted sum to about plus or minus 10 percent on Mistral-7B. The first-order account is therefore predictive of the map and not of the tiles that constitute it.
+
+Remaining rejection risks:
+
+- The method is named for a first-order task-loss score, and that score does not predict individual tile effects. A reviewer reading this row will conclude the stated mechanism is unsupported at the tile level, and on this evidence they are right.
+- The batched agreement could be partly coincidental. Per-tile effects are of order 2e-04 with near-random sign, so a sqrt(n) accumulation over thousands of tiles is the same order as the observed full-map effect. What argues against coincidence is the monotone prefix behaviour and the consistent sign across all six model x type-block cells, not a mechanistic derivation, and the paper should not overstate that.
+- The KL half of the objective is not uniformly predictive even in aggregate: on Qwen3-4B at N8 the realised KL change carries the opposite sign to its predicted sum (realised/predicted -0.026), consistent with that model diverging from the BF16 teacher while improving CE.
+- The nine exactly-measured tiles were chosen as extremes (largest predicted gain, median selected, rejected) rather than sampled at random, so they refute a strong reading of this row rather than estimating a per-tile error rate. A random-sample replication with replication per tile would be needed to quantify the rate, and was not run.
+
+Recommendation: Narrow the mechanism claim and report the negative result rather than omitting it. Do not claim the first-order score identifies individually beneficial tiles - that is refuted wherever it can be measured exactly. Claim instead that the score selects a SET whose aggregate effect is reproducibly negative and which realises 0.36 to 0.79 of its predicted first-order sum. Present this row's negative finding in the paper body, paired with C08 (the selector beats random, weight-MSE, magnitude and change-norm controls at identical per-module counts on three models with every CI below zero), since C08 is the evidence that the selection carries information even though the individual selections do not. Treat every per-tile and per-layer interpretation as unsupported, and state that the reproducible object is the hash-verified map.
+
+## C13 — Multiplicity argument is valid
+
+**Classification: unsupported**
+
+Basis:
+
+- llama8b N16: median CE/KL corr 0.65; k=3 selects 1781; IUT any-dependence null bound 9201; BY q=.05 146; sign-flip FDP 0.317 (global p 0.0010)
+- mistral7b N16: median CE/KL corr 0.32; k=3 selects 4179; IUT any-dependence null bound 9201; BY q=.05 997; sign-flip FDP 0.027 (global p 0.0010)
+- olmo2_13b N16: median CE/KL corr 0.33; k=3 selects 2181; IUT any-dependence null bound 16726; BY q=.05 7; sign-flip FDP 0.111 (global p 0.0010)
+- phi4 N16: median CE/KL corr 0.32; k=3 selects 2184; IUT any-dependence null bound 17970; BY q=.05 3; sign-flip FDP 0.102 (global p 0.0010)
+- qwen27b N16: median CE/KL corr 0.43; k=3 selects 2168; IUT any-dependence null bound 32100; BY q=.05 52; sign-flip FDP 0.206 (global p 0.0010)
+- qwen4b N16: median CE/KL corr 0.45; k=3 selects 4077; IUT any-dependence null bound 4790; BY q=.05 303; sign-flip FDP 0.031 (global p 0.0010)
+- independence argument invalid; a valid statement must use the sign-flip FDP estimate / IUT bound instead
+
+Evidence:
+
+- `runs/V90_analyze_selection_attempt2/analysis_selection/SELECTION_STATISTICS.json` sha256 `255cea8aa73c44e43c2c23cb7627285d24fa75843fc9112aa5e5d179c3a54378`
+
+The archived expected-false-positive bound assumed CE/KL independence across tiles. Measured per-tile CE/KL correlation over sequences is strongly positive on every model (median 0.32-0.65; across-tile t correlation 0.34-0.64), so that bound is invalid. Assumption-free intersection-union bounds (4,790-32,100 expected false positives) exceed the number of tiles k=3 selects on ALL SIX models, not three: Qwen3.8-27B (32,100 vs 2,168), Phi-4 (17,970 vs 2,184), OLMo-2 (16,726 vs 2,181), Llama-3.1-8B (9,201 vs 1,781), Mistral-7B (9,201 vs 4,179) and Qwen3-4B (4,790 vs 4,077). The assumption-free bound is therefore vacuous across the whole panel - it permits more false positives than the rule selects tiles - so it cannot distinguish the selected set from noise on any model. The sequence-level sign-flip permutation rejects the global null on every model (p=0.001, R=1,000) with estimated FDP 0.027-0.317, from small observed counts in the stored stratified sample.
+
+Remaining rejection risks:
+
+- Any reviewer who checks the independence assumption will reject the original bound outright.
+- Dependency-robust FDR keeps far fewer tiles than k=3 (BH q=0.05: 12/2,184 on Phi-4, 20/2,181 on OLMo-2, 108/2,168 on Qwen3.8-27B), so the selected set is not individually significant.
+- The FDP estimates themselves are noisy (13-54 observed tiles per model).
+
+Recommendation: Narrow: drop the Phi(-3)^2 argument entirely, describe k=3 as a conservative screening threshold, and report the sign-flip FDP together with BH/BY sensitivity. The defensible claim is aggregate: the selected set's effect is reproducibly negative, not that any individual tile is a verified improvement.
+
+## C14 — Evaluation uncertainty is valid
+
+**Classification: supported**
+
+Basis:
+
+- confirmatory mistral7b wiki: article-cluster CI [-0.00486, -0.00296] (57 clusters) vs block-5 CI [-0.00487, -0.00298]; conclusions agree True
+- confirmatory olmo2_13b wiki: article-cluster CI [-0.00301, -0.00044] (54 clusters) vs block-5 CI [-0.00321, -0.00037]; conclusions agree True
+- confirmatory phi4 wiki: article-cluster CI [-0.00661, -0.00412] (54 clusters) vs block-5 CI [-0.00638, -0.00428]; conclusions agree True
+- development llama8b wiki: article-cluster CI [-0.00632, -0.00313] (53 clusters) vs block-5 CI [-0.00597, -0.00339]; conclusions agree True
+- development qwen27b wiki: article-cluster CI [-0.00894, -0.00035] (54 clusters) vs block-5 CI [-0.0093, -0.0004]; conclusions agree True
+- development qwen4b wiki: article-cluster CI [-0.1617, -0.14407] (53 clusters) vs block-5 CI [-0.1607, -0.14479]; conclusions agree True
+- calibration-draw vs evaluation variance separated on all 3 draw models: True
+
+Evidence:
+
+- `runs/V90_analyze_ppl_attempt5/analysis_ppl/CONFIRMATORY_PPL.json` sha256 `f68cba72f8632910b67b7606cebfd68cd5a37f0b2bd7104d1f8b3364935ab5b1`
+- `runs/V90_analyze_ppl_attempt5/analysis_ppl/LEGACY_PANEL_PPL.json` sha256 `ea5f6e743d720e5b9ded9b30c035427dfb21770f625736b5cde0f941570fe009`
+- `runs/V90_assemble_deliverables_attempt4/deliverables/CALIBRATION_SEED_STABILITY.json` sha256 `4e06891a7607b3e40547929ea53d3388da065ada080c786c3e2466c876b71293`
+
+Three separate checks. (1) Sampling units are declared and clustered: WikiText by the article containing a window's first token (53-57 clusters over 141-163 windows), C4 by document SHA-256 (231-235 clusters over 256 windows), accuracy by example with MMLU pooled over 57 subjects, and the frozen block-5 sensitivity reproduces every primary conclusion (e.g. Mistral Wiki article-cluster CI [-0.00486,-0.00296] vs block-5 [-0.00487,-0.00298]). (2) Calibration variance is separated from evaluation variance by the five-draw design on three models: between-draw standard deviation 0.00058 (Llama), 0.00041 (Mistral) and 0.0177 (Qwen3-4B) on Wiki, against within-draw bootstrap standard deviations of roughly 0.00081, 0.00048 and 0.0045. (3) Confirmatory and exploratory endpoints are declared separately in the freeze, and Holm is applied across the six primary tests.
+
+Remaining rejection risks:
+
+- WikiText contributes only ~55 clusters, so the effective sample size for half the primary endpoints is small and percentile bootstrap intervals there are usable but not precise; CI widths near +/-0.001 log-PPL are this protocol's resolution floor.
+- Calibration-draw variance exceeds evaluation variance on Qwen3-4B by about four times, so any single-draw result on that model - including the archived campaign's - understates uncertainty.
+- Multiplicity is controlled across the six primary endpoints only. The many exploratory comparisons (k sweep, controls, draws, domains, baselines, long context) are reported without family-wise correction, as the freeze declares.
+
+Recommendation: State the cluster definition and count next to every interval, report the between-draw spread alongside headline effects, and keep the confirmatory/exploratory split visible in every table so no exploratory comparison is read as a controlled test.
+
+## C15 — Activation/backend mismatch is not driving results
+
+**Classification: supported**
+
+Basis:
+
+- llama8b wiki: N8k3 dlogPPL historical (tensor-wide act, eager) -0.00361 vs aligned causal SDPA -0.00496
+- llama8b c4: N8k3 dlogPPL historical (tensor-wide act, eager) -0.00466 vs aligned causal SDPA -0.00501
+- qwen4b wiki: N8k3 dlogPPL historical (tensor-wide act, eager) -0.18587 vs aligned causal SDPA -0.17848
+- qwen4b c4: N8k3 dlogPPL historical (tensor-wide act, eager) -0.09256 vs aligned causal SDPA -0.08778
+- same-GPU eager->SDPA selection perturbation (qwen4b): {"bf16_fit_nll_vs_other": {"max_abs": 0.013623237609863281}, "fit_ce_vs_other": {"max_abs": 0.08753514289855957}, "fixed256_prefix_k2": {"intersection": 167, "jaccard": 0.48405797101449277}, "k2": {"intersection": 17642, "jaccard": 0.16190668940544128, "other": 64866, "this": 61740}, "k3": {"interse
+- confirmatory panel calibrated and evaluated only under the aligned causal protocol
+- selected tile sets are backend-sensitive (Jaccard well below 1) although effects reproduce
+
+Evidence:
+
+- `runs/V90_analyze_historical_attempt3/analysis_historical/HISTORICAL_PPL_ANCHORS.json` sha256 `2beb2ed3f8045e2edfeef0a5929392c8c58e0afb0b675cb90b8bd1df303f325b`
+- `runs/V90_analyze_historical_attempt3/analysis_historical/N8_ANCHOR_RESULTS.json` sha256 `ddff22e6f00c3995e6db80a996dcaa9f4860857c76fcd4588636bd03e85c2e2e`
+- `runs/V90_analyze_ppl_attempt5/analysis_ppl/CONFIRMATORY_PPL.json` sha256 `f68cba72f8632910b67b7606cebfd68cd5a37f0b2bd7104d1f8b3364935ab5b1`
+- `runs/V90_analyze_ppl_attempt5/analysis_ppl/LEGACY_PANEL_PPL.json` sha256 `ea5f6e743d720e5b9ded9b30c035427dfb21770f625736b5cde0f941570fe009`
+
+The aligned protocol uses the same causal per-token activation quantizer and the same attention backend in calibration, PPL, accuracy and generation, which is the closure the gap audit asked for; the confirmatory panel exists only under that protocol. The historical (tensor-wide activation, eager) and aligned (causal, SDPA) protocols agree in sign on the N8 k=3 effect for all three development models - Qwen3.8-27B's historical evaluation completed after this note was first written, and its hist_n8_k3 paired effect reproduces within tier C on both corpora (archived -0.009975 against regenerated -0.009111 on Wiki, -0.003786 against -0.003224 on C4) - so the mismatch does not drive the direction of the result. It does drive which tiles are selected: changing only the backend on one GPU gives k=3 Jaccard 0.29.
+
+Remaining rejection risks:
+
+- Selection instability under a backend change undermines any claim that the method identifies specific tiles, and invites the question whether a different deployment kernel would select a different, equally good set (untested).
+- No crossed calibration-backend x evaluation-backend ablation was run on the confirmatory panel.
+
+Recommendation: Add a limitation: the selection is protocol-conditional, and both protocols must be reported with their Jaccard overlap rather than presenting one map as canonical.
+
+## C16 — Result generation is deterministic/auditable
+
+**Classification: unsupported**
+
+Basis:
+
+- V82 repeat (same GPU: False, same source manifest: False): tierA False, tierB False, score stream equal False, forward fit losses equal True and BF16 fit NLL equal True, maps {"n16_k2": [false, 0.9802], "n16_k3": [false, 0.9849], "n16_k4": [false, 0.9908], "n8_k2": [false, 0.9789], "n8_k3": [false, 0.9874]}
+- V83: 338 runs, by status {'complete': 310, 'failed': 17, 'invalid': 7, 'not_started': 4}, blocking runs with problems 0 (superseded 5, in flight 0); manifest entries 78705
+
+Evidence:
+
+- `runs/V90_analyze_misc_attempt7/analysis_misc/DETERMINISM_REPORT.json` sha256 `2251e5cbe1b81a8a184a2891a3a1db822dcb2c6ca31bc3f05738c88b3590eec0`
+- `runs/V83_validate_artifacts_attempt7/artifact_validation/ARTIFACT_VALIDATION.json` sha256 `94aa7414544f3b60b660f8e409f390d655a188bd850c7883717cf3069e808b4f`
+
+Determinism has a sharp boundary and the row must be read with it in mind. The forward evaluation is bitwise reproducible: the three V43 noise controls each performed 24 baseline evaluations over the same 128 sequences with single-measurement SD and end-of-run drift both exactly 0.0, and the same quantity reproduces bitwise across two different A6000 cards, different containers and different source manifests (Mistral-7B CE 1.3765774966450408, KL 0.04167576700238247 on GPU-9cec7336 and GPU-2e6984d6). The gradient-derived scores are not: the V82 repeat of the seed0 calibration reproduces every forward quantity exactly (bf16_fit_nll_equal and fit_losses_equal both true) while score_stream_sha256_equal is false and payload_equal is false for all five policies, giving map Jaccard 0.9789 (n8 k2), 0.9802 (n16 k2), 0.9849 (n16 k3), 0.9874 (n8 k3) and 0.9908 (n16 k4), with selected counts 4,077 vs 4,083 at n16 k3 and 7,349 vs 7,340 at n8 k3. tierA and tierB are therefore both false. Artifact auditability is separately clean: V83 validated 338 runs and 78,705 manifest entries with 0 blocking problems (5 superseded - the V42 checksum-control attempt1 runs already remediated under amendment 16 - and none still in flight). The supported half now extends beyond per-sequence losses to downstream task outcomes, and on three models rather than one. The V40 and V80 representative-accuracy runs install the same N16 k3 map file (identical SHA-256, map_reloaded_for_evaluation true on both sides) under an identical harness, and all 22,641 per-example outcomes agree exactly - 7,547 examples on each of Llama-3.1-8B, Mistral-7B and Qwen3-4B over arc_challenge, boolq, piqa and winogrande, agreement 1.0000 in all twelve model x task cells, every task accuracy identical to four decimals - although the pairs ran 2.5 to 4.2 hours apart, in different containers, under different source manifests, and on different A6000 cards for Mistral-7B and Qwen3-4B. This is decision-level rather than bitwise-logit agreement, and it concerns evaluation with a stored map rather than regeneration (findings_log item 39).
+
+Remaining rejection risks:
+
+- The maps are not bitwise regenerable, so a reviewer who re-runs the calibration will not obtain the published map. Auditability rests on the stored, hash-verified map files rather than on reproducing the selection, and the paper must say so rather than implying determinism.
+- The V82 repeat ran on a different GPU and under a different source manifest (same_gpu_uuid false), so run-to-run backward non-determinism is confounded with cross-card variation. The queue leases whichever card is free and cannot pin a UUID, so the two sources were not separable within this campaign.
+- tierB fails narrowly - it requires Jaccard >= 0.99 on every policy and the minimum observed is 0.9789 - and that threshold was pre-registered without knowledge of the backward-pass variance it would be tested against.
+- Determinism was measured on one model only (Qwen3-4B). No repeat exists for any confirmatory family, so the ~1.5 percent selection churn is characterised on a single, atypical model. That limitation applies to the REGENERATION side only: the evaluation side is now measured on three models (Llama-3.1-8B, Mistral-7B and Qwen3-4B) with exact per-example agreement, so the single-model caveat must not be quoted against the auditability half of this row.
+
+Recommendation: Narrow the claim rather than dropping it. Do not claim deterministic regeneration of maps. Claim what is evidenced: under a fixed configuration the exact-map evaluation is bitwise reproducible, including across A6000 cards, and every headline result reloads a map file from disk whose SHA-256, model and tokenizer revisions, module names and shapes, type block, protocol id and source manifest are verified before installation. Report the measured run-to-run selection churn (Jaccard 0.978-0.991) as the stability figure, and contrast it with the ~0.29 Jaccard produced by an attention-backend change or a GPU-generation change, so the reader sees that configuration changes dominate run-to-run noise by roughly fiftyfold. State C16 as unsupported for bitwise determinism and supported for auditability, separately.
+
+## C17 — Results port across available GPUs
+
+**Classification: partially_supported**
+
+Basis:
+
+- maps A6000 vs Ada: {"n16_k3": {"a6000": 4077, "ada": 4029, "intersection": 1839, "jaccard": 0.29344183820009573, "payload_equal": false, "tierB": false}, "n8_k3": {"a6000": 7349, "ada": 7695, "intersection": 3343, "jaccard": 0.2857020767455773, "payload_equal": false, "tierB": false}}
+- PPL tier: True; paired effect tier: True
+
+Evidence:
+
+- `runs/V90_analyze_misc_attempt7/analysis_misc/CROSS_GPU_ALIGNED.json` sha256 `8676c17de69cee328a097f17b47d4bff01ced2d75bca16955563544268d2608b`
+- `runs/V90_analyze_historical_attempt3/analysis_historical/CROSS_GPU_ARCHIVE.json` sha256 `9991966c2349edb208875c56c830952e3082e759a9dfe7953166a7293272456d`
+
+The row separates cleanly into two statements that must not be conflated. (1) Evaluation ports across GPU generations: taking the identical map and identical windows and evaluating on an RTX A6000 versus an RTX 6000 Ada moves relative perplexity by -0.00038 to +0.00111 across all six policy x corpus cells - five cells rising and one (the Ada-calibrated map on C4) falling - every one inside the frozen cross-GPU tolerance, and the paired effect versus FourOverSix agrees in sign and tier on every cell (n16 k3 WikiText -0.15251 on A6000 versus -0.15159 on Ada; C4 -0.07523 versus -0.07555). Per-window NLL nevertheless differs by up to 0.060, so the aggregate is the portable object and the per-window value is not. (2) Calibration does not port: running the same frozen protocol on Ada produces a materially different map - Jaccard 0.2934 at N16 k3 and 0.2857 at N8 k3, payload_equal false, 4,077 versus 4,029 and 7,349 versus 7,695 selected tiles - and that difference costs measurable quality, the Ada-calibrated map reaching -0.14430 WikiText against the A6000-calibrated map's -0.15251 on the same card, i.e. it retains roughly 95 percent of the effect. Maximum absolute fit-CE difference between the two calibrations is 0.0807. This is the same hierarchy measured in findings_log item 36: a pure repeat perturbs the selection to Jaccard 0.985 while a generation change takes it to 0.29.
+
+Remaining rejection risks:
+
+- The entire portability row rests on one model, Qwen3-4B, which is this campaign's 30x outlier on every other endpoint. No confirmatory family was evaluated on a second GPU generation, so generalisation of the portability claim is unevidenced.
+- A map calibrated on a different GPU generation is not interchangeable with the published map. A practitioner who regenerates the map on their own hardware should expect roughly 95 percent of the reported effect, not the reported effect, and the paper must not imply the map is hardware-independent.
+- Only A6000 and RTX 6000 Ada were compared, both Ampere-class or later consumer/workstation parts. Nothing is measured about the H100/H200 datacentre GPUs on which the archived campaign ran, so portability to the original hardware is inferred from the V23 archived anchor rather than measured under the aligned protocol.
+- Per-window NLL differences reach 0.060, so any future per-window, per-token or per-tile analysis is not portable across generations even though the aggregate is.
+
+Recommendation: Report both halves explicitly and never just the favourable one. State that exact-map evaluation ports across GPU generations within the frozen tolerance and that paired effects agree in sign and magnitude, and in the same breath that calibration does not port: the selection overlaps only about 29 percent and the resulting map is about 5 percent weaker. Frame the deployable artifact as the published map file, verified by hash, rather than as the calibration procedure, since the procedure is what fails to reproduce across hardware. Flag the single-model limitation as a scope restriction on the portability claim rather than leaving it implicit.
+
+## C18 — Data leakage does not explain results
+
+**Classification: partially_supported**
+
+Basis:
+
+- exact normalized document overlap: {'c4_used_documents': 0, 'heldout_code_eval_documents': 0, 'heldout_math_eval_documents': 1, 'pg19_first_books': 0, 'task_arc_challenge': 0, 'task_arc_easy': 0, 'task_boolq': 0, 'task_gsm8k': 0, 'task_hellaswag': 0, 'task_mmlu': 0, 'task_openbookqa': 0, 'task_piqa': 0, 'task_winogrande': 0, 'wikitext_articles': 0}
+- 13-gram calibration shingle fraction: {'c4_used_documents': 2.6063216331211354e-06, 'heldout_code_eval_documents': 0.007242316238035355, 'heldout_math_eval_documents': 0.002635642751493748, 'pg19_first_books': 0.0, 'task_arc_challenge': 0.0, 'task_arc_easy': 0.0, 'task_boolq': 0.0, 'task_gsm8k': 0.0, 'task_hellaswag': 0.0, 'task_mmlu': 2.6063216331211354e-06, 'task_openbookqa': 0.0, 'task_piqa': 0.0, 'task_winogrande': 0.0, 'wikitext_articles': 0.0}
+- limits: ['pretraining-data overlap of the evaluated models is not measurable here (closed or unindexed corpora)', 'n-gram screening uses word shingles on full documents; paraphrase-level contamination is not detected']
+- task load error: None
+
+Evidence:
+
+- `runs/V53_data_overlap_attempt1/overlap/DATA_OVERLAP_REPORT.json` sha256 `3e4e7f95fc46deeba87265644dc788aa15fd51f986ac2494b7377821a65efe69`
+
+764 distinct calibration documents (all models, all draws) were screened against every evaluation corpus by exact normalized-document hash and by word 13-gram and 8-gram shingles. The corpora that carry the campaign's claims are clean: all nine lm-eval task sets, the WikiText articles, the 231 evaluated C4 documents and the PG19 books show zero exact overlap and 13-gram shingle fractions of 3e-6 or less. The mechanical class is partially_supported because of a single exact hit outside those corpora: one document of the held-out math evaluation set is also a calibration document of V30_calib_llama8b_draw1 and V30_calib_qwen4b_draw1. It is evaluated only under Mistral-7B, whose own calibration never used it, so no model was evaluated on text its own calibration had seen.
+
+Remaining rejection risks:
+
+- The held-out in-domain sets exclude the evaluated model's calibration documents but not other models' draws, so cross-model overlap is possible by construction; one instance occurred and is disclosed.
+- Held-out code documents share 13-grams with 115 calibration documents (0.7% of shingles). This is licence and import boilerplate rather than content reuse, but a reviewer may ask for a de-boilerplated re-screen.
+- Pretraining-data contamination of the six evaluated models cannot be measured here at all, and word-shingle screening cannot detect paraphrase-level reuse; neither limitation is closable on this platform.
+
+Recommendation: State the audit method and both limits explicitly, report the single cross-model overlap rather than rounding it to zero, and confine leakage claims to calibration-versus-evaluation overlap - never to pretraining data.
+
+## C19 — Baseline comparison is fair
+
+**Classification: supported**
+
+Basis:
+
+- llama8b razer_wonly_shared_act minus N16k3: wiki -0.0112 [-0.0136, -0.0089], c4 -0.0103 [-0.0139, -0.0074]
+- llama8b razer_native_rows minus N16k3: wiki -0.0122 [-0.0143, -0.0101], c4 -0.0110 [-0.0146, -0.0081]
+- llama8b nover6_wonly_shared_act minus N16k3: wiki +0.0024 [+0.0007, +0.0040], c4 +0.0020 [-0.0001, +0.0040]
+- llama8b nover6_native_rows minus N16k3: wiki +0.0016 [-0.0003, +0.0033], c4 +0.0004 [-0.0017, +0.0023]
+- llama8b: baseline PPL present True, representative accuracy present True, n16_k3 reproduced across runs {'c4': True, 'wiki': True}
+- qwen4b razer_wonly_shared_act minus N16k3: wiki +0.1499 [+0.1426, +0.1578], c4 +0.0768 [+0.0735, +0.0800]
+- qwen4b razer_native_rows minus N16k3: wiki +0.1447 [+0.1375, +0.1525], c4 +0.0749 [+0.0714, +0.0784]
+- qwen4b nover6_wonly_shared_act minus N16k3: wiki +0.1316 [+0.1242, +0.1396], c4 +0.0743 [+0.0712, +0.0777]
+- qwen4b nover6_native_rows minus N16k3: wiki +0.1279 [+0.1202, +0.1358], c4 +0.0722 [+0.0691, +0.0754]
+- qwen4b: baseline PPL present True, representative accuracy present True, n16_k3 reproduced across runs {'c4': True, 'wiki': True}
+- mistral7b razer_wonly_shared_act minus N16k3: wiki -0.0014 [-0.0025, -0.0003], c4 -0.0026 [-0.0036, -0.0017]
+- mistral7b razer_native_rows minus N16k3: wiki -0.0012 [-0.0023, -0.0001], c4 -0.0024 [-0.0033, -0.0015]
+- mistral7b nover6_wonly_shared_act minus N16k3: wiki +0.0031 [+0.0021, +0.0041], c4 +0.0010 [+0.0002, +0.0018]
+- mistral7b nover6_native_rows minus N16k3: wiki +0.0034 [+0.0023, +0.0044], c4 +0.0010 [+0.0002, +0.0019]
+- mistral7b: baseline PPL present True, representative accuracy present True, n16_k3 reproduced across runs {'c4': True, 'wiki': True}
+- all methods share source weights, tokenizer, module scope, evaluation tokens, attention backend and (except *_native_rows) the causal FourOverSix activation quantizer
+
+Evidence:
+
+- `runs/V90_assemble_deliverables_attempt4/deliverables/ADDITIONAL_BASELINES.json` sha256 `9a6686b6c7997de33718cb52da9ed5dc36e4a4b2a95ef523aad2fdd32d5bae8f`
+- `runs/V90_analyze_ppl_attempt5/analysis_ppl/CONFIRMATORY_PPL.json` sha256 `f68cba72f8632910b67b7606cebfd68cd5a37f0b2bd7104d1f8b3364935ab5b1`
+- `runs/V90_analyze_ppl_attempt5/analysis_ppl/LEGACY_PANEL_PPL.json` sha256 `ea5f6e743d720e5b9ded9b30c035427dfb21770f625736b5cde0f941570fe009`
+
+Every method is evaluated on identical windows with the same source weights, tokenizer, module scope, attention backend and (except the *_native_rows arms, which use their own activation quantizer by definition) the same causal FourOverSix activation path, with maps reloaded and digest-verified. The RaZeR and nover6 arms are run rather than cited. Result: on perplexity RaZeR beats N16 k3 on Llama-3.1-8B (-0.01688/-0.01601 vs -0.00469/-0.00502) and Mistral-7B (-0.00532/-0.00512 vs -0.00389/-0.00247), while N16 k3 beats RaZeR decisively only on Qwen3-4B (-0.15251/-0.07523 vs -0.00783/-0.00032); nover6 is worse than N16 k3 everywhere. Representative accuracy is now measured for every baseline on all three models (all 15 V80_acc_rep jobs complete; ADDITIONAL_BASELINES_ACCURACY.json at 15 of 15 cells). It does not test the same comparison: every cell pairs the V80 baseline run against V40's four_over_six run, so no baseline-versus-N16 k3 accuracy contrast exists, whereas the perplexity arm has one with clustered intervals. Only 2 of 15 cells exclude zero - razer_native_rows on Llama-3.1-8B (+0.90 pp [+0.07, +1.72]) and N16 k3 on Qwen3-4B (+1.30 pp [+0.36, +2.20]) - and on Mistral-7B, the model where perplexity gives RaZeR its narrow win, all five accuracy cells span zero. Separately, the paired perplexity intervals show the nover6 arm is NOT uniformly worse than N16 k3: three of the four Llama-3.1-8B cells span zero (p = 0.107, 0.626 and 0.061), so only Mistral-7B and Qwen3-4B support that claim (findings_log item 30).
+
+Remaining rejection risks:
+
+- A published prior-art format outperforms the proposed method on two of three models, so any state-of-the-art or best-quality framing is unsupportable and would likely be caught by a reviewer who knows RaZeR.
+- The defence that RaZeR needs a different datapath (e3m3 weights, e4m3 activations) is a hardware-cost argument, and this campaign measures no hardware cost at all (H01/H02 are out of scope), so the matched-cost claim rests on the published MMA operand contract rather than on measurement.
+- The one model where the method wins decisively is the same model that is an outlier in the smoothing diagnostic, the k sweep and the calibration-domain analysis, which invites the reading that the headline gain is model-specific.
+- The comparison rests on perplexity and cannot be corroborated downstream. Representative accuracy has since been measured for all four baselines on all three models and resolves almost nothing: 2 of 15 cells exclude zero, and neither is a baseline-versus-N16 k3 contrast, because the accuracy artifact compares every policy against four_over_six rather than against the selector. A reviewer asking whether RaZeR's perplexity advantage carries to downstream tasks cannot be answered from this campaign's accuracy evidence, and on Mistral-7B - where the perplexity win is a hair, the interval clearing zero by 8e-5 - every accuracy cell spans zero.
+
+Recommendation: Keep RaZeR and nover6 in the main table with these numbers. Claim only: within the NVFP4-compatible E2M1/E0M3 family, at the same scale block and MMA operand-tile contract, N16K64 selection improves on FourOverSix. State plainly that RaZeR attains better perplexity on two of three models with a different element format, and that this campaign cannot compare hardware cost.
+
+## C20 — Compute disclosure is complete
+
+**Classification: supported**
+
+Basis:
+
+- total GPU-hours (all attempts) 173.3; complete 165.6; failed/invalid/stopped 7.6
+- by device {'NVIDIA RTX 6000 Ada Generation': 0.7803857997390959, 'NVIDIA RTX A6000': 172.516626765463, 'cpu-only': 0.0}
+- failed/invalid/not-started attempts registered: 28
+
+Evidence:
+
+- `runs/V90_assemble_deliverables_attempt4/deliverables/COMPUTE_DISCLOSURE.json` sha256 `cdf1a35cddbe52251c6583232d11ae89451cc458ea54edf4cf3424b21265978b`
+- `runs/V83_validate_artifacts_attempt7/artifact_validation/FAILED_OR_SKIPPED_RUNS.json` sha256 `07c8ed9bdbcbc13b31b4a6333412fd9e3587e1d0091b137ebd0a4058a2a4a527`
+
+Compute is disclosed from the run records themselves rather than estimated: COMPUTE_DISCLOSURE.json aggregates gpu_hours = wall_hours x leased device count over every attempt under runs/, including failed, invalid and superseded ones. Total 173.30 GPU-hours across all attempts, of which 165.65 on complete runs and 7.65 on failed, invalid or stopped ones; by device 172.52 h on RTX A6000 and 0.78 h on RTX 6000 Ada, of which 0.67 h is the V23/V81 portability row and the remaining 0.11 h the three V01 clean-allocation probes on Ada. 338 run directories are validated and the 28 non-complete attempts are itemised individually in FAILED_OR_SKIPPED_RUNS.json with exit codes and reasons, so no failure is netted out of the total and no attempt is silently dropped. The largest single row is V32 at 47.16 GPU-h over 12 complete and 4 failed runs: the failures are the Qwen3.8-27B CUDA OOM attempts of findings item 40, and the four 3-GPU reruns that replaced them account for 39.85 GPU-h of that row because gpu_hours multiplies wall time by the three leased devices. Artifact validation reports current_runs_with_problems = 0, with the only five flagged runs superseded by later complete attempts.
+
+Remaining rejection risks:
+
+- GPU-hours are leased-device-hours (wall clock x GPU count), not utilisation-weighted. The three-GPU Qwen3.8-27B runs are pipeline-parallel with one device active at a time, so their 39.85 GPU-h overstates the arithmetic actually performed. This is an honest resource-occupancy disclosure, not a FLOP or efficiency measurement.
+- Every number here is fake-quantized simulation on RTX A6000 and RTX 6000 Ada. The compute total says nothing about the cost of a native FP4/E0M3 implementation, which is out of scope (H01-H03), and must never be read as evidence about deployment efficiency.
+- Wall clock includes model load, activation-quantization overhead and container startup, and the host and /home filesystem were shared with other users throughout, so run times are not a clean benchmark of the method.
+- Energy, power and carbon are not measured at all, so no environmental figure can be derived from this disclosure.
+
+Recommendation: Report 172.5 GPU-hours on RTX A6000 plus 0.8 h on RTX 6000 Ada, 173.3 GPU-hours in total, state explicitly that this counts leased-device-hours across all attempts including failures and retries, and cite COMPUTE_DISCLOSURE.json and FAILED_OR_SKIPPED_RUNS.json by path and SHA-256. Do not present it as an efficiency, cost or environmental result.
+
+## H01 — Native E0M3/MixFP4 executes as claimed
+
+**Classification: out_of_scope**
+
+Basis:
+
+- All results use dequantized BF16 matmul (fake quantization) on RTX A6000 / RTX 6000 Ada; no native E0M3/MixFP4 kernel exists in this campaign.
+- excluded by PROTOCOL_FREEZE.json#scope.excluded
+
+Evidence:
+
+
+## H02 — N8 overhead is ~13% and N16 is ~1.5%
+
+**Classification: out_of_scope**
+
+Basis:
+
+- Overhead figures are external team estimates (KNOWN_RESULTS.json); not measurable on the available GPUs and not re-measured.
+- excluded by PROTOCOL_FREEZE.json#scope.excluded
+
+Evidence:
+
+
+## H03 — Mixed-format hardware has acceptable area/power
+
+**Classification: out_of_scope**
+
+Basis:
+
+- No RTL, simulator or physical evaluation was in scope.
+- excluded by PROTOCOL_FREEZE.json#scope.excluded
+
+Evidence:
+
+
+## Recommended claim scope and venue
+
+This section is authored, not computed. It states what this campaign's evidence will support in a submission, what must be
+narrowed, what must not be claimed at all, and where the work is plausibly publishable. Every statement below is anchored to
+a row of the register above, to a numbered item of `reports/authored/findings_log.md`, or to a deliverable under this run's
+`final/` and `deliverables/` directories. Classifications in the register are mechanical; where this section differs in
+emphasis it is narrowing a claim, never widening one.
+
+## What the evidence supports
+
+**1. A quality claim, stated inside the NVFP4-compatible family.** At a 16-element scale block, ue4m3 block scales and the
+MMA operand-tile contract of the public NVFP4 path, a task-loss-calibrated per-tile element-type map at N16K64 is
+non-inferior to, and significantly better than, the FourOverSix E2M1 baseline on held-out perplexity. Six endpoints across
+three unseen confirmatory families (Mistral-7B-v0.3, Phi-4, OLMo-2-1124-13B) are non-inferior after Holm with every upper
+95% CI below zero, and the three development models agree in sign and significance (findings 12, 17; C05). The honest effect
+size is **0.1-0.5% perplexity**, and Qwen3-4B (roughly 30x larger) is an outlier that must be reported separately and never
+pooled (finding 17).
+
+**2. Preservation of downstream accuracy, not improvement.** On the three confirmatory models the macro accuracy change over
+eight zero-shot tasks is +0.24, +0.31 and +0.08 pp with every CI spanning zero, and all three satisfy the pre-registered
+minimum-pass criterion (finding 14; C06). The correct sentence is "no measurable downstream cost", not "accuracy gain" —
+and that prescription is about **this panel**. The development panel is not uniform and must not be quoted selectively in
+either direction. Two of its models do have macro CIs entirely above zero (Qwen3-4B +0.65 pp [+0.10, +1.19],
+Qwen3.8-27B +0.61 pp [+0.19, +1.04]), but both are Qwen-family and neither is corrected for multiplicity across six models
+and five policy pairs, so they are not a general accuracy result and must not be promoted to one. The third runs the other
+way: Llama-3.1-8B is -0.11 pp [-0.60, +0.37], a lower bound that breaches the frozen -0.5 pp SESOI margin. That is **not**
+a gate failure — the frozen minimum-pass criterion binds confirmatory models only, and `decision_gate.json` evaluates
+exactly Mistral-7B, Phi-4 and OLMo-2 — but it would have failed that criterion had it been inside the gate, and reporting
+the confirmatory sweep without it would be selectively quoting our own pre-registration (finding 41).
+
+**3. The selector earns its keep at a matched budget.** Against the eight controls matched to exact per-module tile counts
+- five random seeds, weight-MSE, magnitude and change-norm - N16 k=3 is better on both corpora on all three models, with
+every one of those 48 paired CIs below zero. The quantifier is deliberately scoped to those eight: the ninth control, the
+density-matched N8 map, is statistically indistinguishable from N16 k=3 as expected, and its six cells span zero
+(Llama-3.1-8B -0.00028 Wiki / -0.00037 C4, Mistral-7B -0.00017 / +0.00015, Qwen3-4B -0.00016 / +0.00026), so a blanket
+"every CI below zero" over all 54 cells would be false (finding 26; C08). This is
+the strongest single result in the campaign and should lead the empirical section.
+
+**4. Robustness to calibration choices.** All 30 model x draw x corpus effects across five independent calibration draws are
+negative (finding 31), and every map improves both held-out in-domain corpora, including maps calibrated on arXiv+GovReport
+(findings 28, 32). Claim robustness to calibration-domain shift; do **not** claim domain-matched calibration is beneficial.
+
+## What must be narrowed
+
+**5. k=3 is pre-registered and conservative, not optimal.** dlogPPL improves monotonically as k decreases in four of the six model x
+corpus cells - on Llama-3.1-8B/C4 and Mistral-7B/C4 the k=5 and k=4 estimates invert by under 1e-4, well inside their
+overlapping CIs - and k=2 dominates k=3 in all six cells (finding 25). k=3 must be justified by the freeze and by
+reliability - the sign-flip FDP is already 0.03-0.32 at k=3 - never as a tuned optimum.
+
+**6. N16K64 is a real quality concession relative to N8K64.** Retained fraction of the N8 gain is 0.63-0.97 and N16 is
+significantly worse than N8 on four of six models (statistical validity report, section 3). The compensating finding, which
+should be reported alongside, is that N16 is markedly **more additive**: it realises 0.66-0.79 of its predicted first-order
+sum against N8's 0.36-0.63 (finding 34d). State the limit of that argument in the same place: on Qwen3-4B the more additive
+N16 map nevertheless delivers the *smaller* actual calibration-set effect (-7.71e-2 against N8's -8.41e-2), so additivity
+is not a proxy for realised gain. Present N16K64 as a hardware-granularity trade with a measured cost, not as
+equivalent to N8K64.
+
+**7. Perplexity below BF16 is not capability above BF16.** On Qwen3-4B the gain is task-visible (+6.44 pp GSM8K
+**flexible-extract** [+3.56, +9.33]), but the model simultaneously agrees with BF16 on fewer tokens, and against BF16 it
+remains -2.05 pp macro [-2.59, -1.51] and -10.99 pp GSM8K flexible-extract [-13.34, -8.64] (findings 21, 22). Report both
+halves or neither - and always name the extractor, because the strict-extract numbers are roughly 2.5x smaller in both
+directions (+2.58 pp [+0.53, +4.62] against FourOverSix, -3.11 pp [-5.00, -1.21] against BF16). Quoting "+6.44 pp GSM8K"
+without "flexible-extract" overstates the headline to any reader who assumes the stricter scorer.
+
+**7a. The long-context result is a sign, not an interval.** V71 evaluates 4,096- and 8,192-token contexts on PG19, and the
+N16 k3 effect is negative in all six model x length cells: Llama-3.1-8B -0.00367 / -0.00359, Mistral-7B -0.00237 / -0.00097,
+Qwen3-4B -0.09314 / -0.09414. But the frozen design draws all 64 (4k) and 32 (8k) windows from **four books**, and the paired
+bootstrap resamples clusters, so every interval rests on k=4. Those intervals are demonstrably anti-conservative: they come
+out narrower than naive window-level intervals, and the small N16-minus-N8 contrast flips both sign and significance between
+adjacent context lengths on two models (finding 37). Report the **sign and point estimate** for Llama-3.1-8B and Mistral-7B
+with no inferential claim attached; Qwen3-4B's effect is roughly twenty-five times larger and survives regardless. Do not
+present these CIs beside the WikiText/C4 endpoints, which rest on 53-235 clusters, without saying what they rest on.
+
+**7b. The maps are not bitwise regenerable; auditability rests on the stored files.** Under a fixed configuration the
+exact-map evaluation *is* bitwise reproducible, on three different A6000 cards and confirmed by two independent cross-card
+reproductions of the same measured tile effect. The gradient-derived scores are
+not: an identical repeat of the seed0 calibration produces map Jaccard 0.978-0.991 with selected-tile counts differing by a
+handful (finding 36; C16 is unsupported for this reason). The claim to make is that every headline result reloads a map file
+from disk and verifies its SHA-256, model and tokenizer revisions, module names and shapes, type block, protocol id and
+source manifest before installing it - **not** that a reviewer re-running calibration will obtain the same map. Report the
+~1.5% run-to-run selection churn against the ~0.29 Jaccard produced by an attention-backend or GPU-generation change, so the
+reader sees that configuration changes dominate run-to-run variation by roughly fiftyfold.
+
+## What must not be claimed
+
+**8. No per-tile causal claim.** This is the sharpest negative result in the campaign and it must be stated, not omitted.
+Where the intervention can be measured exactly - the evaluation is bitwise deterministic, so single-tile effects carry no
+measurement error at all - the first-order score fails **precisely at the scale of the tiles that make up the map**. Across
+**nine** N16 tiles re-measured with four bitwise-identical replicates each, three on each of the three models, the predicted
+CE sign is correct in only **3 of 9** (KL 7 of 9); the tile the k=3 rule *rejects* bears no relation to its prediction on any
+model, helping on Llama-3.1-8B (-8.24e-4) and Mistral-7B (-5.31e-4) and hurting on Qwen3-4B (+1.12e-3), always by two to three
+orders of magnitude more than predicted; and near the median prediction the measured effect is 41x to 1,657x larger with
+essentially arbitrary sign (finding 34e). State the boundary honestly in both directions: the prediction is credible for the
+rare tile whose predicted effect is unusually large - top-tile ratio 0.80 on Mistral-7B and 0.54 on Qwen3-4B - while
+Llama-3.1-8B's top-ranked tile raises CE instead of lowering it in both type blocks. The decisive observation is that
+**Qwen3-4B carries the highest single-tile rank correlation of all six model x type-block cells (+0.239) and still
+mispredicts its median and rejected tiles by -146x and -1,657x**, so the failure cannot be waved away as an artifact of the
+models where the score happens to look worst. Rank correlation between predicted and measured single-tile effects spans
+-0.20 to +0.24, and fewer than a third of Llama tiles predicted to help actually helped.
+The reproducible object is therefore the **aggregate effect of a hash-verified map**, never the individual tile selections;
+the same conclusion arrives independently from kernel-noise (finding 2), cross-GPU (finding 19), calibration-draw
+(finding 31) and multiplicity (findings 7, 18) evidence.
+
+**9. No state-of-the-art claim.** RaZeR beats N16K64 on two of the three models where both were measured, and wins by roughly
+3x on Llama-3.1-8B (finding 30; C19). The defensible framing is explicitly matched-datapath: within the E2M1/E0M3 family that
+the existing NVFP4 instruction can already issue, tile selection improves on FourOverSix. RaZeR uses a different element
+format and therefore a different datapath; leaving it out of the comparison table would be a serious integrity problem.
+
+**10. No per-tile or per-layer interpretability.** Mean pairwise Jaccard between calibration draws is 0.11-0.38, only 221 of
+7,375 tiles Llama ever selects appear in all five draws, and a backend change alone perturbs the selection as much as a
+different datacentre GPU does (findings 3, 31).
+
+**11. The archived multiplicity argument is invalid and must be replaced, not repeated.** Measured per-tile CE/KL correlation
+is 0.32-0.65, so the independence-based bound does not hold; the defensible statement is the empirical sign-flip FDP
+(findings 7, 18; C13 is unsupported by design).
+
+## Out of scope for this campaign
+
+**12.** Native FP4/E0M3 Tensor Core execution, SM120, kernel throughput, the ~13% / ~1.5% overhead figures, and area/power are
+**out of scope** and were excluded before any result was opened. Every number here is fake-quantized: dequantized BF16 matmul
+on RTX A6000 and RTX 6000 Ada (H01-H03). No speedup, no efficiency and no hardware co-design claim is supported by this
+evidence, and the overhead figures remain unverified external estimates. A submission that implies deployment benefit
+without a kernel measurement would be making a claim this campaign explicitly cannot back.
+
+## Recommended submission scope and venue
+
+The strongest honest package is **a rigorous empirical study of task-loss calibration for FP4 element-type selection**, whose
+contributions are (i) a matched-budget demonstration that calibrated selection beats every heuristic control, (ii) a
+six-model, six-endpoint non-inferiority result with clustered bootstrap inference and a pre-registered freeze, and (iii) a
+carefully measured **negative** result that the first-order score does not predict individual tile effects even though the
+map-level effect is real and reproducible. Contribution (iii) is unusual and valuable, and the campaign's determinism and
+resolution analysis (finding 34) is the evidence that makes it credible rather than anecdotal.
+
+The principal rejection risks, in the order a reviewer will raise them: the headline effect is 0.1-0.5% perplexity with no
+downstream accuracy gain; a published prior-art format (RaZeR) is better on two of three models; the mechanism the method is
+named for is not supported at the tile level; and there is no hardware measurement, so the practical motivation rests on
+external estimates. Any one of those is survivable; together they make a top-tier main-conference claim of a *better
+quantization method* unlikely to succeed.
+
+Recommended: submit as an empirical/negative-result study - a quantization or efficient-ML workshop at a top-tier venue, or a
+venue that explicitly values careful evaluation and reproduction - and reserve a main-conference submission until a native
+E0M3 kernel measurement exists to convert the granularity argument into a measured deployment benefit. If a main-conference
+submission is attempted regardless, the title and abstract must not promise a state-of-the-art method, and sections 8, 9 and
+12 above must appear in the paper rather than only in an appendix.
+
+

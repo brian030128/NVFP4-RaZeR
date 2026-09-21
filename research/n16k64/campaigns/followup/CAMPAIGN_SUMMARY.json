@@ -1,0 +1,106 @@
+{
+ "artifact_audit_passed": true,
+ "attempt_accounting": {
+  "failed_or_invalid": 5,
+  "run_directories": 10,
+  "status_counts": {
+   "complete": 5,
+   "failed": 4,
+   "invalid": 1
+  }
+ },
+ "authoritative_runs": {
+  "analysis": "F30_followup_analysis_attempt1",
+  "llama": "F21_full_llama8b_attempt2",
+  "maps": "F10_derive_maps_attempt2",
+  "mistral": "F22_full_mistral7b_attempt3",
+  "qwen": "F20_full_qwen4b_attempt2"
+ },
+ "campaign_end_utc": "2026-09-17T15:49:21Z",
+ "campaign_start_utc": "2026-09-17T09:04:38Z",
+ "claims_prohibited": [
+  "reliable individual-tile causal signs or magnitudes",
+  "k=3 simultaneous per-tile confidence guarantee",
+  "universal CE or KL superiority",
+  "native FP4/E0M3 Tensor Core execution",
+  "latency or speedup",
+  "runtime overhead",
+  "area",
+  "power",
+  "Blackwell performance from fake quantization"
+ ],
+ "classifications": {
+  "dose_response": {
+   "boundary": "group-level ranking evidence only; never individual-tile calibration or causality",
+   "classification": "supported",
+   "gate": "for each predictor, all four development Spearman estimates have expected direction and at least three 95% CIs exclude zero",
+   "passed": true,
+   "predictor_gates": {
+    "ce": {
+     "all_four_expected_direction": true,
+     "ci_excluding_zero_in_expected_direction": 3,
+     "expected_direction": "positive",
+     "passed": true
+    },
+    "margin": {
+     "all_four_expected_direction": true,
+     "ci_excluding_zero_in_expected_direction": 3,
+     "expected_direction": "negative",
+     "passed": true
+    }
+   }
+  },
+  "mistral_veto_completion": {
+   "boundary": "completes the one-shot Mistral matrix; does not revise the completed mechanism development gate",
+   "classification": "mistral_veto_symmetry_not_supported",
+   "gate": "actual add-back is worse than conjunction and matched random in both corpora, with all four mean contrasts Holm-significant in the frozen C-Mistral family",
+   "passed": false
+  },
+  "objective_ablation": {
+   "boundary": "natural-threshold maps are descriptive because selected counts differ",
+   "classification": "no_universal_conjunction_superiority",
+   "conjunction_gates": {
+    "conjunction_better_than_ce_matched_k": {
+     "holm_significant_endpoints": 2,
+     "passed": false,
+     "positive_in_all_four_development_endpoints": false
+    },
+    "conjunction_better_than_kl_matched_k": {
+     "holm_significant_endpoints": 2,
+     "passed": false,
+     "positive_in_all_four_development_endpoints": false
+    }
+   },
+   "gate": "each single-objective matched-K minus conjunction contrast is positive in all four development endpoints and Holm-significant in at least three",
+   "information_vs_random_gates": {
+    "ce_matched_k": {
+     "holm_significant_endpoints": 4,
+     "negative_in_all_four_development_endpoints": true,
+     "passed": true
+    },
+    "conjunction": {
+     "holm_significant_endpoints": 4,
+     "negative_in_all_four_development_endpoints": true,
+     "passed": true
+    },
+    "kl_matched_k": {
+     "holm_significant_endpoints": 4,
+     "negative_in_all_four_development_endpoints": true,
+     "passed": true
+    }
+   },
+   "passed": false
+  }
+ },
+ "gpu_hours": {
+  "all_attempts": 9.108886831469006,
+  "failed_non_cotenancy_attempts": 0.006474195255173577,
+  "invalid_cotenancy_attempts": 0.0313229978746838,
+  "valid_complete_attempts": 9.07108963833915
+ },
+ "maximum_concurrent_gpus": 2,
+ "optional_qwen27b_run": "skipped by frozen promotion/time gate",
+ "protocol_sha256": "22a78ee87078543da7d40ca39fabc56078f250438f0ec3d4a540adeec8c132a9",
+ "schema": "mixfp4-followup-campaign-summary/v1",
+ "wall_seconds": 24283.9601290226
+}

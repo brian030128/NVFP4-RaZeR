@@ -1,0 +1,28 @@
+{
+  "schema": "mixfp4-followup-implementation-amendment/v1",
+  "amendment_id": "ANALYSIS_IMPLEMENTATION_AMENDMENT_001",
+  "created_utc": "2026-09-17T09:39:12Z",
+  "timing": {
+    "before_any_new_ppl_outcome_was_available": true,
+    "qwen_attempt2_state": "queued; no GPU lease and no ppl_report",
+    "llama_attempt2_state": "running; ppl_report evaluation was empty and installs was 0",
+    "mistral_attempt2_state": "running; ppl_report evaluation was empty and installs was 0"
+  },
+  "frozen_scientific_protocol_sha256": "22a78ee87078543da7d40ca39fabc56078f250438f0ec3d4a540adeec8c132a9",
+  "file": "source/NVFP4-RaZeR-main/campaign/followup_analyze.py",
+  "original_sha256": "7a7fac9739acc527ee79dd170131876a72b1039d094e946752ffa106fddb6e9e",
+  "original_copy": "freeze_history/followup_analyze_v1_7a7fac9739acc527.py",
+  "amended_sha256": "800275966f1c291fc5d26c9a559dec338b154103ccbdc5f047bbde9cc44db959",
+  "defect": "The original paired-array provenance lookup keyed map SHA-256 values only by policy name. Policy names repeat across models, so Llama and Qwen NPZ metadata would have recorded the Mistral digest for identically named policies even though evaluation used the correct model-specific map.",
+  "correction": "Key paired-array map-digest provenance by (model, policy) and pass the model-specific lookup to the array writer.",
+  "scientific_effect": "none",
+  "unchanged": [
+    "all map files and map definitions",
+    "all GPU evaluation plans and model computations",
+    "all endpoint definitions and contrasts",
+    "all bootstrap seeds, replicates, confidence intervals, p-values, Holm families, gates, and classifications",
+    "all numeric result calculations"
+  ],
+  "affected_output": "Only policy_map_sha256 metadata inside the six paired-cluster NPZ files.",
+  "outcome_blind": true
+}

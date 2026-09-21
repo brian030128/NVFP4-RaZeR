@@ -1,0 +1,95 @@
+{
+ "claims": [
+  {
+   "claim": "N16 k2 broadly improves PPL versus FourOverSix in the frozen breadth panel",
+   "classification": "supported_post_hoc",
+   "evidence": "runs/P10_P11_analysis_attempt1/analysis_breadth/P10_P11_BREADTH_ANALYSIS.json",
+   "id": "C01",
+   "limitation": "k2 was selected from prior results; this is a post-hoc robustness extension"
+  },
+  {
+   "claim": "N16 k2 materially improves over N16 k3",
+   "classification": "unsupported_practically_equivalent",
+   "evidence": "runs/P10_P11_analysis_attempt1/analysis_breadth/P10_P11_BREADTH_ANALYSIS.json",
+   "id": "C02",
+   "limitation": "development/breadth gate; no per-model threshold tuning"
+  },
+  {
+   "claim": "The k2 gain is selector-specific rather than selected-weight density",
+   "classification": "supported",
+   "evidence": "runs/P20_analysis_attempt1/analysis_p20/P20_DENSITY_CONTROL_ANALYSIS.json",
+   "id": "C03",
+   "limitation": "requires both global and per-module selected-weight controls"
+  },
+  {
+   "claim": "N16 quality is no worse than N8 at matched selected-weight density",
+   "classification": "unsupported_tradeoff_only",
+   "evidence": "runs/P20_analysis_attempt1/analysis_p20/P20_DENSITY_CONTROL_ANALYSIS.json",
+   "id": "C04",
+   "limitation": "native deployment overhead was not measured"
+  },
+  {
+   "claim": "A replacement selector has better full-map PPL and tile-effect sign/rank fidelity",
+   "classification": "unsupported_old_selector_fallback",
+   "evidence": "runs/P51_analysis_attempt1/analysis_p51/P51_TILE_FIDELITY_ANALYSIS.json",
+   "id": "C05",
+   "limitation": "tile interventions are the mechanistic inference unit"
+  },
+  {
+   "claim": "The frozen winner generalizes prospectively to two held-out families",
+   "classification": "unsupported",
+   "evidence": [
+    "runs/P71_analysis_attempt1/analysis_p71/P71_HELDOUT_PPL_ANALYSIS.json"
+   ],
+   "id": "C06",
+   "limitation": "software/fake-quant PPL only"
+  },
+  {
+   "claim": "The frozen winner is downstream non-inferior on the frozen eight-task suite",
+   "classification": "unsupported_or_stopped_by_gate",
+   "evidence": [
+    "runs/P71_analysis_attempt1/analysis_p71/P71_HELDOUT_PPL_ANALYSIS.json"
+   ],
+   "id": "C07",
+   "limitation": "GSM8K and PG19 remain secondary/exploratory transfers"
+  },
+  {
+   "claim": "The frozen winner beats the strongest fair prior-art baseline broadly enough for SOTA framing",
+   "classification": "unsupported",
+   "evidence": "runs/P71_analysis_attempt1/analysis_p71/P71_HELDOUT_PPL_ANALYSIS.json",
+   "id": "C08",
+   "limitation": "broad SOTA requires a corrected, scope-matched full-panel superiority family; held-out component alone is insufficient"
+  },
+  {
+   "claim": "Exact-map fake-quant quality is portable between A6000 and RTX 6000 Ada",
+   "classification": "unsupported",
+   "evidence": "runs/P75_analysis_attempt1/analysis_p75/P75_PORTABILITY_ANALYSIS.json",
+   "id": "C09",
+   "limitation": "quality portability only; no native performance implication"
+  },
+  {
+   "claim": "The first-order tile score establishes tile-level causality or interpretability",
+   "classification": "unsupported",
+   "evidence": "parent negative evidence plus P51",
+   "id": "C10",
+   "limitation": "old exact CE sign was 3/9; aggregate map CIs are conditional on the stored map"
+  },
+  {
+   "claim": "k is a per-tile significance guarantee based on independent CE/KL tests",
+   "classification": "unsupported",
+   "evidence": "parent multiplicity audit",
+   "id": "C11",
+   "limitation": "CE/KL dependence invalidates the independence argument"
+  },
+  {
+   "claim": "MixFP4 executed native FP4/E0M3 Tensor Cores or establishes overhead, speedup, area, or power",
+   "classification": "out_of_scope_unsupported",
+   "evidence": "protocol scope",
+   "id": "C12",
+   "limitation": "all experiments use BF16-dequantized software/fake quantization"
+  }
+ ],
+ "protocol_sha256": "bfee511543475db7fba3eca5d62e16570ca34d800831d055bfd45532492413c1",
+ "recommended_scope": "N16/N8 engineering trade-off study with deployment benefit unmeasured",
+ "schema_version": "1.0"
+}

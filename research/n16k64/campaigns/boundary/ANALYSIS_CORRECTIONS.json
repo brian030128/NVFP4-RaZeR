@@ -1,0 +1,82 @@
+{
+  "schema": "mixfp4-boundary-corruption-analysis-corrections/v1",
+  "created_utc": "2026-09-20T21:21:25Z",
+  "correction_id": "AC01",
+  "status": "frozen_before_successful_outcome_analysis",
+  "triggering_attempts": [
+    {
+      "run_id": "B40_boundary_corruption_analysis_attempt1",
+      "status": "docker_failed",
+      "reason": "The reference-campaign mount list was passed as relative volume names instead of absolute read-only bind paths; no analysis code ran and no outcome was read."
+    },
+    {
+      "run_id": "B40_boundary_corruption_analysis_attempt2",
+      "status": "failed",
+      "reason": "The frozen analysis stopped at the report-level evaluation_manifest_sha256 equality check for qwen4b before accessing any evaluation outcome value."
+    }
+  ],
+  "bug": "The original gate compared a container-level evaluation-manifest hash. The prior Qwen mechanism report includes outcome-blind screening-provenance fields (original_windows, screening_descriptive_only, selected_cluster_ids, and selected_window_indices) that the new full evaluator omits. Those metadata-only fields change the container hash even though the exact token windows and natural-cluster assignments are identical.",
+  "outcome_blind_basis": {
+    "new_ppl_values_inspected_before_freeze": false,
+    "fields_used": [
+      "model",
+      "model_class",
+      "module_manifest_sha256",
+      "length",
+      "domains",
+      "teacher",
+      "evaluation_stage",
+      "attention_backend",
+      "attn_implementation",
+      "spec",
+      "windows",
+      "dataset repository and revision",
+      "window token SHA-256 sequence",
+      "natural-cluster assignment sequence",
+      "corpus token-accounting metadata"
+    ],
+    "fields_explicitly_ignored_as_non_scientific_provenance": [
+      "path",
+      "original_windows",
+      "screening_descriptive_only",
+      "selected_cluster_ids",
+      "selected_window_indices"
+    ]
+  },
+  "identity_audit": {
+    "llama8b": {
+      "report_manifest_hashes_equal": true,
+      "old_evaluation_manifest_sha256": "8d72dbf23db218671856f620bd49c2226db829880673f106078e375a8ca35197",
+      "new_evaluation_manifest_sha256": "8d72dbf23db218671856f620bd49c2226db829880673f106078e375a8ca35197",
+      "c4": {"identity_sha256": "72102851a3ccec2efd9a6b07dc845027dfbd26644e85c4804e58cb14237529b8", "windows": 256, "clusters": 231},
+      "wiki": {"identity_sha256": "d7c4ada3ba129bde39e0abbc43bfb7732ccf478b30f265552d393402fcb18cff", "windows": 141, "clusters": 53}
+    },
+    "qwen4b": {
+      "report_manifest_hashes_equal": false,
+      "old_evaluation_manifest_sha256": "b55a04f4a7c1a478e8147547b6d08d6cc4f8584e4631f94fe8d611a3bcc774db",
+      "new_evaluation_manifest_sha256": "9abe458d49f9fa9e61537a68192e083b53563689b5154ac68b0f529f65e4819f",
+      "old_report_sha256": "ac5f52b091f5e41ef057ba4fe87b3548c53e9bfcfcb11ccd68afdca96e8e78ce",
+      "new_report_sha256": "7199f4b4a5b25d27b72a3b32f198fb5b374db3b504552a94cae4b03ce5445264",
+      "c4": {"identity_sha256": "4a9c7b45c29becc273e25943101a7f3bcfe97e3026532f97a5031dd17625baf1", "windows": 256, "clusters": 231},
+      "wiki": {"identity_sha256": "bc865dadf7160d930bde5949bba08dc0ff118b9534609f2561eaa7cec40fcd47", "windows": 146, "clusters": 53}
+    },
+    "mistral7b": {
+      "report_manifest_hashes_equal": true,
+      "old_evaluation_manifest_sha256": "f15f8bad484a93abafa08985a924e255d5f2cdd535bfb9c1d8785487b258cafe",
+      "new_evaluation_manifest_sha256": "f15f8bad484a93abafa08985a924e255d5f2cdd535bfb9c1d8785487b258cafe",
+      "c4": {"identity_sha256": "38f2060c786069f58bef85dbea380896c428aa84182a3522460f5365a871e3b1", "windows": 256, "clusters": 235},
+      "wiki": {"identity_sha256": "3efe295e879f4a5e2d45f8b3b46a89c416daa13b3b7ae0d03fb8ea18d89d1b01", "windows": 163, "clusters": 57}
+    }
+  },
+  "implementation": {
+    "frozen_original_path": "source/NVFP4-RaZeR-main/campaign/boundary_analyze.py",
+    "frozen_original_sha256": "e70eec4f306acc473d8262d8f33386dcc9b7fe0f6b9ff53a35100f33051daece",
+    "corrected_copy_path": "source/NVFP4-RaZeR-main/campaign/boundary_analyze_postfreeze.py",
+    "corrected_copy_sha256": "d38881276b4a47c4bb7a0654cea229095b5a92faa0ddcb3b4f67e2a900a1c20f",
+    "original_preserved_byte_identical": true,
+    "scientific_changes": false,
+    "maps_or_endpoints_changed": false,
+    "statistics_or_seeds_changed": false,
+    "only_change": "Replace the overbroad report-manifest equality test with explicit exact equality checks over all scientific evaluation identity fields; retain both old and new container hashes in result provenance."
+  }
+}

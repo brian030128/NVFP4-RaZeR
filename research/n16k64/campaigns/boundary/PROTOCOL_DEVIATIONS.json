@@ -1,0 +1,105 @@
+{
+  "schema": "mixfp4-boundary-corruption-protocol-deviations/v1",
+  "created_utc": "2026-09-20T07:19:41Z",
+  "updated_utc": "2026-09-20T21:21:25Z",
+  "campaign_start_utc": "2026-09-18T08:03:03Z",
+  "hour20_gpu_launch_cutoff_utc": "2026-09-19T04:03:03Z",
+  "hour24_target_utc": "2026-09-19T08:03:03Z",
+  "time_target_met": false,
+  "deviations": [
+    {
+      "id": "TD01",
+      "requirement": "Stop launching new GPU jobs at campaign hour 20 and target completion within 24 wall-clock hours.",
+      "classification": "operational_time_gate_deviation",
+      "affected_runs": [
+        {
+          "run_id": "B30_full_llama8b_attempt3",
+          "started_utc": "2026-09-20T07:14:11.715722Z",
+          "purpose": "required full frozen Llama evaluation retry"
+        },
+        {
+          "run_id": "B31_full_qwen4b_attempt3",
+          "started_utc": "2026-09-20T07:14:11.735681Z",
+          "purpose": "required full frozen Qwen evaluation retry"
+        }
+      ],
+      "cause": "The original Llama and Qwen attempt2 runs were correctly invalidated after foreign co-tenancy appeared, and no clean replacement run was launched before the hour-20 cutoff. Workflow continuation occurred after the cutoff.",
+      "scientific_safeguards": [
+        "The k=3 method, B=4 coverage choice, all tile lists, maps, p levels, random seeds, endpoint families, power classifications, and analysis code were frozen before any new PPL outcome.",
+        "No partial scientific output from either invalid attempt2 is used.",
+        "Attempt3 uses the identical 461-entry evaluator source manifest and identical frozen protocol/map plans.",
+        "Attempt3 is limited to required retries; no exploratory arm was added."
+      ],
+      "impact": "The elapsed-time/launch discipline was not met. If the 20-hour launch cutoff is treated as an absolute admissibility condition, the late Llama and Qwen results must be regarded as protocol-deviating sensitivity evidence rather than fully time-conformant evidence. The deviation does not itself change frozen scientific definitions or paired inference, but it remains an unresolved submission-risk limitation."
+    },
+    {
+      "id": "TD02",
+      "requirement": "Maintain verified GPU ownership at intervals no greater than 60 seconds and retain every late required retry without treating it as time-conformant.",
+      "classification": "monitoring_fail_closed_and_late_retry_chain",
+      "affected_runs": [
+        {
+          "run_id": "B30_full_llama8b_attempt3",
+          "status": "invalid",
+          "reason": "two nvidia-smi query timeouts produced a 578.615482-second verified-ownership gap"
+        },
+        {
+          "run_id": "B31_full_qwen4b_attempt3",
+          "status": "invalid",
+          "reason": "two nvidia-smi query timeouts produced a 479.057222-second verified-ownership gap"
+        },
+        {
+          "run_id": "B30_full_llama8b_attempt4",
+          "status": "invalid",
+          "reason": "the added strict watchdog encountered its own empty-container-ID startup race and monitoring was therefore not established"
+        },
+        {
+          "run_id": "B31_full_qwen4b_attempt4",
+          "status": "complete",
+          "started_utc": "2026-09-20T12:47:43.105348Z",
+          "finished_utc": "2026-09-20T19:06:29.757489Z",
+          "purpose": "full frozen Qwen evaluation retry with independent strict watchdog"
+        },
+        {
+          "run_id": "B30_full_llama8b_attempt5",
+          "status": "complete",
+          "started_utc": "2026-09-20T12:49:21.012568Z",
+          "finished_utc": "2026-09-20T21:11:06.481752Z",
+          "purpose": "full frozen Llama evaluation retry with independent strict watchdog"
+        }
+      ],
+      "scientific_safeguards": [
+        "Attempts 3 and Llama attempt4 are retained but all scientific outputs are marked invalid and unused.",
+        "The authoritative Qwen attempt4 and Llama attempt5 use the same frozen maps, plans, protocol hash, evaluation windows, revisions, and 461-entry evaluator source manifest as the clean Mistral run.",
+        "Independent strict watchdogs fail closed on query errors, ownership ambiguity, foreign compute processes, or verified sample gaps greater than 60 seconds.",
+        "Qwen attempt4 recorded 757 clean strict samples with a maximum gap of 32.201 seconds; Llama attempt5 recorded 1003 clean strict samples with a maximum gap of 33.525 seconds.",
+        "No partial output from any invalid attempt is reused."
+      ],
+      "impact": "The valid scientific arrays have complete GPU-ownership evidence, but their launches remain later than the predeclared hour-20 cutoff. They must be disclosed as protocol-deviating required-retry evidence; the campaign does not satisfy its 24-hour operational target."
+    },
+    {
+      "id": "TD03",
+      "requirement": "Run the hash-frozen analysis implementation without changing frozen scientific rules after outcomes exist.",
+      "classification": "postfreeze_analysis_plumbing_correction",
+      "affected_runs": [
+        {
+          "run_id": "B40_boundary_corruption_analysis_attempt1",
+          "status": "docker_failed",
+          "reason": "invalid relative read-only bind-mount specification"
+        },
+        {
+          "run_id": "B40_boundary_corruption_analysis_attempt2",
+          "status": "failed",
+          "reason": "overbroad Qwen report-level evaluation-manifest hash equality check"
+        }
+      ],
+      "scientific_safeguards": [
+        "The frozen original analysis file remains byte-identical at SHA-256 e70eec4f306acc473d8262d8f33386dcc9b7fe0f6b9ff53a35100f33051daece.",
+        "The correction was frozen in ANALYSIS_CORRECTIONS.json before a successful outcome analysis and before any new PPL value was inspected.",
+        "All model identity, revision, module manifest, evaluation settings, token-window SHA-256 sequences, natural-cluster assignments, dataset revisions, and token-accounting fields must match exactly.",
+        "No map, arm, endpoint, bootstrap seed, Holm family, classification rule, or outcome value is changed or selected by this correction.",
+        "Both the old and new report-container manifest hashes remain recorded in provenance."
+      ],
+      "impact": "This is a non-scientific analysis-plumbing correction, not a relaxation of frozen evaluation identity. It replaces a metadata-sensitive container-hash comparison with stronger field-level scientific identity checks. The correction and both failed CPU attempts remain auditable."
+    }
+  ]
+}

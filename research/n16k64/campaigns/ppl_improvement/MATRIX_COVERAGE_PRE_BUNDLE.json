@@ -1,0 +1,575 @@
+{
+ "authoritative_final_coverage": "P81 bundle_metadata/MATRIX_COVERAGE.json",
+ "matrix_source": "handoff/agent_handoff/EXPERIMENT_MATRIX.csv",
+ "matrix_source_sha256": "923a3d8f08f1a9e16d797af08e22784b68cd95226aed152ce64f1259ec291a2c",
+ "nonterminal_rows": [
+  "P02_CARRYOVER_FIXES",
+  "P81_ARTIFACT_BUNDLE"
+ ],
+ "protocol_sha256": "bfee511543475db7fba3eca5d62e16570ca34d800831d055bfd45532492413c1",
+ "rows": [
+  {
+   "calibration": "existing manifests",
+   "comparators_or_controls": "NA",
+   "evaluation": "hashes; coverage; provenance",
+   "evidence": [
+    "P00_input_audit_attempt3"
+   ],
+   "gate": "G0",
+   "k_values": "NA",
+   "matrix_id": "P00_INPUT_AUDIT",
+   "methods": "read-only verification",
+   "model_panel": "all",
+   "models": "all referenced inputs",
+   "notes": "Resolve exactly one authoritative prior campaign and retain all failed/OOM/invalid attempts.",
+   "phase": "0",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "parent seed0",
+   "comparators_or_controls": "parent values and tolerances",
+   "evaluation": "frozen WikiText subset then full anchor",
+   "evidence": [
+    "P01_anchor_acceptance_attempt1"
+   ],
+   "gate": "G0",
+   "k_values": "3",
+   "matrix_id": "P01_ANCHOR_REPRO",
+   "methods": "FourOverSix; N16 exact stored map",
+   "model_panel": "development",
+   "models": "Llama-3.1-8B; Mistral-7B-v0.3",
+   "notes": "Use one clean A6000 unless the parent anchor specifies otherwise; do not regenerate the map.",
+   "phase": "0",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "existing evidence",
+   "comparators_or_controls": "parent authoritative report",
+   "evaluation": "unit/integration/clean-extract verification",
+   "evidence": [],
+   "gate": "G0",
+   "k_values": "NA",
+   "matrix_id": "P02_CARRYOVER_FIXES",
+   "methods": "statistics and reviewer-bundle repairs",
+   "model_panel": "all",
+   "models": "CPU artifacts",
+   "notes": "Check independent task RNG; plus-one p; redacted chain; Windows-safe names; conditional-on-map wording.",
+   "phase": "0",
+   "priority": "P0",
+   "reason": "redaction-chain and Windows-safe clean-extract checks complete only in P81",
+   "requiredness": "required_if_unresolved",
+   "status": "pending_P81_bundle_verification"
+  },
+  {
+   "calibration": "seed0 64+64 len512",
+   "comparators_or_controls": "FourOverSix; N8/N16 k3",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P10_P11_analysis_attempt1"
+   ],
+   "gate": "G1",
+   "k_values": "2",
+   "matrix_id": "P10_K2_BREADTH",
+   "methods": "N8; N16",
+   "model_panel": "breadth_replication",
+   "models": "Qwen3.8-27B; Phi-4; OLMo-2-13B",
+   "notes": "Generate exact maps; Qwen OOM remains visible and must not trigger a model/config change.",
+   "phase": "1",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "matched parent protocol",
+   "comparators_or_controls": "pair all compatible methods",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P10_P11_analysis_attempt1"
+   ],
+   "gate": "G1",
+   "k_values": "NA",
+   "matrix_id": "P11_BASELINE_COMPLETION",
+   "methods": "BF16; NVFP4; FourOverSix; all-E0M3; RaZeR wonly_shared_act; RaZeR native_rows; NOver6 wonly_shared_act; NOver6 native_rows",
+   "model_panel": "breadth_replication",
+   "models": "Qwen3.8-27B; Phi-4; OLMo-2-13B",
+   "notes": "Reuse only identity-exact baselines; unsupported arms require explicit reasons.",
+   "phase": "1",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "seed0 64+64 len512",
+   "comparators_or_controls": "EXISTING_K_SWEEP.csv",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P12_existing_k2_provenance_attempt1"
+   ],
+   "gate": "G1",
+   "k_values": "2",
+   "matrix_id": "P12_EXISTING_K2_PROVENANCE",
+   "methods": "N8; N16",
+   "model_panel": "development",
+   "models": "Llama-3.1-8B; Qwen3-4B; Mistral-7B-v0.3",
+   "notes": "Verify and reuse; rerun only if provenance or code identity fails.",
+   "phase": "1",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "seed0 64+64 len512",
+   "comparators_or_controls": "N8 matched selected weights; random s0-s4; weight-MSE; magnitude; change-norm; activation-weighted",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P20_analysis_attempt1"
+   ],
+   "gate": "G3",
+   "k_values": "2",
+   "matrix_id": "P20_K2_DENSITY_DEV",
+   "methods": "N16 k2 fixed-budget controls",
+   "model_panel": "development",
+   "models": "Llama-3.1-8B; Qwen3-4B; Mistral-7B-v0.3",
+   "notes": "Report global and per-layer/module matching separately.",
+   "phase": "2",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "seed0 64+64 len512",
+   "comparators_or_controls": "best controls frozen in P20",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P21_terminal_attempt1"
+   ],
+   "gate": "G1+G3",
+   "k_values": "2",
+   "matrix_id": "P21_K2_DENSITY_BREADTH",
+   "methods": "N16 k2 fixed-budget controls",
+   "model_panel": "breadth_replication",
+   "models": "Qwen3.8-27B; Phi-4; OLMo-2-13B",
+   "notes": "Run only controls selected without breadth-result cherry-picking.",
+   "phase": "2",
+   "priority": "P1",
+   "reason": null,
+   "requiredness": "conditional",
+   "status": "complete"
+  },
+  {
+   "calibration": "draw1-draw4 each 64+64 len512",
+   "comparators_or_controls": "seed0; FourOverSix",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P30_analysis_attempt1"
+   ],
+   "gate": "G1",
+   "k_values": "2",
+   "matrix_id": "P30_K2_DRAWS",
+   "methods": "N8; N16",
+   "model_panel": "all_existing",
+   "models": "Llama-3.1-8B; Qwen3-4B; Mistral-7B-v0.3; Qwen3.8-27B; Phi-4; OLMo-2-13B",
+   "notes": "Keep within-evaluation and between-draw uncertainty separate.",
+   "phase": "3",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "seed0 128+128 len512",
+   "comparators_or_controls": "64+64 k2",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P31_analysis_attempt1"
+   ],
+   "gate": "G5",
+   "k_values": "2",
+   "matrix_id": "P31_CAL_SIZE_128",
+   "methods": "N8; N16",
+   "model_panel": "development",
+   "models": "Llama-3.1-8B; Qwen3-4B; Mistral-7B-v0.3",
+   "notes": "Freeze practical marginal-gain threshold before opening results.",
+   "phase": "3",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "seed0 256+256 len512",
+   "comparators_or_controls": "128+128 k2",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P32_terminal_attempt1"
+   ],
+   "gate": "G5",
+   "k_values": "2",
+   "matrix_id": "P32_CAL_SIZE_256",
+   "methods": "N8; N16",
+   "model_panel": "development",
+   "models": "Llama-3.1-8B; Qwen3-4B; Mistral-7B-v0.3",
+   "notes": "Run only if P31 continuation gate passes.",
+   "phase": "3",
+   "priority": "P1",
+   "reason": "P31 did not meet the predeclared cross-model marginal-gain rule",
+   "requiredness": "conditional",
+   "status": "stopped_by_gate"
+  },
+  {
+   "calibration": "seed0 64+64 len512",
+   "comparators_or_controls": "FourOverSix; all-E0M3",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P40_analysis_attempt1"
+   ],
+   "gate": "G2",
+   "k_values": "0.5; 1.0; 1.5; 2.0; 2.5; 3.0",
+   "matrix_id": "P40_LOWER_K_SEARCH",
+   "methods": "N16",
+   "model_panel": "development",
+   "models": "Llama-3.1-8B; Qwen3-4B; Mistral-7B-v0.3",
+   "notes": "Development-only; select one global k using frozen lexicographic rule.",
+   "phase": "4",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "seed0+draw1-draw4",
+   "comparators_or_controls": "seed0; pooled moments; draw mean; draw median; consensus 3/5; natural and matched budget",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P41_analysis_attempt1"
+   ],
+   "gate": "G2+G3",
+   "k_values": "global k from P40 and k2 anchor",
+   "matrix_id": "P41_DRAW_AGG_DEV",
+   "methods": "N16 aggregation candidates",
+   "model_panel": "development",
+   "models": "Llama-3.1-8B; Qwen3-4B; Mistral-7B-v0.3",
+   "notes": "Never average masks and call it pooled scores.",
+   "phase": "4",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "seed0+draw1-draw4",
+   "comparators_or_controls": "seed0 k2 and strongest fixed-budget control",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P42_terminal_attempt1"
+   ],
+   "gate": "G2+G3",
+   "k_values": "frozen global k",
+   "matrix_id": "P42_DRAW_AGG_BREADTH",
+   "methods": "frozen best aggregation",
+   "model_panel": "breadth_replication",
+   "models": "Qwen3.8-27B; Phi-4; OLMo-2-13B",
+   "notes": "Candidate must be frozen from development panel.",
+   "phase": "4",
+   "priority": "P1",
+   "reason": null,
+   "requiredness": "conditional",
+   "status": "complete"
+  },
+  {
+   "calibration": "development calibration only",
+   "comparators_or_controls": "same selected-weight budget",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P50_analysis_attempt2"
+   ],
+   "gate": "G6",
+   "k_values": "frozen global threshold/budget",
+   "matrix_id": "P50_SELECTOR_DEV",
+   "methods": "first-order CE/KL; activation-weighted error; layer reconstruction; diagonal Hessian/GPTQ proxy",
+   "model_panel": "development",
+   "models": "Llama-3.1-8B; Qwen3-4B; Mistral-7B-v0.3",
+   "notes": "Stage candidates; do not run a blind Cartesian product.",
+   "phase": "5",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "development calibration/eval subset",
+   "comparators_or_controls": "at least 50 stratified tiles/model",
+   "evaluation": "CE; KL; layer reconstruction",
+   "evidence": [
+    "P51_analysis_attempt1"
+   ],
+   "gate": "G6",
+   "k_values": "NA",
+   "matrix_id": "P51_TILE_FIDELITY",
+   "methods": "exact single-tile interventions for old and candidate scores",
+   "model_panel": "development",
+   "models": "Llama-3.1-8B; Qwen3-4B; Mistral-7B-v0.3",
+   "notes": "Report sign CI; Spearman; Kendall; calibration; strata and sampling weights.",
+   "phase": "5",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "frozen calibration",
+   "comparators_or_controls": "old selector; strongest heuristic; equal budget",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P52_terminal_attempt1"
+   ],
+   "gate": "G6",
+   "k_values": "NA",
+   "matrix_id": "P52_SELECTOR_BREADTH",
+   "methods": "frozen best selector",
+   "model_panel": "breadth_replication",
+   "models": "Qwen3.8-27B; Phi-4; OLMo-2-13B",
+   "notes": "No refitting on breadth outcomes.",
+   "phase": "5",
+   "priority": "P1",
+   "reason": "P51 G6 did not accept a replacement selector",
+   "requiredness": "conditional",
+   "status": "stopped_by_gate"
+  },
+  {
+   "calibration": "frozen small scale grid",
+   "comparators_or_controls": "existing scale under FourOverSix and N16 winner",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P60_analysis_attempt1"
+   ],
+   "gate": "G7",
+   "k_values": "NA",
+   "matrix_id": "P60_WEIGHT_SCALE",
+   "methods": "format-preserving weight scale candidates",
+   "model_panel": "development",
+   "models": "Llama-3.1-8B; Qwen3-4B; Mistral-7B-v0.3",
+   "notes": "Account for scale metadata and reject hidden high-precision work.",
+   "phase": "6",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "development only",
+   "comparators_or_controls": "existing causal per-token FourOverSix activation",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P61_analysis_attempt1"
+   ],
+   "gate": "G7",
+   "k_values": "NA",
+   "matrix_id": "P61_ACT_SCALE_CLIP",
+   "methods": "FourOverSix activation MSE scale; frozen percentile clipping grid",
+   "model_panel": "development",
+   "models": "Llama-3.1-8B; Qwen3-4B; Mistral-7B-v0.3",
+   "notes": "Retain causal policy and exact 4-bit format.",
+   "phase": "6",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "development only",
+   "comparators_or_controls": "best no-transform candidate",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "provenance/P62_GATE_RESOLUTION.json"
+   ],
+   "gate": "G7",
+   "k_values": "NA",
+   "matrix_id": "P62_K64_LOCAL_TRANSFORM",
+   "methods": "K64-aligned local transform",
+   "model_panel": "development",
+   "models": "Llama-3.1-8B; Mistral-7B-v0.3",
+   "notes": "Only after algebraic/MMA-scope proof; label separately if not foldable.",
+   "phase": "6",
+   "priority": "P2",
+   "reason": "Record stopped_by_gate rather than silently omitting P62.",
+   "requiredness": "conditional",
+   "status": "stopped_by_gate"
+  },
+  {
+   "calibration": "hash-locked before quality results",
+   "comparators_or_controls": "development-selected configuration",
+   "evaluation": "protocol and code audit",
+   "evidence": [
+    "P70_winner_freeze_attempt1"
+   ],
+   "gate": "G8",
+   "k_values": "NA",
+   "matrix_id": "P70_WINNER_FREEZE",
+   "methods": "one global winner",
+   "model_panel": "held_out",
+   "models": "new held-out panel",
+   "notes": "Freeze exact model revisions and no-swap rule for at least two families.",
+   "phase": "7",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "frozen canonical draws",
+   "comparators_or_controls": "paired baselines",
+   "evaluation": "WikiText; C4",
+   "evidence": [
+    "P71_analysis_attempt1"
+   ],
+   "gate": "G8+G9",
+   "k_values": "NA",
+   "matrix_id": "P71_HELDOUT_PPL",
+   "methods": "frozen winner; N8/N16 k2; FourOverSix; all-E0M3; NVFP4; strongest fair baseline",
+   "model_panel": "held_out",
+   "models": "at least two new 3B-14B dense families",
+   "notes": "No candidate changes after opening held-out PPL.",
+   "phase": "7",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "exact frozen maps",
+   "comparators_or_controls": "paired per-example contrasts",
+   "evaluation": "frozen eight-task suite",
+   "evidence": [
+    "provenance/P71_DOWNSTREAM_GATE_RESOLUTION.json"
+   ],
+   "gate": "G8",
+   "k_values": "NA",
+   "matrix_id": "P72_ACCURACY",
+   "methods": "winner; FourOverSix; N8 k2; N16 k3; strongest fair baseline",
+   "model_panel": "all_supported",
+   "models": "all models passing PPL gate",
+   "notes": "Independent deterministic task bootstrap streams; frozen -0.5 pp SESOI.",
+   "phase": "7",
+   "priority": "P0",
+   "reason": "P71 heldout quality gate did not authorize downstream execution",
+   "requiredness": "conditional",
+   "status": "stopped_by_gate"
+  },
+  {
+   "calibration": "exact frozen maps",
+   "comparators_or_controls": "fixed prompt/decoding/extractor",
+   "evaluation": "GSM8K generation",
+   "evidence": [
+    "provenance/P71_DOWNSTREAM_GATE_RESOLUTION.json"
+   ],
+   "gate": "G8",
+   "k_values": "NA",
+   "matrix_id": "P73_GSM8K",
+   "methods": "winner; FourOverSix; strongest fair baseline",
+   "model_panel": "representative",
+   "models": "at least one model/family class plus all strong-PPL outliers",
+   "notes": "Preserve all generations and paired item outcomes.",
+   "phase": "7",
+   "priority": "P1",
+   "reason": "P71 heldout quality gate did not authorize downstream execution",
+   "requiredness": "conditional",
+   "status": "stopped_by_gate"
+  },
+  {
+   "calibration": "exact frozen maps",
+   "comparators_or_controls": "at least 20 source documents",
+   "evaluation": "PG19 4K; PG19 8K",
+   "evidence": [
+    "provenance/P71_DOWNSTREAM_GATE_RESOLUTION.json"
+   ],
+   "gate": "G8",
+   "k_values": "NA",
+   "matrix_id": "P74_PG19",
+   "methods": "winner; FourOverSix; N8 k2; N16 k3",
+   "model_panel": "representative",
+   "models": "Llama-3.1-8B; Mistral-7B-v0.3; frozen winner models",
+   "notes": "Resample documents; if fewer than 20, report exploratory points only.",
+   "phase": "7",
+   "priority": "P1",
+   "reason": "P71 heldout quality gate did not authorize downstream execution",
+   "requiredness": "conditional",
+   "status": "stopped_by_gate"
+  },
+  {
+   "calibration": "no map regeneration",
+   "comparators_or_controls": "cross-device tolerance",
+   "evaluation": "WikiText/C4 anchor subsets",
+   "evidence": [
+    "P75_analysis_attempt1"
+   ],
+   "gate": "G8",
+   "k_values": "NA",
+   "matrix_id": "P75_PORTABILITY",
+   "methods": "exact same maps on A6000 and RTX 6000 Ada",
+   "model_panel": "representative",
+   "models": "small and medium representative models",
+   "notes": "Quality portability only; no native FP4 performance claim.",
+   "phase": "7",
+   "priority": "P1",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "all valid and invalid evidence",
+   "comparators_or_controls": "all gates",
+   "evaluation": "all reports and machine-readable tables",
+   "evidence": [
+    "P80_final_analysis_attempt1"
+   ],
+   "gate": "G0-G9",
+   "k_values": "NA",
+   "matrix_id": "P80_FINAL_ANALYSIS",
+   "methods": "frozen analysis pipeline",
+   "model_panel": "all",
+   "models": "all attempted cells",
+   "notes": "No manual edits to derived numbers; every matrix row gets terminal status.",
+   "phase": "8",
+   "priority": "P0",
+   "reason": null,
+   "requiredness": "required",
+   "status": "complete"
+  },
+  {
+   "calibration": "redacted only after source freeze",
+   "comparators_or_controls": "parent and new claims",
+   "evaluation": "clean extraction and independent recomputation",
+   "evidence": [],
+   "gate": "G0-G9",
+   "k_values": "NA",
+   "matrix_id": "P81_ARTIFACT_BUNDLE",
+   "methods": "manifest; checksums; reviewer core; verification",
+   "model_panel": "all",
+   "models": "new campaign outputs",
+   "notes": "Use Windows-safe paths; preserve source and packaged hashes and a verifiable redacted chain.",
+   "phase": "8",
+   "priority": "P0",
+   "reason": "P81 follows this analysis",
+   "requiredness": "required",
+   "status": "pending_P81_bundle_verification"
+  }
+ ],
+ "schema_version": "1.0",
+ "status": "pre_bundle",
+ "summary": {
+  "complete": 20,
+  "pending_P81_bundle_verification": 2,
+  "stopped_by_gate": 6
+ }
+}

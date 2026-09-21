@@ -1,0 +1,191 @@
+{
+ "bootstrap_replicates": 10000,
+ "claims_prohibited": [
+  "reliable individual-tile causal signs or magnitudes",
+  "k=3 simultaneous per-tile confidence guarantee",
+  "universal CE or KL superiority",
+  "native FP4/E0M3 Tensor Core execution",
+  "latency or speedup",
+  "runtime overhead",
+  "area",
+  "power",
+  "Blackwell performance from fake quantization"
+ ],
+ "classifications": {
+  "dose_response": {
+   "boundary": "group-level ranking evidence only; never individual-tile calibration or causality",
+   "classification": "supported",
+   "gate": "for each predictor, all four development Spearman estimates have expected direction and at least three 95% CIs exclude zero",
+   "passed": true,
+   "predictor_gates": {
+    "ce": {
+     "all_four_expected_direction": true,
+     "ci_excluding_zero_in_expected_direction": 3,
+     "expected_direction": "positive",
+     "passed": true
+    },
+    "margin": {
+     "all_four_expected_direction": true,
+     "ci_excluding_zero_in_expected_direction": 3,
+     "expected_direction": "negative",
+     "passed": true
+    }
+   }
+  },
+  "mistral_veto_completion": {
+   "boundary": "completes the one-shot Mistral matrix; does not revise the completed mechanism development gate",
+   "classification": "mistral_veto_symmetry_not_supported",
+   "gate": "actual add-back is worse than conjunction and matched random in both corpora, with all four mean contrasts Holm-significant in the frozen C-Mistral family",
+   "passed": false
+  },
+  "objective_ablation": {
+   "boundary": "natural-threshold maps are descriptive because selected counts differ",
+   "classification": "no_universal_conjunction_superiority",
+   "conjunction_gates": {
+    "conjunction_better_than_ce_matched_k": {
+     "holm_significant_endpoints": 2,
+     "passed": false,
+     "positive_in_all_four_development_endpoints": false
+    },
+    "conjunction_better_than_kl_matched_k": {
+     "holm_significant_endpoints": 2,
+     "passed": false,
+     "positive_in_all_four_development_endpoints": false
+    }
+   },
+   "gate": "each single-objective matched-K minus conjunction contrast is positive in all four development endpoints and Holm-significant in at least three",
+   "information_vs_random_gates": {
+    "ce_matched_k": {
+     "holm_significant_endpoints": 4,
+     "negative_in_all_four_development_endpoints": true,
+     "passed": true
+    },
+    "conjunction": {
+     "holm_significant_endpoints": 4,
+     "negative_in_all_four_development_endpoints": true,
+     "passed": true
+    },
+    "kl_matched_k": {
+     "holm_significant_endpoints": 4,
+     "negative_in_all_four_development_endpoints": true,
+     "passed": true
+    }
+   },
+   "passed": false
+  }
+ },
+ "paired_arrays": {
+  "llama8b": {
+   "c4": {
+    "clusters": 231,
+    "path": "<USER_HOME>/mixfp4/research_runs/mixfp4_n16k64_followup_20260917T090438Z/arrays/llama8b_c4_paired_cluster_nll.npz",
+    "policies": 23,
+    "sha256": "71ccd13f27dce3361cf73448080db7bdf428d04b3466d8be523859f2de23e5a6",
+    "tokens": 524032
+   },
+   "wiki": {
+    "clusters": 53,
+    "path": "<USER_HOME>/mixfp4/research_runs/mixfp4_n16k64_followup_20260917T090438Z/arrays/llama8b_wiki_paired_cluster_nll.npz",
+    "policies": 23,
+    "sha256": "656f912fd31bc65aef8c319fdc6e501eb8527d4bc8688a06e71f90661e179f45",
+    "tokens": 288627
+   }
+  },
+  "mistral7b": {
+   "c4": {
+    "clusters": 235,
+    "path": "<USER_HOME>/mixfp4/research_runs/mixfp4_n16k64_followup_20260917T090438Z/arrays/mistral7b_c4_paired_cluster_nll.npz",
+    "policies": 25,
+    "sha256": "d8c88b482d764f838fe3b511fd82d498974d6bdf0db944934aee52092ddaae9c",
+    "tokens": 524032
+   },
+   "wiki": {
+    "clusters": 57,
+    "path": "<USER_HOME>/mixfp4/research_runs/mixfp4_n16k64_followup_20260917T090438Z/arrays/mistral7b_wiki_paired_cluster_nll.npz",
+    "policies": 25,
+    "sha256": "6d9f3599cecdb938b949548391a6c791d7d7a621fd696196221b3401288dbbee",
+    "tokens": 333661
+   }
+  },
+  "qwen4b": {
+   "c4": {
+    "clusters": 231,
+    "path": "<USER_HOME>/mixfp4/research_runs/mixfp4_n16k64_followup_20260917T090438Z/arrays/qwen4b_c4_paired_cluster_nll.npz",
+    "policies": 23,
+    "sha256": "1e20cfdc2cd9789a1a0a5a84fabb81feecddc8913884af65e4031ed46f9aa410",
+    "tokens": 524032
+   },
+   "wiki": {
+    "clusters": 53,
+    "path": "<USER_HOME>/mixfp4/research_runs/mixfp4_n16k64_followup_20260917T090438Z/arrays/qwen4b_wiki_paired_cluster_nll.npz",
+    "policies": 23,
+    "sha256": "2d48bab554d9e3174fb429a83d75e2ce06b3202e5bc34afafc5ca0e7952fcd8f",
+    "tokens": 298862
+   }
+  }
+ },
+ "protocol_sha256": "22a78ee87078543da7d40ca39fabc56078f250438f0ec3d4a540adeec8c132a9",
+ "provenance": {
+  "llama8b": {
+   "c4": {
+    "clusters": 231,
+    "evaluation_manifest_sha256": "8d72dbf23db218671856f620bd49c2226db829880673f106078e375a8ca35197",
+    "new_report_sha256": "e9e70960de4e003e64403fca2419fa14585a83ddd10fa75b60b539db51b18c38",
+    "new_run": "<USER_HOME>/mixfp4/research_runs/mixfp4_n16k64_followup_20260917T090438Z/runs/F21_full_llama8b_attempt2",
+    "old_report_sha256": "f3170c39fac0b24e92d55a2d67668abf9c5358923f1977fee6a5bd4f2be40f3e",
+    "old_run": "<USER_HOME>/mixfp4/research_runs/mixfp4_mechanism_24h_20260916T205501Z/runs/V22_full_llama8b_attempt1",
+    "windows": 256
+   },
+   "wiki": {
+    "clusters": 53,
+    "evaluation_manifest_sha256": "8d72dbf23db218671856f620bd49c2226db829880673f106078e375a8ca35197",
+    "new_report_sha256": "e9e70960de4e003e64403fca2419fa14585a83ddd10fa75b60b539db51b18c38",
+    "new_run": "<USER_HOME>/mixfp4/research_runs/mixfp4_n16k64_followup_20260917T090438Z/runs/F21_full_llama8b_attempt2",
+    "old_report_sha256": "f3170c39fac0b24e92d55a2d67668abf9c5358923f1977fee6a5bd4f2be40f3e",
+    "old_run": "<USER_HOME>/mixfp4/research_runs/mixfp4_mechanism_24h_20260916T205501Z/runs/V22_full_llama8b_attempt1",
+    "windows": 141
+   }
+  },
+  "mistral7b": {
+   "c4": {
+    "clusters": 235,
+    "evaluation_manifest_sha256": "f15f8bad484a93abafa08985a924e255d5f2cdd535bfb9c1d8785487b258cafe",
+    "new_report_sha256": "7984969212023f496a551d1e27a37089fc734a3599964b3f5c94d939fa02f291",
+    "new_run": "<USER_HOME>/mixfp4/research_runs/mixfp4_n16k64_followup_20260917T090438Z/runs/F22_full_mistral7b_attempt3",
+    "old_report_sha256": "9e1076de30643f6c6e2967b1ff66b46b85a259c06e0fd633902dd94204624f1f",
+    "old_run": "<USER_HOME>/mixfp4/research_runs/mixfp4_mechanism_24h_20260916T205501Z/runs/V30_mistral_one_shot_attempt1",
+    "windows": 256
+   },
+   "wiki": {
+    "clusters": 57,
+    "evaluation_manifest_sha256": "f15f8bad484a93abafa08985a924e255d5f2cdd535bfb9c1d8785487b258cafe",
+    "new_report_sha256": "7984969212023f496a551d1e27a37089fc734a3599964b3f5c94d939fa02f291",
+    "new_run": "<USER_HOME>/mixfp4/research_runs/mixfp4_n16k64_followup_20260917T090438Z/runs/F22_full_mistral7b_attempt3",
+    "old_report_sha256": "9e1076de30643f6c6e2967b1ff66b46b85a259c06e0fd633902dd94204624f1f",
+    "old_run": "<USER_HOME>/mixfp4/research_runs/mixfp4_mechanism_24h_20260916T205501Z/runs/V30_mistral_one_shot_attempt1",
+    "windows": 163
+   }
+  },
+  "qwen4b": {
+   "c4": {
+    "clusters": 231,
+    "evaluation_manifest_sha256": "b55a04f4a7c1a478e8147547b6d08d6cc4f8584e4631f94fe8d611a3bcc774db",
+    "new_report_sha256": "64627aff58edf05db1c11c3aad406d5b2012a4039f09ac18a3ec31ba0db0b6ee",
+    "new_run": "<USER_HOME>/mixfp4/research_runs/mixfp4_n16k64_followup_20260917T090438Z/runs/F20_full_qwen4b_attempt2",
+    "old_report_sha256": "ac5f52b091f5e41ef057ba4fe87b3548c53e9bfcfcb11ccd68afdca96e8e78ce",
+    "old_run": "<USER_HOME>/mixfp4/research_runs/mixfp4_mechanism_24h_20260916T205501Z/runs/V21_full_qwen4b_attempt2",
+    "windows": 256
+   },
+   "wiki": {
+    "clusters": 53,
+    "evaluation_manifest_sha256": "b55a04f4a7c1a478e8147547b6d08d6cc4f8584e4631f94fe8d611a3bcc774db",
+    "new_report_sha256": "64627aff58edf05db1c11c3aad406d5b2012a4039f09ac18a3ec31ba0db0b6ee",
+    "new_run": "<USER_HOME>/mixfp4/research_runs/mixfp4_n16k64_followup_20260917T090438Z/runs/F20_full_qwen4b_attempt2",
+    "old_report_sha256": "ac5f52b091f5e41ef057ba4fe87b3548c53e9bfcfcb11ccd68afdca96e8e78ce",
+    "old_run": "<USER_HOME>/mixfp4/research_runs/mixfp4_mechanism_24h_20260916T205501Z/runs/V21_full_qwen4b_attempt2",
+    "windows": 146
+   }
+  }
+ },
+ "schema": "mixfp4-n16k64-followup-results/v1"
+}

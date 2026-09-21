@@ -1,0 +1,125 @@
+{
+ "schema": "mixfp4-mechanism-protocol/v1",
+ "protocol_id": "mechanism-24h-v1",
+ "campaign_id": "mixfp4_mechanism_24h_20260916T205501Z",
+ "campaign_start_utc": "2026-09-16T20:55:01Z",
+ "hard_cutoffs_utc": {
+  "input_gate": "2026-09-16T22:25:01Z",
+  "score_regeneration": "2026-09-17T03:55:01Z",
+  "new_gpu_launches": "2026-09-17T16:55:01Z",
+  "campaign_end": "2026-09-17T20:55:01Z"
+ },
+ "scope": {
+  "questions": [
+   "ranking_not_calibration",
+   "ce_kl_veto",
+   "attention_mlp_interaction"
+  ],
+  "method_search_prohibited": true,
+  "optional_exploration_authorized": false,
+  "models": {
+   "development": ["llama8b", "qwen4b"],
+   "one_shot_validation": ["mistral7b"]
+  }
+ },
+ "base_configuration": {
+  "weight_type_tile": [16, 64],
+  "baseline": "FourOverSix E2M1",
+  "alternative": "E0M3 alpha=1",
+  "scale_block_k": 16,
+  "scale_representation": "UE4M3",
+  "score_reference": "all-FourOverSix student",
+  "calibration": "seed0: 64 OpenWebMath plus 64 CodeParrot sequences, 512 tokens",
+  "selector": "max(mean_CE + 3*SE_CE, mean_KL + 3*SE_KL) < 0",
+  "activations": "causal per-token FourOverSix",
+  "scope": "non-head Linear weights; lm_head, embeddings, norms, and KV cache excluded",
+  "evaluation": "fake-quantized/dequantized BF16 on exact frozen WikiText/C4 windows"
+ },
+ "input_gate": {
+  "input_provenance_sha256": "80f625f907a13f60800eb247188a75721869068f6b9998260e25ba9bd21ef821",
+  "power_analysis_sha256": "9310ca2af0ef707cb83cd1874677b49814a8861c2e30db07746304e1d56a1da4",
+  "decision": "pass_both_development_models_no_score_regeneration",
+  "mistral_status": "eligible only after this protocol and all analysis code hashes are frozen"
+ },
+ "screening": {
+  "selection_seed": 20260917,
+  "selection_rule": "lowest SHA256(corpus, cluster_id, seed=20260917)",
+  "criterion": "minimum directional empirical power >=0.80 for |delta_log_ppl|=0.003 OR paired 95% CI half-width <=0.0025",
+  "llama8b": {
+   "wiki": {"clusters": 32, "windows": 94, "descriptive_only": false},
+   "c4": {"clusters": 96, "windows": 105, "descriptive_only": false}
+  },
+  "qwen4b": {
+   "wiki": {"clusters": 53, "windows": 146, "descriptive_only": true},
+   "c4": {"clusters": 231, "windows": 256, "descriptive_only": true}
+  },
+  "promotion": "All valid primary arms enter full evaluation regardless of screening outcome. Qwen screening equals full evaluation and is not duplicated."
+ },
+ "map_definitions": {
+  "shared_reference": "Reconstruct the frozen k=3 conjunction independently from float64 N16 moments and require bitwise mask equality to the verified primary map before writing a mechanism-protocol map.",
+  "ranking": "Allocate floor(25% of conjunction-selected tiles) by deterministic largest remainder proportional to selected support per exact layer/projection module, capped at floor(support/3). Within each module select largest combined margin as strongest, smallest positive margin as weakest, and a SHA256-keyed disjoint draw from the remainder as random. All three have identical per-module counts.",
+  "veto": "For each one-objective-pass class, propose the globally strongest approving-objective margins up to floor(25% of conjunction count). Bin the approving margin into five frozen global quantile bins. In each exact module/bin cell reduce to disjoint common support when needed, retain the strongest proposed tiles, and draw a SHA256-keyed control from the remaining class tiles. Actual and control counts are identical in every module/bin cell.",
+  "interaction": "Partition the exact conjunction map into disjoint self-attention and MLP modules. For each module draw a SHA256-keyed uniform random mask with the exact conjunction count. The actual and random unions are exact disjoint attention/MLP unions."
+ },
+ "full_evaluation_arms": {
+  "development": [
+   "four_over_six", "full", "group_only_strongest", "group_only_weakest", "group_only_random",
+   "full_minus_strongest", "full_minus_weakest", "full_minus_random",
+   "full_plus_kl_vetoed_ce_approved", "full_plus_kl_vetoed_matched_random",
+   "full_plus_ce_vetoed_kl_approved", "full_plus_ce_vetoed_matched_random",
+   "attention_only", "mlp_only", "matched_random_attention", "matched_random_mlp", "matched_random_union"
+  ],
+  "mistral_one_shot": [
+   "four_over_six", "full", "group_only_strongest", "group_only_weakest",
+   "full_minus_strongest", "full_minus_weakest",
+   "full_plus_kl_vetoed_ce_approved", "full_plus_kl_vetoed_matched_random",
+   "attention_only", "mlp_only", "matched_random_attention", "matched_random_mlp", "matched_random_union"
+  ]
+ },
+ "mistral_promotion_rule": "Launch exactly once only after both development evaluations are valid, map/accounting invariants pass, the analysis code hashes below remain unchanged, no co-tenancy violation exists, and projected completion precedes the hour-20 launch cutoff. Do not inspect any Mistral mechanism outcome before those conditions hold.",
+ "statistics": {
+  "fundamental_endpoint": "paired natural document/article-cluster delta NLL, equal to delta-log-PPL",
+  "bootstrap_replicates": 10000,
+  "bootstrap_seed": 20260917,
+  "p_values": "finite Monte Carlo plus-one, two-sided",
+  "multiplicity": "Holm within each listed family",
+  "families": {
+   "A_development": "all predeclared strongest/weakest/random group-only and full-context marginal pairwise contrasts across two development models and two corpora",
+   "B_development": "for both veto classes: mean actual-minus-full, mean actual-minus-random, q90/q95/q99/worst/probability-of-regression actual-minus-random across two development models and two corpora",
+   "C_development": "actual interaction residual and actual-minus-random residual across two development models and two corpora",
+   "A_validation": "Mistral strongest-minus-weakest group-only and full-context marginal on two corpora",
+   "B_validation": "Mistral KL-vetoed/CE-approved mean and tail family on two corpora",
+   "C_validation": "Mistral actual and actual-minus-random interaction residuals on two corpora"
+  },
+  "tail_endpoints": ["worst_cluster", "q90", "q95", "q99", "cluster_regression_probability"],
+  "relative_ppl": "exp(delta_log_ppl)-1"
+ },
+ "hypothesis_gates": {
+  "ranking_not_calibration": "Support requires all four development marginal strongest-minus-weakest estimates <0, at least three Holm-significant, and at least three of four group-only directions <0. Existing frozen individual-tile sign/calibration evidence remains a required counterpoint.",
+  "ce_kl_veto": "For each of both veto classes, actual add-back must be worse than full and its matched random in at least three of four development model/corpus endpoints, with at least two Holm-significant endpoints; both classes must pass.",
+  "attention_mlp_interaction": "Actual interaction residual must have the same nonzero sign in all four development model/corpus endpoints and at least three must be Holm-significant.",
+  "mistral_interpretation": "One-shot analysis validation only; never a fully independent model-family generalization claim."
+ },
+ "gpu_policy": {
+  "maximum_concurrent_gpus": 3,
+  "device_family": "NVIDIA RTX A6000 only for this campaign",
+  "homogeneous_per_run": true,
+  "exclusive": true,
+  "checks": ["before", "during every 20 seconds", "phase boundary", "after"],
+  "foreign_process_action": "invalidate only this attempt, stop only its own container, preserve evidence, requeue; never signal the foreign process"
+ },
+ "code_hashes": {
+  "mechanism_maps.py": "2f3fdba259f9320cf163770462911843417da6e6e5df2a25ff7a8c2198776627",
+  "mechanism_analyze.py": "4a8d1f74f2ed04858866907ce0279a210233262a35b4cf986f24fc79603d6e06",
+  "mechanism_power.py": "f0f614e6070da271d6d2990d78402a9a7116f423d13ad9bd333f3b9239a9414f",
+  "evaluate_ppl.py": "de657a20cc33da25a8cad3bf26bd0b08b195bfb8c20d1ed0ed41ffd93122ab4b",
+  "launcher.py": "b3b0f3f003f121b5bed4962dc3c4a32974d79c1961b50292eb9b2054aa2df872",
+  "mapio.py": "c8627a8345e70cb1727082f9ec26009d4d6eaa18a8cfa01d21b6564feed53afe",
+  "stats.py": "2d554a8fc38faa3b2b179c425faca254bfd2bf55c8186219f4b4ff6c03315cba"
+ },
+ "claims_prohibited": [
+  "individual-tile causality unless newly established under this frozen protocol",
+  "native FP4/E0M3 Tensor Core execution",
+  "latency, overhead, speedup, area, or power"
+ ]
+}

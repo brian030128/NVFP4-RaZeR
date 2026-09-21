@@ -1,0 +1,26 @@
+{
+  "amendment_id": "AUDIT_IMPLEMENTATION_AMENDMENT_001",
+  "timestamp_utc": "2026-09-17T15:46:18Z",
+  "component": "source/NVFP4-RaZeR-main/campaign/followup_finalize.py",
+  "original_sha256": "b8bda7de7d5cd805418952ee3c9c9aad5d8ee90534736e9955676a618d1fbd5b",
+  "amended_sha256": "8ddaf9b8318fbacba3703320235b356b614fbc4e8a0209766befa7fcccab8223",
+  "trigger": {
+    "first_audit_exit_code": 1,
+    "failures": [
+      "run record schema errors: F22_full_mistral7b_attempt2: ['True was expected', 'False was expected']",
+      "run record validation failed: F22_full_mistral7b_attempt2",
+      "evaluation policy/order drift: llama8b",
+      "evaluation policy/order drift: qwen4b",
+      "evaluation policy/order drift: mistral7b"
+    ]
+  },
+  "diagnosis": [
+    "The supplied result schema intentionally accepts only uncontended GPU records in its gpu_run=true branch. The retained fail-closed co-tenancy attempt therefore has exactly two expected schema rejections while correctly recording status=invalid, foreign_compute_processes_absent=false, and invalid_gpu_cotenancy=true.",
+    "ppl_report.json serializes its evaluation object with sorted keys, so dictionary key order cannot encode execution order. Exact policy-set equality is authoritative there; the ordered installs array independently preserves and is checked against the frozen plan order. All three policy sets and counts matched exactly."
+  ],
+  "change": [
+    "Accept only the exact two expected schema/sidecar rejections for a retained launch_record-invalid co-tenancy attempt whose run_record fields independently prove the fail-closed state. All other attempts must remain schema-valid.",
+    "Compare the evaluation object as an exact policy set and count, while retaining the existing strict install-order, map-hash, tile-count, array-hash, window, token, and numerical checks."
+  ],
+  "scope": "Audit interpretation only. No run record, map, plan, paired array, estimate, confidence interval, p-value, Holm result, gate, classification, report, or figure changed."
+}

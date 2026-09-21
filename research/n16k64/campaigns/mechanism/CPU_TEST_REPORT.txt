@@ -1,0 +1,53 @@
+MixFP4 mechanism campaign CPU test report
+Generated UTC: 2026-09-16T21:33:30Z
+
+Authoritative campaign protocol SHA-256:
+  9e7c3d1dcb6199ab9bbedf9e0947f6198304f26466f2fd2c58e5533fb747926c  MECHANISM_PROTOCOL.json
+
+PASS: Python bytecode compilation
+  python -m compileall -q source/NVFP4-RaZeR-main/campaign
+
+PASS: execution-path unit/integration tests
+  87 passed, 1 deselected in 103.75 seconds
+  Covered campaign/tests/test_gpu_preflight.py, test_e2e_cpu.py,
+  test_v10_quantizer.py, test_v11_tiles.py, test_v12_scores.py, and
+  test_v13_maps.py. The single deselected test reads a legacy handoff
+  KNOWN_RESULTS.json outside this append-only campaign; the same tile totals
+  were independently checked by V10_derive_maps_attempt2 and MAP_MANIFEST.json.
+
+PASS: frozen hashes and plans
+  Every code hash in MECHANISM_PROTOCOL.json matched the on-disk source.
+  All three job-plan hashes, policy names/counts, and every referenced map
+  SHA-256 matched PLAN_MANIFEST.json and the map headers.
+  9310ca2af0ef707cb83cd1874677b49814a8861c2e30db07746304e1d56a1da4  POWER_ANALYSIS.json
+  3e6719faf0341c708198ef9e9f8a7a7de70c2f07e6e840503a1661c74bf43a01  MAP_MANIFEST.json
+  ace7f780232208b286942539105b0bde517978000890ad8ec5fccabef6e4ccfc  job_specs/PLAN_MANIFEST.json
+
+PASS: exact-map derivation and archived-anchor reproduction
+  V10_derive_maps_attempt2 completed with zero anchor mismatches for
+  llama8b, qwen4b, and mistral7b; 48 maps were emitted and hash-locked.
+
+PASS: outcome-free final-analysis schema dry run
+  mechanism_analyze.py successfully read the attempt7 FIRST_ORDER_FIDELITY
+  schema (SHA-256 3e28f8f8fd387201d5b50b995e4e11be2bb90aaee46e3f13382c4145aa8b4103),
+  all three selected_score_components NPZ files, and the frozen group maps.
+  Recovered equal strongest/weakest/random group sizes were 445 (llama8b),
+  1,019 (qwen4b), and 1,044 (mistral7b; no random ranking arm by protocol).
+
+PASS: isolated-container cache/tokenizer/data dry run
+  All exact pinned tokenizer snapshots resolved with network disabled.
+  Deterministic evaluation window counts were:
+    llama8b: wiki=141, c4=256
+    qwen4b:  wiki=146, c4=256
+  The PPL-improvement cache is itself a symlink to /share3. The initial GPU
+  attempts mounted the reference campaign but not that second-level target;
+  they failed before any model evaluation. A read-only bind of the resolved
+  cache target was validated before attempt2. No code, protocol, map, or input
+  evidence was changed.
+
+Context-only legacy suite observation (not an execution-path failure):
+  An unscoped run of all campaign tests yielded 93 passed and 13 failed.
+  Eleven failures import legacy final-report modules that require the old
+  campaign's freeze/PROTOCOL_FREEZE.json, one requires its KNOWN_RESULTS.json,
+  and one subprocess was launched from the repository root rather than the
+  source root. The targeted source-root run above passed all applicable tests.
