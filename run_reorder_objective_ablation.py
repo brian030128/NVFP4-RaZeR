@@ -45,6 +45,10 @@ VARIANTS = ('ce_kl', 'kl', 'ce', 'shrunk', 'placebo', 'placebo_kl', 'placebo_ce'
 # How the layout is fitted, holding the objective fixed. See fit_layout.
 METHODS = ('search', 'spectral', 'bicluster')
 
+# Objectives the frozen layout may be elected under. 'match' reproduces the
+# original coupled behaviour; see election_rule.
+ELECT_OBJECTIVES = ('match', 'ce_kl', 'kl', 'ce', 'placebo')
+
 # Each real variant's matched null. Fit objectives are only comparable within a
 # variant, because collapsing the conjunction onto one channel removes a
 # constraint and raises the attainable objective on its own. Held-out election
@@ -118,6 +122,33 @@ def transform(variant, ce, kl, seed, split):
     return ce, kl, detail
 
 
+def election_rule(variant, elect_objective):
+    """Which objective scores the FROZEN layout on held-out sequences.
+
+    Grouping and electing are separate decisions and the deployable pipeline may
+    want different objectives for them: KL is the lower-variance instrument for
+    the search, while the frozen protocol elects on the CE/KL conjunction.
+
+    `match` is the original coupled behaviour and stays the default so earlier
+    reports reproduce. Note what it does to the matched nulls: `placebo_kl` and
+    `placebo_ce` are outside ("kl", "ce", "placebo"), so they elect under the real
+    conjunction on untransformed scores. That is a valid null for "does a
+    noise-derived layout beat identity", but it is NOT a test of a single-channel
+    election rule, and an earlier reading of this repository's results mistook it
+    for one. Pass `--elect-objective kl` with a placebo variant to actually test
+    that.
+    """
+    if elect_objective == 'match':
+        return variant if variant in ('kl', 'ce', 'placebo') else 'ce_kl'
+    if elect_objective not in ELECT_OBJECTIVES:
+        raise ValueError(f'Unknown election objective {elect_objective}')
+    # A placebo must stay a placebo on the election split when the caller asked
+    # for the coupled null; otherwise the requested objective is used directly.
+    if variant == 'placebo' and elect_objective == 'placebo':
+        return 'placebo'
+    return elect_objective
+
+
 def fit_layout(method, ce, kl, config, rank, progress):
     """Produce a frozen layout by one of the competing grouping methods.
 
@@ -138,11 +169,13 @@ def fit_layout(method, ce, kl, config, rank, progress):
 
 
 def run(directory, output, variant, config, fit_fraction=.5, placebo_seed=1234,
-        method='search', rank=4):
+        method='search', rank=4, elect_objective='match'):
     if variant not in VARIANTS:
         raise ValueError(f'Unknown variant {variant}')
     if method not in METHODS:
         raise ValueError(f'Unknown method {method}')
+    if elect_objective not in ELECT_OBJECTIVES:
+        raise ValueError(f'Unknown election objective {elect_objective}')
     config.validate()
     manifest = json.loads((directory / 'manifest.json').read_text())
     if manifest.get('schema') != 'mixfp4_reorder_scores_v1' or manifest.get('status') != 'complete':
@@ -164,9 +197,7 @@ def run(directory, output, variant, config, fit_fraction=.5, placebo_seed=1234,
 
     print(f'LOAD ELECTION {manifest["name"]} [{variant}]: {len(election)} sequences', flush=True)
     ce, kl = load_scores(directory, manifest, election)
-    # Only the placebo touches election data: its null must hold on both splits.
-    # Shrinkage is a fit-side regularizer, so held-out scoring stays untouched.
-    election_variant = variant if variant in ('kl', 'ce', 'placebo') else 'ce_kl'
+    election_variant = election_rule(variant, elect_objective)
     ce, kl, election_detail = transform(election_variant, ce, kl, placebo_seed, 'election')
     result = elect_layout(ce, kl, layout)
     identity = dict(layout, row_atom_perm=torch.arange(ce.shape[1]),
@@ -179,7 +210,8 @@ def run(directory, output, variant, config, fit_fraction=.5, placebo_seed=1234,
     report = dict(
         status='complete', variant=variant, module=manifest['name'],
         score_directory=str(directory.resolve()), job_id=os.environ.get('SLURM_JOB_ID'),
-        config=asdict(config), method=method, rank=rank, fit_sequences=len(fit), election_sequences=len(election),
+        config=asdict(config), method=method, rank=rank,
+        elect_objective=elect_objective, fit_sequences=len(fit), election_sequences=len(election),
         fit_objective=fit_objective, fit_identity_objective=layout['identity_objective'],
         election_objective=election_objective,
         election_identity_objective=control['objective'],
@@ -215,6 +247,8 @@ def main():
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--variant', required=True, choices=VARIANTS)
     ap.add_argument('--method', default='search', choices=METHODS)
+    ap.add_argument('--elect-objective', default='match', choices=ELECT_OBJECTIVES,
+                    help='Objective the frozen layout is elected under')
     ap.add_argument('--rank', type=int, default=4,
                     help='Bicluster embedding rank q, the only tunable knob of that method')
     ap.add_argument('--fit-fraction', type=float, default=.5)
@@ -227,7 +261,7 @@ def main():
     torch.set_num_threads(args.threads)
     config = SearchConfig(**{name: getattr(args, name) for name in asdict(defaults)})
     run(args.scores, args.out, args.variant, config, args.fit_fraction,
-        args.placebo_seed, args.method, args.rank)
+        args.placebo_seed, args.method, args.rank, args.elect_objective)
 
 
 if __name__ == '__main__':

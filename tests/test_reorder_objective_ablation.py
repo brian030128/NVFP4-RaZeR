@@ -264,6 +264,40 @@ class ObjectiveAblationTests(unittest.TestCase):
         self.assertEqual(layout['config']['rounds'], 0)
         self.assertEqual(layout['config']['swap_samples'], 0)
 
+    def test_election_rule_decouples_grouping_from_electing(self):
+        from run_reorder_objective_ablation import election_rule
+        # 'match' is the original coupled behaviour and must not drift.
+        self.assertEqual(election_rule('ce_kl', 'match'), 'ce_kl')
+        self.assertEqual(election_rule('kl', 'match'), 'kl')
+        self.assertEqual(election_rule('shrunk', 'match'), 'ce_kl')
+        self.assertEqual(election_rule('placebo', 'match'), 'placebo')
+        # The documented trap: under 'match' these elect on the REAL conjunction,
+        # so they never tested a single-channel election rule.
+        self.assertEqual(election_rule('placebo_kl', 'match'), 'ce_kl')
+        self.assertEqual(election_rule('placebo_ce', 'match'), 'ce_kl')
+        # The deployable candidate groups on KL and elects on the conjunction.
+        self.assertEqual(election_rule('kl', 'ce_kl'), 'ce_kl')
+        # The null that actually tests single-channel election.
+        self.assertEqual(election_rule('placebo_kl', 'kl'), 'kl')
+        with self.assertRaises(ValueError):
+            election_rule('kl', 'nope')
+
+    def test_runner_records_a_decoupled_election(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ce, kl = .4 * torch.randn(8, 8, 4), .4 * torch.randn(8, 8, 4)
+            write_scores(root / 'scores', ce, kl)
+            config = SearchConfig(tile_rows=4, tile_cols=32, rounds=1, starts=2,
+                                  swap_samples=16)
+            report = run(root / 'scores', root / 'out', 'kl', config,
+                         method='spectral', elect_objective='ce_kl')
+            self.assertEqual(report['elect_objective'], 'ce_kl')
+            # Grouped on KL, elected on the untransformed conjunction.
+            self.assertEqual(report['election_transform_variant'], 'ce_kl')
+            self.assertEqual(report['election_transform'], {})
+            with self.assertRaises(ValueError):
+                run(root / 'scores', root / 'out2', 'kl', config, elect_objective='nope')
+
     def test_every_real_variant_has_a_matched_null(self):
         from run_reorder_objective_ablation import MATCHED_NULL
         real = [v for v in VARIANTS if not v.startswith('placebo')]

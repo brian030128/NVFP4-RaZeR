@@ -361,19 +361,32 @@ Gate's margin is thin, which is consistent with its fit objective sitting below
 its null: there is probably nothing there to find, for any objective. The `kl`
 recommendation rests on up and down.
 
-### Correction: the `k=3` conjunction is doing real multiplicity protection
+### Retracted: this data does not test KL at election time
 
-Every `placebo` arm elects exactly **0** tiles on held-out data. But
-`placebo_kl` and `placebo_ce` elect **16 / 6 / 5** and **16 / 7 / 2** — close to
-what their matched identity controls elect, i.e. chance. A single-channel `k=3`
-bound is not a strong enough threshold on its own; requiring *both* an only
-0.32-0.59-correlated CE and KL bound to clear is what drives the false-election
-rate to zero.
+An earlier version of this section claimed that `placebo_kl` and `placebo_ce`
+electing 16/6/5 and 16/7/2 tiles showed a single-channel `k=3` bound was too
+weak, and that the conjunction was therefore supplying multiplicity protection.
+**That was wrong.** The saved reports record
+`election_transform_variant = "ce_kl"` for both arms: they elected under the real
+CE/KL conjunction on untransformed election scores, because `transform` routes
+any variant outside `("kl", "ce", "placebo")` to `ce_kl` on the election side.
 
-So do not carry KL into the *election*. Section 2 already kept election
-CE/KL-conjunction on the strength of job 404650's positive control; this is an
-independent second reason, and it narrows P1 to exactly what it claimed:
-**KL for the arrangement search, the unchanged conjunction for election, CE
-primary at the frozen fresh gate.** The `kl` arm above elects under a
-single-channel rule, so its 424/106/22 tile counts are the search's reach, not a
-deployable map — the map must be re-elected under the unchanged conjunction.
+So those tiles are a noise-derived *layout* elected honestly, and it elects no
+more than its matched identity control (16 vs 22, 6 vs 6, 5 vs 5, with
+`beats_identity_on_election` false where it matters). That is correct null
+behaviour and says nothing about the election rule.
+
+**KL at election is untested, not disproven.** The `kl` arm did elect
+single-channel (`election_transform_variant = "kl"`, 424/106/22 tiles against
+identity's 247/73/20), but the matched null for *that* question — a placebo whose
+election is also single-channel — was never run. Note identity itself elects
+roughly ten times more tiles under KL-only than under the conjunction, so the
+larger counts are at least partly threshold calibration rather than a better
+layout.
+
+What survives is the independent argument of section 2: job 404650's positive
+control has CE `t = -3.22` and KL `t = -0.31`, so a KL-primary **fresh gate**
+would reject the known-good map. That is evidence about the gate, not about
+per-tile election. Keeping the conjunction at election remains the conservative
+default because the deployed protocol is frozen, not because this experiment
+showed it necessary. The missing null is scheduled.
