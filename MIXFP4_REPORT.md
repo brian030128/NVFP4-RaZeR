@@ -97,10 +97,10 @@ Neither uses rotation. [Algorithm details](results/task_reorder/transfer_2026092
 
 ## 4. PPL: 8×64, raw 256×64, and 256×64 + MLP reordering
 
-Lower is better. These are **fake-quantized W4A4 quality measurements**, not
-native-kernel PPL. Evaluation uses 2,048-token WikiText-2 windows and 256 seed-0
-C4 crops, tensor-wide activation factors, and the released aggregation protocol.
-E0M3 tile counts differ in area across geometries.
+Lower is better. The table below is **fake-quantized W4A4**; §4a confirms the
+Llama rows on the native SM100 kernel. Evaluation uses 2,048-token WikiText-2
+windows and 256 seed-0 C4 crops, tensor-wide activation factors, and the released
+aggregation protocol. E0M3 tile counts differ in area across geometries.
 
 | Model | Policy | E0M3 tiles | WikiText-2 | C4 |
 |---|---|---:|---:|---:|
@@ -125,6 +125,41 @@ PPL gains do not establish answer-accuracy gains: Llama's separate non-STEM MMLU
 and ARC-Challenge comparisons were inconclusive.
 [Quality results and gates](results/task_reorder/transfer_20260920/report_section.md),
 [answer-accuracy evaluation](results/task_reorder/llama_accuracy_20260920/REPORT.md).
+
+### 4a. The same numbers on the native kernel
+
+Quality above came from the simulator and the timings of §1 from the kernel, so
+no single artifact had shown both. Job 416794 ran the complete native SM100 model
+over the same 397 published windows, loading the library whose digest matches the
+passed kernel gate 406633, with every one of the 224 matrices packed and decoded
+bitwise against its simulator weights first.
+
+| Policy | WikiText-2 native / simulated | C4 native / simulated |
+|---|---|---|
+| FourOverSix | 6.878384 / 6.875525 | 9.826777 / 9.823733 |
+| Refined 147-tile | 6.862185 / 6.864886 | 9.793517 / 9.796946 |
+
+**Native and simulated agree.** Paired per window, on token windows whose
+`token_sha256` were checked identical between the two runs, the refined map's
+native-minus-simulated NLL is **−0.000394 ± 0.001570** on WikiText and
+**−0.000350 ± 0.001258** on C4, i.e. within noise at t = −0.50 and −0.56. The
+simulator is a faithful proxy for the kernel on perplexity, and the ±0.003
+aggregate differences are not evidence of anything.
+
+**The improvement is significant on the kernel.** Paired within the native run,
+the refined map beats FourOverSix by **−0.002358 ± 0.001598 NLL (t = −2.95)** on
+WikiText and **−0.003391 ± 0.001600 (t = −4.24)** on C4, which is −0.016199 and
+−0.033259 in perplexity.
+
+This also settles the full-output gate recorded as failed in the native
+implementation notes. That gate compares logits, where 0–4 BF16 differences per
+projection are amplified by later FP4 activation quantization into a ~10.8%
+relative gap; two correct implementations rounding in different orders diverge
+exactly that way. Perplexity is the metric that matters and it agrees. One model,
+one seed; Qwen native perplexity is still unmeasured.
+[Native run](results/task_reorder/native_ppl_20260921/run_416794/report.json),
+[native versus simulated](results/task_reorder/native_ppl_20260921/native_vs_simulated.json),
+[native gain](results/task_reorder/native_ppl_20260921/native_gain_paired.json).
 
 ## 5. Ablation study: KL only, CE only, and more reordered layers
 
