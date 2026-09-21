@@ -39,7 +39,14 @@ import torch
 from quantize.task_reorder import SearchConfig, elect_layout, search_layout
 from run_task_reorder import load_scores, split_sequences
 
-VARIANTS = ('ce_kl', 'kl', 'ce', 'shrunk', 'placebo')
+VARIANTS = ('ce_kl', 'kl', 'ce', 'shrunk', 'placebo', 'placebo_kl', 'placebo_ce')
+
+# Each real variant's matched null. Fit objectives are only comparable within a
+# variant, because collapsing the conjunction onto one channel removes a
+# constraint and raises the attainable objective on its own. Held-out election
+# numbers need no such pairing.
+MATCHED_NULL = {'ce_kl': 'placebo', 'shrunk': 'placebo',
+                'kl': 'placebo_kl', 'ce': 'placebo_ce'}
 
 
 def balanced_signs(count, seed):
@@ -82,6 +89,12 @@ def shrink_(scores, floor=0.0):
 def transform(variant, ce, kl, seed, split):
     """Return (ce, kl) for one variant plus a JSON-safe description of the change."""
     detail = {}
+    # A matched null collapses the conjunction the same way its real variant does
+    # before flipping, so the two searches face an identically shaped problem.
+    if variant == 'placebo_kl':
+        ce, variant = kl.clone(), 'placebo'
+    elif variant == 'placebo_ce':
+        kl, variant = ce.clone(), 'placebo'
     if variant == 'kl':
         ce = kl.clone()
     elif variant == 'ce':

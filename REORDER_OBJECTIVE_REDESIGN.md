@@ -253,7 +253,79 @@ python summarize_reorder_objective_ablation.py --root <OUT_ROOT>
 **What it can and cannot settle.** It compares surrogate objectives on held-out
 *scores*. It is not model loss, not PPL, and not a substitute for the frozen
 fresh-document gate. A variant winning here earns a finite-loss replay, nothing
-more. If `kl` roughly triples the ratio and `placebo` lands near zero, sections 2
-and 3 are on track and P2/P4/P5 are worth GPU. If `placebo` reaches a fit
-objective close to the real arms, then the fit objective is uninformative at this
-depth too and P1 becomes mandatory before anything else is searched.
+more.
+
+## 5. Result: job 415318, Llama-3.1-8B layer 31, 15/15 completed
+
+All fifteen array tasks COMPLETED in 2.5-3.7 minutes each on one H200
+(`gov113008`, partition `dev`). No model or teacher forward ran.
+
+| matrix | variant | fit | election | **elect/fit** | identity | tiles | id tiles |
+|---|---|---:|---:|---:|---:|---:|---:|
+| gate | `ce_kl` | 10863.9 | 1423.8 | 0.1311 | 459.8 | 4 | 6 |
+| gate | **`kl`** | 14393.7 | **3638.5** | **0.2528** | 2184.7 | 22 | 20 |
+| gate | `ce` | 41541.0 | 1008.1 | 0.0243 | 495.5 | 12 | 11 |
+| gate | `shrunk` | 4288.8 | 1854.8 | **0.4325** | 604.7 | 5 | 6 |
+| gate | `placebo` | 11740.3 | **0.0** | 0.0000 | 0.0 | 0 | 0 |
+| up | `ce_kl` | 17315.3 | 425.5 | 0.0246 | 129.8 | 7 | 5 |
+| up | **`kl`** | 32009.1 | **6030.6** | **0.1884** | 1973.2 | 106 | 73 |
+| up | `ce` | 47223.0 | 312.7 | 0.0066 | 158.9 | 13 | 10 |
+| up | `shrunk` | 5943.5 | 590.3 | 0.0993 | 199.8 | 6 | 5 |
+| up | `placebo` | 14233.6 | **0.0** | 0.0000 | 2.7 | 0 | 1 |
+| down | `ce_kl` | 29288.0 | 10468.2 | 0.3574 | 925.1 | 39 | 22 |
+| down | **`kl`** | 57099.9 | **44206.8** | **0.7742** | 5870.1 | 424 | 247 |
+| down | `ce` | 39813.2 | 9343.2 | 0.2347 | 1017.5 | 47 | 31 |
+| down | `shrunk` | 25470.0 | 15104.2 | 0.5930 | 1276.6 | 36 | 22 |
+| down | `placebo` | 8470.7 | **0.0** | 0.0000 | 0.0 | 0 | 0 |
+
+**The fit objective is not evidence.** Against its matched null the deployed
+`ce_kl` rule scores 10863.9 / 11740.3 = **0.93** on gate — *below* what the
+search manufactures from sign-flipped noise — 1.22 on up, and 3.46 on down.
+Every placebo arm generalizes to exactly 0.000, as a correct null must.
+
+**The placebo screen recovers a known GPU result for free.** Its gate < up < down
+ordering is the same conclusion the Llama diagnosis reached with finite-loss
+replays: "the refined down projection provides most of the fresh measured gain…
+gate/up alone are weak and may have positive mean CE changes on general text."
+Three CPU-minutes reproduced a projection ranking that previously cost model
+forwards. That is the argument for making P1 a standing screen.
+
+**KL generalizes best on every matrix**, by both measures, electing 22/106/424
+tiles that survive to held-out sequences against 4/7/39 for the deployed rule:
+
+| matrix | elect/fit, `kl` vs `ce_kl` | held-out objective, `kl` ÷ `ce_kl` |
+|---|---|---:|
+| gate | 0.2528 vs 0.1311 | 2.6x |
+| up | 0.1884 vs 0.0246 | 14.2x |
+| down | 0.7742 vs 0.3574 | 4.2x |
+
+**CE-only is the worst generalizer everywhere** (0.0243 / 0.0066 / 0.2347) while
+posting the *highest* fit objectives (41541 / 47223 / 39813). The noisiest
+instrument is the one the search overfits hardest, which is the thesis of section
+1 stated in its sharpest form. `shrunk` beats `ce_kl` on all three matrices, so
+P3 holds independently and composes with P1.
+
+### What this does not show
+
+Held-out *scores*, not loss. These are first-order directional surrogates under a
+straight-through derivative, and `MIXFP4_REPORT.md` section 2 already warns that
+"combined changes need exact finite-loss checks because gradients can miss
+quantization effects". KL electing 424 down tiles where the deployed rule elects
+39 is a hypothesis to test by replay, not a map to deploy — and the section 2
+counter-evidence still stands, so the *election* and the frozen fresh gate must
+stay CE-primary. One model, one layer, one seed; the Qwen shards are still
+available for a matched replication, and layers 56-62 would need re-scoring.
+
+### Next
+
+1. Replicate on the Qwen layer 63 shards, which survive and need no new scoring.
+2. Finite-loss replay of the `kl`-searched Llama layout through the cached final
+   MLP, elected with the unchanged CE/KL `k=3` rule, then the frozen fresh gate.
+3. Only if that passes: PPL on the published windows.
+
+Matched nulls for the single-channel arms (`placebo_kl`, `placebo_ce`) were added
+after this run, since the `placebo` arm above is the matched null for `ce_kl` and
+`shrunk` only. Collapsing the conjunction onto one channel removes a constraint
+and raises the attainable fit objective by itself, so the `kl` and `ce` fit
+columns above should not be compared with the `placebo` column. Their held-out
+columns, which carry every conclusion here, are unaffected.

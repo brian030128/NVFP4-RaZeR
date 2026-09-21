@@ -156,6 +156,26 @@ class ObjectiveAblationTests(unittest.TestCase):
         for variant in VARIANTS:
             transform(variant, ce.clone(), kl.clone(), 1234, 'fit')
 
+    def test_matched_nulls_collapse_the_same_channel_then_flip(self):
+        # placebo_kl must face the same single-channel problem as kl, otherwise
+        # its fit objective is not a fair null: dropping the conjunction raises
+        # the attainable objective on its own.
+        ce, kl = torch.randn(8, 3, 2), torch.randn(8, 3, 2)
+        null_ce, null_kl, detail = transform('placebo_kl', ce.clone(), kl.clone(), 1234, 'fit')
+        self.assertTrue(torch.equal(null_ce, null_kl))
+        self.assertTrue(torch.equal(null_ce.abs(), kl.abs()))
+        self.assertEqual(detail['flipped_sequences'], 4)
+        null_ce, null_kl, _ = transform('placebo_ce', ce.clone(), kl.clone(), 1234, 'fit')
+        self.assertTrue(torch.equal(null_ce, null_kl))
+        self.assertTrue(torch.equal(null_ce.abs(), ce.abs()))
+
+    def test_every_real_variant_has_a_matched_null(self):
+        from run_reorder_objective_ablation import MATCHED_NULL
+        real = [v for v in VARIANTS if not v.startswith('placebo')]
+        self.assertEqual(sorted(MATCHED_NULL), sorted(real))
+        for null in MATCHED_NULL.values():
+            self.assertIn(null, VARIANTS)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

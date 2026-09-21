@@ -9,7 +9,7 @@ import argparse
 import json
 from pathlib import Path
 
-from run_reorder_objective_ablation import VARIANTS
+from run_reorder_objective_ablation import MATCHED_NULL, VARIANTS
 
 
 def collect(root):
@@ -23,16 +23,22 @@ def collect(root):
 
 
 def excess_over_placebo(rows):
-    """Fit objective relative to the same matrix's placebo, per variant.
+    """Fit objective relative to the variant's OWN matched null, per matrix.
 
     A variant whose real fit objective barely exceeds its own null is fitting
-    noise, whatever its absolute value.
+    noise, whatever its absolute value. The null must be matched, because
+    collapsing the CE/KL conjunction onto one channel removes a constraint and
+    raises the attainable objective by itself; scoring `kl` against the `ce_kl`
+    null would credit it for that.
     """
-    placebo = {r['module']: r['fit_objective'] for r in rows if r['variant'] == 'placebo'}
+    nulls = {(r['module'], r['variant']): r['fit_objective'] for r in rows}
     out = {}
     for row in rows:
-        null = placebo.get(row['module'])
-        if null is None or row['variant'] == 'placebo':
+        matched = MATCHED_NULL.get(row['variant'])
+        if matched is None:
+            continue
+        null = nulls.get((row['module'], matched))
+        if null is None:
             continue
         out[(row['module'], row['variant'])] = (
             row['fit_objective'] / null if null > 0 else float('inf'))
