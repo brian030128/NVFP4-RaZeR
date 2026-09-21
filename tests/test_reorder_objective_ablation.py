@@ -169,6 +169,24 @@ class ObjectiveAblationTests(unittest.TestCase):
         self.assertTrue(torch.equal(null_ce, null_kl))
         self.assertTrue(torch.equal(null_ce.abs(), ce.abs()))
 
+    def test_summary_keys_nulls_per_tile_shape(self):
+        # A granularity sweep puts several tile shapes under one root. Pairing a
+        # variant with a null from a different tile shape would compare bounds
+        # computed over different atom counts, which is exactly what the sweep
+        # is measuring, so the key must carry the shape.
+        from summarize_reorder_objective_ablation import excess_over_placebo, key
+
+        def report(tile_rows, variant, fit):
+            return dict(status='complete', module='m', variant=variant,
+                        fit_objective=fit, config=dict(tile_rows=tile_rows, tile_cols=64))
+
+        rows = [report(256, 'ce_kl', 30.), report(256, 'placebo', 10.),
+                report(8, 'ce_kl', 8.), report(8, 'placebo', 16.)]
+        ratios = excess_over_placebo(rows)
+        self.assertAlmostEqual(ratios[('m', 256, 64, 'ce_kl')], 3.0)
+        self.assertAlmostEqual(ratios[('m', 8, 64, 'ce_kl')], 0.5)
+        self.assertEqual(key(rows[0]), ('m', 256, 64))
+
     def test_every_real_variant_has_a_matched_null(self):
         from run_reorder_objective_ablation import MATCHED_NULL
         real = [v for v in VARIANTS if not v.startswith('placebo')]
