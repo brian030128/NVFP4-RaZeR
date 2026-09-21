@@ -13,7 +13,7 @@
 # Objective ablation for the 256x64 reordering search. CPU-only search; this
 # cluster has no CPU-only allocation, so one GPU is requested and left idle.
 #
-#   sbatch --array=0-20 slurm/reorder_objective_ablation.sbatch SCORES_ROOT OUT_ROOT [TILE_ROWS] [METHOD] [RANK] [ELECT]
+#   sbatch --array=0-20 slurm/reorder_objective_ablation.sbatch SCORES_ROOT OUT_ROOT [TILE_ROWS] [METHOD] [RANK] [ELECT] [AXES]
 #
 # Array index = matrix * 7 + variant, over the three final-MLP projections
 # (000 gate, 001 up, 002 down) and the seven objective variants. Indices 0-14
@@ -29,12 +29,13 @@ cd "${SLURM_SUBMIT_DIR:?}"
 MODEL="${REORDER_MODEL:-llama8b}"
 source slurm/task_reorder_env.sh
 
-SCORES_ROOT="${1:?Usage: sbatch ... SCORES_ROOT OUT_ROOT [TILE_ROWS] [METHOD] [RANK] [ELECT]}"
-OUT_ROOT="${2:?Usage: sbatch ... SCORES_ROOT OUT_ROOT [TILE_ROWS] [METHOD] [RANK] [ELECT]}"
+SCORES_ROOT="${1:?Usage: sbatch ... SCORES_ROOT OUT_ROOT [TILE_ROWS] [METHOD] [RANK] [ELECT] [AXES]}"
+OUT_ROOT="${2:?Usage: sbatch ... SCORES_ROOT OUT_ROOT [TILE_ROWS] [METHOD] [RANK] [ELECT] [AXES]}"
 TILE_ROWS="${3:-256}"
 METHOD="${4:-search}"
 RANK="${5:-4}"
 ELECT="${6:-match}"
+AXES="${7:-both}"
 VARIANTS=(ce_kl kl ce shrunk placebo placebo_kl placebo_ce)
 MATRICES=(000 001 002)
 
@@ -42,13 +43,14 @@ INDEX="${SLURM_ARRAY_TASK_ID:?Submit with --array}"
 MATRIX="${MATRICES[$((INDEX / ${#VARIANTS[@]}))]}"
 VARIANT="${VARIANTS[$((INDEX % ${#VARIANTS[@]}))]}"
 
-echo "matrix=$MATRIX variant=$VARIANT tile_rows=$TILE_ROWS method=$METHOD rank=$RANK elect=$ELECT scores=$SCORES_ROOT/$MATRIX"
+echo "matrix=$MATRIX variant=$VARIANT tile_rows=$TILE_ROWS method=$METHOD rank=$RANK elect=$ELECT axes=$AXES scores=$SCORES_ROOT/$MATRIX"
 "$PYTHON" run_reorder_objective_ablation.py \
   --scores "$SCORES_ROOT/$MATRIX" \
-  --out "$OUT_ROOT/t$TILE_ROWS/$METHOD/e$ELECT/$MATRIX/$VARIANT" \
+  --out "$OUT_ROOT/t$TILE_ROWS/$METHOD/e$ELECT/a$AXES/$MATRIX/$VARIANT" \
   --variant "$VARIANT" \
   --tile-rows "$TILE_ROWS" \
   --method "$METHOD" \
   --rank "$RANK" \
   --elect-objective "$ELECT" \
+  --axes "$AXES" \
   --threads "${SLURM_CPUS_PER_TASK:-8}"
