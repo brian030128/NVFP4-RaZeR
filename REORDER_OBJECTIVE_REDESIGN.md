@@ -323,9 +323,57 @@ available for a matched replication, and layers 56-62 would need re-scoring.
    MLP, elected with the unchanged CE/KL `k=3` rule, then the frozen fresh gate.
 3. Only if that passes: PPL on the published windows.
 
-Matched nulls for the single-channel arms (`placebo_kl`, `placebo_ce`) were added
-after this run, since the `placebo` arm above is the matched null for `ce_kl` and
-`shrunk` only. Collapsing the conjunction onto one channel removes a constraint
-and raises the attainable fit objective by itself, so the `kl` and `ce` fit
-columns above should not be compared with the `placebo` column. Their held-out
-columns, which carry every conclusion here, are unaffected.
+## 6. Matched nulls: job 415380, 6/6 completed
+
+`placebo` above is the matched null for `ce_kl` and `shrunk` only: collapsing the
+conjunction onto one channel removes a constraint and raises the attainable fit
+objective by itself. `placebo_kl` and `placebo_ce` give the single-channel arms
+their own nulls. All 18 reports are now under one root and summarized by
+`summarize_reorder_objective_ablation.py`.
+
+**Fit objective ÷ the variant's own null.** This is a property of the *matrix*,
+not of the objective:
+
+| matrix | `ce_kl` | `kl` | `ce` | `shrunk` |
+|---|---:|---:|---:|---:|
+| gate | **0.93** | **0.81** | **0.77** | **0.37** |
+| up | 1.22 | 1.18 | 0.99 | 0.42 |
+| down | **3.46** | **2.74** | 1.35 | **3.01** |
+
+On `gate_proj` **every** variant's real search scores *below* its own null, and on
+`up_proj` all four are at or near parity. Only `down_proj` shows a real excess.
+The same gate < up < down ordering the Llama diagnosis established with
+finite-loss replays falls out of three CPU-minutes, and it holds whichever
+objective is used. That is the case for making P1 a standing screen: it is not
+measuring which objective is better, it is measuring whether there is anything
+in the matrix to find.
+
+**KL's held-out advantage survives its own null, decisively on up and down.**
+Against `placebo_kl` on the same matrix:
+
+| matrix | `kl` election | `placebo_kl` election | excess | `kl` tiles | null tiles |
+|---|---:|---:|---:|---:|---:|
+| gate | 3638.5 | 1243.6 | 2.9x | 22 | 6 |
+| up | 6030.6 | 508.1 | **11.9x** | 106 | 5 |
+| down | 44206.8 | 1841.5 | **24.0x** | 424 | 16 |
+
+Gate's margin is thin, which is consistent with its fit objective sitting below
+its null: there is probably nothing there to find, for any objective. The `kl`
+recommendation rests on up and down.
+
+### Correction: the `k=3` conjunction is doing real multiplicity protection
+
+Every `placebo` arm elects exactly **0** tiles on held-out data. But
+`placebo_kl` and `placebo_ce` elect **16 / 6 / 5** and **16 / 7 / 2** — close to
+what their matched identity controls elect, i.e. chance. A single-channel `k=3`
+bound is not a strong enough threshold on its own; requiring *both* an only
+0.32-0.59-correlated CE and KL bound to clear is what drives the false-election
+rate to zero.
+
+So do not carry KL into the *election*. Section 2 already kept election
+CE/KL-conjunction on the strength of job 404650's positive control; this is an
+independent second reason, and it narrows P1 to exactly what it claimed:
+**KL for the arrangement search, the unchanged conjunction for election, CE
+primary at the frozen fresh gate.** The `kl` arm above elects under a
+single-channel rule, so its 424/106/22 tile counts are the search's reach, not a
+deployable map — the map must be re-elected under the unchanged conjunction.
