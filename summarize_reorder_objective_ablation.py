@@ -46,14 +46,18 @@ def excess_over_placebo(rows):
 
 
 def key(report):
-    """Identify a cell by matrix AND type-tile shape.
+    """Identify a cell by matrix, type-tile shape AND fitting method.
 
-    A granularity sweep puts several tile shapes under one root, and a null is
-    only a null for its own tile shape: shrinking the tile changes how many
-    atoms each bound is computed over, which is the whole point of the sweep.
+    A sweep puts several tile shapes and grouping methods under one root, and a
+    null is only a null for its own cell. Shrinking the tile changes how many
+    atoms each bound is computed over, and changing the method changes how much
+    search freedom the null gets to exploit, which is precisely what is being
+    compared. `spectral` runs the deployed search with its refinement disabled,
+    so it reports rounds=0; keying on method keeps it distinct anyway.
     """
     config = report.get('config', {})
-    return (report['module'], config.get('tile_rows'), config.get('tile_cols'))
+    return (report['module'], config.get('tile_rows'), config.get('tile_cols'),
+            report.get('method', 'search'))
 
 
 def main():
@@ -68,33 +72,33 @@ def main():
         raise SystemExit(f'No complete ablation reports under {args.root}')
     ratios = excess_over_placebo(rows)
 
-    header = (f'{"module":<30s} {"tile":>9s} {"variant":<10s} {"fit":>12s} '
-              f'{"election":>12s} {"elect/fit":>10s} {"identity":>12s} '
+    header = (f'{"module":<26s} {"tile":>8s} {"method":<10s} {"variant":<10s} '
+              f'{"fit":>12s} {"election":>12s} {"elect/fit":>10s} {"identity":>11s} '
               f'{"beats id":>9s} {"tiles":>6s} {"id tiles":>9s} {"fit/null":>9s}')
     print(header)
     print('-' * len(header))
-    for module, tile_rows, tile_cols in sorted(
-            {key(r) for r in rows}, key=lambda k: (k[0], -(k[1] or 0))):
+    for cell in sorted({key(r) for r in rows}, key=lambda k: (k[0], -(k[1] or 0), k[3])):
+        module, tile_rows, tile_cols, method = cell
         for variant in VARIANTS:
-            found = [r for r in rows
-                     if key(r) == (module, tile_rows, tile_cols) and r['variant'] == variant]
+            found = [r for r in rows if key(r) == cell and r['variant'] == variant]
             if not found:
                 continue
             r = found[0]
             ratio = r['election_fit_ratio']
-            null = ratios.get((module, tile_rows, tile_cols, variant))
-            print(f'{module[-30:]:<30s} {f"{tile_rows}x{tile_cols}":>9s} {variant:<10s} '
-                  f'{r["fit_objective"]:>12.4f} {r["election_objective"]:>12.4f} '
+            null = ratios.get(cell + (variant,))
+            print(f'{module[-26:]:<26s} {f"{tile_rows}x{tile_cols}":>8s} {method:<10s} '
+                  f'{variant:<10s} {r["fit_objective"]:>12.4f} '
+                  f'{r["election_objective"]:>12.4f} '
                   f'{"n/a" if ratio is None else f"{ratio:>10.4f}":>10s} '
-                  f'{r["election_identity_objective"]:>12.4f} '
+                  f'{r["election_identity_objective"]:>11.4f} '
                   f'{str(r["beats_identity_on_election"]):>9s} '
                   f'{r["elected_tiles"]:>6d} {r["identity_elected_tiles"]:>9d} '
                   f'{"-" if null is None else f"{null:>9.2f}":>9s}')
         print()
 
     summary = dict(reports=len(rows), root=str(args.root.resolve()), rows=rows,
-                   fit_over_placebo={f'{m}|{tr}x{tc}|{v}': x
-                                     for (m, tr, tc, v), x in ratios.items()})
+                   fit_over_placebo={f'{m}|{tr}x{tc}|{me}|{v}': x
+                                     for (m, tr, tc, me, v), x in ratios.items()})
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(summary, indent=2) + '\n')

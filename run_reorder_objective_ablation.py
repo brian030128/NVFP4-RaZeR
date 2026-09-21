@@ -27,7 +27,7 @@ This measures a surrogate on held-out scores. It is not model loss, not PPL, and
 not a substitute for the frozen fresh-document gate.
 """
 import argparse
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import json
 import os
@@ -36,10 +36,14 @@ import time
 
 import torch
 
+from quantize.bicluster import bicluster_layout
 from quantize.task_reorder import SearchConfig, elect_layout, search_layout
 from run_task_reorder import load_scores, split_sequences
 
 VARIANTS = ('ce_kl', 'kl', 'ce', 'shrunk', 'placebo', 'placebo_kl', 'placebo_ce')
+
+# How the layout is fitted, holding the objective fixed. See fit_layout.
+METHODS = ('search', 'spectral', 'bicluster')
 
 # Each real variant's matched null. Fit objectives are only comparable within a
 # variant, because collapsing the conjunction onto one channel removes a
@@ -114,9 +118,31 @@ def transform(variant, ce, kl, seed, split):
     return ce, kl, detail
 
 
-def run(directory, output, variant, config, fit_fraction=.5, placebo_seed=1234):
+def fit_layout(method, ce, kl, config, rank, progress):
+    """Produce a frozen layout by one of the competing grouping methods.
+
+    `search` is the deployed pipeline. `spectral` is the same pipeline with its
+    hinge refinement switched off, so the layout is whichever initializer scored
+    best, which is already a co-clustering. `bicluster` replaces the initializer
+    with a standardized rank-q checkerboard co-clustering and never refines.
+    """
+    if method == 'search':
+        return search_layout(ce, kl, config, progress=progress)
+    if method == 'spectral':
+        # Keep the starts; drop the 14k-parameter refinement that follows them.
+        return search_layout(ce, kl, replace(config, rounds=0, swap_samples=0),
+                             progress=progress)
+    if method == 'bicluster':
+        return bicluster_layout(ce, kl, config, rank=rank)
+    raise ValueError(f'Unknown method {method}')
+
+
+def run(directory, output, variant, config, fit_fraction=.5, placebo_seed=1234,
+        method='search', rank=4):
     if variant not in VARIANTS:
         raise ValueError(f'Unknown variant {variant}')
+    if method not in METHODS:
+        raise ValueError(f'Unknown method {method}')
     config.validate()
     manifest = json.loads((directory / 'manifest.json').read_text())
     if manifest.get('schema') != 'mixfp4_reorder_scores_v1' or manifest.get('status') != 'complete':
@@ -132,7 +158,7 @@ def run(directory, output, variant, config, fit_fraction=.5, placebo_seed=1234):
     print(f'LOAD FIT {manifest["name"]} [{variant}]: {len(fit)} sequences', flush=True)
     ce, kl = load_scores(directory, manifest, fit)
     ce, kl, fit_detail = transform(variant, ce, kl, placebo_seed, 'fit')
-    layout = search_layout(ce, kl, config, progress=lambda event: print(
+    layout = fit_layout(method, ce, kl, config, rank, progress=lambda event: print(
         'SEARCH ' + json.dumps(event), flush=True))
     del ce, kl
 
@@ -153,7 +179,7 @@ def run(directory, output, variant, config, fit_fraction=.5, placebo_seed=1234):
     report = dict(
         status='complete', variant=variant, module=manifest['name'],
         score_directory=str(directory.resolve()), job_id=os.environ.get('SLURM_JOB_ID'),
-        config=asdict(config), fit_sequences=len(fit), election_sequences=len(election),
+        config=asdict(config), method=method, rank=rank, fit_sequences=len(fit), election_sequences=len(election),
         fit_objective=fit_objective, fit_identity_objective=layout['identity_objective'],
         election_objective=election_objective,
         election_identity_objective=control['objective'],
@@ -170,12 +196,12 @@ def run(directory, output, variant, config, fit_fraction=.5, placebo_seed=1234):
         source_sha256={name: hashlib.sha256(
             (Path(__file__).resolve().parent / name).read_bytes()).hexdigest()
             for name in ('run_reorder_objective_ablation.py', 'run_task_reorder.py',
-                         'quantize/task_reorder.py')})
+                         'quantize/task_reorder.py', 'quantize/bicluster.py')})
     torch.save(dict(layout, mask=result['mask'], identity_mask=control['mask'],
                     variant=variant, name=manifest['name']), output / 'layout.pt')
     (output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     print('RESULT ' + json.dumps({k: report[k] for k in (
-        'variant', 'module', 'fit_objective', 'election_objective', 'election_fit_ratio',
+        'variant', 'method', 'module', 'fit_objective', 'election_objective', 'election_fit_ratio',
         'election_identity_objective', 'elected_tiles', 'identity_elected_tiles')}), flush=True)
     return report
 
@@ -188,6 +214,9 @@ def main():
     ap.add_argument('--scores', type=Path, required=True)
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--variant', required=True, choices=VARIANTS)
+    ap.add_argument('--method', default='search', choices=METHODS)
+    ap.add_argument('--rank', type=int, default=4,
+                    help='Bicluster embedding rank q, the only tunable knob of that method')
     ap.add_argument('--fit-fraction', type=float, default=.5)
     ap.add_argument('--placebo-seed', type=int, default=1234)
     ap.add_argument('--threads', type=int, default=8)
@@ -197,7 +226,8 @@ def main():
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
     config = SearchConfig(**{name: getattr(args, name) for name in asdict(defaults)})
-    run(args.scores, args.out, args.variant, config, args.fit_fraction, args.placebo_seed)
+    run(args.scores, args.out, args.variant, config, args.fit_fraction,
+        args.placebo_seed, args.method, args.rank)
 
 
 if __name__ == '__main__':

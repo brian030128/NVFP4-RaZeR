@@ -9,7 +9,7 @@ import unittest
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from quantize.task_reorder import SearchConfig, search_layout
+from quantize.task_reorder import SearchConfig, elect_layout, search_layout
 from run_reorder_objective_ablation import (VARIANTS, balanced_signs, run, shrink_,
                                             transform)
 
@@ -183,9 +183,86 @@ class ObjectiveAblationTests(unittest.TestCase):
         rows = [report(256, 'ce_kl', 30.), report(256, 'placebo', 10.),
                 report(8, 'ce_kl', 8.), report(8, 'placebo', 16.)]
         ratios = excess_over_placebo(rows)
-        self.assertAlmostEqual(ratios[('m', 256, 64, 'ce_kl')], 3.0)
-        self.assertAlmostEqual(ratios[('m', 8, 64, 'ce_kl')], 0.5)
-        self.assertEqual(key(rows[0]), ('m', 256, 64))
+        self.assertAlmostEqual(ratios[('m', 256, 64, 'search', 'ce_kl')], 3.0)
+        self.assertAlmostEqual(ratios[('m', 8, 64, 'search', 'ce_kl')], 0.5)
+        self.assertEqual(key(rows[0]), ('m', 256, 64, 'search'))
+
+    def test_bicluster_recovers_planted_checkerboard_without_refinement(self):
+        # The same planted structure the deployed search is tested on, but with
+        # per-row and per-column magnitude nuisance multiplied in. An
+        # unnormalized SVD reports the loud rows; standardization must see past
+        # them and recover the block structure with no hinge refinement at all.
+        from quantize.bicluster import bicluster_layout
+        rows = torch.tensor([1., -1.]).repeat(256)
+        cols = torch.tensor([1., -1.]).repeat(4)
+        signal = -(rows[:, None] * cols[None, :])
+        row_gain = torch.exp(2 * torch.randn(512))[:, None]
+        col_gain = torch.exp(2 * torch.randn(8))[None, :]
+        ce = (signal * row_gain * col_gain)[None] * torch.linspace(.98, 1.02, 8)[:, None, None]
+        config = SearchConfig(tile_rows=256, tile_cols=64)
+        layout = bicluster_layout(ce, ce * .3, config, rank=2)
+        self.assertEqual(layout['fit_mask'].shape, (2, 2))
+        self.assertEqual(int(layout['fit_mask'].sum()), 2)
+        self.assertGreater(layout['fit_objective'], layout['identity_objective'])
+        self.assertFalse(torch.equal(layout['row_perm'], torch.arange(512)))
+        # Same schema as search_layout, so elect_layout consumes it unchanged.
+        elected = elect_layout(ce, ce * .3, layout)
+        self.assertEqual(int(elected['mask'].sum()), 2)
+
+    def test_standardize_removes_both_marginals(self):
+        from quantize.bicluster import standardize
+        matrix = torch.randn(64, 32) * torch.exp(3 * torch.randn(64))[:, None]
+        out = standardize(matrix)
+        self.assertTrue(torch.isfinite(out).all())
+        # Columns are standardized last, so they are the ones left exactly z-scored.
+        self.assertLess(float(out.mean(0).abs().max()), 1e-4)
+        self.assertLess(float((out.std(0) - 1).abs().max()), 1e-4)
+        # The row-magnitude nuisance no longer dominates the leading component.
+        self.assertLess(float(out.std(1).max() / out.std(1).min()), 10.)
+
+    def test_balanced_kmeans_respects_exact_tile_capacity(self):
+        from quantize.bicluster import balanced_kmeans
+        points = torch.cat([torch.randn(30, 2) + 10, torch.randn(30, 2) - 10])
+        labels = balanced_kmeans(points, size=20)
+        counts = torch.bincount(labels, minlength=3)
+        self.assertEqual(list(counts), [20, 20, 20])
+        # A tail group keeps its own smaller capacity rather than stealing rows.
+        labels = balanced_kmeans(torch.randn(25, 2), size=10)
+        self.assertEqual(list(torch.bincount(labels, minlength=3)), [10, 10, 5])
+
+    def test_structure_diagnostic_detects_a_column_dominant_matrix(self):
+        # Constant down each column: all the structure is on K, none on N. The
+        # leading component must then spread over every row and concentrate on
+        # few columns, which is what CLAUDE.md predicts for this data.
+        from quantize.bicluster import structure
+        matrix = torch.zeros(128, 16)
+        matrix[:, 3] = 1.
+        matrix[:, 9] = -1.
+        report = structure(matrix, rank=1)[0]
+        self.assertGreater(report['row_spread'], 0.9)
+        self.assertLess(report['column_spread'], 0.2)
+
+    def test_fit_layout_methods_all_return_a_usable_layout(self):
+        from run_reorder_objective_ablation import METHODS, fit_layout
+        ce = .4 * torch.randn(8, 16, 8)
+        config = SearchConfig(tile_rows=4, tile_cols=32, rounds=1, starts=2, swap_samples=16)
+        for method in METHODS:
+            layout = fit_layout(method, ce, ce.clone(), config, rank=2, progress=None)
+            self.assertEqual(layout['schema'], 'mixfp4_task_reorder_v1')
+            elect_layout(ce, ce.clone(), layout)
+        with self.assertRaises(ValueError):
+            fit_layout('nope', ce, ce.clone(), config, rank=2, progress=None)
+
+    def test_spectral_method_does_no_refinement(self):
+        # The point of the spectral arm is that it drops the 14k-parameter
+        # refinement, so its trace must contain only initializer evaluations.
+        from run_reorder_objective_ablation import fit_layout
+        ce = .4 * torch.randn(8, 16, 8)
+        config = SearchConfig(tile_rows=4, tile_cols=32, rounds=6, starts=2, swap_samples=4096)
+        layout = fit_layout('spectral', ce, ce.clone(), config, rank=2, progress=None)
+        self.assertTrue(all(event['iteration'] == 0 for event in layout['trace']))
+        self.assertEqual(layout['config']['rounds'], 0)
+        self.assertEqual(layout['config']['swap_samples'], 0)
 
     def test_every_real_variant_has_a_matched_null(self):
         from run_reorder_objective_ablation import MATCHED_NULL
