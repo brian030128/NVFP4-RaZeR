@@ -316,12 +316,62 @@ counter-evidence still stands, so the *election* and the frozen fresh gate must
 stay CE-primary. One model, one layer, one seed; the Qwen shards are still
 available for a matched replication, and layers 56-62 would need re-scoring.
 
+## 7. The candidate failed finite loss, and that is the result
+
+Job 415620 replayed the step-1 candidate through the final MLP on all 192
+development documents. Every one of the 192 bitwise suffix audits passed, so the
+cached replay reproduces the full model exactly.
+
+| comparison | mean ΔCE | SE | t |
+|---|---:|---:|---:|
+| candidate − raw256 | **+0.007347** | 0.000556 | +13.2 |
+| candidate − matched identity | **+0.007132** | 0.000569 | +12.5 |
+| math / code vs raw256 | +0.006464 / +0.008229 | | |
+
+The development screen fails. This is not a power problem: the candidate is worse
+by thirteen standard errors, and worse against **matched identity**, so the
+permutation itself is what hurts rather than the election or the background.
+
+**The surrogate does not predict finite loss.** The candidate won every surrogate
+measure this document reports — the best held-out election/fit ratio of any
+realistic method at 0.685, the best noise resistance at 15.92 against the
+deployed search's 3.46, 36 elected tiles against identity's 22 — and it was a
+genuine `spectral2` co-clustering, not a lucky restart: the random starts did not
+even reach the top three, at fit objective 24007.59 against identity's 5386.81.
+
+So sections 1 to 6 diagnosed a real problem and fixed it, and fixing it did not
+help. Search overfitting was not the binding constraint. The directional score is
+a first-order straight-through gradient taken at the raw256 operating point,
+while a permutation changes which weights are E0M3 across an entire matrix at
+once, which is far outside the regime where that linearization holds. `MIXFP4_REPORT.md`
+section 2 already says combined changes need exact finite-loss checks; this
+measures how badly they are needed.
+
+The ledger agrees. Every layout ever selected by the surrogate has failed its
+gate: the first Llama transfer at +0.005206, the gate/up candidate, the 218-tile
+Fisher extension, and now this at +0.007347. The one candidate that ever passed,
+`tile_refine`, searched subsets of already-elected tiles **using the actual joint
+quantized-model CE**, not gradients.
+
 ### Next
 
-1. Replicate on the Qwen layer 63 shards, which survive and need no new scoring.
-2. Finite-loss replay of the `kl`-searched Llama layout through the cached final
-   MLP, elected with the unchanged CE/KL `k=3` rule, then the frozen fresh gate.
-3. Only if that passes: PPL on the published windows.
+The replay above evaluated 192 documents in about 35 seconds once the model was
+resident. Finite-loss selection is therefore affordable, and that is where the
+effort belongs:
+
+1. **Propose with the surrogate, select with actual CE.** Use the co-clustering
+   to generate a small set of candidate layouts, then rank them by finite-loss
+   replay on development documents rather than by any bound on the scores.
+2. Keep the placebo screen as an admission test. It is cheap, it correctly
+   ranked gate < up < down, and it costs no GPU.
+3. Freeze the finite-loss winner and confirm on 64 new documents under the
+   unchanged CE-primary gate before any perplexity run.
+
+Do **not** spend further effort regularizing the surrogate search. Sections 5
+and 6 show that can be done well, and section 7 shows it does not transfer.
+
+Replication on the surviving Qwen layer-63 shards is now low value: it would
+replicate a surrogate result that has been shown not to predict loss.
 
 ## 6. Matched nulls: job 415380, 6/6 completed
 
