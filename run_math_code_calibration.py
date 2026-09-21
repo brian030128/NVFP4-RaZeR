@@ -5,6 +5,7 @@ import json
 import math
 import os
 import re
+import shutil
 import time
 from pathlib import Path
 import torch
@@ -80,7 +81,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--model', choices=ORIGINS, required=True)
     ap.add_argument('--out', required=True)
+    ap.add_argument('--model-source', default=None,
+                    help='Relocated checkpoint or Hub ID; revision and every weight hash remain checked.')
     ap.add_argument('--adaptive-only', action='store_true')
+    ap.add_argument('--compact-scores', action='store_true',
+        help='Persist fine pilot scores and validated 128-sequence 8x64/256x64 masks, but omit large historical score tables.')
+    ap.add_argument('--retry-incomplete', action='store_true',
+                    help='Recompute an incomplete full-model export, preserving validated pilot shards.')
     ap.add_argument('--reorder-modules', default=None,
         help='Regex selecting modules whose CE/KL scores are additionally streamed as 1x16 '
              'atoms to reorder_scores/. Required for genuine column regrouping; historical '
@@ -93,10 +100,41 @@ def main():
     target = args.model == 'qwen27b'
     torch.set_num_threads(12 if target else 4); torch.backends.cuda.matmul.allow_tf32 = False
     old = Path(ORIGINS[args.model]); prior = json.loads((old/'report.json').read_text())
+    origin_source = prior['source']
+    if args.model_source:
+        prior['source'] = args.model_source
     assert prior['status'] == 'complete' and transformers.__version__ == prior['transformers_version']
-    out = Path(args.out); out.mkdir(parents=True, exist_ok=False)
-    score_dir = out/'scores'; score_dir.mkdir()
-    teacher_dir = Path(os.environ['HF_HOME'])/'adaptive_teacher'; teacher_dir.mkdir()
+    out = Path(args.out)
+    previous = None
+    if args.retry_incomplete:
+        if args.compact_scores:
+            raise ValueError('Compact-score mode is only for a fresh calibration')
+        if args.reorder_modules:
+            raise ValueError('Retry preserves existing pilot shards; omit --reorder-modules')
+        previous = json.loads((out / 'report.json').read_text())
+        if previous['status'] == 'complete' or previous['model'] != args.model:
+            raise ValueError('Only retry an incomplete export of the same model')
+        pilot = json.loads((out.parent / 'pilot_calibration/report.json').read_text())
+        if pilot['status'] != 'pilot_complete' or not pilot['pilot_scores_verified']:
+            raise ValueError('Validate and preserve the pilot before retrying')
+        for key in ('source', 'revision', 'transformers_version'):
+            assert previous[key] == pilot[key]
+        assert previous['source'] == prior['source'] and previous['revision'] == prior['revision']
+    out.mkdir(parents=True, exist_ok=args.retry_incomplete)
+    score_dir = out/'scores'; score_dir.mkdir(exist_ok=args.retry_incomplete)
+    # df on the parent mount can report filesystem capacity instead of the
+    # user's project quota. Check the actual output directory before compute.
+    expected_bytes = sum(math.prod(m['shape']) // 512 * 128 * 3 * 4 for m in prior['matrices'].values())
+    if args.compact_scores:
+        expected_bytes = sum(math.prod(m['shape']) // 512 * 2 for m in prior['matrices'].values())
+    if args.reorder_modules:
+        expected_bytes += sum(math.prod(m['shape']) // 16 * 128 * 2 * 4
+                              for n, m in prior['matrices'].items() if re.search(args.reorder_modules, n))
+    reusable_bytes = sum(p.stat().st_size for p in score_dir.glob('*.pt'))
+    if shutil.disk_usage(out).free + reusable_bytes < expected_bytes + 1024**3:
+        raise RuntimeError('Insufficient output quota for complete calibration scores plus 1 GiB headroom')
+    teacher_dir = Path(os.environ.get('TMPDIR', os.environ['HF_HOME']))/'adaptive_teacher'
+    teacher_dir.mkdir()
     files = ('run_math_code_calibration.py', 'quantize/adaptive_prefix.py',
              'quantize/causal_four_over_six.py', 'quantize/quantizer.py',
              'results/math_code_adaptive/PROTOCOL.md')
@@ -108,6 +146,12 @@ def main():
         activation_convention='causal per-token factors for scoring and evaluation',
         calibration_sources=['OpenWebMath','CodeParrot'], uses_c4_calibration=False, uses_wiki_calibration=False,
         subsets=source_subsets(), fixed256_comparison=not args.adaptive_only)
+    r['historical_scores_persisted'] = not args.compact_scores
+    r['origin_source'] = origin_source
+    if previous:
+        r['reorder_modules'] = previous['reorder_modules']
+        r['reused_pilot_source_job'] = pilot['job_id']
+        r['reused_pilot_validation'] = str(out.parent / 'pilot_calibration/report.json')
     save(out,r)
     # The origin job pinned the quantizer sources by digest. A later commit can invalidate that
     # digest without changing any function this pass calls -- 384b803 appended
@@ -144,6 +188,11 @@ def main():
     batches = [b for values in fit.values() for b in values]
     sequence_ids = [digest for meta in r['fit'].values() for digest in meta['token_sha256']]
     sequence_sources = [source for source, values in fit.items() for _ in values]
+    if previous:
+        assert r['fit'] == pilot['fit']
+        for directory in r['reorder_modules'].values():
+            manifest = json.loads((Path(directory) / 'manifest.json').read_text())
+            assert manifest['sequence_ids'] == sequence_ids and manifest['sequence_sources'] == sequence_sources
     fine_pending = {}
     device = model.get_input_embeddings().weight.device
     r['bf16_fit_nll'] = []
@@ -245,8 +294,38 @@ def main():
                         weight_sha256=r['matrices'][name]['source_sha256'],
                         calibration_report=str(out / 'report.json'))
         (directory / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    compact = None
+    if args.compact_scores:
+        from run_task_reorder_eval import coarse_mask, validate_compact_masks
+        compact = dict(schema='mixfp4_compact_masks_v1', sequences=128, k=3, revision=r['revision'],
+            accumulation='float64 per-sequence sums before mean+3SE', raw256={}, fine8x64={},
+            weight_sha256={name: value['source_sha256'] for name, value in r['matrices'].items()})
     for i,(name,values) in enumerate(tables.items()):
-        torch.save(dict(name=name,ce=values[0],kl=values[1],fisher=values[2]),score_dir/f'{i:03d}.pt')
+        if compact is not None:
+            shape = r['matrices'][name]['shape']
+            compact['raw256'][name] = coarse_mask(values[0], values[1], shape)
+            bounds = [v.double().mean(0) + 3 * v.double().std(0) / math.sqrt(128) for v in values[:2]]
+            assert all(torch.isfinite(v).all() for v in bounds)
+            compact['fine8x64'][name] = (torch.maximum(*bounds) < 0).reshape(shape[0] // 8, shape[1] // 64)
+            continue
+        destination = score_dir/f'{i:03d}.pt'
+        temporary = destination.with_suffix('.pt.tmp')
+        torch.save(dict(name=name,ce=values[0],kl=values[1],fisher=values[2]), temporary)
+        stored = torch.load(temporary, map_location='cpu', weights_only=True)
+        assert stored['name'] == name
+        assert all(torch.equal(stored[key], value) for key, value in zip(('ce', 'kl', 'fisher'), values))
+        del stored
+        temporary.replace(destination)
+    if compact is not None:
+        path = out / 'compact_masks.pt'
+        torch.save(compact, path)
+        stored = validate_compact_masks(torch.load(path, map_location='cpu', weights_only=True), r)
+        assert all(torch.equal(stored[kind][name], mask) for kind in ('raw256', 'fine8x64')
+                   for name, mask in compact[kind].items())
+        r['compact_mask_sha256'] = digest_file(path)
+        r['compact_mask_counts'] = {kind: sum(int(mask.sum()) for mask in compact[kind].values())
+                                    for kind in ('raw256', 'fine8x64')}
+        del stored, compact
     maps,stats=derive_maps(((n,r['matrices'][n]['shape'],*values) for n,values in tables.items()),
                            include_fixed=not args.adaptive_only)
     del tables

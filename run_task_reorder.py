@@ -6,6 +6,7 @@ disjoint, source-stratified sequences. This does not evaluate model quality.
 """
 import argparse
 from dataclasses import asdict
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -63,9 +64,12 @@ def run(directory, output, config, fit_fraction=.5):
     fit, election = split_sequences(manifest, fit_fraction, config.seed)
     output.mkdir(parents=True, exist_ok=False)
     started = time.perf_counter()
+    print(f'LOAD FIT {manifest["name"]}: {len(fit)} sequences, axes={config.axes}', flush=True)
     ce, kl = load_scores(directory, manifest, fit)
-    layout = search_layout(ce, kl, config)
+    layout = search_layout(ce, kl, config, progress=lambda event: print(
+        'SEARCH ' + json.dumps(event), flush=True))
     del ce, kl
+    print(f'LOAD ELECTION {manifest["name"]}: {len(election)} sequences', flush=True)
     ce, kl = load_scores(directory, manifest, election)
     result = elect_layout(ce, kl, layout)
     # Independent-election identity control is diagnostic only. Never select
@@ -74,22 +78,44 @@ def run(directory, output, config, fit_fraction=.5):
     identity['row_atom_perm'] = torch.arange(ce.shape[1])
     identity['col_atom_perm'] = torch.arange(ce.shape[2])
     control = elect_layout(ce, kl, identity)
+    fine = dict(identity, config={**identity['config'], 'tile_rows': 8, 'tile_cols': 64})
+    fine_control = elect_layout(ce, kl, fine)
     del ce, kl
     layout.update(mask=result['mask'], election_upper_ce=result['upper_ce'],
                   election_upper_kl=result['upper_kl'], name=manifest['name'],
+                  identity_mask=control['mask'], identity_upper_ce=control['upper_ce'],
+                  identity_upper_kl=control['upper_kl'],
+                  identity_8x64_mask=fine_control['mask'],
                   provenance=manifest, fit_sequence_ids=[manifest['sequence_ids'][i] for i in fit],
                   election_sequence_ids=[manifest['sequence_ids'][i] for i in election])
+    layout['search_source_sha256'] = {
+        name: hashlib.sha256((Path(__file__).resolve().parent / name).read_bytes()).hexdigest()
+        for name in ('run_task_reorder.py', 'quantize/task_reorder.py')}
     torch.save(layout, output / 'layout.pt')
     report = dict(status='complete', module=manifest['name'], score_directory=str(directory.resolve()),
                   job_id=os.environ.get('SLURM_JOB_ID'), config=asdict(config),
+                  search_source_sha256=layout['search_source_sha256'],
                   fit_sequences=len(fit), election_sequences=len(election),
                   fit_objective=layout['fit_objective'], fit_identity_objective=layout['identity_objective'],
                   election_objective=result['objective'], election_identity_objective=control['objective'],
                   elected_tiles=int(result['mask'].sum()), identity_elected_tiles=int(control['mask'].sum()),
+                  identity_8x64_elected_tiles=int(fine_control['mask'].sum()),
                   total_tiles=result['mask'].numel(), seconds=time.perf_counter()-started,
                   quality_evaluated=False, native_kernel_implemented=False,
                   activation_contract='Gather X by col_perm, or fold matching permutation into producer',
                   output_contract='Scatter new output column j to original row_perm[j] in epilogue')
+    n, k = layout['weight_shape']
+    active = bool(result['mask'].any())
+    row_changed = active and not torch.equal(layout['row_perm'], torch.arange(n))
+    col_changed = active and not torch.equal(layout['col_perm'], torch.arange(k))
+    report['layout_cost'] = dict(
+        rows_changed=row_changed, columns_changed=col_changed,
+        identity_deployment_when_no_tiles=not active,
+        permutation_index_bytes_int32=4 * (n * row_changed + k * col_changed),
+        type_map_bytes_packed=(result['mask'].numel() + 7) // 8,
+        extra_unfused_bf16_activation_bytes_per_token=4 * k * col_changed,
+        extra_unfused_bf16_output_bytes_per_token=4 * n * row_changed,
+        native_fused_overhead_measured=False)
     (output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     return report
 

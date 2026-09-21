@@ -1,3 +1,131 @@
+# Llama mechanism diagnoses complete — 2026-09-20 15:36 UTC
+
+User requested diagnoses; completed on H200 gov113008, max4 concurrent.
+All jobs handled directly: data408530, smoke408535_[0-3], full408543_[0-3],
+summary408550. All monitor receipts saved. No active jobs, no new search.
+Evidence results/task_reorder/llama_diagnosis_20260920/{plan.json,data.json,
+summary.json,REPORT.md}; code llama_diagnosis_common.py,
+run_llama_taskfit_diagnosis.py,run_llama_depth_diagnosis.py,
+summarize_llama_diagnosis.py. Frozen source hashes unchanged.
+
+208docs: originalfit32/election32/reuseddevelopment48 plus96new docs.
+Fresh math/code64 arranged−rawCE−.001434±.000915, KL−.001509±.000463;
+freshgeneral32 CE−.001627±.001278, KL−.002062±.000620 (mean±2SE).
+Same effective weightdelta added toBF16 worsensCE+.008840/+.007583;
+subtractingdelta also hurts. Supports quantization-dependent repair and transfer,
+but does not rule out task-directed fitting. Accuracy conclusions unchanged.
+
+Fixed-template depth probe on32docs (24fresh) at layers0,15,31: freeze baseline
+activation residuals q0+(x−x0), keep exact baseline. Actual→frozen prediction
+MAE .013741→.001382, .012564→.001029, .002137→.001260. Downstream quantization
+contributes strongly to early scoring error. Sign agreement54.2%,54.2%,91.7%;
+freezing early residuals reduces magnitude error but not sign error. Earlier
+layouts were transferred from final-layer candidate, NOT optimized at depth;
+cannot conclude earlier layers cannot work. Refined down_proj supplies most
+fresh benefit; projection interaction intervals include0, no proven synergy.
+All416 suffix baseline,45 changed fullmodel,288 depth audits passed.
+Next justified research design: proposal by gradients, exact finite/joint suffix
+verification, then fresh gate. No additional search authorized by this result
+alone; retain existing gates and max4GPUs. No benchmark-driven map tuning.
+
+Earlier active-job entries below are superseded.
+
+# Llama mechanism diagnostics active — 2026-09-20
+
+User explicitly requested diagnoses after inconclusive accuracy. Frozen plan at
+results/task_reorder/llama_diagnosis_20260920/plan.json; preserve all source hashes.
+Data408530 and smoke408535_[0-3] complete, all audits passed and receipts saved.
+ACTIVE full408543_[0-3], attached monitor session30378; dependent summary408550
+registered with its own attached monitor; no background notifications
+because earlier queue delivery failed. Keep turn active and handle completions.
+Scripts llama_diagnosis_common.py, run_llama_taskfit_diagnosis.py,
+run_llama_depth_diagnosis.py; Slurm llama_diagnosis_prepare.sbatch then
+llama_diagnosis.sbatch array0-3. Run smoke first with DIAGNOSIS_SMOKE=1, inspect
+all4 arms, then full array. Max4H200gov113008; all computation on workers.
+Data208: originalfit32/election32, reusedjointdevelopment48, fresh96
+(math32/code32/C4general32 from validation shard00002), old documents excluded.
+Fit arm: frozen accepted joint192147 vsraw187, BF16+/-exact quantized difference,
+all8 gate/up/down combinations, CE/teacherKL, exact suffix/full audits.
+Depth arms: layers0,15,31;32fixed documents; same final-layer layout transferred
+as DIAGNOSTIC (not optimized elsewhere), STE predictions vsactual finite CE and
+frozen activation residual control q0+(x-x0), quarter/full and isolated/combined.
+Do not infer earlier-layer impossibility from transferred-template outcomes.
+No new search, candidate promotion, PPL rerun, or benchmark tuning.
+
+Earlier entries below are superseded only in active-job status.
+
+# Llama accuracy completed — 2026-09-20 14:56 UTC
+
+Latest user priority: Llama8B first; accuracy outside math/code fitting. All jobs
+completed and attached completion events handled directly. No active GPU jobs.
+Qwen407966 and summary407970 were cancelled before a complete comparison per user
+request; retain partial artifacts, no Qwen accuracy conclusion. Qwen diagnoses
+remain deferred behind the requested Llama focus; no new broad search authorized.
+
+Llama raw187 versus ACCEPTED joint192/layouts147: all source-weight hashes,
+paired question/prompt/target identities, exact sample counts and bitwise raw
+restore audits passed. Smoke408104_0; full408131_[0-3]; paired summary408134.
+Receipts saved under results/task_reorder/llama_accuracy_20260920/monitor_*.
+Zero-shot, batch8, no chat template, fake quantization; native accuracy untested.
+MMLU non-STEM38subjects/10889questions:62.7147%→62.9351%,+0.2204pp,+24correct,
+135wins/111losses, ±2SE0.2881pp, exact p.14238, Holm p.28475.
+ARC-Challenge1172questions, acc_norm:51.2799%→51.1945%,-0.0853pp,-1correct,
+11wins/12losses, ±2SE0.8187pp, exact/Holm p1.
+Neither endpoint establishes improved accuracy. No detected significant loss
+also does NOT establish equivalence. Do not label this subset full MMLU, and
+never tune subject selection or layouts using these benchmark outcomes.
+Frozen plan, question records, summary.json and REPORT.md at
+results/task_reorder/llama_accuracy_20260920. Root MIXFP4_REPORT.md updated.
+
+Earlier active-job entries below are superseded.
+
+# Llama accuracy priority — 2026-09-20 14:45 UTC
+
+User stopped Qwen priority because it costs about3x Llama; explicitly requests
+accuracy outside math/code fitting. Qwen407966_[0-3] and summary407970 cancelled;
+attached monitors observed cancellation, receipts saved. No completed Qwen result.
+Current scope: Llama-3.1-8B raw187 versus accepted joint192/layouts147 (NOT
+failed tile_refine/layouts147). ARC-Challenge and38 non-STEM MMLU subjects;
+exclude all19 STEM subjects; this is not a full MMLU score. Frozen plan at
+results/task_reorder/llama_accuracy_20260920/plan.json. No benchmark tuning.
+Setup408079 and smoke408104_0 complete; source/paired/bitwise audits passed.
+ACTIVE full408131_[0-3], attached monitor session63176. Dependent summary408134
+has its own attached monitor. Handle completion directly. At most4H200 on gov113008.
+Source run_llama_reorder_accuracy.py; summarize_llama_reorder_accuracy.py;
+batch slurm/llama_reorder_accuracy.sbatch and llama_reorder_accuracy_summary.sbatch.
+Pause Qwen task-fitting/layer diagnoses while Llama accuracy has priority.
+No detached notification delivery; keep turn active and attached monitors until
+completion. Earlier Qwen active-job text below is superseded.
+
+# Accuracy and task-fitting diagnosis — 2026-09-20 14:32 UTC
+
+User explicitly reopened diagnostics, then prioritized whether answer accuracy
+improves and said task fitting is acceptable if it does. See
+[TASK_ACCURACY_DIAGNOSIS.md](TASK_ACCURACY_DIAGNOSIS.md). Do not conflate PPL,
+8×64 historical accuracy, new 256×64 accuracy, or native-backend correctness.
+
+Setup407955 completed (lm_eval0.4.5 added with existing versions constrained).
+Smoke407961_0 completed in3m38s; source weights, paired question identity and
+raw restore bitwise audits passed. Setup/smoke completion receipts are saved.
+ACTIVE full accuracy407966_[0-3], attached monitor session54265. Dependent
+paired summary407970 has attached monitor session32818. Keep these monitors
+attached and handle completions directly; do not end the turn with jobs unhandled.
+Frozen plan: results/task_reorder/accuracy_20260920/plan.json. Compare
+Qwen raw195 versus accepted compacted both212, full zero-shot MMLU/ARC, same GPU
+per paired policy comparison, fixedbatch8. No fitting or model promotion.
+Use at most4H200 concurrently, gov113008; monitor every submitted job and handle
+completion directly. Source scripts run_reorder_accuracy.py and
+summarize_reorder_accuracy.py; tests/test_reorder_accuracy.py is prepared.
+
+run_taskfit_diagnosis.py is prepared but unrun: fit/fresh CE/KL plus counterfactual
+BF16±(arranged−raw) shifts. Layer-depth mechanism experiment also pending; do not
+drop it or launch another broad search. No result yet establishes accuracy gains
+for these new256 maps. Existing8×64 Qwen accuracy+0.78pp vsFourOverSix was not
+conclusive(p=.117); Llama−0.06pp(p=.617). User preference question is optional;
+stated default general-knowledge/reasoning uses MMLU+ARC.
+
+Native full-model findings below remain unchanged.
+
 # Native full-model measurement update — 2026-09-20 09:35 UTC
 
 No active jobs. Latest question: why final MLP only? Practical cheap cached-suffix

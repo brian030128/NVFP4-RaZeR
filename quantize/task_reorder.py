@@ -215,7 +215,7 @@ def _initial_orders(gain, generator, starts, axes):
 
 
 @torch.no_grad()
-def search_layout(ce, kl, config=None, objective_scales=None):
+def search_layout(ce, kl, config=None, objective_scales=None, progress=None):
     """Return permutations, fit-only map, trace, and exact fit objective.
 
     Orders map NEW positions to OLD indices. The physical weight transform is
@@ -262,6 +262,8 @@ def search_layout(ce, kl, config=None, objective_scales=None):
                 soft = float(_values(phi, config.k, scales, temp).sum())
                 trace.append(dict(start=name, temperature=temp, iteration=iteration,
                                   objective=hard, continuation_objective=soft))
+                if progress is not None:
+                    progress(trace[-1])
                 if hard > best:
                     best, best_rows, best_cols = hard, rows.clone(), cols.clone()
                 if iteration == config.rounds:
@@ -342,3 +344,26 @@ def scale_block_scores(gradient, direction):
     if gradient.shape != direction.shape or gradient.ndim != 2 or gradient.shape[1] % 16:
         raise ValueError('Need matching weight gradient/direction with K divisible by 16')
     return (gradient.float() * direction.float()).reshape(gradient.shape[0], -1, 16).sum(-1)
+
+
+@torch.no_grad()
+def original_order_weight_reference(base, alternative, layout, policy='reordered'):
+    """Fake-quantized quality reference; permutations are undone on weights.
+
+    Since columns move as whole scale groups, this is algebraically equivalent
+    to activation gathering and output scattering. It measures no runtime cost.
+    """
+    if policy == 'reordered':
+        rp = _validate_order(layout['row_perm'], base.shape[0])
+        cp = _validate_order(layout['col_perm'], base.shape[1])
+        grouped = cp.reshape(-1, 16)
+        if not torch.equal(grouped, (grouped[:, :1] // 16) * 16 + torch.arange(16)):
+            raise ValueError('Column permutation splits a 16-element scale group')
+        deployed = reordered_weight_reference(base, alternative, layout, layout['mask'])
+        return deployed[torch.argsort(rp).to(base.device)][:, torch.argsort(cp).to(base.device)]
+    if policy not in ('identity', 'identity_8x64'):
+        raise ValueError(f'Unknown reference policy: {policy}')
+    control = dict(layout, row_perm=torch.arange(base.shape[0]), col_perm=torch.arange(base.shape[1]))
+    if policy == 'identity_8x64':
+        control['config'] = {**layout['config'], 'tile_rows': 8, 'tile_cols': 64}
+    return reordered_weight_reference(base, alternative, control, layout[policy + '_mask'])

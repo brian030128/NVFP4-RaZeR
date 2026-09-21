@@ -1,0 +1,131 @@
+{
+  "status": "complete",
+  "job_id": "408136",
+  "shard": 0,
+  "smoke": false,
+  "plan_sha256": "f9564f472914e19f47fa0bcfca33b223e201f7bd32b8da5c5a6bb88bcafca565",
+  "tasks": [
+    "arc_challenge"
+  ],
+  "datasets": {
+    "arc_challenge": {
+      "fingerprint": "a4361c3f3e560fcd",
+      "test_documents": 1172
+    }
+  },
+  "zero_shot": true,
+  "chat_template": false,
+  "native_backend": false,
+  "batch_size": 8,
+  "gpu": "NVIDIA H200",
+  "node": "25a-hgpn003",
+  "lm_eval_version": "0.4.5",
+  "source_weight_hashes_checked": true,
+  "raw_tiles": 187,
+  "arranged_tiles": 147,
+  "results": {
+    "raw256": {
+      "arc_challenge": {
+        "alias": "arc_challenge",
+        "acc,none": 0.46928327645051193,
+        "acc_stderr,none": "N/A",
+        "acc_norm,none": 0.5127986348122867,
+        "acc_norm_stderr,none": "N/A"
+      }
+    },
+    "arranged": {
+      "arc_challenge": {
+        "alias": "arc_challenge",
+        "acc,none": 0.47013651877133106,
+        "acc_stderr,none": "N/A",
+        "acc_norm,none": 0.5119453924914675,
+        "acc_norm_stderr,none": "N/A"
+      }
+    }
+  },
+  "sample_sha256": {
+    "raw256": "7ea3f8ea338c995e81ec72b833d262c08fefea1b750f6bc0df27870aa0d0878f",
+    "arranged": "99204f1545754ca92fc287cfb688c4694289fb9126ab173a314508b35e866d29"
+  },
+  "task_configs": {
+    "raw256": {
+      "arc_challenge": {
+        "task": "arc_challenge",
+        "tag": [
+          "ai2_arc"
+        ],
+        "dataset_path": "allenai/ai2_arc",
+        "dataset_name": "ARC-Challenge",
+        "training_split": "train",
+        "validation_split": "validation",
+        "test_split": "test",
+        "doc_to_text": "Question: {{question}}\nAnswer:",
+        "doc_to_target": "{{choices.label.index(answerKey)}}",
+        "doc_to_choice": "{{choices.text}}",
+        "description": "",
+        "target_delimiter": " ",
+        "fewshot_delimiter": "\n\n",
+        "num_fewshot": 0,
+        "metric_list": [
+          {
+            "metric": "acc",
+            "aggregation": "mean",
+            "higher_is_better": true
+          },
+          {
+            "metric": "acc_norm",
+            "aggregation": "mean",
+            "higher_is_better": true
+          }
+        ],
+        "output_type": "multiple_choice",
+        "repeats": 1,
+        "should_decontaminate": true,
+        "doc_to_decontamination_query": "Question: {{question}}\nAnswer:",
+        "metadata": {
+          "version": 1.0
+        }
+      }
+    },
+    "arranged": {
+      "arc_challenge": {
+        "task": "arc_challenge",
+        "tag": [
+          "ai2_arc"
+        ],
+        "dataset_path": "allenai/ai2_arc",
+        "dataset_name": "ARC-Challenge",
+        "training_split": "train",
+        "validation_split": "validation",
+        "test_split": "test",
+        "doc_to_text": "Question: {{question}}\nAnswer:",
+        "doc_to_target": "{{choices.label.index(answerKey)}}",
+        "doc_to_choice": "{{choices.text}}",
+        "description": "",
+        "target_delimiter": " ",
+        "fewshot_delimiter": "\n\n",
+        "num_fewshot": 0,
+        "metric_list": [
+          {
+            "metric": "acc",
+            "aggregation": "mean",
+            "higher_is_better": true
+          },
+          {
+            "metric": "acc_norm",
+            "aggregation": "mean",
+            "higher_is_better": true
+          }
+        ],
+        "output_type": "multiple_choice",
+        "repeats": 1,
+        "should_decontaminate": true,
+        "doc_to_decontamination_query": "Question: {{question}}\nAnswer:",
+        "metadata": {
+          "version": 1.0
+        }
+      }
+    }
+  },
+  "raw_restore_bitwise_audit": true
+}
