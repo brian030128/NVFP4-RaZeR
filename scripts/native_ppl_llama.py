@@ -39,8 +39,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from benchmark_native_llama import PolicyLinear, ROOT, digest, write
 from native_model_runtime import Linear, Runtime, decode
 from quantize.quantizer import quant_mix_4_6, quant_nvfp4_4over6
+from run_conditional_format import sha as tensor_sha
 from quantize.task_reorder import original_order_weight_reference
-from run_baseline_protocol_audit import data
 
 # Published simulated values this run is compared against, from
 # results/task_reorder/transfer_20260920/renewed_llama/joint192_ppl and the
@@ -59,6 +59,8 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--policies', default='base,arranged',
                     help='Comma separated subset of base,raw,arranged')
+    ap.add_argument('--windows', type=Path, required=True,
+                    help='Frozen published windows from prepare_published_windows.py')
     ap.add_argument('--limit-windows', type=int, default=None,
                     help='Smoke mode: evaluate only this many windows per domain')
     args = ap.parse_args()
@@ -181,7 +183,14 @@ def main():
     report['status'] = 'weights_audited'
     write(out / 'report.json', report)
 
-    batches, report['data'] = data(tokenizer, prior, 2048)
+    # Frozen windows rather than a re-derivation, so the native run consumes the
+    # same token tensors the simulated run did; the digests are re-checked here.
+    frozen = torch.load(args.windows, map_location='cpu', weights_only=False)
+    assert frozen['revision'] == prior['revision'] and frozen['length'] == 2048
+    batches, report['data'] = frozen['batches'], frozen['meta']
+    for domain, windows in batches.items():
+        assert [tensor_sha(w) for w in windows] == frozen['meta'][domain]['token_sha256'], domain
+    report['windows_sha256'] = digest(args.windows)
     if args.limit_windows:
         batches = {d: b[:args.limit_windows] for d, b in batches.items()}
     print('WINDOWS ' + json.dumps({d: len(b) for d, b in batches.items()}), flush=True)
