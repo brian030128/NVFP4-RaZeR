@@ -195,9 +195,14 @@ already exists, so it costs **no metadata, no kernel change, and no permutation,
 at every layer**. The current MixFP4 baseline is FourOverSix, so this is
 unclaimed.
 
-Before acting on it, confirm against `../mixfp4/src/mixed_nvfp4_gemm_sm100.cu`
-that the SM100 scale path really is agnostic to how the stored ue4m3 scale was
-chosen. It should be, but the kernel is the authority, not this note.
+Checked against `../mixfp4/src/mixed_nvfp4_gemm_sm100.cu`: scales reach the
+kernel as an opaque ue4m3 byte array through `ptr_SFA`/`layout_SFA`, and
+`decode_scale` simply reinterprets the raw byte. Nothing on the SM100 path
+depends on how that scale was chosen, so a wider alpha search changes only the
+offline value written into a field that already exists. What still needs
+measuring is quality, not feasibility: `headx` has never been evaluated on top
+of the 256x64 MixFP4 baseline, only against plain NVFP4 at 8x64 in the earlier
+round, and `CLAUDE.md` warns that these two search axes are not independent.
 
 ### Do not retry
 
