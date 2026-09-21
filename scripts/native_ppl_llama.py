@@ -39,12 +39,22 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from benchmark_native_llama import PolicyLinear, ROOT, digest, write
 from native_model_runtime import Linear, Runtime, decode
 from quantize.quantizer import quant_mix_4_6, quant_nvfp4_4over6
-from run_conditional_format import sha as tensor_sha
 from quantize.task_reorder import original_order_weight_reference
 
 # Published simulated values this run is compared against, from
 # results/task_reorder/transfer_20260920/renewed_llama/joint192_ppl and the
 # report's section 4 table. Policy names are the benchmark's.
+def tensor_sha(t):
+    """Token-window digest, matching run_conditional_format.sha.
+
+    Inlined rather than imported: that module pulls in `datasets`, which the
+    native venv does not carry and must not be made to carry, since it is shared
+    with the gated latency jobs.
+    """
+    return hashlib.sha256(
+        t.detach().cpu().contiguous().view(torch.uint8).numpy().tobytes()).hexdigest()
+
+
 REFERENCE = {'base': dict(wiki=6.875525, c4=9.823733, label='FourOverSix'),
              'raw': dict(wiki=6.866879, c4=9.801361, label='raw 256x64'),
              'arranged': dict(wiki=6.864886, c4=9.796946, label='refined 147-tile')}
