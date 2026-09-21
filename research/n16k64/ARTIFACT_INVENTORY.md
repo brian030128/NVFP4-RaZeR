@@ -69,3 +69,24 @@ original `mixfp4` checkout; the delivery clone is retained only as temporary bac
 The seals above describe the internal immutable campaigns. The Git copies may
 have different hashes because text-only redaction is deliberate. Both hashes
 are available per file in `SNAPSHOT_SOURCE_INDEX.json`.
+
+## Research-homepage refresh (2026-09-21)
+
+This is a documentation-only update of the existing public snapshot, not a new
+campaign or a new copy of raw evidence. Root `README.md` now presents the
+MixFP4 paper-facing results; `UPSTREAM_RAZER.md` preserves the previous generic
+guide and citation. The research overview adds a question-level index of existing
+`results/`, `native/`, `scripts/` and `inference/` evidence. Software and claim
+guides distinguish primary simulation from the separate native prototype.
+
+The supplied README was found as an uncommitted root draft and saved to a local
+recovery archive before replacement. Its SHA-256 and the committed/remote blob
+comparison are in [validation](COMPATIBILITY_AND_VALIDATION.md#research-homepage-refresh-2026-09-21).
+Its stale local-only evidence links are not published as working GitHub links.
+The old root is also recoverable from commit
+`d841b588843dabd1908047f516642b3ee668d30e`.
+
+No maps, outcomes, source snapshots, raw archives or campaign audits were edited.
+The machine-readable source index/inventory still describe the historical
+collection; the public manifest is resealed for the changed review documents.
+All previous large-artifact exclusions and external-access limitations remain.

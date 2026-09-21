@@ -99,3 +99,23 @@ remain governed by [`MIXFP4_REPORT.md`](../../MIXFP4_REPORT.md),
 [`REORDERING_STUDY_STATUS.md`](../../REORDERING_STUDY_STATUS.md), and
 [`TASK_REORDER_HANDOFF.md`](../../TASK_REORDER_HANDOFF.md). This N16K64 review
 does not overwrite or broaden those distinct claims.
+
+## Homepage execution and supplementary claims (2026-09-21)
+
+The [homepage](../../README.md) now leads with MixFP4 rather than the upstream
+RaZeR guide. Its quality tables are rounded from the primary JSON, not from a
+native experiment. The 77.98% figure is the ratio of summed six-endpoint ΔNLL
+gains; five-draw favorable PPL does not imply all accuracy endpoints improve.
+
+| Claim | Evidence | Status / boundary |
+|---|---|---|
+| Primary map affects actual quality forward | [Installer](software/primary/campaign/policies.py), [activation hooks](software/primary/campaign/quant.py) | Map selects BF16 dequantized weights; activation quantize–dequantize precedes floating-point Linear. Not native packed-FP4 MMA. |
+| A separate native mixed prototype exists | [Native runtime](../../native/model_runtime.cu), [build override](../../scripts/build_native_model_runtime.py), [operator report](../../results/task_reorder/full_model_20260920/kernel_406633/report.json) | Experimental GB200/SM100 path, N256K64 ownership and global activation amax. Recorded checks, not rerun in this review. |
+| Prototype establishes native model quality / primary N16 parity | [Full-model report](../../results/task_reorder/full_model_20260920/llama_406828/report.json), [implementation](../../results/task_reorder/full_model_20260920/IMPLEMENTATION.md) | **Not established**: full-output gate false, native accuracy false, native PPL unmeasured. |
+| E0M3 descriptor value 0 is officially portable | [PTX ISA 8.8 Table 45](https://docs.nvidia.com/cuda/archive/12.9.0/parallel-thread-execution/index.html#tcgen05-instruction-descriptor) | **Not established**: the relevant documented format is E2M1=1. Distinguish saved experimental behavior from official guarantees; absence of documentation is not proof of impossibility. |
+| Later reorder diagnoses or accuracy validate N16 | [Repository-wide index](README.md#repository-wide-research-context) | **Not supported**: different ownership/layout and protocols; Llama accuracy is inconclusive, Qwen partial/cancelled. |
+
+The current overview's power/timing qualifications govern interpretation of the
+sealed boundary statistical report; its stored label is not permission to call
+late launches strictly protocol-conformant confirmation. Historical reports
+remain unchanged and are not duplicated as new evidence.

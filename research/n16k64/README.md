@@ -6,6 +6,11 @@ This directory consolidates the append-only N16K64 research completed between
 2026-09-21. The original campaigns remain immutable outside Git; this is a
 small, redacted review snapshot with per-file source hashes.
 
+The [root MixFP4 homepage](../../README.md) contains the six-model PPL and
+eight-task accuracy tables. This directory supplies detailed qualifications and
+traceability; the [software guide](software/README.md#quality-and-native-execution-paths)
+separates the actual BF16 quality path from the distinct GB200 prototype.
+
 Start with:
 
 - [`CLAIM_EVIDENCE_MATRIX.md`](CLAIM_EVIDENCE_MATRIX.md) for what is and is not supported;
@@ -166,6 +171,25 @@ restore files omitted at that cutoff, not newly generated experimental outcomes.
 Its `research_status` records execution separately from terminal classification,
 with protocol/outcome hashes, source/map provenance and missing external inputs.
 
+For exact boundary construction, see
+[critical-k and coverage definitions](CLAIM_EVIDENCE_MATRIX.md),
+[band definitions](campaigns/boundary/BAND_DEFINITIONS.json) and
+[pool definitions](campaigns/boundary/CORRUPTION_POOL_DEFINITIONS.json).
+The intervention unit is an N16K64 format block, not a 1×16 scale block.
+The four partitions are construction sensitivities, not independent replications.
+Corruption p counts replacements among all original selected units in this
+campaign (corruption coverage is 1); p=1 replaces all of them. Four rank-interleaved
+disjoint pools share the nearest-4K rejected reservoir within each stratum;
+they are not progressively more distant reservoirs.
+
+Endpoint power must be read individually. For example, Qwen C4's corruption
+slope is `limited_inference`, while its boundary slope is `descriptive`;
+calling every Qwen endpoint descriptive is incorrect. The
+[results table](campaigns/boundary/PRIMARY_RESULTS_TABLES.md) shows pointwise
+intervals, and the result JSON retains adjusted tests. Near-minus-random p=.50
+is negative in all six point estimates but not uniformly resolved by pointwise
+intervals; it was a completed planned control, not a newly proposed study.
+
 Five-draw N16 conjunction PPL is complete for Llama/Qwen/Mistral: all 30
 model/draw/corpus point estimates favor FourOverSix-relative improvement. This
 does not mean every task or endpoint is favorable: four-task macro accuracy
@@ -199,3 +223,32 @@ rate, universal CE/KL/conjunction optimality, all-model generalization, or SOTA.
 The N16K64 campaigns do not measure native FP4/E0M3 Tensor Core execution,
 latency, throughput, speedup, N8/N16 overhead, area, power, or Blackwell
 performance.
+
+## Repository-wide research context
+
+The five campaign rows above are the paper-facing N16 core. The following
+question-level index also covers tracked work outside this subtree. These are
+different protocols, not extra independent confirmations of the same method.
+Later reports supersede earlier *status* entries without converting failures
+into passes. The 2026-09-21 homepage refresh reuses existing results only.
+
+| Question / workstream | Evidence and status | Interpretation / paper role |
+|---|---|---|
+| Does local format/reconstruction fitting suffice? | [Early report](../../results/MIXFP4_REPORT.md), [task sensitivity](../../results/task_sensitivity/REPORT.md) | Historical fixed-alpha / N8, small-calibration, tensor-wide activation experiments; seed failures motivate whole-map validation. Not the frozen causal-per-token N16 protocol. |
+| Are baseline numbers comparable? | [Baseline protocol audit](../../results/baseline_protocol_audit/REPORT.md) | Window length, BF16/FP16 labeling, activation convention and C4 shard differences matter. Use within-protocol comparisons; do not pool historical PPL. |
+| Does calibration transfer across domains? | [Domain observations](../../results/task_sensitivity_domains/CALIBRATION_OBSERVATIONS.md), [pooled confirmation](../../results/pooled_confirmation/REPORT_332349.md) | Earlier pooled gains coexist with a failed equal-token diversity gate. Not proof that more diverse calibration universally helps. |
+| Did the old calibration sweep finish? | [Cancelled/superseded run](../../results/calibration_sensitivity/RUN.md) | Partial results are historical; its replacement design must be read separately, not counted as a completed primary sweep. |
+| Are five maps stable and accurate? | Primary V50/V51 PPL/accuracy JSON; [TODO P1-A/P2](TODO_EXPERIMENTS.md) | Completed evaluations, but joint density-aware map analysis and matched-budget composition inference remain distinct tasks. Thirty favorable PPL points do not establish all-task preservation. |
+| Do scale/selector controls explain the gain? | [Selector controls](campaigns/primary/analysis_ppl/SELECTOR_CONTROLS_PPL.json), [extension audit](campaigns/ppl_improvement/FINAL_SUBMISSION_RISK_AUDIT.md) | Retain scale/density controls and failed alternative-selector/held-out promotions. k=2 is post hoc; no universal replacement winner. |
+| Do supplementary tasks transfer? | [Generation](campaigns/primary/analysis_accuracy/CONFIRMATORY_GENERATION.json), [long context](campaigns/primary/analysis_ppl/LONG_CONTEXT.json) | Completed GSM8K/PG19 is supplementary, with four PG19 book clusters. Extension stopped downstream promotion is a separate outcome. |
+| Can reordering improve N256K64 ownership? | [Reordering status](../../REORDERING_STUDY_STATUS.md), [current report](../../MIXFP4_REPORT.md) | Separate accepted Llama/Qwen both-axis results; the 90% recovery target was not met. Failed fresh-transfer gates remain visible. N16 boundary evidence does not validate reorder efficacy. |
+| Does the accepted Llama reorder improve broader accuracy? | [Accuracy report](../../results/task_reorder/llama_accuracy_20260920/REPORT.md) | Completed Llama comparison is inconclusive for improvement/equivalence; Qwen was cancelled with partial artifacts, not a completed accuracy confirmation. |
+| Why do reorder scores mispredict finite effects? | [Fresh-data/depth diagnoses](../../results/task_reorder/llama_diagnosis_20260920/REPORT.md) | Quantization-dependent repair and early activation-quantization sensitivity are diagnostic support. Fixed layouts transferred across depth do not prove early-layer impossibility; no established projection synergy. |
+| Is native mixed execution equivalent? | [Native implementation](../../results/task_reorder/full_model_20260920/IMPLEMENTATION.md), [terminal report](../../results/task_reorder/full_model_20260920/llama_406828/report.json) | GB200 operator/encoding checks and diagnostic timing exist. Full-output equivalence failed, native accuracy is not established, native PPL unmeasured; N256/global-amax is not primary N16/per-token. |
+| What does upstream supply? | [Preserved generic guide](../../UPSTREAM_RAZER.md), [inference artifact](../../inference/README.md) | RaZeR/NVFP4 kernels and historical GPTQ/CD2 components do not imply frozen N16 selector dispatch or inherit its quality results. |
+
+Current untracked handoff archives and full campaign directories remain local
+provenance, not GitHub links or additional public raw-data releases.
+The [inventory](ARTIFACT_INVENTORY.md) explains these exclusions. This index
+does not silently combine outcome-selected historical studies with frozen
+confirmation.

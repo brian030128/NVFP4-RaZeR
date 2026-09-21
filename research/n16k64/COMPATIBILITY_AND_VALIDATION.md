@@ -1,5 +1,86 @@
 # Compatibility, validation, and release gates
 
+## Research homepage refresh (2026-09-21)
+
+This dated section governs the documentation-only refresh; earlier release and
+permission records below remain historical. No algorithm, sealed campaign,
+model, environment or experimental outcome was changed.
+
+### Why the old homepage was still RaZeR
+
+Before editing, local HEAD and freshly fetched research remote were both
+`d841b588843dabd1908047f516642b3ee668d30e`. Both root README blobs were
+`67a2fbd8ea6380358d6cf3b8302c79561ec1d56c`: a RaZeR guide with a short research
+link, not the requested MixFP4 research homepage. The user-supplied draft was
+present as the uncommitted root README, starting “MixFP4: format selection at
+hardware-compatible granularity”; its SHA-256 was
+`d038023fa596fee6f876e43e3e8fff67370a38c878a37f69593138453de90a55`.
+It was saved and read-back hash-verified in the existing local recovery
+checkpoint as `user_readme_before_rewrite_20260921.tar.gz`.
+No reachable README commit contained that title. Thus this was not an unpushed
+commit or evidence that the reader selected the wrong branch: the earlier
+integration retained the upstream-oriented root instead of the full draft.
+The research and software READMEs already matched HEAD/remote.
+
+The new homepage uses that draft's narrative but replaces stale unfinished
+boundary/E10 status, local-only links and overly broad hardware/accuracy claims.
+The previous committed generic guide is retained in `UPSTREAM_RAZER.md`.
+The detailed overview, software guide, claim matrix and inventory are synchronized;
+TODO execution specs were already current and are linked without rewriting their
+frozen/proposed distinctions.
+
+### Scope, compatibility and verification
+
+Fresh fetch still records main
+`2d3e8f397d57009ba843c83b2a75a176262b026c`, already contained in the research
+branch. No source integration or numerical behavior changed. Existing untracked
+handoff ZIPs and research directories were left alone; only the explicit
+documentation/metadata list is submitted. Historical 637-path release scope
+remains a record of the earlier delivery, not this smaller refresh.
+
+| Check actually performed | Result and scope |
+|---|---|
+| Stdlib JSON-to-Markdown comparison in the daily checkout | PASS: 48 PPL values plus 36 macro-accuracy/difference/CI values (84 total), independently rounded from unrounded primary JSON. |
+| Six-endpoint gain arithmetic | PASS: −0.018234921169327074 / −0.023382880830832824 = 77.98406578406876%; all six stored confirmation non-inferiority flags true. |
+| Terminal labels and native flags | PASS: both boundary/corruption pattern gates true but classification remains power_limited_support; native full-output and accuracy flags false. This reads existing outcomes, not a new experiment. |
+| Public snapshot verifier | PASS: 604 source-index entries, 634 manifest entries, 57 scientific invariant checks and 886 ΔNLL-to-relative-PPL checks; result in validation/LOCAL_VALIDATION_RESULTS.json. |
+| Explicit local-link and heading scan | PASS: 191 relative link/image/heading targets resolve in the publishable tree; root and preserved upstream guide included, not just the research subtree. |
+| Code-path and official-document inspection | Read historical installers/quantizers and native runtime/build/report files. Rechecked NVIDIA PTX ISA 8.8 Table 45; no runtime, import-triggered JIT or kernel build performed. |
+| Risk-based software testing | Documents/metadata only. No algorithm/import/config changes; prior three main test failures and deselections are not reclassified. No GPU tests, model downloads or bootstrap reruns are necessary for this diff. |
+
+The repeatable public check is
+`python3 research/n16k64/tools/verify_public_snapshot.py`; maintainer resealing
+uses its existing `--write-manifest --write-report research/n16k64/validation/LOCAL_VALIDATION_RESULTS.json`
+options. Inline Python checks read JSON and Markdown only (Python 3, standard
+library); they do not modify campaign results. Git diff/explicit-file and
+new-commit-range checks cover publication scope, whitespace, secret patterns and
+large files. The manifest covers this research review layer, not all excluded
+local archives or upstream repository files.
+
+### Current authorization and release gates
+
+Rechecked authenticated identity: Xrelifen; repository viewerPermission WRITE,
+REST push=true. SSH authentication to the actual origin transport identifies
+the same account. Repository rulesets, effective rules for
+`research/mixfp4-n16k64`, and classic branch-protection rules are empty in the
+authenticated API responses. Old READ/denial records are not current blockers.
+No account, remote URL or repository permission was changed.
+
+| Gate | Current refresh disposition |
+|---|---|
+| G1 | PASS — original draft backed up; existing source hashes retained. |
+| G2 | PASS — table values rechecked; power/timing/native limits retained, not upgraded. |
+| G3 | PASS — recorded latest main unchanged and already integrated; documentation-only diff. |
+| G4 | PASS — public verifier and focused numeric/link checks; no new runtime risk. |
+| G5 | PASS — ten explicit documentation/metadata files, each below 1 MB; no credential/private-path pattern matches; no pre-existing unpublished commits. Staged/outgoing diff must remain exactly this scope. |
+| G6 | PASS — current API and Git identities/permissions/rules checked as above. |
+| G7 | PASS — five campaigns plus separate historical/reorder/native/upstream work indexed; exclusions unchanged and explicit. |
+| G8 | PASS — no sealed outcomes/source, other user work, backups, branches or artifacts changed/deleted. |
+
+Publication must remain on the same research branch, without force, main
+changes or PR creation. Remote SHA/blob and CI checks are post-push checks;
+push success by itself is not a CI or native-quality pass.
+
 ## Current integration addendum — 2026-09-21
 
 The daily `mixfp4` workspace now contains the research branch based on the same
