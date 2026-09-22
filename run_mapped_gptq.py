@@ -29,7 +29,40 @@ from run_conditional_model import group_name
 from run_math_code_calibration import math_code_data
 from run_task_reorder_eval import mix_coarse, raw256_masks, validate_compact_masks, validate_evaluation_data
 
-POLICIES = ('rtn_four_over_six', 'rtn_raw256', 'gptq_four_over_six', 'gptq_raw256', 'gptq_fine8x64')
+POLICIES = ('rtn_four_over_six', 'rtn_raw256', 'gptq_four_over_six', 'gptq_raw256', 'gptq_fine8x64',
+            'rtn_rule', 'rtn_mse1x16', 'rtn_fine1x16')
+
+
+def bound(mean, std, k, n=128):
+    return mean + k * std / math.sqrt(n)
+
+
+def rule_masks(rule, scores, frozen, modules):
+    """rule = OBJECTIVE:K:TILE_ROWS, OBJECTIVE in {both, ce, kl}, TILE_ROWS in {8, 256}.
+
+    Uses the per-tile statistics persisted by run_math_code_calibration --summary-scores and
+    first checks that k=3 CE+KL reproduces the frozen compact maps exactly."""
+    objective, k, rows = rule.split(':'); k = float(k); rows = int(rows)
+    assert objective in ('both', 'ce', 'kl') and rows in (8, 256)
+    masks, mismatched = {}, 0
+    for i, (n, m) in enumerate(modules.items()):
+        s = torch.load(scores / f'{i:03d}.pt', map_location='cpu', weights_only=True)
+        assert s['name'] == n
+        o, c = s['shape']
+        stats = {}
+        for key in ('ce', 'kl'):
+            seq = s[key + '_seq256']
+            stats[key, 256] = lambda kk, seq=seq: bound(seq.mean(0), seq.std(0, unbiased=True), kk)
+            mean, std = s[key + '_mean8'].double(), s[key + '_std8'].double()
+            stats[key, 8] = lambda kk, mean=mean, std=std, o=o, c=c: bound(mean, std, kk).reshape(o // 8, c // 64)
+        for tr in (8, 256):
+            check = torch.maximum(stats['ce', tr](3.), stats['kl', tr](3.)) < 0
+            mismatched += int((check != frozen['raw256' if tr == 256 else 'fine8x64'][n]).sum())
+        if objective == 'both':
+            masks[n] = torch.maximum(stats['ce', rows](k), stats['kl', rows](k)) < 0
+        else:
+            masks[n] = stats[objective, rows](k) < 0
+    return masks, rows, mismatched
 
 
 def policy_masks(policy, calib, prior, modules):
@@ -51,6 +84,10 @@ def main():
     ap.add_argument('--policy', choices=POLICIES, required=True)
     ap.add_argument('--calib', type=Path, default=Path('/work/u4320956/task_reorder/transfer_20260920/llama8b/calibration'))
     ap.add_argument('--out', type=Path, required=True)
+    ap.add_argument('--rule', help='OBJECTIVE:K:TILE_ROWS for --policy rtn_rule')
+    ap.add_argument('--fine-dir', type=Path, default=Path('/work/u4320956/mixfp4_potential/llama8b_fine1x16/fine_masks'))
+    ap.add_argument('--fine-rule', default='both', help='both|ce|kl, optionally suffixed _k0/_k1/_k2')
+    ap.add_argument('--scores', type=Path, default=Path('/work/u4320956/mixfp4_potential/llama8b_calibration/scores'))
     args = ap.parse_args()
     torch.set_num_threads(min(8, int(os.environ.get('SLURM_CPUS_PER_TASK', 4))))
     torch.backends.cuda.matmul.allow_tf32 = False
@@ -81,7 +118,26 @@ def main():
     for n, m in modules.items():
         assert sha(m.weight) == prior['matrices'][n]['source_sha256'], n
     tok = AutoTokenizer.from_pretrained(prior['source'], revision=prior['revision'])
-    masks, tile_rows = policy_masks(args.policy, args.calib, prior, modules)
+    if args.policy == 'rtn_rule':
+        frozen = validate_compact_masks(torch.load(args.calib / 'compact_masks.pt', map_location='cpu',
+                                                   weights_only=True), prior)
+        masks, tile_rows, mismatched = rule_masks(args.rule, args.scores, frozen, modules)
+        report.update(rule=args.rule, scores=str(args.scores), frozen_k3_mismatched_tiles=mismatched)
+        assert mismatched == 0, f'Re-scored k=3 maps differ from frozen maps in {mismatched} tiles'
+    elif args.policy == 'rtn_fine1x16':
+        import numpy as np
+        masks, tile_rows = {}, 1
+        for i, n in enumerate(modules):
+            f = torch.load(args.fine_dir / f'{i:03d}.pt', map_location='cpu', weights_only=True)
+            assert f['name'] == n and f['k'] == 3
+            count = f['shape'][0] * f['shape'][1]
+            bits = np.unpackbits(f['packed'][args.fine_rule].numpy())[:count]
+            masks[n] = torch.from_numpy(bits.astype(bool)).reshape(f['shape'])
+        report.update(fine_rule=args.fine_rule, fine_dir=str(args.fine_dir))
+    elif args.policy == 'rtn_mse1x16':
+        masks, tile_rows = {n: torch.zeros(1, 1, dtype=torch.bool) for n in modules}, 1
+    else:
+        masks, tile_rows = policy_masks(args.policy, args.calib, prior, modules)
     report['tile_rows'] = tile_rows
     report['elected_tiles'] = sum(int(mask.sum()) for mask in masks.values())
 
@@ -113,10 +169,31 @@ def main():
     for index, (n, m) in enumerate(modules.items()):
         w = m.weight.detach()
         mask = masks[n]
-        if args.policy.startswith('rtn'):
+        if args.policy == 'rtn_fine1x16':
+            # Accuracy ceiling for granularity with the task-loss rule: E0M3 per scale block.
+            b = quant_nvfp4_4over6(w, 4, 16)
+            a = quant_mix_4_6(w, 4, 16, type_block=(8, 64), clip='a1', elect='always')
+            pick = mask.to(w.device).reshape(-1)
+            q = torch.where(pick[:, None], a.reshape(-1, 16), b.reshape(-1, 16)).reshape(w.shape)
+            del a, b
+        elif args.policy == 'rtn_mse1x16':
+            # Accuracy ceiling for granularity: choose E0M3 alpha=1 or FourOverSix per scale block.
+            b = quant_nvfp4_4over6(w, 4, 16)
+            a = quant_mix_4_6(w, 4, 16, type_block=(8, 64), clip='a1', elect='always')
+            pick = ((a.float() - w.float()).square().reshape(-1, 16).sum(-1)
+                    < (b.float() - w.float()).square().reshape(-1, 16).sum(-1))
+            q = torch.where(pick[:, None], a.reshape(-1, 16), b.reshape(-1, 16)).reshape(w.shape)
+            report['elected_tiles'] = report.get('elected_tiles', 0) + int(pick.sum())
+            del a, b
+        elif args.policy.startswith('rtn'):
             q = quant_nvfp4_4over6(w, 4, 16)
             if bool(mask.any()):
-                q = mix_coarse(q, quant_mix_4_6(w, 4, 16, type_block=(8, 64), clip='a1', elect='always'), mask)
+                a = quant_mix_4_6(w, 4, 16, type_block=(8, 64), clip='a1', elect='always')
+                if tile_rows == 256:
+                    q = mix_coarse(q, a, mask)
+                else:
+                    q = torch.where(mask.to(w.device).repeat_interleave(tile_rows, 0).repeat_interleave(64, 1), a, q)
+                del a
             if index % 32 == 0 or (bool(mask.any()) and checked < 3):
                 checked += bool(mask.any())
                 # RTN limit of the GPTQ quantizer must reproduce the evaluated RTN weights.

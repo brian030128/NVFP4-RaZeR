@@ -19,6 +19,7 @@ from quantize.quantizer import quant_mix_4_6, quant_nvfp4_4over6
 from run_c4_frozen import digest_file
 from run_conditional_format import save, sha
 
+FINE_KS = (0, 1, 2, 3)
 ORIGINS = {
     'qwen4b': 'results/pooled_scale/model_332389_qwen4b',
     'llama8b': 'results/pooled_scale/model_332389_llama8b',
@@ -86,6 +87,12 @@ def main():
     ap.add_argument('--adaptive-only', action='store_true')
     ap.add_argument('--compact-scores', action='store_true',
         help='Persist fine pilot scores and validated 128-sequence 8x64/256x64 masks, but omit large historical score tables.')
+    ap.add_argument('--summary-scores', action='store_true',
+        help='With --compact-scores, also persist threshold-sweep statistics: per-8x64-tile CE/KL '
+             'mean and std, and per-sequence CE/KL sums over 256x64 tiles (~0.7 GB for Llama-8B).')
+    ap.add_argument('--fine-masks', action='store_true',
+        help='Accumulate per-1x16-atom CE/KL mean and variance for every module on the GPU and '
+             'persist bit-packed 1x16 election masks (both/ce/kl, k=3). Accuracy ceiling only.')
     ap.add_argument('--retry-incomplete', action='store_true',
                     help='Recompute an incomplete full-model export, preserving validated pilot shards.')
     ap.add_argument('--reorder-modules', default=None,
@@ -127,6 +134,10 @@ def main():
     expected_bytes = sum(math.prod(m['shape']) // 512 * 128 * 3 * 4 for m in prior['matrices'].values())
     if args.compact_scores:
         expected_bytes = sum(math.prod(m['shape']) // 512 * 2 for m in prior['matrices'].values())
+    if args.summary_scores:
+        assert args.compact_scores, '--summary-scores requires --compact-scores'
+        expected_bytes += sum(math.prod(m['shape']) // 512 * 4 * 4 + math.prod(m['shape']) // 16384 * 128 * 2 * 4
+                              for m in prior['matrices'].values())
     if args.reorder_modules:
         expected_bytes += sum(math.prod(m['shape']) // 16 * 128 * 2 * 4
                               for n, m in prior['matrices'].items() if re.search(args.reorder_modules, n))
@@ -194,6 +205,7 @@ def main():
             manifest = json.loads((Path(directory) / 'manifest.json').read_text())
             assert manifest['sequence_ids'] == sequence_ids and manifest['sequence_sources'] == sequence_sources
     fine_pending = {}
+    fine_moments = {}
     device = model.get_input_embeddings().weight.device
     r['bf16_fit_nll'] = []
     with torch.no_grad():
@@ -242,6 +254,10 @@ def main():
                 value=(grad*d).reshape(o//8,8,k//64,64).sum((1,3)).flatten()
                 assert torch.isfinite(value).all(),name
                 tables[name][phase][sequence].copy_(value.cpu()); hits[name][phase]+=1
+                if args.fine_masks and phase in (0, 1):
+                    atom = (grad*d).reshape(o,k//16,16).sum(-1).double()
+                    acc = fine_moments.setdefault((name, phase), [torch.zeros_like(atom), torch.zeros_like(atom)])
+                    acc[0] += atom; acc[1] += atom.square()
                 if name in reorder_dirs and phase in (0, 1):
                     from quantize.task_reorder import scale_block_scores
                     fine = scale_block_scores(grad, d).cpu()
@@ -283,6 +299,32 @@ def main():
     del directions,model,modules,base,alt
     torch.cuda.empty_cache()
     r['score_seconds']=time.perf_counter()-start
+    if args.fine_masks:
+        import numpy as np
+        fine_dir = out / 'fine_masks'; fine_dir.mkdir()
+        counts = {}
+        for i, name in enumerate(tables):
+            bounds = {}
+            for phase, key in ((0, 'ce'), (1, 'kl')):
+                total, square = fine_moments.pop((name, phase))
+                mean = total / 128
+                std = ((square - 128 * mean.square()).clamp_min(0) / 127).sqrt()
+                bounds[key] = (mean, std / math.sqrt(128))
+            rules = {}
+            for kk in FINE_KS:
+                b = {key: m + kk * se for key, (m, se) in bounds.items()}
+                suffix = '' if kk == 3 else f'_k{kk}'
+                rules.update({'both' + suffix: torch.maximum(b['ce'], b['kl']) < 0,
+                              'ce' + suffix: b['ce'] < 0, 'kl' + suffix: b['kl'] < 0})
+            packed = {rule: torch.from_numpy(np.packbits(mask.cpu().numpy().reshape(-1)))
+                      for rule, mask in rules.items()}
+            for rule, mask in rules.items():
+                counts[rule] = counts.get(rule, 0) + int(mask.sum())
+            torch.save(dict(name=name, shape=list(rules['both'].shape), k=3, ks=list(FINE_KS), packed=packed),
+                       fine_dir / f'{i:03d}.pt')
+            del bounds, rules
+        r['fine_mask_counts'] = counts
+        save(out, r)
     for name, directory in reorder_dirs.items():
         manifest = dict(schema='mixfp4_reorder_scores_v1', status='complete', name=name,
                         atom_shape=[1, 16], weight_shape=r['matrices'][name]['shape'],
@@ -301,6 +343,18 @@ def main():
             accumulation='float64 per-sequence sums before mean+3SE', raw256={}, fine8x64={},
             weight_sha256={name: value['source_sha256'] for name, value in r['matrices'].items()})
     for i,(name,values) in enumerate(tables.items()):
+        if args.summary_scores:
+            shape = r['matrices'][name]['shape']
+            summary = dict(name=name, shape=shape)
+            for key, value in zip(('ce', 'kl'), values[:2]):
+                v = value.double()
+                summary[key + '_mean8'] = v.mean(0).float()
+                summary[key + '_std8'] = v.std(0, unbiased=True).float()
+                # Same float64 per-sequence aggregation as run_task_reorder_eval.coarse_mask.
+                g = v.reshape(128, shape[0] // 8, shape[1] // 64)
+                g = F.pad(g, (0, 0, 0, (-g.shape[1]) % 32)).reshape(128, -1, 32, shape[1] // 64).sum(2)
+                summary[key + '_seq256'] = g
+            torch.save(summary, score_dir / f'{i:03d}.pt')
         if compact is not None:
             shape = r['matrices'][name]['shape']
             compact['raw256'][name] = coarse_mask(values[0], values[1], shape)
