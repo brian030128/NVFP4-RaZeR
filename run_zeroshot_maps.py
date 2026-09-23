@@ -1,10 +1,10 @@
 """Zero-shot accuracy of frozen MixFP4 tile maps, paired with FourOverSix in the same run.
 
-Same protocol as run_zeroshot_kse.py (MIXFP4_REPORT_DETAILS.md, zero-shot section):
 lm-eval 0.4.5, 0-shot, arc_easy / arc_challenge / hellaswag / openbookqa / boolq /
-winogrande, acc_norm where defined else acc, unweighted mean, batch size 8,
-FourOverSix weights with E0M3 alpha=1 on the mapped tiles, and FourOverSix
-tensor-wide activation fake-quantization.
+winogrande, acc_norm where defined else acc, unweighted mean. FourOverSix weights with
+E0M3 alpha=1 on the mapped tiles. Activation fake-quantization (FourOverSix, or NVFP4
+for the NVFP4 row) uses one tensor-wide scale per document, so results do not depend
+on the lm-eval batch size, unlike run_zeroshot_kse.py whose scale spans the batch.
 
   --map LABEL=PATH:TILE_ROWS   frozen {module: bool[ceil(N/rows), K/64]} map, repeatable
 """
@@ -18,7 +18,8 @@ import torch
 import transformers
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from quantize.quantizer import quant_mix_4_6, quant_nvfp4_4over6
+from quantize.fast_act import quant_per_document
+from quantize.quantizer import quant_mix_4_6, quant_nvfp4, quant_nvfp4_4over6
 from run_c4_frozen import digest_file
 from run_conditional_format import sha
 
@@ -41,9 +42,10 @@ def main():
     ap.add_argument('--model', choices=tuple(CALIBRATIONS), required=True)
     ap.add_argument('--map', action='append', default=[], help='LABEL=PATH:TILE_ROWS')
     ap.add_argument('--out', type=Path, required=True)
-    ap.add_argument('--batch-size', type=int, default=8)
+    ap.add_argument('--batch-size', type=int, default=64)
+    ap.add_argument('--baselines', default='bf16,nvfp4,four_over_six',
+                    help='Comma-separated baseline policies evaluated before the maps')
     ap.add_argument('--samples-dir', type=Path, default=None)
-    ap.add_argument('--skip-baseline', action='store_true', help='Do not evaluate FourOverSix in this job')
     args = ap.parse_args()
     torch.backends.cuda.matmul.allow_tf32 = False
     qwen = args.model == 'qwen27b'
@@ -98,6 +100,10 @@ def main():
         with torch.no_grad():
             for n, m in modules.items():
                 w = pristine[n].to(m.weight.device)
+                if policy in ('bf16', 'nvfp4'):
+                    m.weight.copy_(w if policy == 'bf16' else quant_nvfp4(w, 4, 16))
+                    del w
+                    continue
                 b = quant_nvfp4_4over6(w, 4, 16)
                 if policy != 'four_over_six':
                     mask = maps[policy][n]
@@ -107,10 +113,22 @@ def main():
                         del a
                 m.weight.copy_(b)
                 del w, b
-        handles = [m.register_forward_pre_hook(
-            lambda module, inputs: (quant_nvfp4_4over6(inputs[0], 4, 16), *inputs[1:])) for m in modules.values()]
+        # Activation scales are per document (not per lm-eval batch), so the batch size
+        # only changes speed. NVFP4 activations for the NVFP4 row, FourOverSix otherwise.
+        if policy == 'bf16':
+            handles = []
+        elif policy == 'nvfp4':
+            handles = [m.register_forward_pre_hook(lambda module, inputs: (torch.stack(
+                [quant_nvfp4(x, 4, 16) for x in inputs[0]]) if inputs[0].dim() >= 3 else quant_nvfp4(inputs[0], 4, 16),
+                *inputs[1:])) for m in modules.values()]
+        else:
+            handles = [m.register_forward_pre_hook(
+                lambda module, inputs: (quant_per_document(inputs[0]), *inputs[1:])) for m in modules.values()]
 
-    for policy in ([] if args.skip_baseline else ['four_over_six']) + list(specs):
+    baselines = [b for b in args.baselines.split(',') if b]
+    assert set(baselines) <= {'bf16', 'nvfp4', 'four_over_six'}
+    r['activation_scale'] = 'per document (padding positions included)'
+    for policy in baselines + list(specs):
         install(policy)
         torch.cuda.empty_cache()
         lm = HFLM(pretrained=model, tokenizer=tok, batch_size=args.batch_size)
