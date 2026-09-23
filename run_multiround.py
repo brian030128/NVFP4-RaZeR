@@ -89,6 +89,10 @@ def main():
                          'over documents for every accepted objective (same 2 SE convention as the candidate filter)')
     ap.add_argument('--warm-start', action='store_true',
                     help='Start each round\'s backtracking at twice the previous accepted step instead of all candidates')
+    ap.add_argument('--eval-batch', type=int, default=1,
+                    help='Development documents per forward pass (activation scales stay per document)')
+    ap.add_argument('--score-batch', type=int, default=1,
+                    help='Calibration sequences per scoring forward/backward (gradients stay per sequence)')
     ap.add_argument('--gpus', type=int, default=None, help='Qwen: 1 loads on one device, else balanced')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
@@ -100,6 +104,7 @@ def main():
     assert transformers.__version__ == prior['transformers_version']
     args.out.mkdir(parents=True, exist_ok=False)
     report = dict(status='running', job_id=os.environ['SLURM_JOB_ID'], model=args.model, unit=args.unit, objective=args.objective,
+                  eval_batch=args.eval_batch, score_batch=args.score_batch,
                   significant_steps=args.significant_steps, warm_start=args.warm_start,
                   filter_k=args.filter_k, max_tries=args.max_tries,
                   acceptance={'both': 'mean dev CE and mean dev KL must both decrease', 'ce': 'mean dev CE must decrease',
@@ -171,22 +176,39 @@ def main():
 
     eval_handles = []
 
+    def per_document_act(module, inputs):
+        # Tensor-wide activation scales are computed per document, exactly as with
+        # one document per forward pass, however many documents are batched.
+        x = inputs[0]
+        if x.dim() >= 3 and x.shape[0] > 1:
+            q = torch.stack([quant_nvfp4_4over6(x[i], 4, 16) for i in range(x.shape[0])])
+        else:
+            q = quant_nvfp4_4over6(x, 4, 16)
+        return (q, *inputs[1:])
+
+    def per_sequence_losses(lp, ids, t):
+        # lp, t: (B, T-1, V) log-probabilities; CE and KL averaged over each sequence's tokens.
+        ce = F.nll_loss(lp.transpose(1, 2), ids[:, 1:].to(lp.device), reduction='none').mean(-1)
+        kl = (t.exp() * (t - lp)).sum(-1).mean(-1)
+        return ce, kl
+
     def eval_hooks(on):
         nonlocal eval_handles
         for h in eval_handles:
             h.remove()
-        eval_handles = [m.register_forward_pre_hook(
-            lambda module, inputs: (quant_nvfp4_4over6(inputs[0], 4, 16), *inputs[1:])) for m in modules.values()] if on else []
+        eval_handles = [m.register_forward_pre_hook(per_document_act) for m in modules.values()] if on else []
 
     def dev_eval():
         eval_hooks(True)
         ce, kl = [], []
-        for r, t in zip(dev, dev_teacher):
-            ids = r['ids'].to(device)
-            lp = model(input_ids=ids, use_cache=False).logits[:, :-1].float().reshape(-1, logits_width).log_softmax(-1)
-            ce.append(float(F.nll_loss(lp, ids[:, 1:].reshape(-1).to(lp.device))))
-            kl.append(float(F.kl_div(lp, t.to(lp.device).float().reshape(-1, lp.shape[-1]), reduction='batchmean', log_target=True)))
-            del lp
+        for start in range(0, len(dev), args.eval_batch):
+            chunk = dev[start:start + args.eval_batch]
+            ids = torch.cat([r['ids'] for r in chunk]).to(device)
+            lp = model(input_ids=ids, use_cache=False).logits[:, :-1].float().log_softmax(-1)
+            t = torch.cat(dev_teacher[start:start + args.eval_batch]).to(lp.device).float()
+            c, k = per_sequence_losses(lp, ids, t)
+            ce.extend(c.tolist()); kl.extend(k.tolist())
+            del lp, t
         eval_hooks(False)
         return dict(ce=sum(ce) / len(ce), kl=sum(kl) / len(kl), ce_nll=ce, kl_values=kl)
 
@@ -213,32 +235,36 @@ def main():
 
         def make_hook(n):
             def forward(module, inputs, output):
-                x = inputs[0].detach().reshape(-1, inputs[0].shape[-1])
+                x = inputs[0].detach()
+                x = x.reshape(x.shape[0], -1, x.shape[-1]) if x.dim() >= 3 else x.reshape(1, -1, x.shape[-1])
 
                 def backward(dy):
-                    grad = dy.detach().reshape(-1, dy.shape[-1]).float().T @ x.float()
+                    # Each sequence's loss reaches only its own slice of dy, so
+                    # dy[i]^T x[i] is exactly sequence i's weight gradient.
+                    dy = dy.detach().reshape(x.shape[0], -1, dy.shape[-1])
                     b = base(n)
                     d = (alt(n).float() - b.float()) * torch.where(expand(sel[n], rows, cols, b.shape[0]), -1., 1.)
                     del b
-                    value = reduce(grad * d, rows, cols).double()
                     s = sums[n]
-                    s[2 * phase[0]] += value
-                    s[2 * phase[0] + 1] += value.square()
+                    for i in range(x.shape[0]):
+                        value = reduce((dy[i].float().T @ x[i].float()) * d, rows, cols).double()
+                        s[2 * phase[0]] += value
+                        s[2 * phase[0] + 1] += value.square()
                 output.register_hook(backward)
             return forward
 
         handles = [m.register_forward_pre_hook(act) for m in modules.values()]
         handles += [m.register_forward_hook(make_hook(n)) for n, m in modules.items()]
         with torch.enable_grad():
-            for ids, t in zip(fit, teacher):
-                ids = ids.to(device)
+            for start in range(0, len(fit), args.score_batch):
+                ids = torch.cat(fit[start:start + args.score_batch]).to(device)
                 embeds = model.get_input_embeddings()(ids).detach().requires_grad_()
-                lp = model(inputs_embeds=embeds, use_cache=False).logits[:, :-1].float().reshape(-1, logits_width).log_softmax(-1)
-                ce = F.nll_loss(lp, ids[:, 1:].reshape(-1).to(lp.device))
-                kl = F.kl_div(lp, t.to(lp.device).float().reshape(-1, lp.shape[-1]), reduction='batchmean', log_target=True)
-                phase[0] = 0; ce.backward(retain_graph=True)
-                phase[0] = 1; kl.backward()
-                del embeds, lp, ce, kl
+                lp = model(inputs_embeds=embeds, use_cache=False).logits[:, :-1].float().log_softmax(-1)
+                t = torch.cat(teacher[start:start + args.score_batch]).to(lp.device).float()
+                ce, kl = per_sequence_losses(lp, ids, t)
+                phase[0] = 0; ce.sum().backward(retain_graph=True)
+                phase[0] = 1; kl.sum().backward()
+                del embeds, lp, t, ce, kl
         for h in handles:
             h.remove()
         n_seq = len(fit)
