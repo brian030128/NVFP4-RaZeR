@@ -12,7 +12,13 @@
 // The resulting shared library must be run through scripts/patch_mixed_nvfp4_gemm.py, like the
 // executable, or every E0M3 site silently computes E2M1.
 
+// -DRQ_STOCK=1 wraps src/nvfp4_gemm.cu instead: the stock CUTLASS SM120 NVFP4 GEMM (E2M1 only, no
+// format dispatch), exposed through the same entry points for latency comparisons.
+#if defined(RQ_STOCK) && RQ_STOCK
+#include "nvfp4_gemm.cu"
+#else
 #include "mixed_nvfp4_gemm.cu"
+#endif
 
 namespace {
 
@@ -54,6 +60,12 @@ int rq_sf_offsets(int operand, int m, int n, int k, int64_t *out) {
   return 0;
 }
 
+#if defined(RQ_STOCK) && RQ_STOCK
+// The stock kernel has no format granule and decodes both operands as E2M1.
+int rq_granule_map(int, int *, int) { return 0; }
+void rq_granule_shape(int *out4) { out4[0] = out4[1] = out4[2] = out4[3] = 0; }
+void rq_pinned(int *out2) { out2[0] = out2[1] = 1; }
+#else
 // Granule representative of every row (operand 0) or column (operand 1) of one CTA tile, as the
 // kernel's own build_granule_map derives it from the TiledMma. Returns the tile extent.
 int rq_granule_map(int operand, int *out, int capacity) {
@@ -93,6 +105,7 @@ void rq_pinned(int *out2) {
   out2[1] = 0;
 #endif
 }
+#endif  // RQ_STOCK
 
 static typename Gemm::Arguments make_arguments(void const *a, void const *sfa, void const *b,
                                                void const *sfb, void *d, int m, int n, int k,

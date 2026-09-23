@@ -52,12 +52,14 @@ def calib_counts(model):
 
 
 def collect(model):
+    # realfix_* re-ran the weights-on-A policies with a contiguous output (see
+    # repro_local/rerun_wt_as_A.sh); evaluation() keeps the first run that has a policy.
     if model == 'llama8b':
         fake = evaluation(['fake_baselines_llama8b', 'fake_maps_llama8b'], 'ppl')
-        real = evaluation(['real_baselines_llama8b', 'real_maps_llama8b'], 'ppl_real')
+        real = evaluation(['realfix_llama8b', 'real_baselines_llama8b', 'real_maps_llama8b'], 'ppl_real')
     else:
         fake = evaluation([f'fake_{model}'], 'ppl')
-        real = evaluation([f'real_{model}'], 'ppl_real')
+        real = evaluation([f'realfix_{model}', f'real_{model}'], 'ppl_real')
     # native: NVFP4 / FourOverSix / N16 on the weights-as-A kernel, N8 on the weights-as-B kernel;
     # each map's native effect is paired with FourOverSix on the SAME kernel.
     native = {p: p for p in ('nvfp4', 'four_over_six', 'n16_k3', 'n8_k3')}

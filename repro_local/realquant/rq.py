@@ -18,6 +18,7 @@ Configurations (repro_local/realquant/build.sh):
     b8x64    weights are operand B, format granule 8 cols x 64 K   -> N8K64 maps
 Both pin the activation operand to E2M1.
 """
+import contextlib
 import ctypes
 import types
 from pathlib import Path
@@ -28,8 +29,37 @@ from quantize.causal_four_over_six import quantize_rows
 from quantize.quantizer import _quant_e2m1, quant_nvfp4, quant_nvfp4_4over6
 
 LIB_DIR = Path('/home/dev/n16k64_campaign/realquant/bin')
-WEIGHT_OPERAND = {'wt_as_A': 0, 'b8x64': 1}
-TYPE_BLOCK = {'wt_as_A': (16, 64), 'b8x64': (8, 64)}
+WEIGHT_OPERAND = {'wt_as_A': 0, 'b8x64': 1, 'wt_as_A_colD': 0}
+TYPE_BLOCK = {'wt_as_A': (16, 64), 'b8x64': (8, 64), 'wt_as_A_colD': (16, 64)}
+# Builds whose D is stored column-major: D = W X^T (out x tokens) lands in memory as row-major
+# [tokens, out], so the weights-on-A output needs no transpose (build.sh wt_as_A_colD).
+COLUMN_MAJOR_D = {'wt_as_A_colD'}
+# Latency-study builds (repro_local/realquant/build.sh): E2M1-only kernels with no format dispatch.
+# The value is the default weight operand; the stock kernel accepts either.
+LATENCY_BUILDS = {'stock': 1, 'wt_as_A_nodisp': 0, 'b8x64_nodisp': 1}
+# Grid/exactness checks force a host sync per call. They are verification, not part of the
+# algorithm: the accuracy runs keep them on; latency runs switch them off after correctness is shown.
+VALIDATE = True
+# Wrap each RealLinear stage in a torch.profiler.record_function range (latency breakdowns only).
+PROFILE_RANGES = False
+# Epilogue as ONE elementwise pass: bf16 D times the FP32 per-token scale, computed in FP32 and
+# written straight into a contiguous bf16 [tokens, out] tensor (for weights-on-A this read is the
+# transpose). Bit-identical to the default three-step path (FP32 multiply, bf16 cast, contiguous
+# copy), which was verified on widths 48..14336; kept opt-in so the recorded runs stay reproducible.
+SINGLE_PASS_EPILOGUE = False
+# Quantize + pack + place activations with the fused Triton kernel (fused_quant.py), one launch per
+# Linear, instead of the PyTorch reference path. Bit-identical on real Llama-3.1-8B activations
+# (results/fused_quant_bitwise_llama8b.json); opt-in so the recorded runs stay reproducible.
+FUSED_ACT_QUANT = False
+_FUSED = None
+
+
+def _fused():
+    global _FUSED
+    if _FUSED is None:
+        import fused_quant
+        _FUSED = fused_quant
+    return _FUSED
 FP8_MIN, FP8_MAX = 2 ** -9, 448.0
 E2M1_LEVELS = (0., .5, 1., 1.5, 2., 3., 4., 6.)
 
@@ -37,7 +67,7 @@ E2M1_LEVELS = (0., .5, 1., 1.5, 2., 3., 4., 6.)
 # ----------------------------------------------------------------------------- kernel binding
 
 class Kernel:
-    def __init__(self, cfg, lib_path=None):
+    def __init__(self, cfg, lib_path=None, weight_operand=None):
         self.cfg = cfg
         self.path = Path(lib_path or LIB_DIR / f'lib{cfg}.so')
         lib = ctypes.CDLL(str(self.path))
@@ -57,6 +87,14 @@ class Kernel:
         pn = (ctypes.c_int * 2)()
         lib.rq_pinned(pn)
         self.pinned = (bool(pn[0]), bool(pn[1]))
+        self._sf = {}
+        self._ws = {}
+        self.d_colmajor = cfg in COLUMN_MAJOR_D
+        self.latency_only = cfg in LATENCY_BUILDS
+        if self.latency_only:
+            # No E0M3 site: only NVFP4 / FourOverSix weights (all flags clear) are legal here.
+            self.weight_operand = LATENCY_BUILDS[cfg] if weight_operand is None else weight_operand
+            return
         self.weight_operand = WEIGHT_OPERAND[cfg]
         # The weight operand carries the format map; the activation operand must be pinned E2M1.
         if self.pinned[self.weight_operand] or not self.pinned[1 - self.weight_operand]:
@@ -65,8 +103,6 @@ class Kernel:
                 else (self.granule['b_cols'], self.granule['b_k']))
         if gran != TYPE_BLOCK[cfg]:
             raise RuntimeError(f'{cfg}: library granule {gran} != expected {TYPE_BLOCK[cfg]}')
-        self._sf = {}
-        self._ws = {}
 
     def granule_map(self, operand):
         buf = (ctypes.c_int * 1024)()
@@ -107,11 +143,13 @@ class Kernel:
         return ws
 
     def gemm(self, a, sfa, b, sfb, m, n, k, alpha):
-        """D[m, n] (bf16) = alpha * decode(a) @ decode(b).T; a: [m, k/2] uint8, b: [n, k/2] uint8."""
+        """D[m, n] (bf16) = alpha * decode(a) @ decode(b).T; a: [m, k/2] uint8, b: [n, k/2] uint8.
+
+        Column-major-D builds return the same D as its row-major transpose, a [n, m] tensor."""
         for t in (a, sfa, b, sfb):
             assert t.is_cuda and t.dtype == torch.uint8 and t.is_contiguous()
         assert a.shape == (m, k // 2) and b.shape == (n, k // 2)
-        d = torch.empty((m, n), dtype=torch.bfloat16, device=a.device)
+        d = torch.empty((n, m) if self.d_colmajor else (m, n), dtype=torch.bfloat16, device=a.device)
         ws = self.workspace(m, n, k, a.device)
         stream = torch.cuda.current_stream(a.device).cuda_stream
         rc = self.lib.rq_gemm(ctypes.c_void_p(a.data_ptr()), ctypes.c_void_p(sfa.data_ptr()),
@@ -137,14 +175,14 @@ def e2m1_nibbles(code):
             lut[int(2 * v)] = i
         _E2M1_INDEX[code.device] = lut
     idx = lut[(code.abs() * 2).round().long().clamp(0, 12)]
-    if bool((idx < 0).any()):
+    if VALIDATE and bool((idx < 0).any()):
         raise ValueError('value off the E2M1 grid')
     return (idx | ((code < 0).long() << 3)).to(torch.uint8)
 
 
 def e0m3_nibbles(code):
     mag = code.abs()
-    if bool((mag > 7).any()) or bool((mag != mag.round()).any()):
+    if VALIDATE and (bool((mag > 7).any()) or bool((mag != mag.round()).any())):
         raise ValueError('value off the E0M3 grid')
     return (mag.long() | ((code < 0).long() << 3)).to(torch.uint8)
 
@@ -157,7 +195,7 @@ def pack_nibbles(nib):
 def scale_bytes(scale):
     """FP32 scales that are exactly E4M3-representable -> their UE4M3 bytes (bit 7 clear)."""
     b = scale.to(torch.float8_e4m3fn)
-    if not torch.equal(b.float(), scale):
+    if VALIDATE and not torch.equal(b.float(), scale):
         raise ValueError('scale is not E4M3-exact')
     return b.view(torch.uint8)
 
@@ -329,6 +367,10 @@ def act_nvfp4_rows(x2d):
 ACT = {'four_over_six_rows': act_four_over_six_rows, 'nvfp4_rows': act_nvfp4_rows}
 
 
+def _range(name):
+    return torch.profiler.record_function(name) if PROFILE_RANGES else contextlib.nullcontext()
+
+
 def _fake_act(kind):
     if kind == 'four_over_six_rows':
         return quantize_rows
@@ -354,29 +396,65 @@ class RealLinear:
         lead = x.shape[:-1]
         x2 = x.reshape(-1, k)
         t = x2.shape[0]
-        code, scale, gs = self.act(x2)
-        nib = e2m1_nibbles(code)
-        if self.calls < self.check_calls:
-            fake = _fake_act(self.act_kind)(x2)
-            got = decode(nib, torch.zeros_like(nib), scale.repeat_interleave(16, 1), gs[:, None])
-            if not torch.equal(got, fake):
-                raise AssertionError(f'activation packing differs from fake quant in '
-                                     f'{(got != fake).sum().item()} elements')
-            self.checked += 1
-        self.calls += 1
-        packed = pack_nibbles(nib)
-        sbytes = scale_bytes(scale)
+        # the activation is the GEMM operand the weights are not on
+        a_op = 1 if kern.weight_operand == 0 else 0
+        am, an = (w.n, t) if a_op == 1 else (t, w.n)
+        if FUSED_ACT_QUANT:
+            # one Triton launch: quantize, pack, and place scale bytes (bit-identical, see fused_quant)
+            with _range('rq/act_quant'):
+                idx, size = kern.sf_index(a_op, am, an, k, x2.device)
+                packed, asf, gs = _fused().quantize(x2.contiguous(), self.act_kind, idx, size)
+            self.calls += 1
+        else:
+            with _range('rq/act_quant'):
+                code, scale, gs = self.act(x2)
+            with _range('rq/encode'):
+                nib = e2m1_nibbles(code)
+            if self.calls < self.check_calls:
+                fake = _fake_act(self.act_kind)(x2)
+                got = decode(nib, torch.zeros_like(nib), scale.repeat_interleave(16, 1), gs[:, None])
+                if not torch.equal(got, fake):
+                    raise AssertionError(f'activation packing differs from fake quant in '
+                                         f'{(got != fake).sum().item()} elements')
+                self.checked += 1
+            self.calls += 1
+            with _range('rq/encode'):
+                packed = pack_nibbles(nib)
+                sbytes = scale_bytes(scale)
+            with _range('rq/place'):
+                asf = kern.place_scales(sbytes, a_op, am, an, k)
         if kern.weight_operand == 0:            # D[out, t] = W X^T
-            sfb = kern.place_scales(sbytes, 1, w.n, t, k)
-            d = kern.gemm(w.packed, w.sf_bytes, packed, sfb, w.n, t, k, w.gs)
-            y = (d.float() * gs[None, :]).t()
+            with _range('rq/gemm'):
+                d = kern.gemm(w.packed, w.sf_bytes, packed, asf, w.n, t, k, w.gs)
+            dt = d if kern.d_colmajor else d.t()  # [t, out]: already row-major for column-major-D builds
+            if SINGLE_PASS_EPILOGUE and self.bias is None:
+                with _range('rq/epilogue'):
+                    out = torch.empty((t, w.n), dtype=x.dtype, device=x.device)
+                    torch.mul(dt, gs[:, None], out=out)
+                    return out.reshape(*lead, w.n)
+            with _range('rq/epilogue'):
+                if kern.d_colmajor:
+                    y = d.float() * gs[:, None]
+                else:
+                    y = (d.float() * gs[None, :]).t()
         else:                                    # D[t, out] = X W^T
-            sfa = kern.place_scales(sbytes, 0, t, w.n, k)
-            d = kern.gemm(packed, sfa, w.packed, w.sf_bytes, t, w.n, k, w.gs)
-            y = d.float() * gs[:, None]
-        if self.bias is not None:
-            y = y + self.bias.float()
-        return y.to(x.dtype).reshape(*lead, w.n)
+            with _range('rq/gemm'):
+                d = kern.gemm(packed, asf, w.packed, w.sf_bytes, t, w.n, k, w.gs)
+            if SINGLE_PASS_EPILOGUE and self.bias is None:
+                with _range('rq/epilogue'):
+                    out = torch.empty((t, w.n), dtype=x.dtype, device=x.device)
+                    torch.mul(d, gs[:, None], out=out)
+                    return out.reshape(*lead, w.n)
+            with _range('rq/epilogue'):
+                y = d.float() * gs[:, None]
+        with _range('rq/epilogue'):
+            if self.bias is not None:
+                y = y + self.bias.float()
+            # Weights-on-A produce D^T; hand the model a row-major [t, out] tensor like nn.Linear.
+            # A strided view here makes downstream attention see non-contiguous q/k/v, which sends
+            # SDPA to its FP32 math backend instead of flash attention (and slows every
+            # elementwise op after it). The copy moves bytes only; the values are unchanged.
+            return y.to(x.dtype).contiguous().reshape(*lead, w.n)
 
 
 class RealInstaller:
@@ -399,7 +477,9 @@ class RealInstaller:
     def install(self, kind, kernel, masks=None, expected_weight=None):
         """expected_weight(name, weight) -> bf16 fake-quant weight, for the bitwise packing check."""
         self.remove()
-        type_block = TYPE_BLOCK[kernel.cfg]
+        type_block = TYPE_BLOCK.get(kernel.cfg)
+        if kernel.latency_only and masks is not None and any(bool(m.any()) for m in masks.values()):
+            raise ValueError(f'{kernel.cfg} has no E0M3 site; it cannot run a map with E0M3 tiles')
         tiles = 0
         for name, mod in self.modules.items():
             w = mod.weight.detach()
