@@ -181,6 +181,7 @@ def main():
 
     act_checks = [0]
     current_batch = [1]
+    input_layouts = {}
 
     def per_document_act(module, inputs):
         # Tensor-wide activation scales are computed per document, exactly as with
@@ -189,6 +190,9 @@ def main():
         # first calls of every run.
         x = inputs[0]
         batch = current_batch[0]
+        if batch > 1:
+            input_layouts.setdefault(str((tuple(x.shape), batch)), 0)
+            input_layouts[str((tuple(x.shape), batch))] += 1
         if batch == 1 or (x.dim() >= 3 and x.shape[0] == batch):
             view = x
         elif x.shape[0] % batch == 0 and x.shape[0] // batch > 1:
@@ -301,6 +305,8 @@ def main():
     save(args.out, report)
     timing = dict(setup_seconds=time.time() - started)
     if args.check_start:
+        report['input_layouts'] = input_layouts
+        print('LAYOUTS ' + json.dumps(input_layouts), flush=True)
         report['status'] = 'check_start_complete'
         save(args.out, report)
         print(f'START {args.objective} dev CE {current["ce"]:.6f} KL {current["kl"]:.6f}', flush=True)
