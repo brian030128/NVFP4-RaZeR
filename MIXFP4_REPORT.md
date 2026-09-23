@@ -161,7 +161,97 @@ one seed; Qwen native perplexity is still unmeasured.
 [native versus simulated](results/task_reorder/native_ppl_20260921/native_vs_simulated.json),
 [native gain](results/task_reorder/native_ppl_20260921/native_gain_paired.json).
 
-## 5. Ablation study: KL only, CE only, and more reordered layers
+## 5. Multi-round KL-only election
+
+One-shot election (§2) scores every tile once, at FourOverSix, and elects all
+tiles whose bound is negative. Summing thousands of first-order scores
+overstates the combined effect of a step by 5–50×, which is why low thresholds
+and fine tiles collapse. Multi-round election works like training with a line
+search:
+
+1. **Score.** At the *current* quantized model, compute per-sequence gradients of
+   KL(BF16 teacher ‖ quantized) on the 128 calibration sequences, and the
+   directional score of every legal flip (E2M1→E0M3, or undo). The activation
+   and straight-through conventions are those of §2.
+2. **Rank.** Candidates are flips with mean + 2 SE < 0; the 2 SE filter is fixed,
+   not tuned.
+3. **Backtrack.** Apply the top n, n/2, n/4, … candidates. Accept the first step
+   that lowers mean KL on 192 held-out math/code development documents. These
+   are the three recorded confirmation sets per model, disjoint from calibration.
+4. **Repeat** until no step lowers development KL. WikiText-2 and C4 are
+   evaluated once, on the final map; no choice looks at them.
+
+The output is an ordinary per-tile E2M1/E0M3 map, so it has no runtime cost. The
+procedure is deterministic: an independent Llama 256×64 re-run reproduced the
+map and every evaluation NLL bitwise.
+
+### Results (W4A4 fake quantization, released protocol)
+
+| Model | Policy | E0M3 tiles | WikiText-2 | C4 | paired ΔNLL vs FourOverSix ± 2SE (wiki / c4) |
+|---|---|---:|---:|---:|---|
+| Llama-3.1-8B | FourOverSix | 0 | 6.875525 | 9.823733 | — |
+| | One-shot 256×64, k=3 (§4) | 187 | 6.866879 | 9.801361 | −0.00126±0.00155 / −0.00228±0.00145 |
+| | One-shot 8×64, k=3 (§4) | 3,345 | 6.849275 | 9.773040 | — |
+| | **Multi-round KL, 256×64** | 8,405 | **6.841998** | **9.774137** | −0.00489±0.00185 / −0.00506±0.00220 |
+| | **Multi-round KL, 8×64** | 3,654 | **6.819751** | **9.750492** | −0.00815±0.00173 / −0.00748±0.00240 |
+| Qwen3.8-27B | FourOverSix | 0 | 7.287076 | 10.188365 | — |
+| | One-shot 256×64, k=3 (local) | 195 | 7.266300 | 10.176030 | — |
+| | One-shot 8×64, k=3 (§4) | 3,785 | 7.214750 | 10.149866 | — |
+| | **Multi-round KL, 256×64**¹ | 39,099 | **7.246839** | **10.157245** | −0.00554±0.00343 / −0.00306±0.00092 |
+| | **Multi-round KL, 8×64** | *running* | — | — | — |
+
+¹ Stopped by request after round 5 of the tail, when rounds accepted 1–17 flips
+each (dev KL 0.04625 → 0.04289).
+
+- **Llama:** at 256×64, multi-round KL gains 3.9× (WikiText) and 2.2× (C4) the
+  one-shot k=3 map, and edges 8×64 k=3 on WikiText. At 8×64 it reaches
+  −0.0558 / −0.0732. That exceeds the non-deployable 1×16 MSE-selected reference
+  (−0.0418 / −0.0613), so the MSE per-block choice is not a ceiling for
+  task-aware selection.
+- **Qwen:** at 256×64, multi-round KL gains about 2× the one-shot k=3 map but
+  stays below one-shot 8×64 k=3. On Qwen, the one-shot threshold results in
+  `results/mixfp4_potential/MULTIROUND.md` show that much larger elections keep
+  improving PPL, which the KL acceptance test does not reach.
+- **Generalization (Llama, five unseen domains).** Fresh math and code, PG-19,
+  arXiv and GovReport, with maps frozen before any of these documents were read.
+  Multi-round KL has the lowest teacher KL of every map on all five domains.
+  Its CE ties the CE+KL and CE-only variants.
+- **One-shot KL was not the problem objective.** One-shot KL-only at 8×64 (§6) is
+  catastrophic; the same objective with re-scoring and backtracking is the best
+  Llama policy measured. Earlier objective ablations were one-shot artifacts.
+
+### Calibration time and memory
+
+Measured by the runs themselves: wall time per phase, `torch.cuda` peak memory
+and process peak RSS. The Qwen 256×64 CPU figure is Slurm MaxRSS.
+
+| Run | Hardware | Scoring passes | Dev evaluations | Setup | Optimization | Final PPL eval | Peak GPU memory | Peak CPU memory |
+|---|---|---:|---:|---:|---:|---:|---|---:|
+| Llama 256×64 | 1× H200 | 5 | 42 | 2.0 min | 43.9 min | 4.7 min | 46.1 GiB (48.9 reserved) | 41.2 GiB |
+| Llama 8×64 | 1× H200 | 10 | 133 | 2.3 min | 2 h 15 min | 4.8 min | 47.3 GiB (50.6 reserved) | 41.3 GiB |
+| Qwen 256×64 (to round 5) | 2× H200 | 6 | 63 | ≤ 37 min³ | 3 h 58 min | 16.8 min² | not logged⁴ | 78.1 GiB |
+| Qwen 8×64 | 2× H200 | *running* | | | | | | |
+
+² Separate 1-GPU evaluation job of the saved map (whole job, including model load).
+³ Job wall time 4 h 35 min minus the logged optimization rounds. This is an upper bound: it also
+  includes the unfinished round 6 that was cancelled.
+⁴ Started before resource logging was added; the Qwen 8×64 run logs it, and its footprint (model,
+  candidates and teachers) is the same apart from the small per-tile score arrays.
+
+- **Where the time goes.** One scoring pass (128 × 512 tokens, forward plus CE and
+  KL backward) takes about 2 min on Llama and 8 min on Qwen. One development
+  evaluation (192 × 512 tokens, forward only) takes about 0.6 min on Llama and
+  3 min on Qwen.
+- **Backtracking dominates, mostly in the tail.** Rounds that accept a handful
+  of flips each cost many evaluations. Round 0 alone takes 3.5 min (Llama
+  256×64) or 11 min (Qwen 256×64) and delivers most of the development-KL gain.
+- **Memory.** GPU memory is the BF16 model plus the FourOverSix and E0M3
+  candidate weights plus 512-token activations. CPU memory is dominated by the
+  BF16 teacher log-probabilities cached for the calibration and development
+  documents.
+- **All of this is one-time and offline.** The deployed artifact is a tile map.
+
+## 6. Ablation study: KL only, CE only, and more reordered layers
 
 ### Tile-selection objective
 
@@ -208,7 +298,7 @@ cannot work.
 [Matched scope tables](results/task_reorder/cluster_20260919/FULL_COMPARISON.md#qwen-expanded-scope-layers-5663),
 [Llama depth diagnosis](results/task_reorder/llama_diagnosis_20260920/REPORT.md).
 
-## 6. Tried and failed
+## 7. Tried and failed
 
 Every entry below was measured and rejected. Links point to the retained report
 for each. Two caveats on reading them. First, **regime matters**: rows marked
@@ -217,7 +307,7 @@ to the deployed 256×64 W4A4 geometry, and vice versa. Second, **"failed" is
 relative to a stated reference** — several entries improve on FourOverSix while
 losing to a better alternative, and the reference is named in each case.
 
-### 6.1 Rearranging weights between tiles
+### 7.1 Rearranging weights between tiles
 
 The largest single line of failed work. Permutation preserves the multiset of
 per-atom scores and only rearranges them into rectangles, and the objective used
@@ -247,7 +337,7 @@ producer. [Capacity bracket](results/task_reorder/capacity_20260921/down_proj_ca
 [axis and objective summary](results/task_reorder/step1_20260921/summary.json),
 [analysis](REORDER_OBJECTIVE_REDESIGN.md).
 
-### 6.2 Rotation
+### 7.2 Rotation
 
 | What was tried | Result | Report |
 |---|---|---|
@@ -264,7 +354,7 @@ does cost about half as much on `up` and `down`. The asymmetry reverses on
 `reference_only_expanded_k`: rotation lives on K and is shared with the
 activation across all rows, so rotating only some tiles requires duplicating K.
 
-### 6.3 Selection objectives
+### 7.3 Selection objectives
 
 | What was tried | Result | Report |
 |---|---|---|
@@ -272,12 +362,12 @@ activation across all rows, so rotating only some tiles requires duplicating K.
 | MAE and L*p* selection losses | Indistinguishable from MSE: `mae_m2_8x64` **−0.0016** WikiText / **+0.0008** C4, `l1.5_m2_32x128` **+0.0011** / **−0.0020** — the squared-error criterion is not what needs fixing | [decide_r1](results/decide_r1/REPORT.md) |
 | Coherent-error objective `corr<r>` | Near no-op: the coherent and incoherent terms are measured equal, ratio **0.998–1.005** for every grid and clip preset | [analyze_coherent_error.py](analyze_coherent_error.py) |
 | Calibration-free proxies for `diag(S)` | Preceding RMSNorm `gamma²` correlates **+0.63** on q/k/v but **−0.50** on gate/up; weight column energy has no consistent sign | [quantize/importance.py](quantize/importance.py), [measured importance](results/mix_4_6_sweep/importance_llama-2-7b.pt) |
-| Regularizing the arrangement search | Deleting the hinge refinement raises fit-over-null **3.46 → 28.66** and KL grouping recovers the tile count, yet both candidates still fail finite loss (6.1) | [objective ablation](results/task_reorder/objective_ablation_20260921/summary.json), [step 1 summary](results/task_reorder/step1_20260921/summary.json) |
+| Regularizing the arrangement search | Deleting the hinge refinement raises fit-over-null **3.46 → 28.66** and KL grouping recovers the tile count, yet both candidates still fail finite loss (7.1) | [objective ablation](results/task_reorder/objective_ablation_20260921/summary.json), [step 1 summary](results/task_reorder/step1_20260921/summary.json) |
 
 A sign-flip placebo search reaches **93%** of the deployed fit objective on Llama
 `gate_proj`, so the fit objective alone is not evidence that a layout is usable.
 
-### 6.4 Scale and format variants
+### 7.4 Scale and format variants
 
 | What was tried | Result |
 |---|---|
@@ -288,7 +378,7 @@ A sign-flip placebo search reaches **93%** of the deployed fit objective on Llam
 Both preset removals are recorded in the `CLIP_PRESETS` comments in
 [quantize/quantizer.py](quantize/quantizer.py).
 
-### 6.5 What this leaves
+### 7.5 What this leaves
 
 Electing a tile's format **in place** is the one mechanism with a clean record:
 it only ever sums the scores of atoms already in that tile and never assumes

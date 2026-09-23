@@ -30,7 +30,7 @@ from run_math_code_calibration import math_code_data
 from run_task_reorder_eval import mix_coarse, raw256_masks, validate_compact_masks, validate_evaluation_data
 
 POLICIES = ('rtn_four_over_six', 'rtn_raw256', 'gptq_four_over_six', 'gptq_raw256', 'gptq_fine8x64',
-            'rtn_rule', 'rtn_mse1x16', 'rtn_fine1x16')
+            'rtn_rule', 'rtn_mse1x16', 'rtn_fine1x16', 'rtn_mapfile')
 
 
 def bound(mean, std, k, n=128):
@@ -85,6 +85,8 @@ def main():
     ap.add_argument('--model', choices=('llama8b', 'qwen27b'), default='llama8b')
     ap.add_argument('--calib', type=Path, default=None)
     ap.add_argument('--out', type=Path, required=True)
+    ap.add_argument('--map', type=Path, help='Frozen {module: bool tile mask} for --policy rtn_mapfile')
+    ap.add_argument('--map-tile-rows', type=int, default=256)
     ap.add_argument('--rule', help='OBJECTIVE:K:TILE_ROWS for --policy rtn_rule')
     ap.add_argument('--fine-dir', type=Path, default=Path('/work/u4320956/mixfp4_potential/llama8b_fine1x16/fine_masks'))
     ap.add_argument('--fine-rule', default='both', help='both|ce|kl, optionally suffixed _k0/_k1/_k2')
@@ -97,7 +99,7 @@ def main():
     if args.scores is None:
         args.scores = Path('/work/u4320956/mixfp4_potential/qwen27b_scores' if qwen
                            else '/work/u4320956/mixfp4_potential/llama8b_calibration/scores')
-    assert not qwen or args.policy in ('rtn_rule', 'rtn_four_over_six'), 'Qwen supports RTN rule arms only'
+    assert not qwen or args.policy in ('rtn_rule', 'rtn_four_over_six', 'rtn_mapfile'), 'Qwen supports RTN rule arms only'
     torch.set_num_threads(min(8, int(os.environ.get('SLURM_CPUS_PER_TASK', 4))))
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.manual_seed(0)
@@ -138,6 +140,10 @@ def main():
         masks, tile_rows, mismatched = rule_masks(args.rule, args.scores, frozen, modules)
         report.update(rule=args.rule, scores=str(args.scores), frozen_k3_mismatched_tiles=mismatched)
         assert mismatched == 0, f'Re-scored k=3 maps differ from frozen maps in {mismatched} tiles'
+    elif args.policy == 'rtn_mapfile':
+        masks, tile_rows = torch.load(args.map, map_location='cpu', weights_only=True), args.map_tile_rows
+        assert set(masks) == set(modules)
+        report.update(map=str(args.map), map_sha256=digest_file(args.map))
     elif args.policy == 'rtn_fine1x16':
         import numpy as np
         masks, tile_rows = {}, 1
