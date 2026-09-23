@@ -29,27 +29,52 @@ from quantize.quantizer import quant_mix_4_6, quant_nvfp4_4over6
 from run_baseline_protocol_audit import data
 from run_c4_frozen import digest_file
 from run_conditional_format import save, sha
-from run_k_dev import load_development
 from run_math_code_calibration import load_model, math_code_data
 from run_task_reorder_eval import validate_evaluation_data
 
-CALIB = Path('/work/u4320956/task_reorder/transfer_20260920/llama8b/calibration')
+CALIBRATIONS = {'llama8b': Path('/work/u4320956/task_reorder/transfer_20260920/llama8b/calibration'),
+                'qwen27b': Path('/work/u4320956/task_reorder/pilot_20260919/qwen27b/calibration')}
+# Held-out math/code documents from recorded earlier confirmation gates, tokenized per model.
+DEVELOPMENT = {
+    'llama8b': [Path('/work/u4320956/task_reorder/transfer_20260920/llama8b') / s
+                for s in ('confirmation', 'gate_up_confirm', 'tile_refine_confirm')],
+    'qwen27b': [Path('/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2') / s
+                for s in ('fisher_subset_validate_v2_confirm', 'preserved_row_confirm', 'ce_target_combinations_confirm')]}
+PUBLISHED = {'llama8b': 'results/kse_paper/job_336566/llama8b/report.json',
+             'qwen27b': 'results/kse_paper/job_336969/qwen27b/report.json'}
+
+
+def load_development(model):
+    records, provenance = [], []
+    for directory in DEVELOPMENT[model]:
+        report = json.loads((directory / 'report.json').read_text())
+        assert report.get('status') == 'complete', directory
+        assert digest_file(directory / 'fresh.pt') == report['fresh_sha256'], directory
+        rows = torch.load(directory / 'fresh.pt', map_location='cpu', weights_only=True)
+        records.extend(rows)
+        provenance.append(dict(name=str(directory), documents=len(rows), sha256=report['fresh_sha256']))
+    return records, provenance
+
+
 UNITS = {'256x64': (256, 64), '1x16': (1, 16)}
 
 
-def expand(mask, rows, cols):
-    return mask.repeat_interleave(rows, 0).repeat_interleave(cols, 1)
+def expand(mask, rows, cols, height=None):
+    # The last row tile may be partial; its padded rows are trimmed (raw256 convention).
+    return mask.repeat_interleave(rows, 0).repeat_interleave(cols, 1)[:height]
 
 
 def reduce(x, rows, cols):
     o, k = x.shape
-    return x.reshape(o // rows, rows, k // cols, cols).sum((1, 3))
+    x = F.pad(x, (0, 0, 0, (-o) % rows))
+    return x.reshape(-1, rows, k // cols, cols).sum((1, 3))
 
 
 @torch.no_grad()
 def main():
     assert os.environ.get('SLURM_JOB_ID'), 'Run through Slurm'
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('--model', choices=tuple(CALIBRATIONS), default='llama8b')
     ap.add_argument('--unit', choices=tuple(UNITS), required=True)
     ap.add_argument('--objective', choices=('both', 'ce', 'kl'), required=True,
                     help='Scores that rank candidates AND the development loss(es) a step must lower')
@@ -62,10 +87,11 @@ def main():
     started = time.time()
     torch.backends.cuda.matmul.allow_tf32 = False
     rows, cols = UNITS[args.unit]
-    prior = json.loads((CALIB / 'report.json').read_text())
+    qwen = args.model == 'qwen27b'
+    prior = json.loads((CALIBRATIONS[args.model] / 'report.json').read_text())
     assert transformers.__version__ == prior['transformers_version']
     args.out.mkdir(parents=True, exist_ok=False)
-    report = dict(status='running', job_id=os.environ['SLURM_JOB_ID'], unit=args.unit, objective=args.objective,
+    report = dict(status='running', job_id=os.environ['SLURM_JOB_ID'], model=args.model, unit=args.unit, objective=args.objective,
                   filter_k=args.filter_k, max_tries=args.max_tries,
                   acceptance={'both': 'mean dev CE and mean dev KL must both decrease', 'ce': 'mean dev CE must decrease',
                               'kl': 'mean dev KL must decrease'}[args.objective],
@@ -73,17 +99,30 @@ def main():
                                                              'quantize/causal_four_over_six.py')},
                   rounds=[])
     save(args.out, report)
-    model, modules = load_model(prior, False)
-    model.set_attn_implementation('sdpa')
+    if qwen:
+        from transformers import Qwen3_5ForConditionalGeneration
+        model, loading = Qwen3_5ForConditionalGeneration.from_pretrained(
+            prior['source'], revision=prior['revision'], dtype=torch.bfloat16, attn_implementation='sdpa',
+            device_map='balanced', output_loading_info=True)
+        assert not loading['missing_keys'] and not loading.get('mismatched_keys') and not loading.get('error_msgs')
+        model.eval().requires_grad_(False)
+        modules = {n: m for n, m in model.named_modules() if isinstance(m, torch.nn.Linear)
+                   and 'language_model' in n and 'head' not in n}
+        assert list(modules) == list(prior['matrices'])
+    else:
+        model, modules = load_model(prior, False)
+        model.set_attn_implementation('sdpa')
     tok = AutoTokenizer.from_pretrained(prior['source'], revision=prior['revision'])
     fit, _ = math_code_data(tok, prior['fit'])
     fit = [b for source in ('math', 'code') for b in fit[source]]
-    dev, report['development'] = load_development()
+    dev, report['development'] = load_development(args.model)
     device = model.get_input_embeddings().weight.device
     dev_teacher = []
     for r in dev:
         logits = model(input_ids=r['ids'].to(device), use_cache=False).logits
         dev_teacher.append(logits[:, :-1].float().log_softmax(-1).bfloat16().cpu())
+    logits_width = logits.shape[-1]
+    del logits
     teacher = []
     for ids in fit:
         logits = model(input_ids=ids.to(device), use_cache=False).logits
@@ -94,12 +133,12 @@ def main():
         base[n] = quant_nvfp4_4over6(m.weight, 4, 16)
         alt[n] = quant_mix_4_6(m.weight, 4, 16, type_block=(8, 64), clip='a1', elect='always')
         o, k = m.weight.shape
-        assert o % rows == 0 and k % cols == 0
-        sel[n] = torch.zeros(o // rows, k // cols, dtype=torch.bool, device=device)
+        assert k % cols == 0
+        sel[n] = torch.zeros(-(-o // rows), k // cols, dtype=torch.bool, device=m.weight.device)
         m.weight.copy_(base[n])
 
     def apply(n):
-        modules[n].weight.copy_(torch.where(expand(sel[n], rows, cols), alt[n], base[n]))
+        modules[n].weight.copy_(torch.where(expand(sel[n], rows, cols, base[n].shape[0]), alt[n], base[n]))
 
     eval_handles = []
 
@@ -115,9 +154,9 @@ def main():
         ce, kl = [], []
         for r, t in zip(dev, dev_teacher):
             ids = r['ids'].to(device)
-            lp = model(input_ids=ids, use_cache=False).logits[:, :-1].float().reshape(-1, model.config.vocab_size).log_softmax(-1)
-            ce.append(float(F.nll_loss(lp, ids[:, 1:].reshape(-1))))
-            kl.append(float(F.kl_div(lp, t.to(device).float().reshape(-1, lp.shape[-1]), reduction='batchmean', log_target=True)))
+            lp = model(input_ids=ids, use_cache=False).logits[:, :-1].float().reshape(-1, logits_width).log_softmax(-1)
+            ce.append(float(F.nll_loss(lp, ids[:, 1:].reshape(-1).to(lp.device))))
+            kl.append(float(F.kl_div(lp, t.to(lp.device).float().reshape(-1, lp.shape[-1]), reduction='batchmean', log_target=True)))
             del lp
         eval_hooks(False)
         return dict(ce=sum(ce) / len(ce), kl=sum(kl) / len(kl), ce_nll=ce, kl_values=kl)
@@ -141,7 +180,7 @@ def main():
 
                 def backward(dy):
                     grad = dy.detach().reshape(-1, dy.shape[-1]).float().T @ x.float()
-                    d = (alt[n].float() - base[n].float()) * torch.where(expand(sel[n], rows, cols), -1., 1.)
+                    d = (alt[n].float() - base[n].float()) * torch.where(expand(sel[n], rows, cols, base[n].shape[0]), -1., 1.)
                     value = reduce(grad * d, rows, cols).double()
                     s = sums[n]
                     s[2 * phase[0]] += value
@@ -155,9 +194,9 @@ def main():
             for ids, t in zip(fit, teacher):
                 ids = ids.to(device)
                 embeds = model.get_input_embeddings()(ids).detach().requires_grad_()
-                lp = model(inputs_embeds=embeds, use_cache=False).logits[:, :-1].float().reshape(-1, model.config.vocab_size).log_softmax(-1)
-                ce = F.nll_loss(lp, ids[:, 1:].reshape(-1))
-                kl = F.kl_div(lp, t.to(device).float().reshape(-1, lp.shape[-1]), reduction='batchmean', log_target=True)
+                lp = model(inputs_embeds=embeds, use_cache=False).logits[:, :-1].float().reshape(-1, logits_width).log_softmax(-1)
+                ce = F.nll_loss(lp, ids[:, 1:].reshape(-1).to(lp.device))
+                kl = F.kl_div(lp, t.to(lp.device).float().reshape(-1, lp.shape[-1]), reduction='batchmean', log_target=True)
                 phase[0] = 0; ce.backward(retain_graph=True)
                 phase[0] = 1; kl.backward()
                 del embeds, lp, ce, kl
@@ -189,8 +228,8 @@ def main():
             (cm, cse), (km, kse) = stats[n]
             ub = {'ce': cm + args.filter_k * cse, 'kl': km + args.filter_k * kse}
             u = (torch.maximum(ub['ce'], ub['kl']) if args.objective == 'both' else ub[args.objective]).reshape(-1)
-            bounds.append(u); flat_mean_ce.append(cm.reshape(-1)); flat_mean_kl.append(km.reshape(-1))
-            owners.append(torch.full_like(u, i, dtype=torch.int32))
+            bounds.append(u.to(device)); flat_mean_ce.append(cm.reshape(-1).to(device)); flat_mean_kl.append(km.reshape(-1).to(device))
+            owners.append(torch.full_like(u, i, dtype=torch.int32, device=device))
         bounds = torch.cat(bounds); owners = torch.cat(owners)
         flat_mean_ce = torch.cat(flat_mean_ce); flat_mean_kl = torch.cat(flat_mean_kl)
         offsets = np.cumsum([0] + [sel[n].numel() for n in names])
@@ -208,7 +247,7 @@ def main():
             for i in who.unique().tolist():
                 touched[names[i]] = chosen[who == i] - int(offsets[i])
             for n, idx in touched.items():
-                flat = sel[n].view(-1); flat[idx] ^= True; apply(n)
+                flat = sel[n].view(-1); flat[idx.to(flat.device)] ^= True; apply(n)
             new = dev_eval()
             pce, pkl = float(flat_mean_ce[chosen].sum()), float(flat_mean_kl[chosen].sum())
             entry['tries'].append(dict(size=size, predicted_ce=pce, predicted_kl=pkl,
@@ -218,7 +257,7 @@ def main():
             if improves(new, current):
                 accepted = size; current = new; break
             for n, idx in touched.items():
-                flat = sel[n].view(-1); flat[idx] ^= True; apply(n)
+                flat = sel[n].view(-1); flat[idx.to(flat.device)] ^= True; apply(n)
             if size == 1:
                 break
             size = max(1, size // 2)
@@ -239,7 +278,7 @@ def main():
     save(args.out, report)
     # One evaluation of the final map on the released PPL windows.
     batches, report['data'] = data(tok, prior, 2048)
-    published = json.loads(Path('results/kse_paper/job_336566/llama8b/report.json').read_text())
+    published = json.loads(Path(PUBLISHED[args.model]).read_text())
     validate_evaluation_data(report['data'], published['data'])
     eval_hooks(True)
     report['evaluation'] = {}
@@ -248,7 +287,7 @@ def main():
         for ids in sequences:
             ids = ids.to(device)
             logits = model(input_ids=ids, use_cache=(domain == 'wiki')).logits
-            values.append(float(F.cross_entropy(logits[:, :-1].float().reshape(-1, logits.shape[-1]), ids[:, 1:].reshape(-1))))
+            values.append(float(F.cross_entropy(logits[:, :-1].float().reshape(-1, logits.shape[-1]), ids[:, 1:].reshape(-1).to(logits.device))))
             del logits
         losses = torch.tensor(values, dtype=torch.float32) * 2048
         key = 'c4' if domain == 'c4_paper' else domain
