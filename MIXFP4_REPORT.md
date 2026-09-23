@@ -97,10 +97,10 @@ Neither uses rotation. [Algorithm details](results/task_reorder/transfer_2026092
 
 ## 4. PPL: 8×64, raw 256×64, and 256×64 + MLP reordering
 
-Lower is better. These are **fake-quantized W4A4 quality measurements**, not
-native-kernel PPL. Evaluation uses 2,048-token WikiText-2 windows and 256 seed-0
-C4 crops, tensor-wide activation factors, and the released aggregation protocol.
-E0M3 tile counts differ in area across geometries.
+Lower is better. The table below is **fake-quantized W4A4**; §4a confirms the
+Llama rows on the native SM100 kernel. Evaluation uses 2,048-token WikiText-2
+windows and 256 seed-0 C4 crops, tensor-wide activation factors, and the released
+aggregation protocol. E0M3 tile counts differ in area across geometries.
 
 | Model | Policy | E0M3 tiles | WikiText-2 | C4 |
 |---|---|---:|---:|---:|
@@ -125,6 +125,41 @@ PPL gains do not establish answer-accuracy gains: Llama's separate non-STEM MMLU
 and ARC-Challenge comparisons were inconclusive.
 [Quality results and gates](results/task_reorder/transfer_20260920/report_section.md),
 [answer-accuracy evaluation](results/task_reorder/llama_accuracy_20260920/REPORT.md).
+
+### 4a. The same numbers on the native kernel
+
+Quality above came from the simulator and the timings of §1 from the kernel, so
+no single artifact had shown both. Job 416794 ran the complete native SM100 model
+over the same 397 published windows, loading the library whose digest matches the
+passed kernel gate 406633, with every one of the 224 matrices packed and decoded
+bitwise against its simulator weights first.
+
+| Policy | WikiText-2 native / simulated | C4 native / simulated |
+|---|---|---|
+| FourOverSix | 6.878384 / 6.875525 | 9.826777 / 9.823733 |
+| Refined 147-tile | 6.862185 / 6.864886 | 9.793517 / 9.796946 |
+
+**Native and simulated agree.** Paired per window, on token windows whose
+`token_sha256` were checked identical between the two runs, the refined map's
+native-minus-simulated NLL is **−0.000394 ± 0.001570** on WikiText and
+**−0.000350 ± 0.001258** on C4, i.e. within noise at t = −0.50 and −0.56. The
+simulator is a faithful proxy for the kernel on perplexity, and the ±0.003
+aggregate differences are not evidence of anything.
+
+**The improvement is significant on the kernel.** Paired within the native run,
+the refined map beats FourOverSix by **−0.002358 ± 0.001598 NLL (t = −2.95)** on
+WikiText and **−0.003391 ± 0.001600 (t = −4.24)** on C4, which is −0.016199 and
+−0.033259 in perplexity.
+
+This also settles the full-output gate recorded as failed in the native
+implementation notes. That gate compares logits, where 0–4 BF16 differences per
+projection are amplified by later FP4 activation quantization into a ~10.8%
+relative gap; two correct implementations rounding in different orders diverge
+exactly that way. Perplexity is the metric that matters and it agrees. One model,
+one seed; Qwen native perplexity is still unmeasured.
+[Native run](results/task_reorder/native_ppl_20260921/run_416794/report.json),
+[native versus simulated](results/task_reorder/native_ppl_20260921/native_vs_simulated.json),
+[native gain](results/task_reorder/native_ppl_20260921/native_gain_paired.json).
 
 ## 5. Ablation study: KL only, CE only, and more reordered layers
 
@@ -172,6 +207,94 @@ early-layer scoring; it does not establish that optimized earlier layouts
 cannot work.
 [Matched scope tables](results/task_reorder/cluster_20260919/FULL_COMPARISON.md#qwen-expanded-scope-layers-5663),
 [Llama depth diagnosis](results/task_reorder/llama_diagnosis_20260920/REPORT.md).
+
+## 6. Tried and failed
+
+Every entry below was measured and rejected. Links point to the retained report
+for each. Two caveats on reading them. First, **regime matters**: rows marked
+8×64 W4A16 come from the earlier `mix_4_6` rounds and do not automatically carry
+to the deployed 256×64 W4A4 geometry, and vice versa. Second, **"failed" is
+relative to a stated reference** — several entries improve on FourOverSix while
+losing to a better alternative, and the reference is named in each case.
+
+### 6.1 Rearranging weights between tiles
+
+The largest single line of failed work. Permutation preserves the multiset of
+per-atom scores and only rearranges them into rectangles, and the objective used
+to choose the rearrangement is not additive under that operation.
+
+| What was tried | Result | Report |
+|---|---|---|
+| Both-axis 256×64 transfer to Llama | Fresh CE **+0.005206** vs raw256, also worse vs matched identity; not promoted to PPL | [llama_confirmation](results/task_reorder/transfer_20260920/llama_confirmation/report.json) |
+| Gate/up-only candidate | Improved mean fresh CE, failed its frozen gate | [gate_up_confirm](results/task_reorder/transfer_20260920/renewed_llama/gate_up_confirm/report.json) |
+| Eight-down-tile refinement | Improved mean fresh CE, failed its frozen gate | [tile_refine_confirm](results/task_reorder/transfer_20260920/renewed_llama/tile_refine_confirm/report.json) |
+| KL-grouped spectral co-clustering, refinement deleted | Development CE **+0.007347 ± 0.000556 (t = +13.2)** vs raw256, **+0.007132** vs matched identity, on 192 documents with 192/192 bitwise suffix audits | [development192](results/task_reorder/step2_20260921/development192_report.json) |
+| Rows-only arrangement | Development CE **+0.006919 ± 0.000587 (t = +11.8)** vs raw256 | [rows_only192](results/task_reorder/step2_20260921/rows_only192_report.json) |
+| Fisher / logit-Gauss-Newton row grouping | Failed fresh CE confirmation; the 218-tile extension was never evaluated for PPL | [fisher_validate](results/task_reorder/cluster_20260919/published_evidence/fisher_validate/report.json), [fisher_subset_validate_v2_confirm](results/task_reorder/cluster_20260919/published_evidence/fisher_subset_validate_v2_confirm/report.json) |
+| Individual-row scoring in full raw256 context | Failed its development gate | [raw_context_fisher](results/task_reorder/cluster_20260919/published_evidence/raw_context_fisher/report.json) |
+| Preserving inactive raw maps, last-MLP rows | CE improved on 64 new windows but teacher KL did not (**+0.0000263** mean+1SE); math KL positive | [preserved_row_confirmation](results/task_reorder/cluster_20260919/preserved_row_confirmation_summary.json) |
+| Wider matrix scope (24 matrices, layers 56–63) | **17 of 24 matrices elected zero tiles** on held-out data; median election/fit objective ratio **0** | [fine_rows_v2_diagnosis](results/task_reorder/cluster_20260919/fine_rows_v2_diagnosis.json) |
+| Extending reordering past the final MLP | Trade-off, not a win: WikiText 7.263466 → 7.263998, C4 10.177821 → 10.175365 | [matched scope tables](results/task_reorder/cluster_20260919/FULL_COMPARISON.md#qwen-expanded-scope-layers-5663) |
+| Row permutation at 8×64 (`_perm`, W4A16) | `perm_h1.5` **−0.0086** vs plain `h1.5` **−0.0111** — permutation costs ~+0.0025 | [decide_r2](results/decide_r2/REPORT.md), [decide_r3](results/decide_r3/REPORT.md) |
+
+**The column axis specifically is not worth its cost.** Decomposing the deployed
+256×64 arrangement by axis on Llama `down_proj`, against a free-assignment
+ceiling of 27904 over an identity floor of 925: rows capture **40.7%** of that
+headroom, columns **0.19%**, and both axes together **35.4%** — so adding the
+column axis makes the result *worse* while raising the fit objective. The column
+permutation is also the half that needs the activation gather fused into the
+producer. [Capacity bracket](results/task_reorder/capacity_20260921/down_proj_capacity.json),
+[axis and objective summary](results/task_reorder/step1_20260921/summary.json),
+[analysis](REORDER_OBJECTIVE_REDESIGN.md).
+
+### 6.2 Rotation
+
+| What was tried | Result | Report |
+|---|---|---|
+| Unconditional Hadamard, 8×64 W4A16 | `_rot` **+0.0942** WikiText / **+0.1250** C4; `_rotcol` **+0.0946** / **+0.1431** | [decide_r3](results/decide_r3/REPORT.md) |
+| Fixed selective H16 column bands | No incremental CE winner across three scopes | [cached_rotation_ablation](results/task_reorder/cluster_20260919/published_evidence/cached_rotation_ablation/report.json), [cached_rotation_panel](results/task_reorder/cluster_20260919/published_evidence/cached_rotation_panel/report.json) |
+| Rotating the tiles that elected **E0M3** | Worse than the same arrangement unrotated: `up` **+0.000343**, `down` **+0.000232**, `both` **+0.000600** | [cached_tile_rotation_precise](results/task_reorder/cluster_20260919/published_evidence/cached_tile_rotation_precise/report.json), [paired arms](results/task_reorder/rotation_pairing_20260921/summary.json) |
+| Rotating the tiles that stayed **E2M1** | Also worse: **+0.000776**, **+0.000466**, **+0.000197** | same |
+| 20 individual E0M3 tile rotations | Zero eligible tiles; branch closed | recorded in [cached_tile_rotation_precise](results/task_reorder/cluster_20260919/published_evidence/cached_tile_rotation_precise/report.json) (`selected: null`, `passed_calibration_check: false`) |
+
+E0M3 is uniform with scale `block_max / 7` and no coarse top codes, so it should
+in principle gain more from outlier suppression than log-spaced E2M1 — and it
+does cost about half as much on `up` and `down`. The asymmetry reverses on
+`both`, and every arm is harmful, so it is moot. Selective rotation also flags
+`reference_only_expanded_k`: rotation lives on K and is shared with the
+activation across all rows, so rotating only some tiles requires duplicating K.
+
+### 6.3 Selection objectives
+
+| What was tried | Result | Report |
+|---|---|---|
+| Clipping the block scale (`alpha < 1`) | Harmful on WikiText, e.g. `clipe2_m2_8x64` **+0.0070**; C4 moves the other way, so it is not a clean win anywhere | [decide_r1](results/decide_r1/REPORT.md) |
+| MAE and L*p* selection losses | Indistinguishable from MSE: `mae_m2_8x64` **−0.0016** WikiText / **+0.0008** C4, `l1.5_m2_32x128` **+0.0011** / **−0.0020** — the squared-error criterion is not what needs fixing | [decide_r1](results/decide_r1/REPORT.md) |
+| Coherent-error objective `corr<r>` | Near no-op: the coherent and incoherent terms are measured equal, ratio **0.998–1.005** for every grid and clip preset | [analyze_coherent_error.py](analyze_coherent_error.py) |
+| Calibration-free proxies for `diag(S)` | Preceding RMSNorm `gamma²` correlates **+0.63** on q/k/v but **−0.50** on gate/up; weight column energy has no consistent sign | [quantize/importance.py](quantize/importance.py), [measured importance](results/mix_4_6_sweep/importance_llama-2-7b.pt) |
+| Regularizing the arrangement search | Deleting the hinge refinement raises fit-over-null **3.46 → 28.66** and KL grouping recovers the tile count, yet both candidates still fail finite loss (6.1) | [objective ablation](results/task_reorder/objective_ablation_20260921/summary.json), [step 1 summary](results/task_reorder/step1_20260921/summary.json) |
+
+A sign-flip placebo search reaches **93%** of the deployed fit objective on Llama
+`gate_proj`, so the fit objective alone is not evidence that a layout is usable.
+
+### 6.4 Scale and format variants
+
+| What was tried | Result |
+|---|---|
+| E2M1 headroom family (`head`, `headx`, `alpha > 1`) | **Removed from `CLIP_PRESETS`.** Not universally safe: on Qwen3-4B plain NVFP4 scores 13.6584/16.8723 while FourOverSix scores 14.0407/17.0153, i.e. **+0.38 WikiText worse**. `alpha > 1` discards the sparse top codes that absorb a block's outlier. |
+| E0M3 headroom (`heade0`, `heade0x`) | **Removed.** It entangles the element-type decision with a second scale search on the E0M3 branch; `test_no_e0m3_headroom` enforces the removal. |
+| Type blocks coarser than 1×16, MSE-selected | Every shape coarser than one scale block lost to plain NVFP4 in the original sweep. Superseded by the task-loss selection of §2, which is what makes 256×64 viable. See [mixfp4_sweep](results/mixfp4_sweep/REPORT.md). |
+
+Both preset removals are recorded in the `CLIP_PRESETS` comments in
+[quantize/quantizer.py](quantize/quantizer.py).
+
+### 6.5 What this leaves
+
+Electing a tile's format **in place** is the one mechanism with a clean record:
+it only ever sums the scores of atoms already in that tile and never assumes
+anything about moving them. That is the raw 256×64 map of §4 and the refined
+Llama map that passed its fresh gate. Rearranging those atoms, rotating them, or
+changing the tile geometry has not paid.
 
 The [archived detailed report](MIXFP4_REPORT_DETAILS.md) retains the full protocol,
 threshold sweeps, diagnostics, timing tables, and experiment history.
