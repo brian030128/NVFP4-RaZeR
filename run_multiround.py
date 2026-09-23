@@ -26,6 +26,7 @@ import transformers
 from transformers import AutoTokenizer
 
 from quantize.causal_four_over_six import quantize_rows
+from quantize.fast_act import check as check_act, quant_per_document
 from quantize.packed_candidates import decode_alt, decode_base, nbytes, pack
 from quantize.quantizer import quant_mix_4_6, quant_nvfp4_4over6
 from run_baseline_protocol_audit import data
@@ -176,15 +177,18 @@ def main():
 
     eval_handles = []
 
+    act_checks = [0]
+
     def per_document_act(module, inputs):
         # Tensor-wide activation scales are computed per document, exactly as with
-        # one document per forward pass, however many documents are batched.
+        # one document per forward pass, however many documents are batched. The
+        # vectorized quantizer is checked bitwise against quant_nvfp4_4over6 on the
+        # first calls of every run.
         x = inputs[0]
-        if x.dim() >= 3 and x.shape[0] > 1:
-            q = torch.stack([quant_nvfp4_4over6(x[i], 4, 16) for i in range(x.shape[0])])
-        else:
-            q = quant_nvfp4_4over6(x, 4, 16)
-        return (q, *inputs[1:])
+        if act_checks[0] < 64:
+            assert check_act(x), 'vectorized activation quantizer differs from quant_nvfp4_4over6'
+            act_checks[0] += 1
+        return (quant_per_document(x), *inputs[1:])
 
     def per_sequence_losses(lp, ids, t):
         # lp, t: (B, T-1, V) log-probabilities; CE and KL averaged over each sequence's tokens.
