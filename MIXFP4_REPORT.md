@@ -28,8 +28,8 @@ choice. E0M3 is an undocumented encoding.
 | SM100 (B200/GB200, `tcgen05.mma`) | **256×64**: the kernel's MMA tile N (256) × one 64-K block | Operand-format field of the MMA descriptor, rewritten per K-block |
 | SM120 (`mma.sync …m16n8k64`) | **8×64** minimum: the weight (B) operand tile n8 × k64 | Compiled E0M3 instruction variants, dispatched per MMA |
 
-Anything coarser than 8×64 is a union of operand tiles and is also expressible.
-8×64 and 256×64 are the two geometries reported here.
+The two geometries reported here are platform-specific: **256×64 is the SM100
+path and 8×64 is the SM120 path.**
 
 ## 2. GEMM overhead: 8×64 and 256×64
 
@@ -41,7 +41,6 @@ All overheads are relative to the same GEMM with every weight tile in E2M1
 | 256×64 | GB200 (SM100) | 8192³, uniform E0M3 vs uniform E2M1 weights, same executable | **−0.012%** (launch) / **−0.093%** (CUDA graph): within run-to-run noise, i.e. ≈ 0 |
 | 256×64 | GB200 (SM100) | Heterogeneous per-tile maps from §3 | *not yet measured* |
 | 8×64 | SM120 | Heterogeneous per-tile maps | *to be provided* |
-| 8×64 | SM100 | — | *not measured* |
 
 The 256×64 uniform result comes from job 400605 (median of three samples,
 256×256×256 GEMM tile, BF16 output, FP32 accumulation, PDL on):
