@@ -198,24 +198,38 @@ map and every evaluation NLL bitwise.
 | | One-shot 256×64, k=3 (local) | 195 | 7.266300 | 10.176030 | — |
 | | One-shot 8×64, k=3 (§4) | 3,785 | 7.214750 | 10.149866 | — |
 | | **Multi-round KL, 256×64**¹ | 39,099 | **7.246839** | **10.157245** | −0.00554±0.00343 / −0.00306±0.00092 |
-| | **Multi-round KL, 8×64**² | 17,413 | **7.153788** | **10.145843** | −0.01846±0.00309 / −0.00418±0.00089 |
+| | **Multi-round KL, 8×64 (converged)** | 17,441 | **7.166357** | **10.155802** | −0.01671±0.00381 / −0.00320±0.00084 |
+| | Multi-round KL, 8×64, map after round 4² | 17,413 | 7.153788 | 10.145843 | −0.01846±0.00309 / −0.00418±0.00089 |
+| | Multi-round KL, 256×64, 1 GPU, 2 rounds³ | 39,092 | 7.201498 | 10.149290 | −0.01181±0.00353 / −0.00384±0.00089 |
 
 ¹ Stopped by request after round 5 of the tail, when rounds accepted 1–17 flips
 each (dev KL 0.04625 → 0.04289).
-² Map after round 4 (dev KL 0.04625 → 0.04327; rounds accepted 17,227 / 569 / 70 /
-67 / 34 flips). The run itself is continuing; the final map will replace this row.
+² Intermediate map of the same run, saved after round 4 (dev KL 0.04327). The run
+converged after round 8 (dev KL 0.04245).
+³ Independent one-GPU run with packed candidates, capped at 2 rounds to measure speed
+(dev KL 0.04384). It differs from the 256×64 row above in 999 of ~39,100 tiles.
 
 - **Llama:** at 256×64, multi-round KL gains 3.9× (WikiText) and 2.2× (C4) the
   one-shot k=3 map, and edges 8×64 k=3 on WikiText. At 8×64 it reaches
   −0.0558 / −0.0732. That exceeds the non-deployable 1×16 MSE-selected reference
   (−0.0418 / −0.0613), so the MSE per-block choice is not a ceiling for
   task-aware selection.
-- **Qwen:** at 8×64, multi-round KL gains −0.1333 / −0.0425. That is 1.8×
-  (WikiText) and 1.1× (C4) the one-shot 8×64 k=3 map, and both paired gains are
-  clearly significant. At 256×64 it gains about 2× the one-shot k=3 map but stays
-  below one-shot 8×64 k=3. On Qwen, the one-shot threshold results in
-  `results/mixfp4_potential/MULTIROUND.md` show that much larger elections keep
-  improving PPL, which the KL acceptance test does not reach.
+- **Qwen:** the converged 8×64 map gains −0.1207 / −0.0326, 1.7× the one-shot
+  8×64 k=3 map on WikiText and 0.85× on C4. At 256×64, gains range from
+  −0.0402 / −0.0311 to −0.0856 / −0.0391 depending on the run (see below). All
+  paired gains versus FourOverSix are significant.
+- **Qwen results are path-sensitive, and the tail overfits the development set.**
+  - In the 8×64 run, rounds 5–8 lowered development KL (0.04327 → 0.04245) but
+    made both test PPLs worse: the round-4 map scores −0.1333 / −0.0425.
+  - Two 256×64 runs differ in only 999 of ~39,100 tiles, a floating-point
+    difference in scoring (1 vs 2 GPUs) compounded over rounds, yet their WikiText
+    gains are −0.0402 and −0.0856.
+  - 192 development documents do not resolve these differences. A single Qwen run
+    is one draw, and the paired ±2SE does not include this selection variance.
+  - Llama shows neither effect: its 256×64 re-run gives the same or slightly
+    better PPL, and its tail rounds did not hurt.
+  - Reporting Qwen reliably needs repeated selections, e.g. on different
+    calibration halves, and possibly a larger development set or earlier stopping.
 - **Generalization (Llama, five unseen domains).** Fresh math and code, PG-19,
   arXiv and GovReport, with maps frozen before any of these documents were read.
   Multi-round KL has the lowest teacher KL of every map on all five domains.
@@ -239,13 +253,14 @@ target device.
 | Llama 256×64 | 1× H200 | 5 | 42 | 2.0 min | 43.9 min | 4.7 min | 46.1 GiB (48.9 reserved) | 41.2 GiB |
 | Llama 8×64 | 1× H200 | 10 | 133 | 2.3 min | 2 h 15 min | 4.8 min | 47.3 GiB (50.6 reserved) | 41.3 GiB |
 | Qwen 256×64 (to round 5) | 2× H200 | 6 | 63 | ≤ 37 min³ | 3 h 58 min | 16.8 min² | not logged⁴ | 78.1 GiB |
-| Qwen 8×64 (to round 4) | 2× H200 | 5 | — | — | 3 h 56 min | 16.5 min² | logged at completion | — |
+| Qwen 8×64 (converged) | 2× H200 | 9 | 137 | 7.8 min | 8 h 20 min | 14.5 min | 82.2 + 94.2 GiB | 78.2 GiB |
+| Qwen 256×64, packed, 2 rounds | **1× H200** | 2 | 11 | 6.2 min | 47 min | 8.3 min | **107.1 GiB** | 78.2 GiB |
 
 ² Separate 1-GPU evaluation job of the saved map (whole job, including model load).
 ³ Job wall time 4 h 35 min minus the logged optimization rounds. This is an upper bound: it also
   includes the unfinished round 6 that was cancelled.
-⁴ Started before resource logging was added; the Qwen 8×64 run logs it, and its footprint (model,
-  candidates and teachers) is the same apart from the small per-tile score arrays.
+⁴ Started before resource logging was added. The Qwen 8×64 run, with the same model,
+  candidates and teachers on the same two GPUs, peaked at 82.2 + 94.2 GiB.
 
 - **Where the time goes.** One scoring pass (128 × 512 tokens, forward plus CE and
   KL backward) takes about 2 min on Llama and 8 min on Qwen. One development
@@ -258,6 +273,14 @@ target device.
   candidate weights plus 512-token activations. CPU memory is dominated by the
   BF16 teacher log-probabilities cached for the calibration and development
   documents.
+- **Packed candidates.** Both candidates can be kept as 4-bit codes plus FP8 scales
+  (bitwise-verified) instead of dequantized BF16. That brings Llama's peak GPU memory
+  from 46.1 to 27.9 GiB and lets Qwen run on a single H200 (107.1 GiB), with no
+  change to any weight value. Evaluation also uses a vectorized, bitwise-identical
+  activation quantizer: on Llama, batching plus vectorization makes 256×64 selection
+  2.9× faster (43.9 → 15.3 min). Qwen's batched forward pass is not numerically
+  identical to one document at a time, so Qwen evaluates one document per pass: 1.6×
+  faster evaluations, about 1.16× faster per round, on half the GPUs.
 - **All of this is one-time and offline.** The deployed artifact is a tile map.
 
 ## 6. Ablation study: KL only, CE only, and more reordered layers
