@@ -198,18 +198,22 @@ map and every evaluation NLL bitwise.
 | | One-shot 256×64, k=3 (local) | 195 | 7.266300 | 10.176030 | — |
 | | One-shot 8×64, k=3 (§4) | 3,785 | 7.214750 | 10.149866 | — |
 | | **Multi-round KL, 256×64**¹ | 39,099 | **7.246839** | **10.157245** | −0.00554±0.00343 / −0.00306±0.00092 |
-| | **Multi-round KL, 8×64** | *running* | — | — | — |
+| | **Multi-round KL, 8×64**² | 17,413 | **7.153788** | **10.145843** | −0.01846±0.00309 / −0.00418±0.00089 |
 
 ¹ Stopped by request after round 5 of the tail, when rounds accepted 1–17 flips
 each (dev KL 0.04625 → 0.04289).
+² Map after round 4 (dev KL 0.04625 → 0.04327; rounds accepted 17,227 / 569 / 70 /
+67 / 34 flips). The run itself is continuing; the final map will replace this row.
 
 - **Llama:** at 256×64, multi-round KL gains 3.9× (WikiText) and 2.2× (C4) the
   one-shot k=3 map, and edges 8×64 k=3 on WikiText. At 8×64 it reaches
   −0.0558 / −0.0732. That exceeds the non-deployable 1×16 MSE-selected reference
   (−0.0418 / −0.0613), so the MSE per-block choice is not a ceiling for
   task-aware selection.
-- **Qwen:** at 256×64, multi-round KL gains about 2× the one-shot k=3 map but
-  stays below one-shot 8×64 k=3. On Qwen, the one-shot threshold results in
+- **Qwen:** at 8×64, multi-round KL gains −0.1333 / −0.0425. That is 1.8×
+  (WikiText) and 1.1× (C4) the one-shot 8×64 k=3 map, and both paired gains are
+  clearly significant. At 256×64 it gains about 2× the one-shot k=3 map but stays
+  below one-shot 8×64 k=3. On Qwen, the one-shot threshold results in
   `results/mixfp4_potential/MULTIROUND.md` show that much larger elections keep
   improving PPL, which the KL acceptance test does not reach.
 - **Generalization (Llama, five unseen domains).** Fresh math and code, PG-19,
@@ -235,7 +239,7 @@ target device.
 | Llama 256×64 | 1× H200 | 5 | 42 | 2.0 min | 43.9 min | 4.7 min | 46.1 GiB (48.9 reserved) | 41.2 GiB |
 | Llama 8×64 | 1× H200 | 10 | 133 | 2.3 min | 2 h 15 min | 4.8 min | 47.3 GiB (50.6 reserved) | 41.3 GiB |
 | Qwen 256×64 (to round 5) | 2× H200 | 6 | 63 | ≤ 37 min³ | 3 h 58 min | 16.8 min² | not logged⁴ | 78.1 GiB |
-| Qwen 8×64 | 2× H200 | *running* | | | | | | |
+| Qwen 8×64 (to round 4) | 2× H200 | 5 | — | — | 3 h 56 min | 16.5 min² | logged at completion | — |
 
 ² Separate 1-GPU evaluation job of the saved map (whole job, including model load).
 ³ Job wall time 4 h 35 min minus the logged optimization rounds. This is an upper bound: it also
