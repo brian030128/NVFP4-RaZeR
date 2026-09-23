@@ -85,3 +85,25 @@ in the procedure looked at WikiText or C4.
   were used for acceptance, so they are no longer held out.
 - Multi-round on Qwen3.8-27B, and at 1×16 (the one-shot catastrophe) as a ceiling.
 - Backtracking that prunes harmful flips instead of halving.
+
+## Cross-domain generalization (Llama-3.1-8B, maps frozen before these documents)
+
+`run_domain_eval.py`, job 424404. There are 64 windows of 512 tokens per domain:
+fresh math and code (excluding every earlier set), PG-19 books, arXiv and
+GovReport. Values are paired ΔKL(BF16 teacher ‖ quantized) versus FourOverSix;
+the last two columns average over the five domains.
+
+| Map | math | code | books | arXiv | GovReport | mean ΔKL | mean ΔCE |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| One-shot k=3 | −0.0115 | −0.0030 | −0.0045 | −0.0050 | −0.0043 | −0.0057 | −0.0056 |
+| One-shot k=1.5 | −0.0180 | −0.0064 | −0.0046 | −0.0050 | −0.0045 | −0.0077 | −0.0107 |
+| Multi-round CE | −0.0202 | −0.0054 | −0.0064 | −0.0065 | −0.0054 | −0.0088 | −0.0106 |
+| Multi-round CE+KL | −0.0169 | −0.0059 | −0.0074 | −0.0090 | −0.0063 | −0.0091 | −0.0109 |
+| **Multi-round KL** | **−0.0202** | **−0.0071** | **−0.0084** | **−0.0106** | **−0.0069** | **−0.0106** | −0.0107 |
+
+- **KL-only has the lowest teacher KL on every domain.** Its mean ΔKL is about
+  17% larger than CE+KL's, and the books/arXiv/GovReport gains are individually
+  significant (2SE ≈ 0.001–0.002).
+- **On CE the multi-round maps and one-shot k=1.5 are tied** within noise.
+- Contrasts are against FourOverSix only. Direct KL-only versus CE+KL
+  differences per domain are not individually established.
