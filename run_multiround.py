@@ -167,7 +167,7 @@ def main():
 
     def score():
         """Per-unit mean and SE of CE and KL directional scores for flipping each unit now."""
-        sums = {n: [torch.zeros(sel[n].shape, dtype=torch.float64, device=device) for _ in range(4)] for n in modules}
+        sums = {n: [torch.zeros(sel[n].shape, dtype=torch.float64, device=sel[n].device) for _ in range(4)] for n in modules}
         phase = [0]
 
         def act(module, inputs):
