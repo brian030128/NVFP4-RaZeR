@@ -284,7 +284,10 @@ def main():
                 lp = model(inputs_embeds=embeds, use_cache=False).logits[:, :-1].float().log_softmax(-1)
                 t = torch.cat(teacher[start:start + args.score_batch]).to(lp.device).float()
                 ce, kl = per_sequence_losses(lp, ids, t)
-                phase[0] = 0; ce.sum().backward(retain_graph=True)
+                # KL-only selection never reads the CE scores, so their backward (and its
+                # per-module candidate decode) is skipped; the KL backward is unchanged.
+                if args.objective != 'kl':
+                    phase[0] = 0; ce.sum().backward(retain_graph=True)
                 phase[0] = 1; kl.sum().backward()
                 del embeds, lp, t, ce, kl
         for h in handles:
