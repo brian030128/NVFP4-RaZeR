@@ -15,11 +15,12 @@ Per Llama-3.1-8B shape (T = 2048 tokens), median over iterations of the GPU time
 import statistics
 import sys
 import time
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
 
-sys.path.insert(0, '/home/dev/NVFP4-RaZeR-n16k64/repro_local/realquant')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import rq  # noqa: E402
 from campaign import quant as Q  # noqa: E402
 from quantize.causal_four_over_six import quantize_rows  # noqa: E402

@@ -7,7 +7,7 @@
 # [tokens, out] tensor (same values, verified bitwise). The weights-on-B runs (n8_k3,
 # four_over_six_b8x64) were already contiguous and are kept.
 set -uo pipefail
-cd /home/dev/NVFP4-RaZeR-n16k64
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 source repro_local/env.sh
 RUNS=$CAMPAIGN_ROOT/runs
 for M in llama8b qwen4b mistral7b phi4 qwen27b; do

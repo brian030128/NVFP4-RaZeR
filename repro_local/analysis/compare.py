@@ -10,7 +10,7 @@ import json, math, sys
 from pathlib import Path
 import numpy as np
 
-ROOT = Path('/home/dev/NVFP4-RaZeR-n16k64')
+ROOT = Path(__file__).resolve().parents[2]   # the checkout this script lives in
 RUNS = Path('/home/dev/n16k64_campaign/runs')
 ORIG = json.load(open(ROOT / 'repro_local/original_reference.json'))
 LEG = {}

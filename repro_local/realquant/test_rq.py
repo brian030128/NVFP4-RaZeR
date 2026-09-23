@@ -12,11 +12,12 @@ For each kernel configuration and several Llama-shaped problems:
 """
 import json
 import sys
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
 
-sys.path.insert(0, '/home/dev/NVFP4-RaZeR-n16k64/repro_local/realquant')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import rq  # noqa: E402
 from campaign import quant as Q  # noqa: E402
 from campaign import tiles as T  # noqa: E402

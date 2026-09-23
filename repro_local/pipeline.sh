@@ -9,7 +9,7 @@
 set -uo pipefail
 M="$1"; shift
 CAL_EXTRA=("$@")
-cd /home/dev/NVFP4-RaZeR-n16k64
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 source repro_local/env.sh
 PLANS=repro_local/plans
 RUNS=$CAMPAIGN_ROOT/runs

@@ -5,7 +5,7 @@
 set -uo pipefail
 RUNS=/home/dev/n16k64_campaign/runs
 FETCH=/home/dev/n16k64_campaign/provenance/fetch.log
-PIPE=/home/dev/NVFP4-RaZeR-n16k64/repro_local/pipeline.sh
+PIPE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/pipeline.sh"
 
 until grep -q "PIPELINE qwen4b DONE\|rc=[1-9]" "$RUNS/pipeline_qwen4b.log" 2>/dev/null; do sleep 60; done
 echo "qwen4b pipeline finished $(date -u +%FT%TZ)"
