@@ -1,177 +1,219 @@
-# MixFP4: implementation, selection, reordering, and results
+# MixFP4
 
 <!-- CURATED MIXFP4 SUMMARY: keep experiment history in supporting reports. -->
 
-MixFP4 keeps NVFP4's 4-bit storage and 16-element scale groups, but chooses
-E2M1 or E0M3 for each weight tile. Activations remain E2M1. Reordering groups
-compatible weights into the larger 256×64 tiles used by our B200 kernel.
+## 1. What MixFP4 is
 
-## 1. MixFP4 implementation on B200 and sm_120
+MixFP4 is NVFP4 with one extra choice per weight tile: the 4-bit element type.
 
-| Path | Weight type granularity | Format selection |
+- **Unchanged from NVFP4:** 4-bit storage, one FP8 E4M3 block scale per 16
+  elements along K, and one FP32 per-tensor global scale (`amax / (6·448)`).
+- **The per-tile choice:** every weight **type tile** of `rows × 64` elements
+  (rows = output channels, 64 = one MMA K-block) is decoded as either
+  - **E2M1**, the standard FP4 grid `{0, ±0.5, ±1, ±1.5, ±2, ±3, ±4, ±6}`, with
+    FourOverSix block scaling (per-16-element choice of block max → 6 or → 4); or
+  - **E0M3**, the uniform grid `{0, ±1, …, ±7}` (equivalent to signed INT4), with
+    block scale `block_max / 7`.
+- **What a tile shares:** every 16-element scale block inside a tile uses the
+  tile's type and keeps its own E4M3 scale. Both types encode 15 values in 4 bits
+  and use the same scale format, so no extra per-element metadata is stored.
+- **Activations** stay E2M1 (FourOverSix).
+
+**Hardware path.** The Blackwell block-scaled FP4 MMA reads an operand as E2M1 or
+E0M3 from its instruction format field, so the type is a per-operand, per-MMA
+choice. E0M3 is an undocumented encoding.
+
+| Path | Weight type tile | How the type is selected |
 |---|---|---|
-| B200 / SM100 (`sm_100a` build) | 256×64 in the implemented kernel | Set the operand-format field of the `tcgen05.mma` descriptor; the same instruction handles E2M1 and E0M3. |
-| SM120 (`sm_120a` build) | Hardware minimum 8×64 for operand B | Patch compiled `mma.sync` format bits to create E0M3 variants. Dispatch around a pipeline iteration to avoid issuing predicated-off tensor instructions. |
+| SM100 (B200/GB200, `tcgen05.mma`) | **256×64**: the kernel's MMA tile N (256) × one 64-K block | Operand-format field of the MMA descriptor, rewritten per K-block |
+| SM120 (`mma.sync …m16n8k64`) | **8×64** minimum: the weight (B) operand tile n8 × k64 | Compiled E0M3 instruction variants, dispatched per MMA |
 
-E2M1 magnitudes are `{0, 0.5, 1, 1.5, 2, 3, 4, 6}`; E0M3 magnitudes are
-`{0, 1, 2, 3, 4, 5, 6, 7}`. Both retain sign bits and FP8 block scaling.
-E0M3 uses an undocumented hardware interface. The 256×64 geometry is our
-chosen SM100 implementation, not a universal hardware minimum. GEMM launch
-tiles and weight type tiles are distinct.
+Anything coarser than 8×64 is a union of operand tiles and is also expressible.
+8×64 and 256×64 are the two geometries reported here.
 
-Our datacenter measurements use **GB200**, not a separately tested B200 system:
+## 2. GEMM overhead: 8×64 and 256×64
 
-| Measurement | Result and scope |
-|---|---|
-| Uniform-format GEMM, 8192³ | Approximately zero format-selection overhead; not a heterogeneous model-map test. |
-| Actual heterogeneous Llama GEMMs | Shape- and run-dependent; all nine shapes are in the linked timing tables. |
-| Fused Qwen projection pipeline | **+1.4–5.1%** versus the same quantizer/GEMM/consumer without permutation; common activation amax excluded. |
-| Full Llama, batch 1, prompt 128 + decode 32 | **915.747 ms arranged / 911.380 ms FourOverSix**; paired request overhead **+0.53% ±0.53% (2SE)**. |
-| Full Llama, prompt 2048 | Overhead inconclusive: large timing variation across all policies. |
-| SM120 GEMM, RTX 5090 | Sibling implementation reports **+1.0–4.9%** for its tested patterns/shapes. |
+All overheads are relative to the same GEMM with every weight tile in E2M1
+(plain NVFP4 arithmetic).
 
-Full-model timing includes all layers, activation amax/quantization, attention,
-and KV cache. It is an eager-backend **diagnostic**, with fused column permutation
-and separate row restoration: operator checks pass, but mixed-policy full-output
-equivalence fails and native PPL is unmeasured. Qwen native full-model latency
-is also unmeasured.
+| Type tile | Platform | Setting | Overhead |
+|---|---|---|---|
+| 256×64 | GB200 (SM100) | 8192³, uniform E0M3 vs uniform E2M1 weights, same executable | **−0.012%** (launch) / **−0.093%** (CUDA graph): within run-to-run noise, i.e. ≈ 0 |
+| 256×64 | GB200 (SM100) | Heterogeneous per-tile maps from §3 | *not yet measured* |
+| 8×64 | SM120 | Heterogeneous per-tile maps | *to be provided* |
+| 8×64 | SM100 | — | *not measured* |
 
-Sources: [SM100 kernel](../mixfp4/src/mixed_nvfp4_gemm_sm100.cu),
-[SM120 implementation](../mixfp4/docs/mixed_nvfp4_report.md),
-[full timing tables](results/task_reorder/transfer_20260920/latency_scope_20260920/report_section.md),
-[native correctness limitations](results/task_reorder/full_model_20260920/IMPLEMENTATION.md).
+The 256×64 uniform result comes from job 400605 (median of three samples,
+256×256×256 GEMM tile, BF16 output, FP32 accumulation, PDL on):
+[graph samples](results/task_reorder/transfer_20260920/latency_scope_20260920/sm100_graph.json),
+[launch samples](results/task_reorder/transfer_20260920/latency_scope_20260920/sm100_launch.json).
+It shows that switching the type costs nothing on SM100. It does not time a
+realistic mixed map.
 
-## 2. How to choose tile type
+## 3. How tile selection works: multi-round KL-only election
 
-Start with FourOverSix E2M1 weights, `Q0`, and an E0M3 candidate, `Q1`, with
-alpha fixed at 1. For each tile, `D = Q1 − Q0`. On math/code calibration
-sequences, score the change at the **quantized model**:
+Each tile is either FourOverSix E2M1 (the default) or E0M3. Selection minimizes
+KL(BF16 teacher ‖ quantized model) and works like training with a line search.
 
-```text
-g_CE[i, tile] = ⟨gradient of next-token CE, D_tile⟩
-g_KL[i, tile] = ⟨gradient of KL(BF16 teacher || quantized model), D_tile⟩
+**Data.**
+- 128 calibration sequences of 512 tokens: 64 OpenWebMath and 64 CodeParrot.
+- 192 separate held-out math/code **development** documents of 512 tokens.
+- No WikiText or C4 is used anywhere in selection.
 
-Choose E0M3 iff both:
-    mean(g_CE) + 3 SE(g_CE) < 0
-    mean(g_KL) + 3 SE(g_KL) < 0
-Otherwise keep E2M1.
-```
+**Loop.** Start from all-E2M1 (FourOverSix), then repeat:
 
-Negative scores predict lower loss. Scoring uses a straight-through derivative
-for activation quantization. This is task-loss selection, not weight-MSE
-selection; tile count follows from the rule rather than a fixed budget. The
-bounds are a selection heuristic, not a multiple-testing guarantee. Combined
-changes need exact finite-loss checks because gradients can miss quantization
-effects.
+1. **Score every flip at the current model.**
+   - For each calibration sequence, compute the weight gradient `G` of the KL
+     between the BF16 teacher's and the current quantized model's next-token
+     distributions. Activations are quantized with a straight-through estimator.
+   - A tile's flip score is `⟨G, ΔW_tile⟩`, where `ΔW_tile` is the weight change of
+     switching that tile to the other type. Undoing an earlier flip is also a flip.
+2. **Filter and rank.** Keep flips whose per-sequence mean + 2 SE < 0, i.e.
+   predicted to lower KL with confidence. Rank them by that bound.
+3. **Backtrack on measured loss.**
+   - Apply the top n candidates, starting with n = all, and measure mean KL on the
+     development documents.
+   - Accept the first step that lowers it; otherwise halve n and retry.
+4. **Stop** when no step lowers development KL.
 
-## 3. How to decide reordering
+**Why multiple rounds.** First-order scores are only valid near the current point.
+Summed over thousands of tiles, they overstate the combined effect of a step by
+5–50×. Electing everything that passes the filter in one step (one-shot election)
+overshoots, and in later rounds most flips that pass the filter are rejected. On
+Llama 256×64, for example, round 1 had 29,820 candidates but accepted 465; applying
+all of them *raised* development KL by 0.11. Re-scoring after every accepted step,
+with the step size set by measured loss, avoids this.
 
-1. **Score small units:** retain per-document CE/KL scores for each 1-row ×
-   16-column atom. Sum within each document to preserve covariance for a
-   proposed tile.
-2. **Fit a legal arrangement:** group rows into sets of 256 and intact
-   16-column scale groups into sets of four. Alternate capacity-constrained
-   row/column assignments and pair swaps to improve joint score bounds.
-   Never split a scale group. The original 128-document calibration uses
-   64 documents for fitting and 64 for tile election after freezing the layout.
-3. **Verify combined changes:** Llama needed exact final-MLP replay and format
-   refinement among previously elected tiles on 192 development documents.
-   Freeze the map, then require pooled CE mean+2SE < 0 versus raw and matched
-   identity on **64 new documents**, with nonpositive math/code CE means versus
-   raw. KL is diagnostic in this later CE-primary gate; original tile election
-   still requires both objectives. Prior failed gates remain failures.
-4. **Compact for deployment:** retain original indices for inactive rows/column
-   groups wherever possible, preserving effective quantized weights bitwise.
-   Pack weights offline; fuse runtime permutations into adjacent operations.
+**Output.** A per-tile E2M1/E0M3 map, the only runtime artifact. Selection is
+deterministic for a fixed setup: an independent re-run reproduced the Llama map
+and every evaluation loss bitwise. Implementation: `run_multiround.py
+--objective kl`.
 
-For `W′ = P W Qᵀ`, use `X′ = X Qᵀ`; then `X′W′ᵀ = XWᵀPᵀ`.
-Restoring output order cancels the row permutation. Gate/up ordering must agree
-before their elementwise product. This preserves the unquantized operation;
-the new grouping changes which weights receive E0M3.
+## 4. Calibration time and cost
 
-Accepted layouts change **only the final MLP's gate/up/down projections**;
-other layers retain raw 256×64 MixFP4. Cached inputs make exact trials cheap
-and the small scope limits runtime overhead. This is not proven globally
-optimal. Qwen has 0/6/14 final-MLP E0M3 tiles; refined Llama has 3/6/10.
-Neither uses rotation. [Algorithm details](results/task_reorder/transfer_20260920/report_section.md).
+These are **one-time, offline tile-selection costs**. Inference memory is not
+reported: this is fake quantization, and peak inference memory will be measured
+on the target device.
 
-## 4. PPL: 8×64, raw 256×64, and 256×64 + MLP reordering
+| Run | Hardware | Implementation | Scoring passes | Dev evaluations | Selection time | Peak GPU memory | Peak CPU memory |
+|---|---|---|---:|---:|---:|---|---:|
+| Llama-3.1-8B, 256×64 | 1× H200 | reference | 5 | 42 | 43.9 min | 46.1 GiB | 41.2 GiB |
+| Llama-3.1-8B, 256×64 | 1× H200 | **optimized** | 4 | 33 | **15.3 min** | 64.5 GiB | 42.9 GiB |
+| Llama-3.1-8B, 8×64 | 1× H200 | reference | 10 | 133 | 2 h 15 min | 47.3 GiB | 41.3 GiB |
+| Qwen3.8-27B, 256×64 (run 1, to round 5) | 2× H200 | reference | 6 | 63 | 3 h 58 min | ~82 + 94 GiB¹ | 78.1 GiB |
+| Qwen3.8-27B, 256×64 (run 2, 2 rounds) | **1× H200** | optimized | 2 | 11 | 47 min | **107.1 GiB** | 78.2 GiB |
+| Qwen3.8-27B, 8×64 | 2× H200 | reference | 9 | 137 | 8 h 20 min | 82.2 + 94.2 GiB | 78.2 GiB |
 
-Lower is better. These are **fake-quantized W4A4 quality measurements**, not
-native-kernel PPL. Evaluation uses 2,048-token WikiText-2 windows and 256 seed-0
-C4 crops, tensor-wide activation factors, and the released aggregation protocol.
-E0M3 tile counts differ in area across geometries.
+¹ Not logged for this run; the Qwen 8×64 run has the same model, candidates and
+teachers on the same two GPUs.
 
-| Model | Policy | E0M3 tiles | WikiText-2 | C4 |
-|---|---|---:|---:|---:|
-| Llama-3.1-8B | FourOverSix | 0 | 6.875525 | 9.823733 |
-| | MixFP4 8×64, k=3 | 3,345 | 6.849275 | 9.773040 |
-| | Raw MixFP4 256×64, supplied | 187 | 6.866879 | 9.801361 |
-| | **256×64 + final-MLP reordering and refined selection** | **147** | **6.864886** | **9.796946** |
-| Qwen3.8-27B | FourOverSix | 0 | 7.287076 | 10.188365 |
-| | MixFP4 8×64, k=3 | 3,785 | 7.214750 | 10.149866 |
-| | Raw MixFP4 256×64, supplied | 198 | 7.275704 | 10.177685 |
-| | Raw MixFP4 256×64, local reconstruction | 195 | 7.266300 | 10.176030 |
-| | **256×64 + final-MLP both-axis reordering** | **212** | **7.255834** | **10.167336** |
+Selection time excludes setup (loading model and teachers, 2–8 min) and the final
+evaluation.
 
-Llama improves supplied raw PPL by **0.001993 / 0.004415** and passes its fresh
-CE gate. Its gain includes format-mask refinement, not permutation alone.
-Qwen's accepted endpoint improves both PPLs but **failed the later strict fresh
-joint CE/KL gate**; supplied and local raw maps are distinct controls.
-Recovery of the 8×64 gain over FourOverSix is **40.5% / 52.8% for Llama** and
-**43.2% / 54.6% for Qwen**. The historical 90% target was not achieved.
+**Where the time goes.**
 
-PPL gains do not establish answer-accuracy gains: Llama's separate non-STEM MMLU
-and ARC-Challenge comparisons were inconclusive.
-[Quality results and gates](results/task_reorder/transfer_20260920/report_section.md),
-[answer-accuracy evaluation](results/task_reorder/llama_accuracy_20260920/REPORT.md).
-
-## 5. Ablation study: KL only, CE only, and more reordered layers
-
-### Tile-selection objective
-
-Hold calibration, 8×64 geometry, and `k=3` fixed; drop one selection objective.
-Tile counts are shown because a fixed threshold does **not** give equal budgets.
-
-| Model | Objective | E0M3 tiles | WikiText-2 | C4 |
-|---|---|---:|---:|---:|
-| Llama-3.1-8B | CE + KL | 3,345 | 6.849275 | 9.773040 |
-| | KL only | 32,774 | 7.356566 | 10.394302 |
-| | CE only | 22,906 | **6.836686** | **9.768658** |
-| Qwen3-4B | CE + KL | 7,912 | 11.862908 | **15.824034** |
-| | KL only | 21,528 | 12.007304 | 16.192286 |
-| | CE only | 125,611 | **11.804390** | 16.745670 |
-
-KL-only loses to the joint rule on both corpora here. **CE-only wins both Llama
-PPLs**, using 6.85× as many tiles, and trades better WikiText for worse C4 on
-Qwen3-4B. Requiring both is a conservative rule, not a universal optimum.
-Threshold sweeps also contain CE-only wins with fewer tiles; they do not prove
-KL is always necessary. No equivalent objective ablation was run on Qwen3.8-27B.
-[Full threshold/count and accuracy comparisons](MIXFP4_REPORT_DETAILS.md#the-conjunction-measured).
-
-### Extending reordering to more layers
-
-Matched Qwen study using eight-row groups and the same layers-56–63 background:
-
-| Reordered scope | E0M3 tiles | WikiText-2 | C4 |
+| Model | Scoring pass (reference) | Development evaluation (reference) | Development evaluation (optimized) |
 |---|---:|---:|---:|
-| Final MLP only | 192 | **7.263466** | 10.177821 |
-| Last eight MLPs | 201 | 7.263998 | **10.175365** |
+| Llama-3.1-8B | ~2 min | 0.9 min | 0.3 min |
+| Qwen3.8-27B | ~8 min | 3 min | 1.8 min |
 
-Extension improves C4 but slightly worsens WikiText. This is a separate matched
-study, not an extension of the accepted 212-tile model. Later wider candidates
-failed applicable gates; the 218-tile Fisher extension failed fresh CE
-confirmation and was not evaluated for PPL.
+Scoring is 128 × 512 tokens, forward plus KL backward. A development evaluation is
+192 × 512 tokens, forward only. Late rounds that accept few flips spend most of
+their time on backtracking evaluations, while round 0 alone gives most of the
+gain.
 
-Llama has **no exhaustive earlier-layer layout search**. A diagnostic transfers
-the final-layer layout to layers 0/15/31: predicted versus actual loss change
-agrees in sign on 54.2%/54.2%/91.7% of fresh cases. Freezing downstream
-activation-quantization residuals reduces early prediction-error magnitude by
-about 10–12× but does not fix sign agreement. This explains a difficulty with
-early-layer scoring; it does not establish that optimized earlier layouts
-cannot work.
-[Matched scope tables](results/task_reorder/cluster_20260919/FULL_COMPARISON.md#qwen-expanded-scope-layers-5663),
-[Llama depth diagnosis](results/task_reorder/llama_diagnosis_20260920/REPORT.md).
+**The optimized implementation** changes no weight value.
+- Both candidates are stored packed as 4-bit codes plus FP8 scales and decoded per
+  module, verified bitwise. This lets Qwen run on one GPU.
+- Activation fake-quantization is vectorized and verified bitwise at the start of
+  every run.
+- Llama batches 16 documents per evaluation and 8 sequences per scoring pass.
+  Qwen evaluates one document per pass, because its batched forward is not
+  numerically identical to one-at-a-time.
+- Floating-point summation order changes which borderline tiles are selected.
+  The Llama 256×64 optimized run selected 8,393 tiles vs 8,405.
 
-The [archived detailed report](MIXFP4_REPORT_DETAILS.md) retains the full protocol,
-threshold sweeps, diagnostics, timing tables, and experiment history.
+## 5. Perplexity
+
+W4A4 fake quantization: weights as listed, activations FourOverSix (NVFP4
+activations for the NVFP4 row). Evaluation uses the released protocol: WikiText-2
+test in 2,048-token windows and 256 seed-0 C4 validation crops. Lower is better.
+Paired ΔNLL is per window versus FourOverSix, ± 2 SE.
+
+### Llama-3.1-8B
+
+| Policy | E0M3 tiles | WikiText-2 | C4 | paired ΔNLL vs FourOverSix (wiki / c4) |
+|---|---:|---:|---:|---|
+| BF16 (reference) | — | 6.240087 | 8.958212 | — |
+| NVFP4 | 0 | 6.940252 | 9.925099 | — |
+| NVFP4 FourOverSix | 0 | 6.875525 | 9.823733 | — |
+| **MixFP4 8×64** | 3,654 | **6.819751** | **9.750492** | −0.00815±0.00173 / −0.00748±0.00240 |
+| **MixFP4 256×64** (run 1) | 8,405 | 6.841998 | 9.774137 | −0.00489±0.00185 / −0.00506±0.00220 |
+| MixFP4 256×64 (run 2, optimized) | 8,393 | 6.835411 | 9.771621 | −0.00585±0.00187 / −0.00532±0.00220 |
+
+Versus FourOverSix:
+- **MixFP4 8×64:** −0.0558 WikiText / −0.0732 C4.
+- **MixFP4 256×64:** −0.0335 / −0.0496 (run 1) and −0.0401 / −0.0521 (run 2).
+
+### Qwen3.8-27B
+
+| Policy | E0M3 tiles | WikiText-2 | C4 | paired ΔNLL vs FourOverSix (wiki / c4) |
+|---|---:|---:|---:|---|
+| BF16 (reference) | — | 7.050375 | 9.893323 | — |
+| NVFP4 | 0 | 7.579994 | 10.230958 | — |
+| NVFP4 FourOverSix | 0 | 7.287076 | 10.188365 | — |
+| **MixFP4 8×64** | 17,441 | **7.166357** | **10.155802** | −0.01671±0.00381 / −0.00320±0.00084 |
+| **MixFP4 256×64** (run 1) | 39,099 | 7.246839 | 10.157245 | −0.00554±0.00343 / −0.00306±0.00092 |
+| MixFP4 256×64 (run 2) | 39,092 | 7.201498 | 10.149290 | −0.01181±0.00353 / −0.00384±0.00089 |
+
+Versus FourOverSix:
+- **MixFP4 8×64:** −0.1207 WikiText / −0.0326 C4.
+- **MixFP4 256×64:** −0.0402 / −0.0311 (run 1) and −0.0856 / −0.0391 (run 2).
+
+**Qwen results depend on the selection path.**
+- The two 256×64 runs differ in only 999 of ~39,100 tiles. The difference comes
+  from floating-point summation order in scoring (two GPUs vs one), compounded
+  over rounds. Yet their WikiText gains differ by 2×.
+- In the 8×64 run, the map after round 4 scored better on both corpora
+  (7.153788 / 10.145843) than the converged map. Rounds 5–8 lowered development KL
+  but not test PPL.
+- The paired ±2 SE above does not include this selection variance.
+- A reliable Qwen number needs repeated selections, e.g. on different
+  calibration halves. Llama shows neither effect.
+
+## 6. Zero-shot accuracy
+
+lm-eval 0.4.5, 0-shot, batch size 8: `arc_easy`, `arc_challenge`, `hellaswag`,
+`openbookqa`, `boolq`, `winogrande`. The metric is `acc_norm` where defined, else
+`acc`, and the mean is unweighted over the six tasks. BF16 and NVFP4 rows are from
+the earlier zero-shot study with the same protocol
+([details](MIXFP4_REPORT_DETAILS.md)). FourOverSix and MixFP4 rows are evaluated
+together in jobs 427938–427940.
+
+### Llama-3.1-8B
+
+| Policy | arc_easy | arc_challenge | hellaswag | openbookqa | boolq | winogrande | mean |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| BF16 (reference) | 0.8106 | 0.5350 | 0.7885 | 0.4480 | 0.8196 | 0.7380 | 0.6899 |
+| NVFP4 | 0.7496 | 0.5085 | 0.7743 | 0.4280 | 0.7969 | 0.7182 | 0.6626 |
+| NVFP4 FourOverSix | *running* | | | | | | |
+| MixFP4 8×64 | *running* | | | | | | |
+| MixFP4 256×64 (run 1) | *running* | | | | | | |
+
+### Qwen3.8-27B
+
+| Policy | arc_easy | arc_challenge | hellaswag | openbookqa | boolq | winogrande | mean |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| BF16 (reference) | 0.7298 | 0.5896 | 0.8291 | 0.4620 | 0.8670 | 0.7561 | 0.7056 |
+| NVFP4 | 0.7542 | 0.5828 | 0.8237 | 0.4460 | 0.7783 | 0.7451 | 0.6883 |
+| NVFP4 FourOverSix | *running* | | | | | | |
+| MixFP4 8×64 | *running* | | | | | | |
+| MixFP4 256×64 (run 1) | *running* | | | | | | |
+| MixFP4 256×64 (run 2) | *running* | | | | | | |
+
+---
+
+Supporting material: [multi-round study](results/mixfp4_potential/MULTIROUND.md),
+[potential ladder and threshold study](results/mixfp4_potential/REPORT.md),
+[archived detailed report](MIXFP4_REPORT_DETAILS.md) (earlier one-shot election
+and other experiment history).
