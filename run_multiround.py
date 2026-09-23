@@ -15,6 +15,7 @@ import argparse
 import json
 import math
 import os
+import resource
 import time
 from pathlib import Path
 
@@ -56,7 +57,7 @@ def load_development(model):
     return records, provenance
 
 
-UNITS = {'256x64': (256, 64), '1x16': (1, 16)}
+UNITS = {'256x64': (256, 64), '8x64': (8, 64), '1x16': (1, 16)}
 
 
 def expand(mask, rows, cols, height=None):
@@ -216,6 +217,7 @@ def main():
     current = dev_eval()
     report['initial_dev'] = current
     save(args.out, report)
+    timing = dict(setup_seconds=time.time() - started)
     print(f'START {args.objective} dev CE {current["ce"]:.6f} KL {current["kl"]:.6f}', flush=True)
     names = list(modules)
     for rnd in range(args.max_rounds):
@@ -273,6 +275,7 @@ def main():
         if not accepted:
             report['stopped'] = 'no step lowers the development objective'; break
     report['final_dev'] = current
+    timing['optimization_seconds'] = time.time() - started - timing['setup_seconds']
     report['final_e0m3_units'] = sum(int(s.sum()) for s in sel.values())
     report['map_sha256'] = digest_file(args.out / 'map.pt') if (args.out / 'map.pt').exists() else None
     save(args.out, report)
@@ -295,6 +298,16 @@ def main():
         print(f'PPL multiround_{args.unit}_{args.objective} {key} {report["evaluation"][key]["ppl"]:.6f}', flush=True)
         save(args.out, report)
     eval_hooks(False)
+    timing['evaluation_seconds'] = time.time() - started - timing['setup_seconds'] - timing['optimization_seconds']
+    timing['total_seconds'] = time.time() - started
+    report['resources'] = dict(
+        timing, gpus=[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())],
+        gpu_peak_allocated_gib=[torch.cuda.max_memory_allocated(i) / 2 ** 30 for i in range(torch.cuda.device_count())],
+        gpu_peak_reserved_gib=[torch.cuda.max_memory_reserved(i) / 2 ** 30 for i in range(torch.cuda.device_count())],
+        cpu_peak_rss_gib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2 ** 20,
+        scoring_passes=len(report['rounds']),
+        development_evaluations=sum(len(r['tries']) for r in report['rounds']) + 1)
+    print('RESOURCES ' + json.dumps(report['resources']), flush=True)
     report['status'] = 'complete'
     save(args.out, report)
 
