@@ -55,7 +55,7 @@ def rule_masks(rule, scores, frozen, modules):
             stats[key, 256] = lambda kk, seq=seq: bound(seq.mean(0), seq.std(0, unbiased=True), kk)
             mean, std = s[key + '_mean8'].double(), s[key + '_std8'].double()
             stats[key, 8] = lambda kk, mean=mean, std=std, o=o, c=c: bound(mean, std, kk).reshape(o // 8, c // 64)
-        for tr in (8, 256):
+        for tr in (() if frozen is None else (8, 256)):
             check = torch.maximum(stats['ce', tr](3.), stats['kl', tr](3.)) < 0
             mismatched += int((check != frozen['raw256' if tr == 256 else 'fine8x64'][n]).sum())
         if objective == 'both':
@@ -82,13 +82,22 @@ def main():
     assert os.environ.get('SLURM_JOB_ID'), 'Run through Slurm'
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--policy', choices=POLICIES, required=True)
-    ap.add_argument('--calib', type=Path, default=Path('/work/u4320956/task_reorder/transfer_20260920/llama8b/calibration'))
+    ap.add_argument('--model', choices=('llama8b', 'qwen27b'), default='llama8b')
+    ap.add_argument('--calib', type=Path, default=None)
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--rule', help='OBJECTIVE:K:TILE_ROWS for --policy rtn_rule')
     ap.add_argument('--fine-dir', type=Path, default=Path('/work/u4320956/mixfp4_potential/llama8b_fine1x16/fine_masks'))
     ap.add_argument('--fine-rule', default='both', help='both|ce|kl, optionally suffixed _k0/_k1/_k2')
-    ap.add_argument('--scores', type=Path, default=Path('/work/u4320956/mixfp4_potential/llama8b_calibration/scores'))
+    ap.add_argument('--scores', type=Path, default=None)
     args = ap.parse_args()
+    qwen = args.model == 'qwen27b'
+    if args.calib is None:
+        args.calib = Path('/work/u4320956/task_reorder/pilot_20260919/qwen27b/calibration' if qwen
+                          else '/work/u4320956/task_reorder/transfer_20260920/llama8b/calibration')
+    if args.scores is None:
+        args.scores = Path('/work/u4320956/mixfp4_potential/qwen27b_scores' if qwen
+                           else '/work/u4320956/mixfp4_potential/llama8b_calibration/scores')
+    assert not qwen or args.policy in ('rtn_rule', 'rtn_four_over_six'), 'Qwen supports RTN rule arms only'
     torch.set_num_threads(min(8, int(os.environ.get('SLURM_CPUS_PER_TASK', 4))))
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.manual_seed(0)
@@ -108,19 +117,24 @@ def main():
                   calibration_sources=['OpenWebMath', 'CodeParrot'], uses_wiki_calibration=False,
                   uses_c4_calibration=False, evaluation={}, matrices={})
     save(args.out, report)
-    model = AutoModelForCausalLM.from_pretrained(prior['source'], revision=prior['revision'],
-                                                 torch_dtype=torch.bfloat16, attn_implementation='sdpa',
-                                                 device_map='cuda')
+    loader = AutoModelForCausalLM
+    if qwen:
+        from transformers import Qwen3_5ForConditionalGeneration
+        loader = Qwen3_5ForConditionalGeneration
+    model = loader.from_pretrained(prior['source'], revision=prior['revision'], torch_dtype=torch.bfloat16,
+                                   attn_implementation='sdpa', device_map='cuda')
     model.eval().requires_grad_(False)
     modules = {n: m for n, m in model.named_modules() if isinstance(m, torch.nn.Linear)
-               and m is not model.get_output_embeddings()}
+               and (('language_model' in n and 'head' not in n) if qwen else m is not model.get_output_embeddings())}
     assert list(modules) == list(prior['matrices'])
     for n, m in modules.items():
         assert sha(m.weight) == prior['matrices'][n]['source_sha256'], n
     tok = AutoTokenizer.from_pretrained(prior['source'], revision=prior['revision'])
     if args.policy == 'rtn_rule':
-        frozen = validate_compact_masks(torch.load(args.calib / 'compact_masks.pt', map_location='cpu',
-                                                   weights_only=True), prior)
+        # Qwen summaries were converted from the full historical tables with the raw256
+        # equality asserted per shard (convert_scores_summary.py); Llama re-checks here.
+        frozen = None if qwen else validate_compact_masks(torch.load(args.calib / 'compact_masks.pt', map_location='cpu',
+                                                                     weights_only=True), prior)
         masks, tile_rows, mismatched = rule_masks(args.rule, args.scores, frozen, modules)
         report.update(rule=args.rule, scores=str(args.scores), frozen_k3_mismatched_tiles=mismatched)
         assert mismatched == 0, f'Re-scored k=3 maps differ from frozen maps in {mismatched} tiles'
@@ -219,7 +233,7 @@ def main():
     torch.cuda.empty_cache()
 
     batches, report['data'] = data(tok, prior, 2048)
-    published = json.loads(Path('results/kse_paper/job_336566/llama8b/report.json').read_text())
+    published = json.loads(Path(f'results/kse_paper/job_{"336969" if qwen else "336566"}/{args.model}/report.json').read_text())
     validate_evaluation_data(report['data'], published['data'])
     report['published_token_windows_verified'] = True
     save(args.out, report)

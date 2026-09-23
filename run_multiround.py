@@ -1,0 +1,264 @@
+"""Multi-round relinearized MixFP4 election with backtracking on measured loss (Llama-3.1-8B).
+
+Each round re-scores every unit's legal flip (E2M1 FourOverSix <-> E0M3 alpha=1,
+undo included) with per-sequence CE and KL(BF16 teacher) weight gradients at the
+CURRENT quantized model on the 128 calibration sequences, exactly the scoring
+convention of run_math_code_calibration.py (causal per-token activation factors,
+straight-through). Candidates are units whose CE and KL upper bounds
+mean + FILTER_K * SE are both negative, ranked by that bound. The step is chosen
+by backtracking: the top n, n/2, n/4, ... candidates are applied and the first
+set that lowers mean CE on the 192 held-out development documents (tensor-wide
+W4A4, as in evaluation) is accepted. The loop stops when no step lowers it.
+WikiText-2 / C4 are evaluated once, on the final map only.
+"""
+import argparse
+import json
+import math
+import os
+import time
+from pathlib import Path
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+import transformers
+from transformers import AutoTokenizer
+
+from quantize.causal_four_over_six import quantize_rows
+from quantize.quantizer import quant_mix_4_6, quant_nvfp4_4over6
+from run_baseline_protocol_audit import data
+from run_c4_frozen import digest_file
+from run_conditional_format import save, sha
+from run_k_dev import load_development
+from run_math_code_calibration import load_model, math_code_data
+from run_task_reorder_eval import validate_evaluation_data
+
+CALIB = Path('/work/u4320956/task_reorder/transfer_20260920/llama8b/calibration')
+UNITS = {'256x64': (256, 64), '1x16': (1, 16)}
+
+
+def expand(mask, rows, cols):
+    return mask.repeat_interleave(rows, 0).repeat_interleave(cols, 1)
+
+
+def reduce(x, rows, cols):
+    o, k = x.shape
+    return x.reshape(o // rows, rows, k // cols, cols).sum((1, 3))
+
+
+@torch.no_grad()
+def main():
+    assert os.environ.get('SLURM_JOB_ID'), 'Run through Slurm'
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('--unit', choices=tuple(UNITS), required=True)
+    ap.add_argument('--objective', choices=('both', 'ce', 'kl'), required=True,
+                    help='Scores that rank candidates AND the development loss(es) a step must lower')
+    ap.add_argument('--filter-k', type=float, default=2.0)
+    ap.add_argument('--max-rounds', type=int, default=40)
+    ap.add_argument('--max-tries', type=int, default=22)
+    ap.add_argument('--budget-hours', type=float, default=3.0)
+    ap.add_argument('--out', type=Path, required=True)
+    args = ap.parse_args()
+    started = time.time()
+    torch.backends.cuda.matmul.allow_tf32 = False
+    rows, cols = UNITS[args.unit]
+    prior = json.loads((CALIB / 'report.json').read_text())
+    assert transformers.__version__ == prior['transformers_version']
+    args.out.mkdir(parents=True, exist_ok=False)
+    report = dict(status='running', job_id=os.environ['SLURM_JOB_ID'], unit=args.unit, objective=args.objective,
+                  filter_k=args.filter_k, max_tries=args.max_tries,
+                  acceptance={'both': 'mean dev CE and mean dev KL must both decrease', 'ce': 'mean dev CE must decrease',
+                              'kl': 'mean dev KL must decrease'}[args.objective],
+                  source_sha256={p: digest_file(p) for p in ('run_multiround.py', 'quantize/quantizer.py',
+                                                             'quantize/causal_four_over_six.py')},
+                  rounds=[])
+    save(args.out, report)
+    model, modules = load_model(prior, False)
+    model.set_attn_implementation('sdpa')
+    tok = AutoTokenizer.from_pretrained(prior['source'], revision=prior['revision'])
+    fit, _ = math_code_data(tok, prior['fit'])
+    fit = [b for source in ('math', 'code') for b in fit[source]]
+    dev, report['development'] = load_development()
+    device = model.get_input_embeddings().weight.device
+    dev_teacher = []
+    for r in dev:
+        logits = model(input_ids=r['ids'].to(device), use_cache=False).logits
+        dev_teacher.append(logits[:, :-1].float().log_softmax(-1).bfloat16().cpu())
+    teacher = []
+    for ids in fit:
+        logits = model(input_ids=ids.to(device), use_cache=False).logits
+        teacher.append(logits[:, :-1].float().log_softmax(-1).bfloat16().cpu())
+    base, alt, sel = {}, {}, {}
+    for n, m in modules.items():
+        assert sha(m.weight) == prior['matrices'][n]['source_sha256'], n
+        base[n] = quant_nvfp4_4over6(m.weight, 4, 16)
+        alt[n] = quant_mix_4_6(m.weight, 4, 16, type_block=(8, 64), clip='a1', elect='always')
+        o, k = m.weight.shape
+        assert o % rows == 0 and k % cols == 0
+        sel[n] = torch.zeros(o // rows, k // cols, dtype=torch.bool, device=device)
+        m.weight.copy_(base[n])
+
+    def apply(n):
+        modules[n].weight.copy_(torch.where(expand(sel[n], rows, cols), alt[n], base[n]))
+
+    eval_handles = []
+
+    def eval_hooks(on):
+        nonlocal eval_handles
+        for h in eval_handles:
+            h.remove()
+        eval_handles = [m.register_forward_pre_hook(
+            lambda module, inputs: (quant_nvfp4_4over6(inputs[0], 4, 16), *inputs[1:])) for m in modules.values()] if on else []
+
+    def dev_eval():
+        eval_hooks(True)
+        ce, kl = [], []
+        for r, t in zip(dev, dev_teacher):
+            ids = r['ids'].to(device)
+            lp = model(input_ids=ids, use_cache=False).logits[:, :-1].float().reshape(-1, model.config.vocab_size).log_softmax(-1)
+            ce.append(float(F.nll_loss(lp, ids[:, 1:].reshape(-1))))
+            kl.append(float(F.kl_div(lp, t.to(device).float().reshape(-1, lp.shape[-1]), reduction='batchmean', log_target=True)))
+            del lp
+        eval_hooks(False)
+        return dict(ce=sum(ce) / len(ce), kl=sum(kl) / len(kl), ce_nll=ce, kl_values=kl)
+
+    def improves(new, old):
+        keys = ('ce', 'kl') if args.objective == 'both' else (args.objective,)
+        return all(new[key] < old[key] for key in keys)
+
+    def score():
+        """Per-unit mean and SE of CE and KL directional scores for flipping each unit now."""
+        sums = {n: [torch.zeros(sel[n].shape, dtype=torch.float64, device=device) for _ in range(4)] for n in modules}
+        phase = [0]
+
+        def act(module, inputs):
+            x = inputs[0]
+            return (quantize_rows(x.detach()) + (x - x.detach()), *inputs[1:])
+
+        def make_hook(n):
+            def forward(module, inputs, output):
+                x = inputs[0].detach().reshape(-1, inputs[0].shape[-1])
+
+                def backward(dy):
+                    grad = dy.detach().reshape(-1, dy.shape[-1]).float().T @ x.float()
+                    d = (alt[n].float() - base[n].float()) * torch.where(expand(sel[n], rows, cols), -1., 1.)
+                    value = reduce(grad * d, rows, cols).double()
+                    s = sums[n]
+                    s[2 * phase[0]] += value
+                    s[2 * phase[0] + 1] += value.square()
+                output.register_hook(backward)
+            return forward
+
+        handles = [m.register_forward_pre_hook(act) for m in modules.values()]
+        handles += [m.register_forward_hook(make_hook(n)) for n, m in modules.items()]
+        with torch.enable_grad():
+            for ids, t in zip(fit, teacher):
+                ids = ids.to(device)
+                embeds = model.get_input_embeddings()(ids).detach().requires_grad_()
+                lp = model(inputs_embeds=embeds, use_cache=False).logits[:, :-1].float().reshape(-1, model.config.vocab_size).log_softmax(-1)
+                ce = F.nll_loss(lp, ids[:, 1:].reshape(-1))
+                kl = F.kl_div(lp, t.to(device).float().reshape(-1, lp.shape[-1]), reduction='batchmean', log_target=True)
+                phase[0] = 0; ce.backward(retain_graph=True)
+                phase[0] = 1; kl.backward()
+                del embeds, lp, ce, kl
+        for h in handles:
+            h.remove()
+        n_seq = len(fit)
+        stats = {}
+        for n, (cs, cq, ks, kq) in sums.items():
+            out = []
+            for total, square in ((cs, cq), (ks, kq)):
+                mean = total / n_seq
+                se = ((square - n_seq * mean.square()).clamp_min(0) / (n_seq - 1)).sqrt() / math.sqrt(n_seq)
+                out.append((mean, se))
+            stats[n] = out
+        return stats
+
+    current = dev_eval()
+    report['initial_dev'] = current
+    save(args.out, report)
+    print(f'START {args.objective} dev CE {current["ce"]:.6f} KL {current["kl"]:.6f}', flush=True)
+    names = list(modules)
+    for rnd in range(args.max_rounds):
+        if time.time() - started > args.budget_hours * 3600:
+            report['stopped'] = 'time budget'; break
+        t0 = time.time()
+        stats = score()
+        bounds, flat_mean_ce, flat_mean_kl, owners = [], [], [], []
+        for i, n in enumerate(names):
+            (cm, cse), (km, kse) = stats[n]
+            ub = {'ce': cm + args.filter_k * cse, 'kl': km + args.filter_k * kse}
+            u = (torch.maximum(ub['ce'], ub['kl']) if args.objective == 'both' else ub[args.objective]).reshape(-1)
+            bounds.append(u); flat_mean_ce.append(cm.reshape(-1)); flat_mean_kl.append(km.reshape(-1))
+            owners.append(torch.full_like(u, i, dtype=torch.int32))
+        bounds = torch.cat(bounds); owners = torch.cat(owners)
+        flat_mean_ce = torch.cat(flat_mean_ce); flat_mean_kl = torch.cat(flat_mean_kl)
+        offsets = np.cumsum([0] + [sel[n].numel() for n in names])
+        candidates = (bounds < 0).nonzero().squeeze(-1)
+        candidates = candidates[bounds[candidates].argsort()]
+        score_seconds = time.time() - t0
+        entry = dict(round=rnd, candidates=int(candidates.numel()), score_seconds=score_seconds, tries=[])
+        if candidates.numel() == 0:
+            entry['accepted'] = 0; report['rounds'].append(entry); report['stopped'] = 'no candidates'; break
+        size, accepted = int(candidates.numel()), None
+        for _ in range(args.max_tries):
+            chosen = candidates[:size]
+            touched = {}
+            who = owners[chosen]
+            for i in who.unique().tolist():
+                touched[names[i]] = chosen[who == i] - int(offsets[i])
+            for n, idx in touched.items():
+                flat = sel[n].view(-1); flat[idx] ^= True; apply(n)
+            new = dev_eval()
+            pce, pkl = float(flat_mean_ce[chosen].sum()), float(flat_mean_kl[chosen].sum())
+            entry['tries'].append(dict(size=size, predicted_ce=pce, predicted_kl=pkl,
+                                       dev_delta_ce=new['ce'] - current['ce'], dev_delta_kl=new['kl'] - current['kl']))
+            print(f'ROUND {rnd} try size={size} pred CE {pce:+.6f} KL {pkl:+.6f} | dev dCE {new["ce"] - current["ce"]:+.6f} '
+                  f'dKL {new["kl"] - current["kl"]:+.6f}', flush=True)
+            if improves(new, current):
+                accepted = size; current = new; break
+            for n, idx in touched.items():
+                flat = sel[n].view(-1); flat[idx] ^= True; apply(n)
+            if size == 1:
+                break
+            size = max(1, size // 2)
+        entry['accepted'] = accepted or 0
+        entry['e0m3_units'] = sum(int(s.sum()) for s in sel.values())
+        entry['dev_ce'], entry['dev_kl'] = current['ce'], current['kl']
+        entry['round_seconds'] = time.time() - t0
+        report['rounds'].append(entry)
+        torch.save({n: s.cpu() for n, s in sel.items()}, args.out / 'map.pt')
+        save(args.out, report)
+        print(f'ROUND {rnd} accepted={accepted} e0m3={entry["e0m3_units"]} dev CE {current["ce"]:.6f} KL {current["kl"]:.6f} '
+              f'{entry["round_seconds"]:.0f}s', flush=True)
+        if not accepted:
+            report['stopped'] = 'no step lowers the development objective'; break
+    report['final_dev'] = current
+    report['final_e0m3_units'] = sum(int(s.sum()) for s in sel.values())
+    report['map_sha256'] = digest_file(args.out / 'map.pt') if (args.out / 'map.pt').exists() else None
+    save(args.out, report)
+    # One evaluation of the final map on the released PPL windows.
+    batches, report['data'] = data(tok, prior, 2048)
+    published = json.loads(Path('results/kse_paper/job_336566/llama8b/report.json').read_text())
+    validate_evaluation_data(report['data'], published['data'])
+    eval_hooks(True)
+    report['evaluation'] = {}
+    for domain, sequences in batches.items():
+        values = []
+        for ids in sequences:
+            ids = ids.to(device)
+            logits = model(input_ids=ids, use_cache=(domain == 'wiki')).logits
+            values.append(float(F.cross_entropy(logits[:, :-1].float().reshape(-1, logits.shape[-1]), ids[:, 1:].reshape(-1))))
+            del logits
+        losses = torch.tensor(values, dtype=torch.float32) * 2048
+        key = 'c4' if domain == 'c4_paper' else domain
+        report['evaluation'][key] = dict(nll=values, ppl=float(torch.exp(losses.sum() / (len(values) * 2048))))
+        print(f'PPL multiround_{args.unit}_{args.objective} {key} {report["evaluation"][key]["ppl"]:.6f}', flush=True)
+        save(args.out, report)
+    eval_hooks(False)
+    report['status'] = 'complete'
+    save(args.out, report)
+
+
+if __name__ == '__main__':
+    main()

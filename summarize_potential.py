@@ -16,6 +16,8 @@ def pair(a, b):
 
 
 def label(report, directory):
+    if 'objective' in report and 'unit' in report:
+        return f'multiround {report["unit"]} {report["objective"]}'
     if report['policy'] == 'rtn_rule':
         objective, k, rows = report['rule'].split(':')
         return f'{rows}x64 {objective} k={k}'
@@ -27,16 +29,17 @@ def label(report, directory):
 
 def main():
     arms = {}
-    for path in sorted(PPL_ROOT.glob('*/report.json')) + sorted(REFERENCE.glob('rtn_*/report.json')):
+    for path in (sorted(PPL_ROOT.glob('*/report.json')) + sorted(REFERENCE.glob('rtn_*/report.json'))
+                 + sorted(PPL_ROOT.parent.glob('multiround_256x64_*/report.json'))):
         r = json.loads(path.read_text())
-        if r['status'] != 'complete':
+        if r['status'] != 'complete' or 'evaluation' not in r or 'c4' not in r['evaluation']:
             continue
         arms[label(r, path.parent)] = r
     base = arms['rtn_four_over_six']['evaluation']
     rows = []
     for name, r in arms.items():
         e = r['evaluation']
-        row = dict(arm=name, e0m3_units=r.get('elected_tiles'),
+        row = dict(arm=name, e0m3_units=r.get('elected_tiles', r.get('final_e0m3_units')),
                    wiki=e['wiki']['ppl'], c4=e['c4']['ppl'],
                    d_wiki=e['wiki']['ppl'] - base['wiki']['ppl'], d_c4=e['c4']['ppl'] - base['c4']['ppl'],
                    paired_vs_four_over_six={d: pair(e[d]['nll'], base[d]['nll']) for d in ('wiki', 'c4')})
