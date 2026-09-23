@@ -11,6 +11,46 @@ eight-task accuracy tables. This directory supplies detailed qualifications and
 traceability; the [software guide](software/README.md#quality-and-native-execution-paths)
 separates the actual BF16 quality path from the distinct GB200 prototype.
 
+The subsequent [selector-characterization campaign](campaigns/selector_characterization_v1/REPORT.md)
+is a separate, **partially completed, externally blocked** addition, not part of that sealed historical
+snapshot. Its three-model/five-draw CPU map characterization is complete:
+natural overlap exceeds module-preserving random overlap, but map identities
+vary. T2 primary PPL has 150/150 validated quality cells (54 reused, 96 new) and
+T3 has 20/36; missing evaluations are not inferred from score surrogates.
+Qwen's five-draw T2 panel is complete: CE matched-quota is more favorable than
+joint at all ten draw/corpus points, with smaller observed across-draw SD.
+This does not establish population tail risk or a universal CE advantage.
+Llama's complete five-draw panel has 10/10 observed KL-natural regressions
+against baseline, but 0/10 for KL matched-quota. Budget/identity and objective
+must be distinguished; neither is isolated as the unique causal explanation.
+Mistral's five-draw PPL panel is also complete: all 50 points are favorable
+versus baseline, while KL matched is more favorable than joint at 9/10 points
+and CE matched at 3/10. These are descriptive counts, not independent trials.
+Secondary accuracy now covers 80/96 cells (48 historical baseline/joint plus
+32 newly validated Qwen/Mistral matched-policy cells). Qwen CE/KL matched macro changes
+are +1.1689/+0.2448 percentage points, with 0/8 and 3/8 negative task changes.
+These fixed-seed0 points are not five-draw accuracy robustness or safety claims;
+see the [array-checked table](campaigns/selector_characterization_v1/results/SECONDARY_ACCURACY_TABLE.md).
+Mistral CE/KL matched macro changes are +0.0032/+0.3684 pp, with 3/8 and 2/8
+negative task changes. The remaining 16 Llama task cells are missing, not
+inferred from PPL; Llama is blocked at its retry limit after invalid attempts.
+All three A6000 baseline/N16 prefix anchors passed, and the first new Mistral run
+passed full-window ingestion. All three models' full N8/N16 reproduction
+passed on both corpora with maximum window-NLL difference 0. Llama/Mistral's
+16 coarse-granularity cells remain unresolved.
+One additional Llama/Mistral calibration and Qwen coarse-evaluation attempt
+each was explicitly authorized on 2026-09-23 and submitted under the unchanged
+three-GPU cap. Both calibration retries completed but failed historical
+score/map identity; no parent moments were accepted. Qwen's eight new coarse
+cells passed. Its WikiText gain decreases with coarser N; C4 is not strictly
+monotonic, with N128 slightly better than N64 as a point estimate. N256 retains
+39.45%/48.84% of the N8 delta-NLL gain on WikiText/C4, not accuracy retention.
+See the [granularity table](campaigns/selector_characterization_v1/results/GRANULARITY_TABLE.md).
+This does not authorize another Llama accuracy retry or relax the
+historical numerical admission gates.
+See its [live status](campaigns/selector_characterization_v1/TASK_STATUS.json)
+and [reproduction instructions](campaigns/selector_characterization_v1/REPRODUCE.md).
+
 Start with:
 
 - [`CLAIM_EVIDENCE_MATRIX.md`](CLAIM_EVIDENCE_MATRIX.md) for what is and is not supported;
@@ -238,7 +278,7 @@ into passes. The 2026-09-21 homepage refresh reuses existing results only.
 | Are baseline numbers comparable? | [Baseline protocol audit](../../results/baseline_protocol_audit/REPORT.md) | Window length, BF16/FP16 labeling, activation convention and C4 shard differences matter. Use within-protocol comparisons; do not pool historical PPL. |
 | Does calibration transfer across domains? | [Domain observations](../../results/task_sensitivity_domains/CALIBRATION_OBSERVATIONS.md), [pooled confirmation](../../results/pooled_confirmation/REPORT_332349.md) | Earlier pooled gains coexist with a failed equal-token diversity gate. Not proof that more diverse calibration universally helps. |
 | Did the old calibration sweep finish? | [Cancelled/superseded run](../../results/calibration_sensitivity/RUN.md) | Partial results are historical; its replacement design must be read separately, not counted as a completed primary sweep. |
-| Are five maps stable and accurate? | Primary V50/V51 PPL/accuracy JSON; [TODO P1-A/P2](TODO_EXPERIMENTS.md) | Completed evaluations, but joint density-aware map analysis and matched-budget composition inference remain distinct tasks. Thirty favorable PPL points do not establish all-task preservation. |
+| Are five maps stable and accurate? | Primary V50/V51 PPL/accuracy JSON; [selector characterization](campaigns/selector_characterization_v1/REPORT.md); [remaining composition design](TODO_EXPERIMENTS.md) | Density-aware five-draw T1 map analysis and the 150-cell primary objective PPL panel are complete. Secondary matched-policy accuracy remains incomplete; matched-budget composition inference is a separate unresolved question. Thirty favorable joint PPL points do not establish all-task preservation. |
 | Do scale/selector controls explain the gain? | [Selector controls](campaigns/primary/analysis_ppl/SELECTOR_CONTROLS_PPL.json), [extension audit](campaigns/ppl_improvement/FINAL_SUBMISSION_RISK_AUDIT.md) | Retain scale/density controls and failed alternative-selector/held-out promotions. k=2 is post hoc; no universal replacement winner. |
 | Do supplementary tasks transfer? | [Generation](campaigns/primary/analysis_accuracy/CONFIRMATORY_GENERATION.json), [long context](campaigns/primary/analysis_ppl/LONG_CONTEXT.json) | Completed GSM8K/PG19 is supplementary, with four PG19 book clusters. Extension stopped downstream promotion is a separate outcome. |
 | Can reordering improve N256K64 ownership? | [Reordering status](../../REORDERING_STUDY_STATUS.md), [current report](../../MIXFP4_REPORT.md) | Separate accepted Llama/Qwen both-axis results; the 90% recovery target was not met. Failed fresh-transfer gates remain visible. N16 boundary evidence does not validate reorder efficacy. |

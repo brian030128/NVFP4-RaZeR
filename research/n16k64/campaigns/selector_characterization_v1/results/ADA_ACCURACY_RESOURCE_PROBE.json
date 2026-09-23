@@ -1,0 +1,14 @@
+{
+  "status": "prospective_resource_probe_not_quality_promotion",
+  "record_timing": "This consolidated note was written after starting the waiting launchers but before inspecting any probe outcome. Pilot definitions, tolerance and resource policy already existed in the pinned launcher and frozen protocol; no new outcome-dependent rule was introduced.",
+  "protocol_sha256": "dbf2a3cb353e168a9bbe104309a345781f51f7d04ca281c4415e8097463e2306",
+  "reason": "Frozen resources permit A6000 or Ada. The failed Llama Ada anchor does not establish numerical mismatch for Mistral or Qwen. Check those two models before unnecessarily excluding otherwise available hardware from the incomplete secondary-accuracy work.",
+  "models": ["mistral7b", "qwen4b"],
+  "runs": ["pilot_mistral_ada_accuracy_attempt1", "pilot_qwen_ada_accuracy_attempt1"],
+  "device_uuid": "GPU-96caba73-e173-0862-61d4-b11784bf6ca4",
+  "design": "Existing pinned pilot plan: FourOverSix and exact frozen seed0 N16 k=3 map, first two frozen windows of each corpus, identical source/cache/revisions. No model download or benchmark tuning.",
+  "acceptance": "Existing absolute NLL tolerance 1e-10 plus exact token and installed-weight hashes. A passing prefix alone never admits accuracy: complete frozen prompt/response/correctness/environment pairing is still mandatory.",
+  "failure_action": "Retain mismatch and continue existing A6000 wait; do not relax tolerance or change maps. No automatic hardware-pilot repair for a numerical mismatch.",
+  "limits": "One initial pilot per model, serial on one Ada under the same campaign-wide three-physical-GPU cap and cadence/ownership guard. No new Llama Ada probe. No new selector or granularity quality arm.",
+  "retry_boundary": "This cannot authorize any exhausted Llama/Mistral calibration or Qwen granularity/full-reproduction attempt4. Any future accuracy adapter change must be separately CPU-verified and recorded before use."
+}

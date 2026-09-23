@@ -1,0 +1,81 @@
+{
+  "status": "rejected_historical_score_identity",
+  "checked_utc": "2026-09-22T08:38:32.892667+00:00",
+  "reports": [
+    {
+      "path": "research_runs/mixfp4_n16k64_full_validation_20260911T065444Z/runs/V61_calib_mistral7b_seed0_attempt2/calibration/calibration_report.json",
+      "sha256": "f252732e1a1329231616e2ee4d0a6e11bd9ad80733aa16e75bfe6ec3fd15918e"
+    },
+    {
+      "path": "research_runs/mixfp4_selector_characterization_20260921T133858Z/runs/calibration_mistral7b_attempt2_reassigned/calibration/calibration_report.json",
+      "sha256": "6ad1a2c0c89ef904b6a046a956d209b989c8b7befe7109380397973daa254b05"
+    }
+  ],
+  "bf16_teacher_losses_exact": true,
+  "student_fit_losses": {
+    "ce": {
+      "count": 128,
+      "equal": 128,
+      "max_abs": 0.0
+    },
+    "kl": {
+      "count": 128,
+      "equal": 128,
+      "max_abs": 0.0
+    }
+  },
+  "matched_score_modules": [
+    "model.layers.31.mlp.down_proj",
+    "model.layers.31.mlp.gate_proj",
+    "model.layers.31.mlp.up_proj",
+    "model.layers.31.self_attn.k_proj",
+    "model.layers.31.self_attn.o_proj",
+    "model.layers.31.self_attn.v_proj"
+  ],
+  "total_modules": 224,
+  "maps": [
+    {
+      "N": 8,
+      "K_a": 7501,
+      "K_b": 7497,
+      "intersection": 7476,
+      "jaccard": 0.9938846051582026,
+      "containment_a_to_b": 0.9966671110518598,
+      "containment_b_to_a": 0.9971988795518207,
+      "overlap_coefficient": 0.9971988795518207,
+      "empty_a": false,
+      "empty_b": false,
+      "xor_tiles": 46,
+      "historical_sha256": "6c41cd97cf291557f1b3a6d00768274a7111528bb8eb0f43bce9980669947d78",
+      "regenerated_sha256": "c9c8059a724129ff90212931a25fa9853db01023fd1c8db3156103a357a78acd"
+    },
+    {
+      "N": 16,
+      "K_a": 4179,
+      "K_b": 4185,
+      "intersection": 4170,
+      "jaccard": 0.994277539341917,
+      "containment_a_to_b": 0.9978463747307968,
+      "containment_b_to_a": 0.996415770609319,
+      "overlap_coefficient": 0.9978463747307968,
+      "empty_a": false,
+      "empty_b": false,
+      "xor_tiles": 24,
+      "historical_sha256": "0c3d822a18d0480ca2aeff0abd78cf6e4ca3155bb207156a400fde124e1cf13d",
+      "regenerated_sha256": "762dac31eaf374fab0d04bd4871980eabda338fc588161c52b099ea9dcc3ffec"
+    }
+  ],
+  "quant_source": {
+    "current_sha256": "c19623d141e6fb4f473efceccbda72b83cb6524b1997e834e7dbc5ae19838451",
+    "recovered_historical_sha256": "210d182478d9bab9ce6c9b8e6d8ff831420ca83f31a2ecf170998c13ca641aca",
+    "historical_manifest_sha256": "de271fe17082fa0db05a5db64652b99edd1ae7f92aafae5b63023dbd0671b8cd",
+    "finding": "Only token-row chunking added. At 512 rows, fn(x) is used; original STE expression and dtype guard are unchanged. No evidence of changed STE arithmetic."
+  },
+  "known_launch_differences": [
+    "Historical --raw sample --subset-moments; regeneration --raw none without subset moments.",
+    "Regeneration adds CPU parent-moment observer; historical launch was containerized, current launch is direct using the same pinned environment."
+  ],
+  "inference": "Identical forward losses but differing backward score streams localize the mismatch beyond the checked forward losses. Allocation/backend backward nondeterminism is a hypothesis, not an established cause.",
+  "acceptance": "No regenerated parents or maps admitted. Do not relax score identity, report new moments as historical, or set missing covariance to zero.",
+  "final_retry_requirement": "Restore hash-verified historical quant text and original raw/subset allocation options in a new isolated adapter; retain exact score/N8/N16 gate. At most one final reasoned calibration retry remains."
+}

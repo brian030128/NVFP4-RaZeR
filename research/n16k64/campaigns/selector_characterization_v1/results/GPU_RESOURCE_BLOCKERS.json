@@ -1,0 +1,148 @@
+{
+  "llama8b_secondary_accuracy": {
+    "status": "blocked_retry_limit",
+    "last_run": "secondary_accuracy_llama8b_attempt3",
+    "source": "research_runs/mixfp4_selector_characterization_20260921T133858Z/runs/secondary_accuracy_llama8b_attempt3/launch_record.json",
+    "gpu_hours": 0.00931395795998267,
+    "reason": "Final repair obtained clean GPU0 preflight, then foreign PID 2995992 entered. Ownership monitor stopped only the campaign child; attempt invalid, no scientific outputs admitted. Earlier attempt1 monitor gaps and attempt2 GPU1 co-tenancy remain retained.",
+    "repair": "Resource reassignment from GPU1 to GPU0 did not secure exclusivity. All initial-plus-two-repair attempts are exhausted; no fourth attempt is authorized. Keep 16 Llama matched-policy full8 cells missing.",
+    "required_external_resolution": "A coordinated exclusive A6000 window and explicit authority for an additional Llama secondary-accuracy attempt beyond the two-repair limit. Never automatically retry or use invalid partial outputs."
+  },
+  "mistral7b_reproduction": {
+    "status": "resolved_validated",
+    "last_run": "reproduction_mistral7b_attempt2",
+    "source": "research_runs/mixfp4_selector_characterization_20260921T133858Z/runs/reproduction_mistral7b_attempt2/launch_record.json",
+    "gpu_hours": 0.6051719692266649,
+    "reason": "Guarded attempt2 passed full N8/N16 runtime, weight, window/cluster identities and baseline ingestion. All four comparisons have maximum absolute NLL difference 0. Attempt1 remains invalid for monitor gaps.",
+    "evidence": [
+      "results/N8_REPRODUCTION.json",
+      "results/N16_REPRODUCTION.json"
+    ],
+    "required_external_resolution": "None for this reproduction; missing coarse moments and exhausted calibration retries remain separate blockers."
+  },
+  "mistral7b_calibration": {
+    "status": "blocked_retry_limit",
+    "last_run": "calibration_mistral7b_attempt4_authorized",
+    "source": "research_runs/mixfp4_selector_characterization_20260921T133858Z/runs/calibration_mistral7b_attempt4_authorized/launch_record.json",
+    "gpu_hours": 0.174000607049222,
+    "reason": "The one explicitly authorized additional calibration attempt is terminal but not scientifically admitted; see AUTHORIZED_CALIBRATION_AUDIT.json.",
+    "diagnostic": "results/MISTRAL_CALIBRATION_IDENTITY_DIAGNOSTIC.json",
+    "repair": "CPU import repair and restored historical source/options executed in the explicitly authorized fourth attempt; operational completion did not pass historical score/map identity. No fifth attempt authorized.",
+    "required_external_resolution": "Verified historical full seed0 per-sequence scores or complete child covariance, or an externally resolved exact-reproduction discrepancy and a new explicit user decision. No fifth calibration attempt is authorized; do not use mismatching parents.",
+    "authorized_run": "calibration_mistral7b_attempt4_authorized",
+    "authorization": "plans/additional_retry_authorization_20260923.json",
+    "authorization_sha256": "9ac0d8dc3f0a44a86e24ee0f23e1fc8e0a3d7037b91d3c03118a843cd0f9b67f"
+  },
+  "mistral7b_granularity": {
+    "status": "blocked_retry_limit",
+    "model": "mistral7b",
+    "N": [
+      32,
+      64,
+      128,
+      256
+    ],
+    "corpora": [
+      "wiki",
+      "c4"
+    ],
+    "last_run": "calibration_mistral7b_attempt4_authorized",
+    "source": "research_runs/mixfp4_selector_characterization_20260921T133858Z/runs/calibration_mistral7b_attempt4_authorized/launch_record.json",
+    "reason": "The one explicitly authorized additional calibration attempt is terminal but not scientifically admitted; see AUTHORIZED_CALIBRATION_AUDIT.json.",
+    "required_external_resolution": "Verified historical full seed0 per-sequence scores or complete child covariance, or an externally resolved exact-reproduction discrepancy and a new explicit user decision. No fifth calibration attempt is authorized; do not use mismatching parents.",
+    "map_change_required": false,
+    "authorized_run": "calibration_mistral7b_attempt4_authorized",
+    "authorization": "plans/additional_retry_authorization_20260923.json",
+    "authorization_sha256": "9ac0d8dc3f0a44a86e24ee0f23e1fc8e0a3d7037b91d3c03118a843cd0f9b67f",
+    "gpu_hours": 0.174000607049222
+  },
+  "llama8b_reproduction": {
+    "status": "resolved_validated",
+    "last_run": "reproduction_llama8b_attempt2",
+    "source": "research_runs/mixfp4_selector_characterization_20260921T133858Z/runs/reproduction_llama8b_attempt2/launch_record.json",
+    "gpu_hours": 0.6149844064780822,
+    "reason": "First repair passed full N8/N16 runtime, weight, window/cluster identities and baseline ingestion. All four map/corpus comparisons have maximum absolute NLL difference 0. Prior invalid attempt retained.",
+    "evidence": [
+      "results/N8_REPRODUCTION.json",
+      "results/N16_REPRODUCTION.json"
+    ],
+    "required_external_resolution": "None for this reproduction. Exhausted Llama calibration retry budget and missing coarse-granularity evaluations remain separate and unchanged."
+  },
+  "qwen4b_granularity": {
+    "status": "resolved_validated",
+    "model": "qwen4b",
+    "N": [
+      32,
+      64,
+      128,
+      256
+    ],
+    "corpora": [
+      "wiki",
+      "c4"
+    ],
+    "last_run": "granularity_qwen4b_attempt4_authorized",
+    "source": "research_runs/mixfp4_selector_characterization_20260921T133858Z/runs/granularity_qwen4b_attempt4_authorized/launch_record.json",
+    "last_gpu_hours": 0.017397674856992024,
+    "reason": "Authorized fourth attempt passed full baseline, map/runtime/window identity, N8/N16 reproduction and ownership/cadence/postflight admission. Eight new coarse cells accepted; earlier failures remain retained.",
+    "required_external_resolution": "None for Qwen; do not rerun accepted cells.",
+    "map_change_required": false,
+    "authorized_run": "granularity_qwen4b_attempt4_authorized",
+    "authorization": "plans/additional_retry_authorization_20260923.json",
+    "authorization_sha256": "9ac0d8dc3f0a44a86e24ee0f23e1fc8e0a3d7037b91d3c03118a843cd0f9b67f",
+    "gpu_hours": 1.0146817441350626,
+    "evidence": [
+      "results/GRANULARITY_TABLE_AUDIT.json",
+      "results/N8_REPRODUCTION.json",
+      "results/N16_REPRODUCTION.json"
+    ]
+  },
+  "llama8b_granularity": {
+    "status": "blocked_retry_limit",
+    "model": "llama8b",
+    "N": [
+      32,
+      64,
+      128,
+      256
+    ],
+    "corpora": [
+      "wiki",
+      "c4"
+    ],
+    "last_run": "calibration_llama8b_attempt4_authorized",
+    "source": "research_runs/mixfp4_selector_characterization_20260921T133858Z/runs/calibration_llama8b_attempt4_authorized/launch_record.json",
+    "last_gpu_hours": 0.006246787353367028,
+    "reason": "The one explicitly authorized additional calibration attempt is terminal but not scientifically admitted; see AUTHORIZED_CALIBRATION_AUDIT.json.",
+    "required_external_resolution": "Verified historical full seed0 per-sequence scores or complete child covariance, or an externally resolved exact-reproduction discrepancy and a new explicit user decision. No fifth calibration attempt is authorized; do not use mismatching parents.",
+    "map_change_required": false,
+    "authorized_run": "calibration_llama8b_attempt4_authorized",
+    "authorization": "plans/additional_retry_authorization_20260923.json",
+    "authorization_sha256": "9ac0d8dc3f0a44a86e24ee0f23e1fc8e0a3d7037b91d3c03118a843cd0f9b67f",
+    "gpu_hours": 0.18815055395670546
+  },
+  "qwen4b_draw3": {
+    "status": "resolved_validated",
+    "last_run": "continued_t2_qwen4b_draw3_attempt3",
+    "source": "research_runs/mixfp4_selector_characterization_20260921T133858Z/runs/continued_t2_qwen4b_draw3_attempt3/launch_record.json",
+    "gpu_hours": 0.736639238452513,
+    "reason": "Final repair completed with passing postflight and full-window identity/array ingestion. Eight new cells admitted; all Qwen T2 cells now present. Original failures retained; no attempt4 needed or authorized."
+  },
+  "qwen4b_draw4": {
+    "status": "resolved_validated",
+    "last_run": "continued_t2_qwen4b_draw4_attempt2",
+    "source": "research_runs/mixfp4_selector_characterization_20260921T133858Z/runs/continued_t2_qwen4b_draw4_attempt2/launch_record.json",
+    "gpu_hours": 0.7407267802332839,
+    "reason": "First repair completed with passing postflight and full-window identity/array ingestion. Eight new cells admitted; original invalid attempt preserved."
+  },
+  "mistral7b_draw4": {
+    "status": "resolved_validated",
+    "last_run": "continued_t2_mistral7b_draw4_attempt3",
+    "source": "research_runs/mixfp4_selector_characterization_20260921T133858Z/runs/continued_t2_mistral7b_draw4_attempt3/launch_record.json",
+    "prior_invalid_gpu_hours": 0.31256599277917607,
+    "gpu_hours": 1.0037325544848055,
+    "started_utc": "2026-09-22T07:13:23.597499+00:00",
+    "pid": 437899,
+    "reason": "Final repair attempt3 completed with passing postflight, ownership cadence and full-window ingestion. Eight new cells admitted; primary T2 PPL now 150/150. Original failures retained. No attempt4 needed or authorized."
+  }
+}

@@ -17,6 +17,38 @@ full-output equivalence or native model quality.
 [Software entry points](research/n16k64/software/README.md) ·
 [Next experiments](research/n16k64/TODO_EXPERIMENTS.md)
 
+**Selector characterization (partial; externally blocked):** the new
+[audited interim report](research/n16k64/campaigns/selector_characterization_v1/REPORT.md)
+separates five-draw map overlap from density-aware random overlap and currently
+contains all 150/150 validated primary objective-quality cells (54 reused, 96 new).
+CPU map analysis is complete; missing coarse-granularity evaluations remain
+explicit. Every admitted new quality outcome requires full-window baseline validation.
+Qwen's five-draw panel is complete: CE matched-quota has better NLL point
+estimates than joint on all ten draw/corpus endpoints, with lower observed
+across-draw SD. This is not a population robustness guarantee. Llama's five-draw panel
+is also complete: KL natural regresses against baseline at all ten points,
+whereas KL matched-quota is favorable at all ten. Natural-rule and fixed-quota
+results answer different questions; these are observed, not population-risk claims.
+Mistral's 50 policy/draw/corpus points are all favorable versus baseline, but
+matched-versus-joint comparisons remain model/corpus dependent. Secondary
+accuracy now covers 80/96 task cells: Qwen's new CE/KL matched-quota full8 runs
+passed exact-baseline admission. Their macro point changes are +1.1689/+0.2448
+percentage points; KL matched still declines on 3/8 tasks. These are fixed-seed0
+points, not five-draw accuracy robustness. Mistral's admitted CE/KL matched
+macro changes are +0.0032/+0.3684 pp, with 3/8 and 2/8 declining tasks.
+Llama's 16 matched-policy cells remain missing after invalid attempts exhausted
+its two repairs. Primary PPL completion does not fill them.
+On 2026-09-23, one additional Llama/Mistral calibration and Qwen coarse-evaluation
+attempt each was explicitly authorized and submitted. Both calibration retries
+completed operationally but failed exact historical score/map identity; their
+parents are rejected. Qwen evaluation passed, bringing T3 to 20/36 cells;
+the remaining 16 Llama/Mistral coarse cells are blocked. Qwen's WikiText gain
+decreases with coarser N, but C4 is not strictly monotonic (N128 slightly
+outperforms N64 as a point estimate). See the
+[array-checked granularity table](research/n16k64/campaigns/selector_characterization_v1/results/GRANULARITY_TABLE.md).
+Authorization does not
+relax numerical gates or extend the Llama accuracy retry budget.
+
 ## In one minute
 
 - **Quality:** N16 has lower PPL point estimates than FourOverSix in all 12

@@ -1,0 +1,16 @@
+{
+  "run": "reproduction_llama8b_attempt1",
+  "task": "T3 acceptance item 8",
+  "model": "llama8b",
+  "draw": "seed0",
+  "plan": "plans/llama8b_reproduction_only_v1.json",
+  "policies": ["four_over_six", "n8_reproduction", "n16_reproduction"],
+  "allowed_uuid": "GPU-d0ab9929-0ef6-d612-0cb5-718f4fdd6c24",
+  "adapter": "scripts/gpu_run_wait.py",
+  "transformed_launcher_sha256": "2860cff6769e5120a57ffe22f85dd4835d6dec70bff5fb9e1b3be09844404a8f",
+  "selection_reason": "Separate A6000 queue; only launch after foreign/unresolved usage clears and campaign-wide physical lease count is below three.",
+  "scientific_scope": "Full frozen evaluation windows for existing N8/N16 maps. Independent of missing N32-N256 moments, and not an additional exhausted calibration or coarse-map retry.",
+  "prelaunch_cpu_checks": "Actual evaluator map reader and all three test_map_backend checks passed; no numerical tolerance change.",
+  "postconditions": ["Full baseline identity ingestion", "n8_reproduction_audit.py --N 8", "n8_reproduction_audit.py --N 16"],
+  "no_automatic_retry_on_failure": true
+}

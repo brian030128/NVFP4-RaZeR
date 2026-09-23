@@ -1,0 +1,14 @@
+{
+  "reason": "Resume the remaining legal repairs after inventory-query recovery, while waiting for an exclusive GPU. A prelaunch timeout must not be mistaken for an accepted GPU run.",
+  "adapter": "scripts/gpu_run_wait.py",
+  "parent_adapter_sha256": "6601e10310d5e0d5c3a94b40056c1bbf10f5aa9b9bc1f0778728721033300c8d",
+  "transformed_source_sha256": "4526382c7819e53f2fdea0d6fca1e71f6fed604d387eb7938af7d7f0ad98c522",
+  "allowed_uuid": "GPU-9cec7336-5b30-3f86-35e7-06919156e7da",
+  "repairs": [
+    {"run": "continued_t2_qwen4b_draw3_attempt3", "model": "qwen4b", "plan": "plans/qwen4b_draw3_anchored.json", "repair_number": 2},
+    {"run": "continued_t2_mistral7b_draw4_attempt3", "model": "mistral7b", "plan": "plans/mistral7b_draw4_anchored.json", "repair_number": 2}
+  ],
+  "gates": "Three CPU inventory-wait tests passed; complete CPU suite 35 passed. No changes to maps, evaluator, lease count, ownership, phase checks, in-run monitor, postflight or cleanup. Waiting is not GPU allocation.",
+  "controller_transition": "Own idle controller 105646 was stopped after UID/cmdline and no-ingestion-child checks. Waiting Llama launcher was left intact. Controller 223157 recognizes the new wrapper; scheduling unit tests passed before restart.",
+  "limit": "No attempt4 is authorized for either repaired T2 plan. Mistral calibration has a separate retry budget; exhausted Qwen granularity and Llama calibration remain blocked."
+}

@@ -1,0 +1,29 @@
+{
+  "recorded_utc": "2026-09-23T01:58:24.420900+00:00",
+  "grant_sha256": "9ac0d8dc3f0a44a86e24ee0f23e1fc8e0a3d7037b91d3c03118a843cd0f9b67f",
+  "previous_blockers_sha256": "30393213c882660fe489e1d7adc25b81fd561baef5f65cbe602bc16558688ed3",
+  "plans": [
+    {
+      "run": "calibration_mistral7b_attempt4_authorized",
+      "entry": "scripts/calibration_repair_run_v2.py",
+      "source_sha256": "b392190e51c56b3cd8bc0818e445ca7c997fa46b2bef396a74b590d47a12de6a",
+      "repair": "CPU-tested sibling import fix; original Mistral raw sample/subset allocation and hash-proven quant source"
+    },
+    {
+      "run": "granularity_qwen4b_attempt4_authorized",
+      "entry": "scripts/cadence_launch.py",
+      "source_sha256": "d8b33ad150bfebdd2749a1fc661123c3745d9bd39ee1fb4ca9b94d626ec71ee5",
+      "plan": "plans/qwen4b_granularity_anchored_v2.json",
+      "plan_sha256": "e80923e16515d91639a00d0134de42391caee712344895c75ac3059fbd5859a4",
+      "repair": "Existing CPU-validated header repair; exclusive A6000 with cadence guard"
+    },
+    {
+      "run": "calibration_llama8b_attempt4_authorized",
+      "entry": "scripts/calibration_llama_retry_run.py",
+      "source_sha256": "534b6e28d6639018e57cdc567f7756015bb7710cee5dbb1c4bdfb26f9245c0f8",
+      "adapter_sha256": "4768375813b3ce54d0776ad5d6c732585c12f7cf6c61b90106eaf3bd947f1bcd",
+      "repair": "Separate Llama historical raw sample, no subset moments; hash-proven quant restore; wait for available campaign slot"
+    }
+  ],
+  "exclusions": "No fourth Llama secondary accuracy attempt; no acceptance or retry-limit relaxation beyond the three named attempts."
+}

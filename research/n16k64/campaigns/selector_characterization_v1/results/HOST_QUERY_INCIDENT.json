@@ -1,0 +1,22 @@
+{
+  "incident": "GPU inventory queries timed out during host contention; cause not independently established",
+  "observed_utc": "2026-09-22T04:11:00Z",
+  "evidence": [
+    "research_runs/mixfp4_selector_characterization_20260921T133858Z/runs/continued_t2_mistral7b_draw4_attempt2/launch_record.json",
+    "research_runs/mixfp4_selector_characterization_20260921T133858Z/runs/calibration_mistral7b_attempt1/launch_record.json",
+    "results/OBSERVED_FAILURES.json"
+  ],
+  "observations": {
+    "nvidia_smi_timeout_seconds": 60,
+    "host_loadavg_at_041039": [345.03, 619.31, 829.56],
+    "mistral_draw4_attempt2": "Invalid; own child stopped; 0.31256599277917607 GPU-hours; partial outputs excluded",
+    "mistral_calibration_attempt1": "Invalid; own child stopped; 0.4982006187802957 GPU-hours; no accepted parent moments",
+    "qwen_draw3_attempt2": "Exited before GPU launch on inventory QueryError; no launch_record and zero allocated GPU-hours",
+    "cpu_ingestion": "Controller child 85104 took unusually long during contention, then completed; successor ingestion 102987 also completed. No CPU child was signalled.",
+    "controller": "Only own controller PID 4156331 was terminated after UID/cmdline verification. It had already submitted Llama draw3 attempt1 at 04:10:40Z; that independent run passed preflight and remains monitored, not cancelled.",
+    "recovery": "Read-only inventory queries returned promptly at 04:10 UTC; Llama draw3 ownership monitors passed at 04:11. This is not proof of future availability."
+  },
+  "continuation": "After repeated passing Llama draw3 monitor checks following query recovery, the fixed-order T2 controller was restarted as PID 105646. It may schedule only still-untried T2 work; it does not automatically repair failed cells. No failed waiting launcher was silently reused.",
+  "retry_policy": "Require stable inventory/NVML/owner checks before remaining authorized repairs. Mistral draw4 and Qwen draw3 each have at most one repair retry left; Mistral calibration has at most two. Qwen granularity and Llama calibration remain exhausted. Never relax monitor identity or accept outputs spanning query failures.",
+  "scientific_effect": "No invalid partial output admitted; T2 remains 118/150 and T3 remains 12/36. No causal diagnosis of host contention or driver failure is claimed."
+}

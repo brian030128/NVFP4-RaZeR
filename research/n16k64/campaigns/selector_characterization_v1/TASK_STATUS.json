@@ -1,0 +1,126 @@
+{
+  "protocol_version": "selector_characterization_v1",
+  "source_head": "db63419cc33b2bbbda2117aad636435a2956532d",
+  "tasks": [
+    {
+      "id": "T0",
+      "status": "done",
+      "evidence_paths": [
+        "FROZEN_PROTOCOL.yaml",
+        "artifact_inventory.csv",
+        "results/INPUTS.json",
+        "DATA_AUDIT.md",
+        "results/calibration_overlap.csv",
+        "results/ENVIRONMENT.json"
+      ],
+      "blockers": []
+    },
+    {
+      "id": "T1",
+      "status": "done",
+      "evidence_paths": [
+        "results/map_counts.csv",
+        "results/map_pairs.csv",
+        "results/selection_frequency.csv",
+        "results/ranking_overlap.csv",
+        "results/quota_diagnostics.csv",
+        "results/veto.csv",
+        "results/MAP_MANIFEST.json",
+        "results/STABILITY_SUMMARY.json"
+      ],
+      "blockers": []
+    },
+    {
+      "id": "T2",
+      "status": "blocked",
+      "evidence_paths": [
+        "results/quality_results.csv",
+        "results/quality_contrasts.csv",
+        "results/veto.csv",
+        "job_plan.csv"
+      ],
+      "blockers": [
+        "llama8b_secondary_accuracy: A coordinated exclusive A6000 window and explicit authority for an additional Llama secondary-accuracy attempt beyond the two-repair limit. Never automatically retry or use invalid partial outputs."
+      ],
+      "primary_ppl_status": "complete",
+      "secondary_accuracy": {
+        "required": 96,
+        "historical": 48,
+        "validated_new": 32,
+        "missing": 16,
+        "path": "results/secondary_accuracy_current.csv",
+        "sha256": "10dd38e07a91858ec68031391990e26cf22194015514dbfb6accadf7e0bd28a1"
+      }
+    },
+    {
+      "id": "T3",
+      "status": "blocked",
+      "evidence_paths": [
+        "results/granularity_results.csv",
+        "results/granularity_modules.csv",
+        "results/GRANULARITY_MAP_MANIFEST.json",
+        "results/GRANULARITY_BLOCKERS.json"
+      ],
+      "blockers": [
+        "llama8b/N32: No full N8 per-sequence scores or complete child covariance; only mean ownership regret valid; exact parent SE and joint map unavailable",
+        "llama8b/N64: No full N8 per-sequence scores or complete child covariance; only mean ownership regret valid; exact parent SE and joint map unavailable",
+        "llama8b/N128: No full N8 per-sequence scores or complete child covariance; only mean ownership regret valid; exact parent SE and joint map unavailable",
+        "llama8b/N256: No full N8 per-sequence scores or complete child covariance; only mean ownership regret valid; exact parent SE and joint map unavailable",
+        "mistral7b/N32: No full N8 per-sequence scores or complete child covariance; only mean ownership regret valid; exact parent SE and joint map unavailable",
+        "mistral7b/N64: No full N8 per-sequence scores or complete child covariance; only mean ownership regret valid; exact parent SE and joint map unavailable",
+        "mistral7b/N128: No full N8 per-sequence scores or complete child covariance; only mean ownership regret valid; exact parent SE and joint map unavailable",
+        "mistral7b/N256: No full N8 per-sequence scores or complete child covariance; only mean ownership regret valid; exact parent SE and joint map unavailable",
+        "mistral7b_calibration: Verified historical full seed0 per-sequence scores or complete child covariance, or an externally resolved exact-reproduction discrepancy and a new explicit user decision. No fifth calibration attempt is authorized; do not use mismatching parents.",
+        "mistral7b_granularity: Verified historical full seed0 per-sequence scores or complete child covariance, or an externally resolved exact-reproduction discrepancy and a new explicit user decision. No fifth calibration attempt is authorized; do not use mismatching parents.",
+        "llama8b_granularity: Verified historical full seed0 per-sequence scores or complete child covariance, or an externally resolved exact-reproduction discrepancy and a new explicit user decision. No fifth calibration attempt is authorized; do not use mismatching parents."
+      ],
+      "additional_retry_authorization": {
+        "path": "plans/additional_retry_authorization_20260923.json",
+        "sha256": "9ac0d8dc3f0a44a86e24ee0f23e1fc8e0a3d7037b91d3c03118a843cd0f9b67f",
+        "runs": [
+          "calibration_llama8b_attempt4_authorized",
+          "calibration_mistral7b_attempt4_authorized",
+          "granularity_qwen4b_attempt4_authorized"
+        ]
+      },
+      "validated_cells": 20,
+      "required_cells": 36
+    },
+    {
+      "id": "T4",
+      "status": "done",
+      "evidence_paths": [
+        "individual_tile_review.md",
+        "results/effect_diagnostics.csv",
+        "results/group_interventions.csv",
+        "results/INDIVIDUAL_SUMMARY.json",
+        "results/reorder_ratio_audit.csv",
+        "results/composition_existing.csv"
+      ],
+      "blockers": []
+    },
+    {
+      "id": "T5",
+      "status": "complete_with_explicit_gaps",
+      "evidence_paths": [
+        "REPORT.md",
+        "CLAIMS.md",
+        "REPRODUCE.md",
+        "figures",
+        "CPU_TEST_REPORT.txt",
+        "ACCEPTANCE_AUDIT.json"
+      ],
+      "blockers": [
+        "Full handoff acceptance remains false because T2 secondary accuracy lacks 16 cells and T3 lacks 16 cells."
+      ]
+    }
+  ],
+  "gpu_hours": 26.696763020237498,
+  "last_updated": "2026-09-23T03:05:18.897183+00:00",
+  "execution_wait": {
+    "status": "terminal_no_active_launches",
+    "processes": [],
+    "controllers": []
+  },
+  "disposition": "All currently authorized independent work completed; scientific handoff not fully complete."
+}

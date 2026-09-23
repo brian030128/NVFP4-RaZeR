@@ -1,0 +1,10 @@
+{
+  "reason": "Repeated foreign arrivals after passing preflights on two A6000 devices. Future submissions are narrowed to the A6000 that has continuously hosted the valid Llama draw2 run; this is a resource restriction, not an outcome-based arm choice.",
+  "allowed_uuid": "GPU-9cec7336-5b30-3f86-35e7-06919156e7da",
+  "launcher": "scripts/gpu_run_on_uuid.py",
+  "base_launcher_sha256": "35e40c567436c78bcab5b51116751c58f66e6c4b970349409c148565d3e2ffa4",
+  "validation": "Two CPU tests reconstruct the exact unchanged base after reversing only the UUID selection and provenance additions; all lease/owner/monitor/phase/postflight/cleanup logic remains intact. Static validation is not an exclusive reservation or model-quality proof.",
+  "controller_transition": "Only own controller PID 3557539 was terminated while no ingestion child was active, then restarted with --only-uuid. Existing evaluation launcher and GPU child remained live.",
+  "cancel_guard": "A proposed cancellation of own waiting Qwen draw4 launcher was rejected under the lease lock because a launch_record already existed. No signal was sent; its running attempt remains monitored.",
+  "retry_limits": "Qwen granularity and Llama calibration exhausted two repair retries and remain blocked. This adapter does not authorize attempt4 or reset retry counts. Qwen draw3 and Mistral draw4 use their first reasoned repair retry."
+}

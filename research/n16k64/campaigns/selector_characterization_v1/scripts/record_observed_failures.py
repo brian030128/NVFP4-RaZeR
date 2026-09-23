@@ -1,0 +1,23 @@
+"""Persist tool-observed failures not caught by the original script logger.
+
+Reported time is not invented execution time. No historical run is rewritten.
+"""
+from common import *
+
+events=[
+    dict(run_id='T4-inventory-first-execution',task='T4',status='failed_adapter_assertion',exit_code=1,error='Assertion on baseline_restored_exact; raw flags actually false. Repaired by preserving flag and bounded interpretation, not changing inputs.',repair='retain batch8-vs16 flag; separate noise control review',gpu_hours=0),
+    dict(run_id='supporting-seal-audit-first-execution',task='T0-seals',status='failed_adapter',exit_code=1,error='TypeError PosixPath object is not subscriptable at REPO[m[path]]',repair='correct path join to REPO / m[path]',gpu_hours=0),
+    dict(run_id='pilot_qwen_attempt1-wait-exit',task='T2-pilot',status='terminated_before_gpu_launch',exit_code=143,error='Waiting process ended with exit 143; signal source unknown. No launch_record or GPU child was created.',repair='No automatic identical retry; inspect resource and process state before rescheduling',gpu_hours=0),
+    dict(run_id='continued_t2_qwen4b_draw3_attempt2-prelaunch-query-failure',task='T2',status='failed_before_gpu_launch',exit_code=1,error='Tool session 1283 returned QueryError: nvidia-smi GPU inventory query timed out after 60 seconds while waiting. No launch_record or GPU child was created.',repair='Require stable GPU inventory/NVML/owner checks before the second and final repair retry; do not relabel missing output as complete.',gpu_hours=0),
+    dict(run_id='calibration_mistral7b_attempt2_reassigned-scientific-rejection',task='T3',status='rejected_score_identity',exit_code=0,error='Operational completion is not scientific acceptance: score digests and N8/N16 masks differ from frozen historical reference despite identical forward losses.',repair='Final retry restores hash-verified historical quant text and original raw/sample subset allocations; exact admission unchanged. See MISTRAL_CALIBRATION_IDENTITY_DIAGNOSTIC.json.',gpu_hours=0,cost_note='Actual cost accounted once by launch_record / GPU_COST; this is an admission event, not a second launch.'),
+    dict(run_id='reproduction_llama8b_attempt2-resource-repair',task='T3',status='queued_repair_not_accepted',exit_code=0,error='First reproduction invalidated by foreign PID 575049 after clean preflight; output excluded.',repair='Move first repair to A6000 GPU-2e6984d6-fde8-3ed3-2f83-14ec2228a8b9; wait until ownership/NVML checks pass. Same immutable plan and full-window gate; no reservation guarantee.',gpu_hours=0),
+    dict(run_id='secondary_accuracy_qwen4b_attempt2-resource-repair',task='T2-secondary',status='queued_repair_not_accepted',exit_code=0,error='Attempt1 passed before checks, then failed closed at load_model when foreign PID 1292684 appeared on GPU1. No accuracy output admitted.',repair='First repair waits on a different A6000, GPU-d0ab9929-0ef6-d612-0cb5-718f4fdd6c24, avoiding the observed GPU1 release/reacquisition. Same frozen plan, batch16 and strict baseline identity; no exclusivity duration guarantee. One further reasoned repair remains if this attempt fails.',gpu_hours=0,cost_note='Attempt1 cost is accounted once from launch_record in GPU_COST, not by this repair event.')
+]
+def main():
+    path=OUT/'RUN_LOG.jsonl';existing={json.loads(x)['run_id'] for x in path.read_text().splitlines()}
+    with path.open('a') as f:
+        for e in events:
+            if e['run_id'] not in existing:f.write(json.dumps(e|dict(reported_utc=now(),execution_timestamp='not independently persisted',evidence='tool execution output; historical inputs unchanged'))+'\n')
+    jsonout(OUT/'results/OBSERVED_FAILURES.json',events)
+
+if __name__=='__main__':main()
