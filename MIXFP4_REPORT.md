@@ -222,8 +222,13 @@ each (dev KL 0.04625 → 0.04289).
 
 ### Calibration time and memory
 
+These are **calibration costs only**: the one-time, offline tile selection.
 Measured by the runs themselves: wall time per phase, `torch.cuda` peak memory
-and process peak RSS. The Qwen 256×64 CPU figure is Slurm MaxRSS.
+and process peak RSS. The Qwen 256×64 CPU figure is Slurm MaxRSS. The "Final PPL
+eval" column is the fake-quantized evaluation run, not inference. Inference
+memory is not reported here: this is simulated quantization, so its memory is
+not the deployed format's, and peak inference memory will be measured on the
+target device.
 
 | Run | Hardware | Scoring passes | Dev evaluations | Setup | Optimization | Final PPL eval | Peak GPU memory | Peak CPU memory |
 |---|---|---:|---:|---:|---:|---:|---|---:|

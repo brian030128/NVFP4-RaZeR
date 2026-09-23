@@ -26,6 +26,7 @@ import transformers
 from transformers import AutoTokenizer
 
 from quantize.causal_four_over_six import quantize_rows
+from quantize.packed_candidates import decode_alt, decode_base, nbytes, pack
 from quantize.quantizer import quant_mix_4_6, quant_nvfp4_4over6
 from run_baseline_protocol_audit import data
 from run_c4_frozen import digest_file
@@ -83,6 +84,12 @@ def main():
     ap.add_argument('--max-rounds', type=int, default=40)
     ap.add_argument('--max-tries', type=int, default=22)
     ap.add_argument('--budget-hours', type=float, default=3.0)
+    ap.add_argument('--significant-steps', action='store_true',
+                    help='Accept a step only if the paired development change is significant: mean + 2 SE < 0 '
+                         'over documents for every accepted objective (same 2 SE convention as the candidate filter)')
+    ap.add_argument('--warm-start', action='store_true',
+                    help='Start each round\'s backtracking at twice the previous accepted step instead of all candidates')
+    ap.add_argument('--gpus', type=int, default=None, help='Qwen: 1 loads on one device, else balanced')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     started = time.time()
@@ -93,6 +100,7 @@ def main():
     assert transformers.__version__ == prior['transformers_version']
     args.out.mkdir(parents=True, exist_ok=False)
     report = dict(status='running', job_id=os.environ['SLURM_JOB_ID'], model=args.model, unit=args.unit, objective=args.objective,
+                  significant_steps=args.significant_steps, warm_start=args.warm_start,
                   filter_k=args.filter_k, max_tries=args.max_tries,
                   acceptance={'both': 'mean dev CE and mean dev KL must both decrease', 'ce': 'mean dev CE must decrease',
                               'kl': 'mean dev KL must decrease'}[args.objective],
@@ -104,7 +112,7 @@ def main():
         from transformers import Qwen3_5ForConditionalGeneration
         model, loading = Qwen3_5ForConditionalGeneration.from_pretrained(
             prior['source'], revision=prior['revision'], dtype=torch.bfloat16, attn_implementation='sdpa',
-            device_map='balanced', output_loading_info=True)
+            device_map='cuda' if args.gpus == 1 else 'balanced', output_loading_info=True)
         assert not loading['missing_keys'] and not loading.get('mismatched_keys') and not loading.get('error_msgs')
         model.eval().requires_grad_(False)
         modules = {n: m for n, m in model.named_modules() if isinstance(m, torch.nn.Linear)
@@ -128,18 +136,38 @@ def main():
     for ids in fit:
         logits = model(input_ids=ids.to(device), use_cache=False).logits
         teacher.append(logits[:, :-1].float().log_softmax(-1).bfloat16().cpu())
-    base, alt, sel = {}, {}, {}
+    # Both candidates are stored in deployment format (4-bit codes + FP8 scales) and
+    # decoded per module on use; pack() verifies bitwise equality with the reference
+    # quantizers, and any module that fails keeps dequantized BF16 copies instead.
+    packed, dense, sel = {}, {}, {}
     for n, m in modules.items():
         assert sha(m.weight) == prior['matrices'][n]['source_sha256'], n
-        base[n] = quant_nvfp4_4over6(m.weight, 4, 16)
-        alt[n] = quant_mix_4_6(m.weight, 4, 16, type_block=(8, 64), clip='a1', elect='always')
+        b = quant_nvfp4_4over6(m.weight, 4, 16)
+        a = quant_mix_4_6(m.weight, 4, 16, type_block=(8, 64), clip='a1', elect='always')
+        p = pack(m.weight, b, a)
+        if p is None:
+            dense[n] = (b, a)
+        else:
+            packed[n] = p
         o, k = m.weight.shape
         assert k % cols == 0
         sel[n] = torch.zeros(-(-o // rows), k // cols, dtype=torch.bool, device=m.weight.device)
-        m.weight.copy_(base[n])
+        m.weight.copy_(b)
+        del a, b
+    torch.cuda.empty_cache()
+    report['candidate_storage'] = dict(packed_modules=len(packed), dense_fallback_modules=sorted(dense),
+                                       packed_gib=sum(nbytes(p) for p in packed.values()) / 2 ** 30)
+    print('CANDIDATES ' + json.dumps(report['candidate_storage']), flush=True)
+
+    def base(n):
+        return dense[n][0] if n in dense else decode_base(packed[n])
+
+    def alt(n):
+        return dense[n][1] if n in dense else decode_alt(packed[n])
 
     def apply(n):
-        modules[n].weight.copy_(torch.where(expand(sel[n], rows, cols, base[n].shape[0]), alt[n], base[n]))
+        b = base(n)
+        modules[n].weight.copy_(torch.where(expand(sel[n], rows, cols, b.shape[0]), alt(n), b))
 
     eval_handles = []
 
@@ -164,7 +192,15 @@ def main():
 
     def improves(new, old):
         keys = ('ce', 'kl') if args.objective == 'both' else (args.objective,)
-        return all(new[key] < old[key] for key in keys)
+        if not args.significant_steps:
+            return all(new[key] < old[key] for key in keys)
+        for key, values in (('ce', 'ce_nll'), ('kl', 'kl_values')):
+            if key not in keys:
+                continue
+            diff = torch.tensor(new[values], dtype=torch.float64) - torch.tensor(old[values], dtype=torch.float64)
+            if float(diff.mean() + 2 * diff.std(unbiased=True) / math.sqrt(len(diff))) >= 0:
+                return False
+        return True
 
     def score():
         """Per-unit mean and SE of CE and KL directional scores for flipping each unit now."""
@@ -181,7 +217,9 @@ def main():
 
                 def backward(dy):
                     grad = dy.detach().reshape(-1, dy.shape[-1]).float().T @ x.float()
-                    d = (alt[n].float() - base[n].float()) * torch.where(expand(sel[n], rows, cols, base[n].shape[0]), -1., 1.)
+                    b = base(n)
+                    d = (alt(n).float() - b.float()) * torch.where(expand(sel[n], rows, cols, b.shape[0]), -1., 1.)
+                    del b
                     value = reduce(grad * d, rows, cols).double()
                     s = sums[n]
                     s[2 * phase[0]] += value
@@ -220,6 +258,7 @@ def main():
     timing = dict(setup_seconds=time.time() - started)
     print(f'START {args.objective} dev CE {current["ce"]:.6f} KL {current["kl"]:.6f}', flush=True)
     names = list(modules)
+    previous_accepted = None
     for rnd in range(args.max_rounds):
         if time.time() - started > args.budget_hours * 3600:
             report['stopped'] = 'time budget'; break
@@ -242,6 +281,8 @@ def main():
         if candidates.numel() == 0:
             entry['accepted'] = 0; report['rounds'].append(entry); report['stopped'] = 'no candidates'; break
         size, accepted = int(candidates.numel()), None
+        if args.warm_start and previous_accepted:
+            size = min(size, 2 * previous_accepted)
         for _ in range(args.max_tries):
             chosen = candidates[:size]
             touched = {}
@@ -264,6 +305,7 @@ def main():
                 break
             size = max(1, size // 2)
         entry['accepted'] = accepted or 0
+        previous_accepted = accepted
         entry['e0m3_units'] = sum(int(s.sum()) for s in sel.values())
         entry['dev_ce'], entry['dev_kl'] = current['ce'], current['kl']
         entry['round_seconds'] = time.time() - t0
