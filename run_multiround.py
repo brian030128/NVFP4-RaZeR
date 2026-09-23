@@ -94,6 +94,8 @@ def main():
                     help='Development documents per forward pass (activation scales stay per document)')
     ap.add_argument('--score-batch', type=int, default=1,
                     help='Calibration sequences per scoring forward/backward (gradients stay per sequence)')
+    ap.add_argument('--check-start', action='store_true',
+                    help='Stop after the initial development evaluation (batching equivalence check)')
     ap.add_argument('--gpus', type=int, default=None, help='Qwen: 1 loads on one device, else balanced')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
@@ -178,6 +180,7 @@ def main():
     eval_handles = []
 
     act_checks = [0]
+    current_batch = [1]
 
     def per_document_act(module, inputs):
         # Tensor-wide activation scales are computed per document, exactly as with
@@ -185,10 +188,19 @@ def main():
         # vectorized quantizer is checked bitwise against quant_nvfp4_4over6 on the
         # first calls of every run.
         x = inputs[0]
+        batch = current_batch[0]
+        if batch == 1 or (x.dim() >= 3 and x.shape[0] == batch):
+            view = x
+        elif x.shape[0] % batch == 0 and x.shape[0] // batch > 1:
+            # Some modules receive the batch flattened to (documents * tokens, features);
+            # restore the document axis so each document keeps its own scale.
+            view = x.reshape(batch, -1, x.shape[-1])
+        else:
+            raise RuntimeError(f'Cannot recover the document axis of a {tuple(x.shape)} input at batch {batch}')
         if act_checks[0] < 64:
-            assert check_act(x), 'vectorized activation quantizer differs from quant_nvfp4_4over6'
+            assert check_act(view), 'vectorized activation quantizer differs from quant_nvfp4_4over6'
             act_checks[0] += 1
-        return (quant_per_document(x), *inputs[1:])
+        return (quant_per_document(view).reshape(x.shape), *inputs[1:])
 
     def per_sequence_losses(lp, ids, t):
         # lp, t: (B, T-1, V) log-probabilities; CE and KL averaged over each sequence's tokens.
@@ -208,11 +220,13 @@ def main():
         for start in range(0, len(dev), args.eval_batch):
             chunk = dev[start:start + args.eval_batch]
             ids = torch.cat([r['ids'] for r in chunk]).to(device)
+            current_batch[0] = ids.shape[0]
             lp = model(input_ids=ids, use_cache=False).logits[:, :-1].float().log_softmax(-1)
             t = torch.cat(dev_teacher[start:start + args.eval_batch]).to(lp.device).float()
             c, k = per_sequence_losses(lp, ids, t)
             ce.extend(c.tolist()); kl.extend(k.tolist())
             del lp, t
+        current_batch[0] = 1
         eval_hooks(False)
         return dict(ce=sum(ce) / len(ce), kl=sum(kl) / len(kl), ce_nll=ce, kl_values=kl)
 
@@ -286,6 +300,11 @@ def main():
     report['initial_dev'] = current
     save(args.out, report)
     timing = dict(setup_seconds=time.time() - started)
+    if args.check_start:
+        report['status'] = 'check_start_complete'
+        save(args.out, report)
+        print(f'START {args.objective} dev CE {current["ce"]:.6f} KL {current["kl"]:.6f}', flush=True)
+        return
     print(f'START {args.objective} dev CE {current["ce"]:.6f} KL {current["kl"]:.6f}', flush=True)
     names = list(modules)
     previous_accepted = None
