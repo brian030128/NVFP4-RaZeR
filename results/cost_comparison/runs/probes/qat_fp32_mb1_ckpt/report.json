@@ -1,0 +1,302 @@
+{
+  "status": "complete",
+  "job_id": null,
+  "config": {
+    "arm": "qat",
+    "optimizer": "adamw_fp32",
+    "lr": 1e-05,
+    "budget": "probe",
+    "time_budget": null,
+    "pool": null,
+    "pool_per_source": null,
+    "teacher_chunk": 256,
+    "batch": 8,
+    "micro_batch": 1,
+    "checkpointing": true,
+    "probe_steps": 3,
+    "live_teacher": false,
+    "lora_rank": 16,
+    "eval_batch": 16,
+    "seed": 0,
+    "save_state": false,
+    "evaluate": null,
+    "data_root": "/home/dev/n16k64_campaign/cost_comparison/data",
+    "transformers_deviation": true,
+    "out": "/home/dev/n16k64_campaign/cost_comparison/runs/probes/qat_fp32_mb1_ckpt"
+  },
+  "deviations": [
+    {
+      "transformers_installed": "5.16.1",
+      "transformers_calibration": "4.57.3"
+    }
+  ],
+  "host": {
+    "hostname": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+    "gpus": [
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "torch": "2.9.0+cu128",
+    "cuda": "12.8",
+    "transformers": "5.16.1"
+  },
+  "source_sha256": {
+    "run_cost_distill.py": "5e2d97f0963abbb166e832c560ecce81b814f42f53927f487eaddd3b7e52f729",
+    "cost_monitor.py": "3cdde9ab50204ef237cd2d604dab4e34f8b414fc1640a5740cd37e8965936954",
+    "quantize/fused_fourover6.py": "ec07fef76e2a43f81eee5ba2c591880b6f623b9d2f3409168618b687e566dd38",
+    "quantize/quantizer.py": "af6246545b0e9918c4232e4e59f64e249a6d1316186dc90f2768ed85700dc007",
+    "quantize/fast_act.py": "ea30b21f61df1c8dab8d8a6d23fe83d8a7e2a8a85835ffa9d318e6b524c06805",
+    "run_multiround.py": "9b0ae2ec1bc229639710ed664cd475087296ae6a5ef0838bcce1129088152d30"
+  },
+  "development": [
+    {
+      "name": "/home/dev/n16k64_campaign/cost_comparison/data/llama8b/confirmation",
+      "documents": 64,
+      "sha256": "2d2c4940427946dd2311338d68572b323d5ee1f1ae184bbb351fe5691fe702f7"
+    },
+    {
+      "name": "/home/dev/n16k64_campaign/cost_comparison/data/llama8b/gate_up_confirm",
+      "documents": 64,
+      "sha256": "5c5a1bb221715e49e26311e2f1255bf03857bf99905e8ca59dea1ca45597c701"
+    },
+    {
+      "name": "/home/dev/n16k64_campaign/cost_comparison/data/llama8b/tile_refine_confirm",
+      "documents": 64,
+      "sha256": "eb913e15ce047ee47cf403961048c2f28f38a3965a969f14f93b702ad2d7b087"
+    }
+  ],
+  "teacher_cpu_bytes": 3145863168,
+  "fused_quantizer_bitwise_on_source_weights": true,
+  "setup_seconds": 68.12830376625061,
+  "memory_computed": {
+    "model_weights_bytes": 16060522496,
+    "trainable_parameters": 6979321856,
+    "gradient_bytes": 13958643712,
+    "teacher_cpu_bytes": 3145863168,
+    "pristine_weight_copy_cpu_bytes": 13958643712,
+    "optimizer_state_bytes": {
+      "cpu": 896,
+      "cuda:0": 55834574848
+    }
+  },
+  "log": [
+    {
+      "step": 1,
+      "kl": 0.09090103209018707,
+      "seconds": 3.9914681911468506,
+      "elapsed": 73.34060072898865
+    },
+    {
+      "step": 2,
+      "kl": 0.1026746416464448,
+      "seconds": 3.059401035308838,
+      "elapsed": 76.40039443969727
+    },
+    {
+      "step": 3,
+      "kl": 0.07701251516118646,
+      "seconds": 3.059741497039795,
+      "elapsed": 79.46013879776001
+    }
+  ],
+  "counts": {
+    "teacher_forward_sequences": 24,
+    "student_forward_sequences": 24,
+    "student_backward_sequences": 24,
+    "recompute_forward_sequences": 24,
+    "development_forward_sequences": 0,
+    "optimizer_steps": 3
+  },
+  "optimizer_state_bytes": {
+    "cpu": 896,
+    "cuda:0": 55834574848
+  },
+  "training_seconds": 11.332701206207275,
+  "resources": {
+    "phases": [
+      {
+        "name": "model_load",
+        "start": 0.31847190856933594,
+        "host_rss_start": 1.1675529479980469,
+        "host_peak_rss": 14.718055725097656,
+        "gpu_allocated_start": [
+          0.0
+        ],
+        "seconds": 26.576694011688232,
+        "host_rss_end": 1.2062759399414062,
+        "gpu_peak_allocated": [
+          14.957528114318848
+        ],
+        "gpu_peak_reserved": [
+          14.9609375
+        ],
+        "gpu_allocated_end": [
+          14.957528114318848
+        ],
+        "device_used_end": [
+          15.507080078125
+        ]
+      },
+      {
+        "name": "data_load",
+        "start": 26.89516592025757,
+        "host_rss_start": 1.2062759399414062,
+        "host_peak_rss": 1.73626708984375,
+        "gpu_allocated_start": [
+          14.957528114318848
+        ],
+        "seconds": 11.99198031425476,
+        "host_rss_end": 1.52227783203125,
+        "gpu_peak_allocated": [
+          14.957528114318848
+        ],
+        "gpu_peak_reserved": [
+          14.9609375
+        ],
+        "gpu_allocated_end": [
+          14.957528114318848
+        ],
+        "device_used_end": [
+          15.507080078125
+        ]
+      },
+      {
+        "name": "teacher_precompute",
+        "start": 38.88714623451233,
+        "host_rss_start": 1.52227783203125,
+        "host_peak_rss": 5.057403564453125,
+        "gpu_allocated_start": [
+          14.957528114318848
+        ],
+        "seconds": 2.9657180309295654,
+        "host_rss_end": 5.057403564453125,
+        "gpu_peak_allocated": [
+          15.576811790466309
+        ],
+        "gpu_peak_reserved": [
+          15.666015625
+        ],
+        "gpu_allocated_end": [
+          14.965462684631348
+        ],
+        "device_used_end": [
+          16.343017578125
+        ]
+      },
+      {
+        "name": "quantizer_verification",
+        "start": 41.852864265441895,
+        "host_rss_start": 5.057403564453125,
+        "host_peak_rss": 20.27041244506836,
+        "gpu_allocated_start": [
+          14.965462684631348
+        ],
+        "seconds": 26.59757351875305,
+        "host_rss_end": 20.185043334960938,
+        "gpu_peak_allocated": [
+          17.252573013305664
+        ],
+        "gpu_peak_reserved": [
+          17.607421875
+        ],
+        "gpu_allocated_end": [
+          14.965462684631348
+        ],
+        "device_used_end": [
+          18.313720703125
+        ]
+      },
+      {
+        "name": "training",
+        "start": 68.45043778419495,
+        "host_rss_start": 20.185043334960938,
+        "host_peak_rss": 20.390254974365234,
+        "gpu_allocated_start": [
+          14.965462684631348
+        ],
+        "seconds": 11.330279111862183,
+        "host_rss_end": 20.268306732177734,
+        "gpu_peak_allocated": [
+          81.45090055465698
+        ],
+        "gpu_peak_reserved": [
+          81.806640625
+        ],
+        "gpu_allocated_end": [
+          66.97339820861816
+        ],
+        "device_used_end": [
+          82.522705078125
+        ]
+      }
+    ],
+    "by_phase": {
+      "model_load": {
+        "count": 1,
+        "seconds": 26.576694011688232,
+        "gpu_peak_allocated_gib": [
+          14.957528114318848
+        ],
+        "gpu_peak_reserved_gib": [
+          14.9609375
+        ],
+        "host_peak_rss_gib": 14.718055725097656
+      },
+      "data_load": {
+        "count": 1,
+        "seconds": 11.99198031425476,
+        "gpu_peak_allocated_gib": [
+          14.957528114318848
+        ],
+        "gpu_peak_reserved_gib": [
+          14.9609375
+        ],
+        "host_peak_rss_gib": 1.73626708984375
+      },
+      "teacher_precompute": {
+        "count": 1,
+        "seconds": 2.9657180309295654,
+        "gpu_peak_allocated_gib": [
+          15.576811790466309
+        ],
+        "gpu_peak_reserved_gib": [
+          15.666015625
+        ],
+        "host_peak_rss_gib": 5.057403564453125
+      },
+      "quantizer_verification": {
+        "count": 1,
+        "seconds": 26.59757351875305,
+        "gpu_peak_allocated_gib": [
+          17.252573013305664
+        ],
+        "gpu_peak_reserved_gib": [
+          17.607421875
+        ],
+        "host_peak_rss_gib": 20.27041244506836
+      },
+      "training": {
+        "count": 1,
+        "seconds": 11.330279111862183,
+        "gpu_peak_allocated_gib": [
+          81.45090055465698
+        ],
+        "gpu_peak_reserved_gib": [
+          81.806640625
+        ],
+        "host_peak_rss_gib": 20.390254974365234
+      }
+    },
+    "gpu_peak_allocated_gib": [
+      81.45090055465698
+    ],
+    "gpu_peak_reserved_gib": [
+      81.806640625
+    ],
+    "host_peak_rss_sampled_gib": 20.390254974365234,
+    "cpu_peak_rss_gib": 20.34903335571289,
+    "host_rss_samples": 764,
+    "host_rss_interval_seconds": 0.1,
+    "method": "torch.cuda.max_memory_allocated/reserved after reset_peak_memory_stats at each phase start; host RSS sampled by psutil every interval and at phase boundaries; cpu_peak_rss_gib is ru_maxrss"
+  },
+  "steady_step_seconds": 3.0595712661743164
+}

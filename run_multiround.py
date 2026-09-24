@@ -16,6 +16,7 @@ import json
 import math
 import os
 import resource
+import socket
 import time
 from pathlib import Path
 
@@ -25,6 +26,7 @@ import torch.nn.functional as F
 import transformers
 from transformers import AutoTokenizer
 
+from cost_monitor import PhaseMonitor
 from quantize.causal_four_over_six import quantize_rows
 from quantize.fast_act import check as check_act, quant_per_document
 from quantize.packed_candidates import decode_alt, decode_base, nbytes, pack
@@ -47,9 +49,18 @@ PUBLISHED = {'llama8b': 'results/kse_paper/job_336566/llama8b/report.json',
              'qwen27b': 'results/kse_paper/job_336969/qwen27b/report.json'}
 
 
-def load_development(model):
+def data_paths(model, data_root=None):
+    """Calibration report directory and development directories: the cluster paths, or the
+    same layout under a local data root (see prepare_multiround_data.py)."""
+    if data_root is None:
+        return CALIBRATIONS[model], DEVELOPMENT[model]
+    root = Path(data_root) / model
+    return root / 'calibration', [root / d.name for d in DEVELOPMENT[model]]
+
+
+def load_development(directories):
     records, provenance = [], []
-    for directory in DEVELOPMENT[model]:
+    for directory in directories:
         report = json.loads((directory / 'report.json').read_text())
         assert report.get('status') == 'complete', directory
         assert digest_file(directory / 'fresh.pt') == report['fresh_sha256'], directory
@@ -75,7 +86,8 @@ def reduce(x, rows, cols):
 
 @torch.no_grad()
 def main():
-    assert os.environ.get('SLURM_JOB_ID'), 'Run through Slurm'
+    monitor = PhaseMonitor()
+    monitor.enter('model_load')
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--model', choices=tuple(CALIBRATIONS), default='llama8b')
     ap.add_argument('--unit', choices=tuple(UNITS), required=True)
@@ -97,16 +109,35 @@ def main():
     ap.add_argument('--check-start', action='store_true',
                     help='Stop after the initial development evaluation (batching equivalence check)')
     ap.add_argument('--gpus', type=int, default=None, help='Qwen: 1 loads on one device, else balanced')
+    ap.add_argument('--data-root', type=Path, default=None,
+                    help='Local copies of the calibration report and development directories '
+                         '(<root>/<model>/calibration, <root>/<model>/<development name>); default: cluster paths')
+    ap.add_argument('--transformers-deviation', action='store_true',
+                    help='Run although the installed transformers differs from the calibration\'s; both are recorded')
+    ap.add_argument('--skip-ce-backward', action='store_true',
+                    help='--objective kl only: skip the CE backward in scoring (KL scores do not depend on it)')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     started = time.time()
     torch.backends.cuda.matmul.allow_tf32 = False
     rows, cols = UNITS[args.unit]
     qwen = args.model == 'qwen27b'
-    prior = json.loads((CALIBRATIONS[args.model] / 'report.json').read_text())
-    assert transformers.__version__ == prior['transformers_version']
+    assert not args.skip_ce_backward or args.objective == 'kl', '--skip-ce-backward needs --objective kl'
+    calibration, development = data_paths(args.model, args.data_root)
+    prior = json.loads((calibration / 'report.json').read_text())
+    deviations = []
+    if transformers.__version__ != prior['transformers_version']:
+        assert args.transformers_deviation, (transformers.__version__, prior['transformers_version'])
+        deviations.append(dict(transformers_installed=transformers.__version__,
+                               transformers_calibration=prior['transformers_version']))
     args.out.mkdir(parents=True, exist_ok=False)
-    report = dict(status='running', job_id=os.environ['SLURM_JOB_ID'], model=args.model, unit=args.unit, objective=args.objective,
+    report = dict(status='running', job_id=os.environ.get('SLURM_JOB_ID'),
+                  host=dict(hostname=socket.gethostname(),
+                            gpus=[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())],
+                            torch=torch.__version__, cuda=torch.version.cuda, transformers=transformers.__version__),
+                  data_root=None if args.data_root is None else str(args.data_root), deviations=deviations,
+                  skip_ce_backward=args.skip_ce_backward,
+                  model=args.model, unit=args.unit, objective=args.objective,
                   eval_batch=args.eval_batch, score_batch=args.score_batch,
                   significant_steps=args.significant_steps, warm_start=args.warm_start,
                   filter_k=args.filter_k, max_tries=args.max_tries,
@@ -129,11 +160,13 @@ def main():
     else:
         model, modules = load_model(prior, False)
         model.set_attn_implementation('sdpa')
+    monitor.enter('data_load')
     tok = AutoTokenizer.from_pretrained(prior['source'], revision=prior['revision'])
     fit, _ = math_code_data(tok, prior['fit'])
     fit = [b for source in ('math', 'code') for b in fit[source]]
-    dev, report['development'] = load_development(args.model)
+    dev, report['development'] = load_development(development)
     device = model.get_input_embeddings().weight.device
+    monitor.enter('teacher_precompute')
     dev_teacher = []
     for r in dev:
         logits = model(input_ids=r['ids'].to(device), use_cache=False).logits
@@ -147,6 +180,7 @@ def main():
     # Both candidates are stored in deployment format (4-bit codes + FP8 scales) and
     # decoded per module on use; pack() verifies bitwise equality with the reference
     # quantizers, and any module that fails keeps dequantized BF16 copies instead.
+    monitor.enter('candidate_packing')
     packed, dense, sel = {}, {}, {}
     for n, m in modules.items():
         assert sha(m.weight) == prior['matrices'][n]['source_sha256'], n
@@ -284,7 +318,8 @@ def main():
                 lp = model(inputs_embeds=embeds, use_cache=False).logits[:, :-1].float().log_softmax(-1)
                 t = torch.cat(teacher[start:start + args.score_batch]).to(lp.device).float()
                 ce, kl = per_sequence_losses(lp, ids, t)
-                phase[0] = 0; ce.sum().backward(retain_graph=True)
+                if not args.skip_ce_backward:
+                    phase[0] = 0; ce.sum().backward(retain_graph=True)
                 phase[0] = 1; kl.sum().backward()
                 del embeds, lp, t, ce, kl
         for h in handles:
@@ -300,6 +335,7 @@ def main():
             stats[n] = out
         return stats
 
+    monitor.enter('initial_dev_eval')
     current = dev_eval()
     report['initial_dev'] = current
     save(args.out, report)
@@ -317,6 +353,7 @@ def main():
     for rnd in range(args.max_rounds):
         if time.time() - started > args.budget_hours * 3600:
             report['stopped'] = 'time budget'; break
+        monitor.enter('scoring')
         t0 = time.time()
         stats = score()
         bounds, flat_mean_ce, flat_mean_kl, owners = [], [], [], []
@@ -339,6 +376,7 @@ def main():
         if args.warm_start and previous_accepted:
             size = min(size, 2 * previous_accepted)
         for _ in range(args.max_tries):
+            monitor.enter('dev_evaluation')
             chosen = candidates[:size]
             touched = {}
             who = owners[chosen]
@@ -377,6 +415,7 @@ def main():
     report['map_sha256'] = digest_file(args.out / 'map.pt') if (args.out / 'map.pt').exists() else None
     save(args.out, report)
     # One evaluation of the final map on the released PPL windows.
+    monitor.enter('final_evaluation')
     batches, report['data'] = data(tok, prior, 2048)
     published = json.loads(Path(PUBLISHED[args.model]).read_text())
     validate_evaluation_data(report['data'], published['data'])
@@ -397,13 +436,18 @@ def main():
     eval_hooks(False)
     timing['evaluation_seconds'] = time.time() - started - timing['setup_seconds'] - timing['optimization_seconds']
     timing['total_seconds'] = time.time() - started
+    monitor.close()
+    phases = monitor.summary()
+    # Peak statistics are reset at every phase start; the phases cover the whole run, so the
+    # maximum over phases is the run-wide torch.cuda.max_memory_allocated/reserved.
     report['resources'] = dict(
         timing, gpus=[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())],
-        gpu_peak_allocated_gib=[torch.cuda.max_memory_allocated(i) / 2 ** 30 for i in range(torch.cuda.device_count())],
-        gpu_peak_reserved_gib=[torch.cuda.max_memory_reserved(i) / 2 ** 30 for i in range(torch.cuda.device_count())],
+        gpu_peak_allocated_gib=phases['gpu_peak_allocated_gib'],
+        gpu_peak_reserved_gib=phases['gpu_peak_reserved_gib'],
         cpu_peak_rss_gib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2 ** 20,
         scoring_passes=len(report['rounds']),
-        development_evaluations=sum(len(r['tries']) for r in report['rounds']) + 1)
+        development_evaluations=sum(len(r['tries']) for r in report['rounds']) + 1,
+        phases=phases)
     print('RESOURCES ' + json.dumps(report['resources']), flush=True)
     report['status'] = 'complete'
     save(args.out, report)
