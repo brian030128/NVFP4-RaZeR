@@ -89,27 +89,104 @@ $L_{\text{dev}}(m) = \frac{1}{192} \sum_d \mathrm{KL}_d(m)$. It is measured with
 the evaluation protocol: a forward pass only, with one tensor-wide FourOverSix
 activation scale per document.
 
-**Step 1: score every flip with one backward pass.** Take a linear layer
-$y = \hat W \tilde x$, where $\tilde x = Q(x)$ is the fake-quantized activation.
-For sequence $s$, the gradient of its KL with respect to the layer's weights is a
-sum of outer products over tokens:
-
-$$G_s = \frac{\partial\, \mathrm{KL}_s}{\partial \hat W} = \sum_t \delta_{s,t}\, \tilde x_{s,t}^{\top},
-\qquad \delta_{s,t} = \frac{\partial\, \mathrm{KL}_s}{\partial y_{s,t}}.$$
-
-The activation quantizer has zero gradient almost everywhere, so it is passed
-through as identity (the straight-through estimator, $\partial Q(x)/\partial x
-:= I$) to let gradients reach earlier layers. Scoring uses causal per-token
-FourOverSix activation scales. A first-order Taylor expansion predicts how flipping
-tile $u$ changes sequence $s$'s KL:
+**Step 1: score every flip with one backward pass.** The score of flipping tile $u$
+is its first-order effect on each calibration sequence's KL. A first-order Taylor
+expansion at the current weights $\hat W$ gives
 
 $$\mathrm{KL}_s\big(\hat W + \Delta W_u\big) \approx \mathrm{KL}_s(\hat W) + g_{u,s},
-\qquad g_{u,s} = \langle G_s, \Delta W_u \rangle = \sum_{(i,j) \in u} (G_s)_{ij}\, (\Delta W_u)_{ij}.$$
+\qquad g_{u,s} = \langle G_s, \Delta W_u \rangle = \sum_{(i,j) \in u} (G_s)_{ij}\, (\Delta W_u)_{ij},$$
 
-One forward and one backward pass per sequence yields $g_{u,s}$ for every tile of
-every layer at once. The cost of a scoring pass therefore does not depend on the
-number of tiles; testing each flip directly would need one forward pass per tile,
-millions of them at 8×64.
+where $G_s = \partial\, \mathrm{KL}_s / \partial \hat W$ is sequence $s$'s gradient
+with respect to that layer's weights. The scoring pass computes every $g_{u,s}$
+without storing a single weight gradient.
+
+*Forward pass, for each batch of calibration sequences at the current map $m$:*
+
+1. **Teacher.** The BF16 teacher's log-probabilities $\log p_t$ were computed once,
+   before any quantization, and are reused in every round.
+2. **Weights.** Every text linear layer holds $\hat W(m)$, decoded from the packed
+   candidates. The weights are frozen (`requires_grad=False`), so autograd never
+   builds or stores a weight gradient.
+3. **Graph.** The token embeddings are detached and marked `requires_grad`. The
+   backward pass then flows through the activations of every layer, even though no
+   parameter requires a gradient.
+4. **Activation quantization with a straight-through estimator.** A pre-hook on each
+   linear layer replaces its input $x$ with
+
+   $$\tilde x = Q(x) + \big(x - \operatorname{sg}(x)\big),$$
+
+   where $\operatorname{sg}$ is stop-gradient (`detach`). The value is $Q(x)$, but
+   the Jacobian is the identity: $\partial \tilde x / \partial x = I$. Here $Q$ is
+   FourOverSix with one FP32 factor per token (`quantize_rows`). Each token gets
+   its own global scale $\max|x_t| / (6 \cdot 448)$. Each 16-element block then
+   picks the E4M3 block scale that maps its maximum to 6 or to 4, whichever has the
+   smaller block squared error. Every token is quantized from its own values only.
+   This keeps the scoring forward causal.
+5. **Save the layer input.** A forward hook on each linear layer keeps its quantized
+   input $\tilde x_s \in \mathbb R^{T \times K}$ for each sequence. It also
+   registers a hook on the layer's output $y$, which fires during the backward pass.
+6. **Loss.** For each sequence, $\mathrm{KL}_s$ is its token-mean KL against the
+   teacher, as defined above. The batch loss is $\sum_s \mathrm{KL}_s$.
+
+*Backward pass: one `backward()` per batch.* When it reaches a linear layer, the
+output hook receives $\delta = \partial \big(\sum_s \mathrm{KL}_s\big) / \partial y$.
+Sequences in a batch never interact: attention is within a sequence and activation
+scales are per token. Sequence $s$'s loss therefore reaches only its own slice
+$\delta_s \in \mathbb R^{T \times N}$. The hook then does four things, entirely in
+FP32:
+
+1. **Per-sequence weight gradient.** Because $y_{s,t} = \hat W \tilde x_{s,t}$, the
+   gradient sums outer products over the sequence's tokens, i.e. one matmul:
+
+   $$G_s = \sum_{t} \delta_{s,t}\, \tilde x_{s,t}^{\top} = \delta_s^{\top} \tilde x_s \in \mathbb R^{N \times K}.$$
+
+   $\delta_s$ already contains the effect of this layer's output on every later
+   layer and on the logits. The score therefore measures a weight change's effect
+   on the model's output distribution, not the local reconstruction error of the
+   layer.
+2. **Flip direction for the whole matrix.** For every element,
+   $D = (A - B) \odot \Sigma$, where $\Sigma$ is $-1$ on currently-E0M3 tiles and
+   $+1$ elsewhere. $D$ restricted to tile $u$ is exactly $\Delta W_u$, so a single
+   elementwise product serves every tile.
+3. **Tile sums.** $E_s = G_s \odot D$ is summed within each tile. For $r \times c$
+   tiles, pad the rows up to a multiple of $r$, reshape to
+   $(\lceil N/r \rceil, r, K/c, c)$, and sum over the two within-tile axes
+   (`reduce`). The result is a $\lceil N/r \rceil \times K/c$ array holding
+   $g_{u,s} = \sum_{(i,j) \in u} (E_s)_{ij}$ for every tile of the layer.
+4. **Accumulate.** Add $g_{u,s}$ and $g_{u,s}^2$ into FP64 running sums, one pair
+   per tile. $G_s$ and $E_s$ are discarded immediately.
+
+Every linear layer's hook fires within the same backward pass, so one forward and
+one backward per batch score every tile of every layer. In total that's 128
+sequences (16 batches of 8 on Llama, 128 of 1 on Qwen). What persists is two FP64
+numbers per tile. Testing each flip directly would instead need one forward pass
+per tile, millions of them at 8×64.
+
+In pseudocode, for one linear layer:
+
+```
+forward:   x̃ = Q_per_token(x).detach() + (x - x.detach())      # value Q(x), gradient identity
+           y = Ŵ x̃ ;  save x̃ ;  y.register_hook(on_backward)
+on_backward(δ):                                                  # δ = ∂ Σ_s KL_s / ∂y
+           D = (A - B) * where(tile_is_E0M3, -1, +1)             # flip direction, all tiles
+           for s in batch:
+               G = δ[s].T @ x̃[s]                                  # N×K gradient of KL_s
+               g = tile_sum(G * D)                                # ⌈N/r⌉ × K/c scores g_{u,s}
+               sum_g += g ; sum_g2 += g**2                        # FP64
+after 128 sequences:
+           μ  = sum_g / S
+           SE = sqrt((sum_g2 - S μ²) / (S - 1)) / sqrt(S)
+```
+
+*What the score is not.* It is exact for the model it differentiates, but that
+model differs from the one that is deployed and evaluated in two ways:
+- the straight-through estimator ignores how a weight change moves the activation
+  quantization grid;
+- scoring uses per-token activation scales, while the development evaluation, like
+  deployment, uses one tensor-wide scale per document.
+
+Both gaps, and the finite size of each flip, are why a score only *proposes* a flip.
+Step 3 decides with the measured development KL under the evaluation protocol.
 
 **Step 2: keep flips predicted to help, with confidence.** Over the $S = 128$
 calibration sequences, take each tile's mean score and its standard error:
