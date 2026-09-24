@@ -50,6 +50,14 @@ def e2m1_nibbles(code):
     return (idx | (torch.signbit(code).long() << 3)).to(torch.uint8)
 
 
+def e0m3_signed_nibbles(code):
+    """rq.e0m3_nibbles with the sign taken from the sign bit (a rounded-to-zero negative is -0)."""
+    mag = code.abs()
+    if bool((mag > 7).any()) or bool((mag != mag.round()).any()):
+        raise ValueError('value off the E0M3 grid')
+    return (mag.long() | (torch.signbit(code).long() << 3)).to(torch.uint8)
+
+
 def unpack_nibbles(packed, n, k):
     """[n, k/2] bytes -> [n, k] nibbles (element 2j in the low nibble)."""
     return torch.stack((packed & 0xF, packed >> 4), dim=-1).reshape(n, k)
@@ -63,7 +71,10 @@ def decode_packed(packed, sbytes, gs, n, k):
 
 
 class NativeDev:
-    def __init__(self, modules, rows, cols, tokens, check_calls=64):
+    def __init__(self, modules, rows, cols, tokens, check_calls=64, alt_signed_zero=False):
+        # alt_signed_zero: store an E0M3 code rounded to zero from a negative value as -0, as
+        # quant_mix_4_6 itself returns it (the zero-shot script's reference weights). The default
+        # (+0) matches decode_alt, whose offset-binary codes have no negative zero (run_multiround).
         if (rows, cols) not in ((256, 64), (8, 64)):
             raise ValueError('a map unit must be a union of the kernel\'s 8x64 format granules')
         self.kern = rq.Kernel(CONFIG)
@@ -74,6 +85,9 @@ class NativeDev:
         self.saved = {n: m.forward for n, m in modules.items()}
         self.documents = 1
         self.rebuild_seconds = 0.0
+        self.alt_signed_zero = alt_signed_zero
+        # the fake activation quantizer the first calls are checked against (bitwise)
+        self.reference = lambda x, docs: quant_per_document(x.reshape(docs, -1, x.shape[-1]))
 
     @torch.no_grad()
     def add(self, name, w, base, alt):
@@ -85,7 +99,8 @@ class NativeDev:
             raise AssertionError(f'{name}: E0M3 and FourOverSix global scales differ')
         sb4 = rq.scale_bytes(s4)
         sb0 = rq.scale_bytes(s0) | 128
-        b4, b0 = rq.pack_nibbles(e2m1_nibbles(c4)), rq.pack_nibbles(rq.e0m3_nibbles(c0))
+        alt_nibbles = e0m3_signed_nibbles(c0) if self.alt_signed_zero else rq.e0m3_nibbles(c0)
+        b4, b0 = rq.pack_nibbles(e2m1_nibbles(c4)), rq.pack_nibbles(alt_nibbles)
         gs = g4.reshape(()).float()
         for packed, sb, ref, label in ((b4, sb4, base, 'base'), (b0, sb0, alt, 'alternative')):
             got = decode_packed(packed, sb, gs, n, k)
@@ -140,7 +155,9 @@ class NativeDev:
             k, docs = w.k, self.documents
             x2 = x.reshape(-1, k).contiguous()
             t = x2.shape[0]
-            assert t == self.tokens and t % docs == 0, (tuple(x.shape), docs)
+            # The operand-B scale layout does not depend on the token count, so the weights
+            # placed for `tokens` serve every batch shape (checked: m = 1 ... 16384).
+            assert t % docs == 0, (tuple(x.shape), docs)
             # quant_per_document's global scale, one per document, broadcast to its tokens
             gs_doc = x.reshape(docs, -1, 16).float().abs().amax(dim=(1, 2)) / (6 * 448)
             gs_rows = gs_doc.repeat_interleave(t // docs).contiguous()
@@ -149,7 +166,7 @@ class NativeDev:
                                                   signed_zero=True)
             if self.checked < self.check_calls:
                 got = decode_packed(packed, asf[idx].reshape(t, k // 16), gs_rows[:, None], t, k)
-                ref = quant_per_document(x.reshape(docs, -1, k)).reshape(t, k)
+                ref = self.reference(x, docs).reshape(t, k)
                 if not torch.equal(got.view(torch.int16), ref.view(torch.int16)):
                     raise AssertionError(f'{name}: native activation differs from quant_per_document in '
                                          f'{(got != ref).sum().item()} elements')

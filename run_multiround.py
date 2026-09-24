@@ -121,6 +121,16 @@ def main():
                          'repro_local/realquant/native_dev.py). Logged only: the fake evaluation decides')
     ap.add_argument('--init-map', type=Path, default=None,
                     help='Start from this map (map.pt of a run with the same unit) instead of all E2M1')
+    ap.add_argument('--dev-backend', choices=('fake', 'native'), default='fake',
+                    help='Evaluator whose development KL makes every backtracking decision '
+                         '(native: mixfp4 b8x64 kernel; the fake start value is still logged)')
+    ap.add_argument('--eval-backend', choices=('fake', 'native'), default='fake',
+                    help='Backend of the final WikiText-2 / C4 evaluation')
+    ap.add_argument('--evaluate-map', action='append', default=[], metavar='LABEL=PATH',
+                    help='Evaluate saved maps on WikiText-2 / C4 without calibrating (PATH may also be '
+                         'fourover6 or bf16); repeatable')
+    ap.add_argument('--deterministic', action='store_true',
+                    help='torch.use_deterministic_algorithms(True); needs CUBLAS_WORKSPACE_CONFIG=:4096:8')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     started = time.time()
@@ -128,6 +138,13 @@ def main():
     rows, cols = UNITS[args.unit]
     qwen = args.model == 'qwen27b'
     assert not args.skip_ce_backward or args.objective == 'kl', '--skip-ce-backward needs --objective kl'
+    if args.deterministic:
+        assert os.environ.get('CUBLAS_WORKSPACE_CONFIG') in (':4096:8', ':16:8'), 'set CUBLAS_WORKSPACE_CONFIG=:4096:8'
+        torch.use_deterministic_algorithms(True)
+    assert not (args.shadow_native and args.dev_backend == 'native'), 'the shadow logs native next to fake decisions'
+    maps_to_evaluate = dict(spec.partition('=')[::2] for spec in args.evaluate_map)
+    evaluate_only = bool(maps_to_evaluate)
+    assert args.eval_backend == 'fake' or 'bf16' not in maps_to_evaluate.values(), 'bf16 is evaluated with fake only'
     calibration, development = data_paths(args.model, args.data_root)
     prior = json.loads((calibration / 'report.json').read_text())
     deviations = []
@@ -136,7 +153,13 @@ def main():
         deviations.append(dict(transformers_installed=transformers.__version__,
                                transformers_calibration=prior['transformers_version']))
     args.out.mkdir(parents=True, exist_ok=False)
-    report = dict(status='running', job_id=os.environ.get('SLURM_JOB_ID'),
+    extra = {}
+    if args.dev_backend != 'fake' or args.eval_backend != 'fake' or evaluate_only:
+        extra['backends'] = dict(dev=args.dev_backend, eval=args.eval_backend, evaluate_only=evaluate_only)
+    if args.deterministic:
+        extra['deterministic'] = dict(use_deterministic_algorithms=True,
+                                      cublas_workspace_config=os.environ['CUBLAS_WORKSPACE_CONFIG'])
+    report = dict(**extra, status='running', job_id=os.environ.get('SLURM_JOB_ID'),
                   host=dict(hostname=socket.gethostname(),
                             gpus=[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())],
                             torch=torch.__version__, cuda=torch.version.cuda, transformers=transformers.__version__),
@@ -167,17 +190,19 @@ def main():
         model.set_attn_implementation('sdpa')
     monitor.enter('data_load')
     tok = AutoTokenizer.from_pretrained(prior['source'], revision=prior['revision'])
-    fit, _ = math_code_data(tok, prior['fit'])
-    fit = [b for source in ('math', 'code') for b in fit[source]]
-    dev, report['development'] = load_development(development)
+    if evaluate_only:
+        fit, dev, report['development'] = [], [], None
+    else:
+        fit, _ = math_code_data(tok, prior['fit'])
+        fit = [b for source in ('math', 'code') for b in fit[source]]
+        dev, report['development'] = load_development(development)
     device = model.get_input_embeddings().weight.device
     monitor.enter('teacher_precompute')
     dev_teacher = []
     for r in dev:
         logits = model(input_ids=r['ids'].to(device), use_cache=False).logits
         dev_teacher.append(logits[:, :-1].float().log_softmax(-1).bfloat16().cpu())
-    logits_width = logits.shape[-1]
-    del logits
+        del logits
     teacher = []
     for ids in fit:
         logits = model(input_ids=ids.to(device), use_cache=False).logits
@@ -188,12 +213,13 @@ def main():
     monitor.enter('candidate_packing')
     packed, dense, sel = {}, {}, {}
     native = None
-    if args.shadow_native:
+    if args.shadow_native or args.dev_backend == 'native' or args.eval_backend == 'native':
         import sys
         assert not qwen and len(dev) % args.eval_batch == 0
         sys.path.insert(0, str(Path(__file__).resolve().parent / 'repro_local' / 'realquant'))
         from native_dev import NativeDev
-        native = NativeDev(modules, rows, cols, tokens=args.eval_batch * dev[0]['ids'].shape[1])
+        native = NativeDev(modules, rows, cols, tokens=args.eval_batch * dev[0]['ids'].shape[1] if dev else 2048)
+    pristine = {}
     for n, m in modules.items():
         assert sha(m.weight) == prior['matrices'][n]['source_sha256'], n
         b = quant_nvfp4_4over6(m.weight, 4, 16)
@@ -209,6 +235,8 @@ def main():
         o, k = m.weight.shape
         assert k % cols == 0
         sel[n] = torch.zeros(-(-o // rows), k // cols, dtype=torch.bool, device=m.weight.device)
+        if 'bf16' in maps_to_evaluate.values():
+            pristine[n] = m.weight.detach().to('cpu', copy=True)
         m.weight.copy_(b)
         del a, b
     torch.cuda.empty_cache()
@@ -234,11 +262,12 @@ def main():
             apply(n)
         report['init_map'] = dict(path=str(args.init_map), sha256=digest_file(args.init_map),
                                   e0m3_units=sum(int(s.sum()) for s in sel.values()))
+    def installed(n):
+        return modules[n].weight
+
     if native is not None:
         # The packed native weight of a map must decode to the weight apply() installs, bitwise:
         # the start map, one random mixed map, and the start map again after restoring it.
-        def installed(n):
-            return modules[n].weight
         check = dict(start_map_mismatches=native.verify_map(sel, installed))
         start_sel = {n: s.clone() for n, s in sel.items()}
         mixer = torch.Generator(device=device).manual_seed(0)
@@ -253,8 +282,12 @@ def main():
         check['restored_start_mismatches'] = native.verify_map(sel, installed)
         assert not (check['start_map_mismatches'] or check['mixed_map_mismatches']
                     or check['restored_start_mismatches']), check
-        report['shadow_native'] = dict(kernel=native.kern.cfg, library=str(native.kern.path),
-                                       tokens_per_forward=native.tokens, verification=check, tries=[])
+        record = dict(kernel=native.kern.cfg, library=str(native.kern.path), tokens_per_forward=native.tokens,
+                      verification=check)
+        if args.shadow_native:
+            report['shadow_native'] = dict(record, tries=[])
+        else:
+            report['native'] = record
         print('NATIVE ' + json.dumps(check), flush=True)
 
     eval_handles = []
@@ -329,6 +362,34 @@ def main():
             del lp, t
         native.remove()
         return dict(ce=sum(ce) / len(ce), kl=sum(kl) / len(kl), ce_nll=ce, kl_values=kl)
+
+    def final_eval(backend, batches, label):
+        # run_multiround's WikiText-2 / C4 evaluation: one 2048-token window per forward, with the
+        # per-window FourOverSix activation of per_document_act (fake), the native kernel with one
+        # activation scale per window (native), or no quantization (bf16, pristine weights installed).
+        out = {}
+        if backend == 'fake':
+            eval_hooks(True)
+        elif backend == 'native':
+            native.install(sel)
+            native.documents = 1
+        for domain, sequences in batches.items():
+            values = []
+            for ids in sequences:
+                ids = ids.to(device)
+                logits = model(input_ids=ids, use_cache=(domain == 'wiki')).logits
+                values.append(float(F.cross_entropy(logits[:, :-1].float().reshape(-1, logits.shape[-1]),
+                                                    ids[:, 1:].reshape(-1).to(logits.device))))
+                del logits
+            losses = torch.tensor(values, dtype=torch.float32) * 2048
+            key = 'c4' if domain == 'c4_paper' else domain
+            out[key] = dict(nll=values, ppl=float(torch.exp(losses.sum() / (len(values) * 2048))))
+            print(f'PPL {label} {key} {out[key]["ppl"]:.6f}', flush=True)
+        if backend == 'fake':
+            eval_hooks(False)
+        elif backend == 'native':
+            native.remove()
+        return out
 
     def difference(nat, fake):
         out = {}
@@ -406,12 +467,66 @@ def main():
             stats[n] = out
         return stats
 
+    if evaluate_only:
+        monitor.enter('final_evaluation')
+        batches, report['data'] = data(tok, prior, 2048)
+        published = json.loads(Path(PUBLISHED[args.model]).read_text())
+        validate_evaluation_data(report['data'], published['data'])
+        report['evaluations'] = {}
+        for label, path in maps_to_evaluate.items():
+            entry = report['evaluations'][label] = dict(path=path, backend='fake' if path == 'bf16' else args.eval_backend)
+            if path == 'bf16':
+                for n, m in modules.items():
+                    m.weight.copy_(pristine[n].to(m.weight.device))
+                entry['evaluation'] = final_eval('bf16', batches, label)
+                for n in sel:
+                    apply(n)
+                save(args.out, report)
+                continue
+            if path == 'fourover6':
+                for n in sel:
+                    sel[n].zero_()
+                    apply(n)
+            else:
+                saved_map = torch.load(path, map_location='cpu', weights_only=True)
+                assert list(saved_map) == list(sel), label
+                for n in sel:
+                    sel[n].copy_(saved_map[n].to(sel[n].device))
+                    apply(n)
+                entry['sha256'] = digest_file(path)
+            entry['e0m3_units'] = sum(int(s.sum()) for s in sel.values())
+            if native is not None:
+                entry['native_map_mismatches'] = native.verify_map(sel, installed)
+                assert not entry['native_map_mismatches'], label
+                native.checked = 0          # the first 64 activation calls of every map are checked
+            entry['evaluation'] = final_eval(args.eval_backend, batches, label)
+            if native is not None:
+                entry['native_activation_checks'] = native.checked
+            save(args.out, report)
+        monitor.close()
+        phases = monitor.summary()
+        report['resources'] = dict(total_seconds=time.time() - started,
+                                   gpus=[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())],
+                                   gpu_peak_allocated_gib=phases['gpu_peak_allocated_gib'],
+                                   gpu_peak_reserved_gib=phases['gpu_peak_reserved_gib'],
+                                   cpu_peak_rss_gib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2 ** 20,
+                                   phases=phases)
+        report['status'] = 'complete'
+        save(args.out, report)
+        return
     monitor.enter('initial_dev_eval')
     t_fake = time.time()
     current = dev_eval()
     t_fake = time.time() - t_fake
     report['initial_dev'] = current
-    if native is not None:
+    if args.dev_backend == 'native':
+        # The fake start value is logged; from here on the native development KL decides.
+        report['fake_initial_dev'] = current
+        monitor.enter('native_dev_evaluation')
+        current = native_dev_eval()
+        report['initial_dev'] = current
+        monitor.enter('initial_dev_eval')
+    if args.shadow_native:
         monitor.enter('native_dev_evaluation')
         t_native = time.time()
         native_current = native_dev_eval()
@@ -468,9 +583,9 @@ def main():
             for n, idx in touched.items():
                 flat = sel[n].view(-1); flat[idx.to(flat.device)] ^= True; apply(n)
             t_fake = time.time()
-            new = dev_eval()
+            new = native_dev_eval() if args.dev_backend == 'native' else dev_eval()
             t_fake = time.time() - t_fake
-            if native is not None:
+            if args.shadow_native:
                 monitor.enter('native_dev_evaluation')
                 t_native = time.time()
                 native_new = native_dev_eval()
@@ -482,7 +597,7 @@ def main():
             print(f'ROUND {rnd} try size={size} pred CE {pce:+.6f} KL {pkl:+.6f} | dev dCE {new["ce"] - current["ce"]:+.6f} '
                   f'dKL {new["kl"] - current["kl"]:+.6f}', flush=True)
             fake_accepts = improves(new, current)
-            if native is not None:
+            if args.shadow_native:
                 # The native state mirrors fake's: its "current" moves only when fake accepts.
                 native_accepts = improves(native_new, native_current)
                 d_fake, d_native = new['kl'] - current['kl'], native_new['kl'] - native_current['kl']
@@ -533,21 +648,25 @@ def main():
     batches, report['data'] = data(tok, prior, 2048)
     published = json.loads(Path(PUBLISHED[args.model]).read_text())
     validate_evaluation_data(report['data'], published['data'])
-    eval_hooks(True)
-    report['evaluation'] = {}
-    for domain, sequences in batches.items():
-        values = []
-        for ids in sequences:
-            ids = ids.to(device)
-            logits = model(input_ids=ids, use_cache=(domain == 'wiki')).logits
-            values.append(float(F.cross_entropy(logits[:, :-1].float().reshape(-1, logits.shape[-1]), ids[:, 1:].reshape(-1).to(logits.device))))
-            del logits
-        losses = torch.tensor(values, dtype=torch.float32) * 2048
-        key = 'c4' if domain == 'c4_paper' else domain
-        report['evaluation'][key] = dict(nll=values, ppl=float(torch.exp(losses.sum() / (len(values) * 2048))))
-        print(f'PPL multiround_{args.unit}_{args.objective} {key} {report["evaluation"][key]["ppl"]:.6f}', flush=True)
+    if args.eval_backend == 'native':
+        report['evaluation'] = final_eval('native', batches, f'multiround_{args.unit}_{args.objective}')
         save(args.out, report)
-    eval_hooks(False)
+    else:
+        eval_hooks(True)
+        report['evaluation'] = {}
+        for domain, sequences in batches.items():
+            values = []
+            for ids in sequences:
+                ids = ids.to(device)
+                logits = model(input_ids=ids, use_cache=(domain == 'wiki')).logits
+                values.append(float(F.cross_entropy(logits[:, :-1].float().reshape(-1, logits.shape[-1]), ids[:, 1:].reshape(-1).to(logits.device))))
+                del logits
+            losses = torch.tensor(values, dtype=torch.float32) * 2048
+            key = 'c4' if domain == 'c4_paper' else domain
+            report['evaluation'][key] = dict(nll=values, ppl=float(torch.exp(losses.sum() / (len(values) * 2048))))
+            print(f'PPL multiround_{args.unit}_{args.objective} {key} {report["evaluation"][key]["ppl"]:.6f}', flush=True)
+            save(args.out, report)
+        eval_hooks(False)
     timing['evaluation_seconds'] = time.time() - started - timing['setup_seconds'] - timing['optimization_seconds']
     timing['total_seconds'] = time.time() - started
     monitor.close()
