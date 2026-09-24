@@ -51,37 +51,132 @@ realistic mixed map.
 
 ## 3. How tile selection works: multi-round KL-only election
 
-Each tile is either FourOverSix E2M1 (the default) or E0M3. Selection minimizes
-KL(BF16 teacher ‖ quantized model) and works like training with a line search.
+Each tile is either FourOverSix E2M1 (the default) or E0M3. Selection is a greedy
+descent on a distillation loss. First-order scores propose which tiles to flip, and
+measured loss on held-out documents decides how many flips to take. It works like
+gradient descent with a backtracking line search, over a discrete set of moves.
 
 **Data.**
 - 128 calibration sequences of 512 tokens: 64 OpenWebMath and 64 CodeParrot.
 - 192 separate held-out math/code **development** documents of 512 tokens.
 - No WikiText or C4 is used anywhere in selection.
 
-**Loop.** Start from all-E2M1 (FourOverSix), then repeat:
+**Weights as a function of the map.** For each weight matrix $W$, two quantized
+candidates are computed once from the BF16 weights and never change:
+- $B$, the FourOverSix E2M1 quantization;
+- $A$, the E0M3 quantization with $\alpha = 1$.
 
-1. **Score every flip at the current model.**
-   - For each calibration sequence, compute the weight gradient `G` of the KL
-     between the BF16 teacher's and the current quantized model's next-token
-     distributions. Activations are quantized with a straight-through estimator.
-   - A tile's flip score is `⟨G, ΔW_tile⟩`, where `ΔW_tile` is the weight change of
-     switching that tile to the other type. Undoing an earlier flip is also a flip.
-2. **Filter and rank.** Keep flips whose per-sequence mean + 2 SE < 0, i.e.
-   predicted to lower KL with confidence. Rank them by that bound.
-3. **Backtrack on measured loss.**
-   - Apply the top n candidates, starting with n = all, and measure mean KL on the
-     development documents.
-   - Accept the first step that lowers it; otherwise halve n and retry.
-4. **Stop** when no step lowers development KL.
+Both share the tensor's FP32 global scale, and each 16-element scale block keeps
+its own E4M3 scale. A map $m \in \{0,1\}^{\text{tiles}}$ gives the weights
 
-**Why multiple rounds.** First-order scores are only valid near the current point.
-Summed over thousands of tiles, they overstate the combined effect of a step by
-5–50×. Electing everything that passes the filter in one step (one-shot election)
-overshoots, and in later rounds most flips that pass the filter are rejected. On
-Llama 256×64, for example, round 1 had 29,820 candidates but accepted 465; applying
-all of them *raised* development KL by 0.11. Re-scoring after every accepted step,
-with the step size set by measured loss, avoids this.
+$$\hat W(m) = B + \sum_{u:\,m_u = 1} P_u \odot (A - B),$$
+
+where $P_u$ is the 0/1 mask of tile $u$ (256×64 or 8×64 elements). Flipping tile
+$u$ changes only the entries of that tile, by
+
+$$\Delta W_u = \sigma_u\, P_u \odot (A - B), \qquad
+\sigma_u = \begin{cases} +1 & u \text{ is currently E2M1} \\ -1 & u \text{ is currently E0M3 (an undo)} \end{cases}$$
+
+**Objective.** Let $p_t$ be the BF16 teacher's next-token distribution at position
+$t$, and $q_{m,t}$ that of the W4A4 model with map $m$. For a sequence $s$ of $T$
+tokens,
+
+$$\mathrm{KL}_s(m) = \frac{1}{T-1} \sum_{t=1}^{T-1} \sum_{v \in \text{vocab}}
+p_t(v)\, \big[\log p_t(v) - \log q_{m,t}(v)\big].$$
+
+The development objective is the mean over the 192 development documents:
+$L_{\text{dev}}(m) = \frac{1}{192} \sum_d \mathrm{KL}_d(m)$. It is measured with
+the evaluation protocol: a forward pass only, with one tensor-wide FourOverSix
+activation scale per document.
+
+**Step 1: score every flip with one backward pass.** Take a linear layer
+$y = \hat W \tilde x$, where $\tilde x = Q(x)$ is the fake-quantized activation.
+For sequence $s$, the gradient of its KL with respect to the layer's weights is a
+sum of outer products over tokens:
+
+$$G_s = \frac{\partial\, \mathrm{KL}_s}{\partial \hat W} = \sum_t \delta_{s,t}\, \tilde x_{s,t}^{\top},
+\qquad \delta_{s,t} = \frac{\partial\, \mathrm{KL}_s}{\partial y_{s,t}}.$$
+
+The activation quantizer has zero gradient almost everywhere, so it is passed
+through as identity (the straight-through estimator, $\partial Q(x)/\partial x
+:= I$) to let gradients reach earlier layers. Scoring uses causal per-token
+FourOverSix activation scales. A first-order Taylor expansion predicts how flipping
+tile $u$ changes sequence $s$'s KL:
+
+$$\mathrm{KL}_s\big(\hat W + \Delta W_u\big) \approx \mathrm{KL}_s(\hat W) + g_{u,s},
+\qquad g_{u,s} = \langle G_s, \Delta W_u \rangle = \sum_{(i,j) \in u} (G_s)_{ij}\, (\Delta W_u)_{ij}.$$
+
+One forward and one backward pass per sequence yields $g_{u,s}$ for every tile of
+every layer at once. The cost of a scoring pass therefore does not depend on the
+number of tiles; testing each flip directly would need one forward pass per tile,
+millions of them at 8×64.
+
+**Step 2: keep flips predicted to help, with confidence.** Over the $S = 128$
+calibration sequences, take each tile's mean score and its standard error:
+
+$$\mu_u = \frac{1}{S} \sum_s g_{u,s}, \qquad
+\mathrm{SE}_u = \frac{1}{\sqrt S} \sqrt{\frac{1}{S-1} \sum_s \big(g_{u,s} - \mu_u\big)^2}.$$
+
+Tile $u$ is a candidate only if
+
+$$b_u = \mu_u + 2\, \mathrm{SE}_u < 0.$$
+
+$b_u$ is an approximate one-sided 97.7% upper confidence bound on the expected
+first-order change in KL per sequence. The filter therefore keeps flips that lower
+KL across the calibration sequences, not ones driven by a few sequences. This is
+the "decisive margin" principle from earlier rounds of this work. Candidates are
+ranked by $b_u$, most negative first: $c_1, c_2, \dots, c_M$.
+
+**Step 3: choose the step size by backtracking on measured loss.** Try
+$n = M, \lfloor M/2 \rfloor, \lfloor M/4 \rfloor, \dots, 1$, with at most 22 tries:
+1. Flip the top $n$ candidates together, giving map $m'$.
+2. Measure $L_{\text{dev}}(m')$.
+3. If $L_{\text{dev}}(m') < L_{\text{dev}}(m)$, accept $m'$ and end the round.
+   Otherwise undo the flips and halve $n$.
+
+Each try logs the predicted change $\sum_{i \le n} \mu_{c_i}$ next to the measured
+change.
+
+**Step 4: re-score at the new point and stop when nothing helps.** The next round
+repeats steps 1–3 at the accepted map, with fresh gradients. The loop stops when no
+tile passes the filter, or when even $n = 1$ fails to lower $L_{\text{dev}}$. An
+accepted step always lowers $L_{\text{dev}}$, so development KL decreases strictly
+from round to round.
+
+**Why multiple rounds: the linear prediction overstates a combined step.** For a
+step $\Delta = \sum_{u \in C} \Delta W_u$, the second-order expansion is
+
+$$\mathrm{KL}(\hat W + \Delta) \approx \mathrm{KL}(\hat W)
++ \underbrace{\sum_{u \in C} \langle G, \Delta W_u \rangle}_{\text{what the scores add up}}
++ \tfrac12 \sum_{u \in C} \sum_{v \in C} \mathrm{vec}(\Delta W_u)^{\top} H\, \mathrm{vec}(\Delta W_v),$$
+
+where $H$ is the Hessian of KL with respect to all weights. The scores capture only
+the linear term, which grows like $n$. The quadratic term has $n^2$ pairwise terms:
+- tiles in the same layer interact through shared inputs;
+- tiles in different layers interact because each layer's error changes what later
+  layers see.
+
+Each flip is also a finite jump (the full E2M1-to-E0M3 difference on its tile), not
+an infinitesimal step. The sum of scores therefore overstates the combined effect.
+First-round tries from the reported runs:
+
+| Run, first round | Flips | Predicted Δ dev KL | Measured Δ dev KL | Result |
+|---|---:|---:|---:|---|
+| Llama 8×64, all candidates | 412,228 | −0.405 | **+0.389** | rejected |
+| Llama 8×64, 6 halvings | 6,441 | −0.043 | **+0.011** | rejected |
+| Llama 8×64, 7 halvings | 3,220 | −0.032 | −0.0014 | accepted (23× smaller than predicted) |
+| Qwen 8×64, 6 halvings | 17,215 | −0.024 | −0.0011 | accepted (22× smaller) |
+| Qwen 256×64, all candidates | 39,093 | −0.064 | −0.0024 | accepted (27× smaller) |
+
+Even accepted steps realize only about 1/20 to 1/30 of the predicted gain. Large
+steps cross over to a net loss, because the quadratic term grows faster than the
+linear one.
+
+Electing every candidate in one step (one-shot election) overshoots. Once a step is
+taken, the gradients $G_s$ change, and so do the right flips. Re-scoring at every
+accepted map, with the step size set by measured loss, avoids both problems. Each
+round's candidate count and accepted flips are in the run reports; for example,
+Llama 8×64 accepted 3,220, 1,208, 826, 423, 199, 91, 5 and 5 flips before stopping.
 
 **Output.** A per-tile E2M1/E0M3 map, the only runtime artifact. Selection is
 deterministic for a fixed setup: an independent re-run reproduced the Llama map
