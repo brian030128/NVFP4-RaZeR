@@ -62,6 +62,7 @@ def main():
     assert os.environ.get('SLURM_JOB_ID'), 'Run through Slurm'
     import lm_eval
     from lm_eval.models.huggingface import HFLM
+    from lm_eval.tasks import TaskManager, get_task_dict
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--lib', required=True)
     ap.add_argument('--kernel-gate', type=Path, required=True)
@@ -114,12 +115,12 @@ def main():
     print(f'PACKED {len(prior["matrices"])} matrices, {tiles} E0M3 tiles, bitwise', flush=True)
 
     lm = HFLM(pretrained=model, tokenizer=tok, batch_size=1)
-    task_manager = lm_eval.tasks.TaskManager()
+    task_manager = TaskManager()
     samples = None
     if shards > 1:
         # Document indices of this shard, per task (lm-eval 0.4.9 `samples`).
         samples = {}
-        for task_name, task in lm_eval.tasks.get_task_dict(tasks, task_manager).items():
+        for task_name, task in get_task_dict(tasks, task_manager).items():
             docs = task.eval_docs if hasattr(task, 'eval_docs') else None
             count = len(docs) if docs is not None else None
             assert count is not None, f'cannot shard {task_name}'
