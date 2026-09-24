@@ -116,6 +116,11 @@ def main():
                     help='Run although the installed transformers differs from the calibration\'s; both are recorded')
     ap.add_argument('--skip-ce-backward', action='store_true',
                     help='--objective kl only: skip the CE backward in scoring (KL scores do not depend on it)')
+    ap.add_argument('--shadow-native', action='store_true',
+                    help='Also run every development evaluation on the native mixfp4 kernel (b8x64 build, '
+                         'repro_local/realquant/native_dev.py). Logged only: the fake evaluation decides')
+    ap.add_argument('--init-map', type=Path, default=None,
+                    help='Start from this map (map.pt of a run with the same unit) instead of all E2M1')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     started = time.time()
@@ -182,6 +187,13 @@ def main():
     # quantizers, and any module that fails keeps dequantized BF16 copies instead.
     monitor.enter('candidate_packing')
     packed, dense, sel = {}, {}, {}
+    native = None
+    if args.shadow_native:
+        import sys
+        assert not qwen and len(dev) % args.eval_batch == 0
+        sys.path.insert(0, str(Path(__file__).resolve().parent / 'repro_local' / 'realquant'))
+        from native_dev import NativeDev
+        native = NativeDev(modules, rows, cols, tokens=args.eval_batch * dev[0]['ids'].shape[1])
     for n, m in modules.items():
         assert sha(m.weight) == prior['matrices'][n]['source_sha256'], n
         b = quant_nvfp4_4over6(m.weight, 4, 16)
@@ -191,6 +203,9 @@ def main():
             dense[n] = (b, a)
         else:
             packed[n] = p
+        if native is not None:
+            # both native candidates must decode to exactly what decode_base / decode_alt return
+            native.add(n, m.weight, *((b, a) if p is None else (decode_base(p), decode_alt(p))))
         o, k = m.weight.shape
         assert k % cols == 0
         sel[n] = torch.zeros(-(-o // rows), k // cols, dtype=torch.bool, device=m.weight.device)
@@ -210,6 +225,37 @@ def main():
     def apply(n):
         b = base(n)
         modules[n].weight.copy_(torch.where(expand(sel[n], rows, cols, b.shape[0]), alt(n), b))
+
+    if args.init_map is not None:
+        start_map = torch.load(args.init_map, map_location='cpu', weights_only=True)
+        assert list(start_map) == list(sel), 'the map was made for other modules'
+        for n in sel:
+            sel[n].copy_(start_map[n].to(sel[n].device))
+            apply(n)
+        report['init_map'] = dict(path=str(args.init_map), sha256=digest_file(args.init_map),
+                                  e0m3_units=sum(int(s.sum()) for s in sel.values()))
+    if native is not None:
+        # The packed native weight of a map must decode to the weight apply() installs, bitwise:
+        # the start map, one random mixed map, and the start map again after restoring it.
+        def installed(n):
+            return modules[n].weight
+        check = dict(start_map_mismatches=native.verify_map(sel, installed))
+        start_sel = {n: s.clone() for n, s in sel.items()}
+        mixer = torch.Generator(device=device).manual_seed(0)
+        for n in sel:
+            sel[n].copy_(torch.rand(sel[n].shape, generator=mixer, device=sel[n].device) < 0.5)
+            apply(n)
+        check['mixed_map_units'] = sum(int(s.sum()) for s in sel.values())
+        check['mixed_map_mismatches'] = native.verify_map(sel, installed)
+        for n in sel:
+            sel[n].copy_(start_sel[n])
+            apply(n)
+        check['restored_start_mismatches'] = native.verify_map(sel, installed)
+        assert not (check['start_map_mismatches'] or check['mixed_map_mismatches']
+                    or check['restored_start_mismatches']), check
+        report['shadow_native'] = dict(kernel=native.kern.cfg, library=str(native.kern.path),
+                                       tokens_per_forward=native.tokens, verification=check, tries=[])
+        print('NATIVE ' + json.dumps(check), flush=True)
 
     eval_handles = []
 
@@ -267,6 +313,31 @@ def main():
         current_batch[0] = 1
         eval_hooks(False)
         return dict(ce=sum(ce) / len(ce), kl=sum(kl) / len(kl), ce_nll=ce, kl_values=kl)
+
+    def native_dev_eval():
+        # dev_eval with every scoped Linear on the native kernel instead of the activation hooks
+        native.install(sel)
+        ce, kl = [], []
+        for start in range(0, len(dev), args.eval_batch):
+            chunk = dev[start:start + args.eval_batch]
+            ids = torch.cat([r['ids'] for r in chunk]).to(device)
+            native.documents = ids.shape[0]
+            lp = model(input_ids=ids, use_cache=False).logits[:, :-1].float().log_softmax(-1)
+            t = torch.cat(dev_teacher[start:start + args.eval_batch]).to(lp.device).float()
+            c, k = per_sequence_losses(lp, ids, t)
+            ce.extend(c.tolist()); kl.extend(k.tolist())
+            del lp, t
+        native.remove()
+        return dict(ce=sum(ce) / len(ce), kl=sum(kl) / len(kl), ce_nll=ce, kl_values=kl)
+
+    def difference(nat, fake):
+        out = {}
+        for key, values in (('kl', 'kl_values'), ('ce', 'ce_nll')):
+            d = [x - y for x, y in zip(nat[values], fake[values])]
+            out[key] = dict(mean_native_minus_fake=nat[key] - fake[key],
+                            mean_abs_per_document=sum(abs(x) for x in d) / len(d),
+                            max_abs_per_document=max(abs(x) for x in d))
+        return out
 
     def improves(new, old):
         keys = ('ce', 'kl') if args.objective == 'both' else (args.objective,)
@@ -336,8 +407,20 @@ def main():
         return stats
 
     monitor.enter('initial_dev_eval')
+    t_fake = time.time()
     current = dev_eval()
+    t_fake = time.time() - t_fake
     report['initial_dev'] = current
+    if native is not None:
+        monitor.enter('native_dev_evaluation')
+        t_native = time.time()
+        native_current = native_dev_eval()
+        report['shadow_native']['initial'] = dict(
+            native_current, fake_seconds=t_fake, native_seconds=time.time() - t_native,
+            native_rebuild_seconds=native.rebuild_seconds, activation_checks=native.checked,
+            difference=difference(native_current, current))
+        print('NATIVE initial ' + json.dumps(report['shadow_native']['initial']['difference']), flush=True)
+        monitor.enter('initial_dev_eval')
     save(args.out, report)
     timing = dict(setup_seconds=time.time() - started)
     if args.check_start:
@@ -384,13 +467,44 @@ def main():
                 touched[names[i]] = chosen[who == i] - int(offsets[i])
             for n, idx in touched.items():
                 flat = sel[n].view(-1); flat[idx.to(flat.device)] ^= True; apply(n)
+            t_fake = time.time()
             new = dev_eval()
+            t_fake = time.time() - t_fake
+            if native is not None:
+                monitor.enter('native_dev_evaluation')
+                t_native = time.time()
+                native_new = native_dev_eval()
+                t_native = time.time() - t_native
+                monitor.enter('dev_evaluation')
             pce, pkl = float(flat_mean_ce[chosen].sum()), float(flat_mean_kl[chosen].sum())
             entry['tries'].append(dict(size=size, predicted_ce=pce, predicted_kl=pkl,
                                        dev_delta_ce=new['ce'] - current['ce'], dev_delta_kl=new['kl'] - current['kl']))
             print(f'ROUND {rnd} try size={size} pred CE {pce:+.6f} KL {pkl:+.6f} | dev dCE {new["ce"] - current["ce"]:+.6f} '
                   f'dKL {new["kl"] - current["kl"]:+.6f}', flush=True)
-            if improves(new, current):
+            fake_accepts = improves(new, current)
+            if native is not None:
+                # The native state mirrors fake's: its "current" moves only when fake accepts.
+                native_accepts = improves(native_new, native_current)
+                d_fake, d_native = new['kl'] - current['kl'], native_new['kl'] - native_current['kl']
+                report['shadow_native']['tries'].append(dict(
+                    round=rnd, try_index=len(entry['tries']) - 1, size=size,
+                    fake_new_kl=new['kl'], fake_current_kl=current['kl'], fake_new_ce=new['ce'],
+                    fake_current_ce=current['ce'], fake_accepts=fake_accepts,
+                    native_new_kl=native_new['kl'], native_current_kl=native_current['kl'],
+                    native_new_ce=native_new['ce'], native_current_ce=native_current['ce'],
+                    native_accepts=native_accepts, agree=native_accepts == fake_accepts,
+                    delta_fake=d_fake, delta_native=d_native, discrepancy=abs(d_native - d_fake),
+                    margin=abs(d_fake), fake_seconds=t_fake, native_seconds=t_native,
+                    native_rebuild_seconds=native.rebuild_seconds,
+                    fake_kl_values=new['kl_values'], fake_ce_nll=new['ce_nll'],
+                    native_kl_values=native_new['kl_values'], native_ce_nll=native_new['ce_nll']))
+                print(f'SHADOW round {rnd} size={size} fake dKL {d_fake:+.6f} {"accept" if fake_accepts else "reject"} | '
+                      f'native dKL {d_native:+.6f} {"accept" if native_accepts else "reject"} | '
+                      f'{"agree" if native_accepts == fake_accepts else "DISAGREE"} | '
+                      f'fake {t_fake:.1f}s native {t_native:.1f}s', flush=True)
+                if fake_accepts:
+                    native_current = native_new
+            if fake_accepts:
                 accepted = size; current = new; break
             for n, idx in touched.items():
                 flat = sel[n].view(-1); flat[idx.to(flat.device)] ^= True; apply(n)
