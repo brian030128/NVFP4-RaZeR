@@ -17,4 +17,5 @@ MAIN=/home/u4320956/NVFP4-RaZeR
 MODEL="${1:?model}"
 export REORDER_HF_HOME=$MAIN/.joblib/huggingface PYTHON=$MAIN/.joblib/$MODEL/bin/python
 source slurm/task_reorder_env.sh
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 "$PYTHON" run_zeroshot_maps.py --model "$MODEL" --out "${2:?out}" --samples-dir "$2/samples" "${@:3}"
