@@ -90,54 +90,52 @@ and every evaluation loss bitwise. Implementation: `run_multiround.py
 
 ## 4. Calibration time and cost
 
-These are **one-time, offline tile-selection costs**. Inference memory is not
-reported: this is fake quantization, and peak inference memory will be measured
-on the target device.
+These are **one-time, offline tile-selection costs** of the optimized
+implementation that produced every MixFP4 map in §5 and §6. Inference memory is
+not reported: this is fake quantization, and peak inference memory will be
+measured on the target device.
 
-| Run | Hardware | Implementation | Scoring passes | Dev evaluations | Selection time | Peak GPU memory | Peak CPU memory |
-|---|---|---|---:|---:|---:|---|---:|
-| Llama-3.1-8B, 256×64 | 1× H200 | reference | 5 | 42 | 43.9 min | 46.1 GiB | 41.2 GiB |
-| Llama-3.1-8B, 256×64 | 1× H200 | **optimized** | 4 | 33 | **15.3 min** | 64.5 GiB | 42.9 GiB |
-| Llama-3.1-8B, 8×64 | 1× H200 | reference | 10 | 133 | 2 h 15 min | 47.3 GiB | 41.3 GiB |
-| Qwen3.8-27B, 256×64 (run 1, to round 5) | 2× H200 | reference | 6 | 63 | 3 h 58 min | ~82 + 94 GiB¹ | 78.1 GiB |
-| Qwen3.8-27B, 256×64 (run 2, 2 rounds) | **1× H200** | optimized | 2 | 11 | 47 min | **107.1 GiB** | 78.2 GiB |
-| Qwen3.8-27B, 8×64 | 2× H200 | reference | 9 | 137 | 8 h 20 min | 82.2 + 94.2 GiB | 78.2 GiB |
+| Run | Hardware | Scoring passes | Dev evaluations | Setup | Selection time | Peak GPU memory | Peak CPU memory |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Llama-3.1-8B, 256×64 | 1× H200 | 4 | 33 | 1.5 min | **15.3 min** | 64.5 GiB | 42.9 GiB |
+| Llama-3.1-8B, 8×64 | 1× H200 | 9 | 118 | 1.8 min | **45.5 min** | 63.7 GiB | 42.9 GiB |
+| Qwen3.8-27B, 256×64 | 1× H200 | 3 | 28 | 6.0 min | **1 h 16 min** | 106.6 GiB | 78.1 GiB |
+| Qwen3.8-27B, 8×64 | 1× H200 | 10 | 143 | 6.0 min | **5 h 34 min** | 110.7 GiB | 78.2 GiB |
 
-¹ Not logged for this run; the Qwen 8×64 run has the same model, candidates and
-teachers on the same two GPUs.
+- **Selection time** covers all scoring passes and development evaluations. It
+  excludes setup (loading model, teachers and packed candidates) and the final PPL
+  evaluation.
+- **Scoring pass:** 128 × 512 tokens, forward plus the KL backward.
+- **Development evaluation:** 192 × 512 tokens, forward only. These dominate late
+  rounds, where backtracking evaluates several step sizes per accepted step.
 
-Selection time excludes setup (loading model and teachers, 2–8 min) and the final
-evaluation.
-
-**Where the time goes.**
-
-| Model | Scoring pass (reference) | Development evaluation (reference) | Development evaluation (optimized) |
-|---|---:|---:|---:|
-| Llama-3.1-8B | ~2 min | 0.9 min | 0.3 min |
-| Qwen3.8-27B | ~8 min | 3 min | 1.8 min |
-
-Scoring is 128 × 512 tokens, forward plus KL backward. A development evaluation is
-192 × 512 tokens, forward only. Late rounds that accept few flips spend most of
-their time on backtracking evaluations, while round 0 alone gives most of the
-gain.
-
-**The optimized implementation** changes no weight value.
-- Both candidates are stored packed as 4-bit codes plus FP8 scales and decoded per
-  module, verified bitwise. This lets Qwen run on one GPU.
-- Activation fake-quantization is vectorized and verified bitwise at the start of
+**What makes it fast**, none of it changing a weight value:
+- Both candidates are stored packed as 4-bit codes plus FP8 scales, decoded per
+  module and verified bitwise. This is what lets Qwen run on one GPU.
+- Activation fake-quantization is vectorized and bitwise-verified at the start of
   every run.
+- The CE backward is skipped, because KL-only selection never uses it.
 - Llama batches 16 documents per evaluation and 8 sequences per scoring pass.
-  Qwen evaluates one document per pass, because its batched forward is not
+  Qwen uses one document per pass, because its batched forward is not
   numerically identical to one-at-a-time.
-- Floating-point summation order changes which borderline tiles are selected.
-  The Llama 256×64 optimized run selected 8,393 tiles vs 8,405.
+
+**Speed-up over the earlier reference implementation**, which used unpacked BF16
+candidates, looped quantization and a CE backward:
+
+| Run | Reference | Optimized |
+|---|---:|---:|
+| Llama 256×64 | 43.9 min | **15.3 min (2.9×)** |
+| Llama 8×64 | 2 h 15 min | **45.5 min (3.0×)** |
+| Qwen 8×64 | 8 h 20 min on 2× H200 | **5 h 34 min on 1× H200** (≈3× fewer GPU-hours) |
+| Qwen 256×64 round 0 | 671 s on 2× H200 | **586 s on 1× H200** |
 
 ## 5. Perplexity
 
 W4A4 fake quantization: weights as listed, activations FourOverSix (NVFP4
 activations for the NVFP4 row). Evaluation uses the released protocol: WikiText-2
 test in 2,048-token windows and 256 seed-0 C4 validation crops. Lower is better.
-Paired ΔNLL is per window versus FourOverSix, ± 2 SE.
+MixFP4 rows are the converged maps from the optimized calibration of §4. Paired
+ΔNLL is per window versus FourOverSix, ± 2 SE.
 
 ### Llama-3.1-8B
 
@@ -146,13 +144,12 @@ Paired ΔNLL is per window versus FourOverSix, ± 2 SE.
 | BF16 (reference) | — | 6.240087 | 8.958212 | — |
 | NVFP4 | 0 | 6.940252 | 9.925099 | — |
 | NVFP4 FourOverSix | 0 | 6.875525 | 9.823733 | — |
-| **MixFP4 8×64** | 3,654 | **6.819751** | **9.750492** | −0.00815±0.00173 / −0.00748±0.00240 |
-| **MixFP4 256×64** (run 1) | 8,405 | 6.841998 | 9.774137 | −0.00489±0.00185 / −0.00506±0.00220 |
-| MixFP4 256×64 (run 2, optimized) | 8,393 | 6.835411 | 9.771621 | −0.00585±0.00187 / −0.00532±0.00220 |
+| **MixFP4 8×64** (SM120) | 3,645 | **6.817620** | **9.759931** | −0.00846±0.00171 / −0.00652±0.00203 |
+| **MixFP4 256×64** (SM100) | 8,393 | **6.835411** | **9.771621** | −0.00585±0.00187 / −0.00532±0.00220 |
 
 Versus FourOverSix:
-- **MixFP4 8×64:** −0.0558 WikiText / −0.0732 C4.
-- **MixFP4 256×64:** −0.0335 / −0.0496 (run 1) and −0.0401 / −0.0521 (run 2).
+- **MixFP4 8×64:** −0.0579 WikiText / −0.0638 C4.
+- **MixFP4 256×64:** −0.0401 / −0.0521.
 
 ### Qwen3.8-27B
 
@@ -161,54 +158,59 @@ Versus FourOverSix:
 | BF16 (reference) | — | 7.050375 | 9.893323 | — |
 | NVFP4 | 0 | 7.579994 | 10.230958 | — |
 | NVFP4 FourOverSix | 0 | 7.287076 | 10.188365 | — |
-| **MixFP4 8×64** | 17,441 | **7.166357** | **10.155802** | −0.01671±0.00381 / −0.00320±0.00084 |
-| **MixFP4 256×64** (run 1) | 39,099 | 7.246839 | 10.157245 | −0.00554±0.00343 / −0.00306±0.00092 |
-| MixFP4 256×64 (run 2) | 39,092 | 7.201498 | 10.149290 | −0.01181±0.00353 / −0.00384±0.00089 |
+| **MixFP4 8×64** (SM120) | 17,571 | **7.205417** | **10.148049** | −0.01127±0.00442 / −0.00396±0.00089 |
+| **MixFP4 256×64** (SM100) | 39,095 | **7.223045** | **10.152189** | −0.00883±0.00361 / −0.00356±0.00089 |
 
 Versus FourOverSix:
-- **MixFP4 8×64:** −0.1207 WikiText / −0.0326 C4.
-- **MixFP4 256×64:** −0.0402 / −0.0311 (run 1) and −0.0856 / −0.0391 (run 2).
+- **MixFP4 8×64:** −0.0817 WikiText / −0.0403 C4.
+- **MixFP4 256×64:** −0.0640 / −0.0362.
 
-**Qwen results depend on the selection path.**
-- The two 256×64 runs differ in only 999 of ~39,100 tiles. The difference comes
-  from floating-point summation order in scoring (two GPUs vs one), compounded
-  over rounds. Yet their WikiText gains differ by 2×.
-- In the 8×64 run, the map after round 4 scored better on both corpora
-  (7.153788 / 10.145843) than the converged map. Rounds 5–8 lowered development KL
-  but not test PPL.
-- The paired ±2 SE above does not include this selection variance.
-- A reliable Qwen number needs repeated selections, e.g. on different
-  calibration halves. Llama shows neither effect.
+**Run-to-run variation.** Earlier reference-implementation runs of the same
+algorithm give the spread caused by floating-point summation order, which moves
+borderline tiles and compounds over rounds.
+
+| Model | Tile | Optimized run (above) | Reference runs, ΔPPL vs FourOverSix (wiki / c4) |
+|---|---|---|---|
+| Llama | 8×64 | −0.0579 / −0.0638 | −0.0558 / −0.0732 |
+| Llama | 256×64 | −0.0401 / −0.0521 | −0.0335 / −0.0496 |
+| Qwen | 8×64 | −0.0817 / −0.0403 | −0.1207 / −0.0326 |
+| Qwen | 256×64 | −0.0640 / −0.0362 | −0.0402 / −0.0311 and −0.0856 / −0.0391 |
+
+- **Llama** is stable to within about ±0.01.
+- **Qwen varies by up to ±0.04 on WikiText.** Its reference 8×64 map also scored
+  better after round 4 than when converged, so late rounds can overfit the 192
+  development documents.
+- The paired ±2 SE in the tables above does not include this selection variance.
 
 ## 6. Zero-shot accuracy
 
-lm-eval 0.4.5, 0-shot, batch size 8: `arc_easy`, `arc_challenge`, `hellaswag`,
-`openbookqa`, `boolq`, `winogrande`. The metric is `acc_norm` where defined, else
-`acc`, and the mean is unweighted over the six tasks. BF16 and NVFP4 rows are from
-the earlier zero-shot study with the same protocol
-([details](MIXFP4_REPORT_DETAILS.md)). FourOverSix and MixFP4 rows are evaluated
-together in jobs 427938–427940.
+lm-eval 0.4.5, 0-shot: `arc_easy`, `arc_challenge`, `hellaswag`, `openbookqa`,
+`boolq`, `winogrande`. The metric is `acc_norm` where defined, else `acc`, and the
+mean is unweighted over the six tasks. Activation fake-quantization uses one
+tensor-wide scale **per document**, not per lm-eval batch, so results do not
+depend on batch size. Padding positions are included in a document's scale.
+Batch size 64. All rows are evaluated with this protocol on the §5 maps (jobs
+428890–428892).
 
 ### Llama-3.1-8B
 
 | Policy | arc_easy | arc_challenge | hellaswag | openbookqa | boolq | winogrande | mean |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| BF16 (reference) | 0.8106 | 0.5350 | 0.7885 | 0.4480 | 0.8196 | 0.7380 | 0.6899 |
-| NVFP4 | 0.7496 | 0.5085 | 0.7743 | 0.4280 | 0.7969 | 0.7182 | 0.6626 |
+| BF16 (reference) | *running* | | | | | | |
+| NVFP4 | *running* | | | | | | |
 | NVFP4 FourOverSix | *running* | | | | | | |
 | MixFP4 8×64 | *running* | | | | | | |
-| MixFP4 256×64 (run 1) | *running* | | | | | | |
+| MixFP4 256×64 | *running* | | | | | | |
 
 ### Qwen3.8-27B
 
 | Policy | arc_easy | arc_challenge | hellaswag | openbookqa | boolq | winogrande | mean |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| BF16 (reference) | 0.7298 | 0.5896 | 0.8291 | 0.4620 | 0.8670 | 0.7561 | 0.7056 |
-| NVFP4 | 0.7542 | 0.5828 | 0.8237 | 0.4460 | 0.7783 | 0.7451 | 0.6883 |
+| BF16 (reference) | *running* | | | | | | |
+| NVFP4 | *running* | | | | | | |
 | NVFP4 FourOverSix | *running* | | | | | | |
 | MixFP4 8×64 | *running* | | | | | | |
-| MixFP4 256×64 (run 1) | *running* | | | | | | |
-| MixFP4 256×64 (run 2) | *running* | | | | | | |
+| MixFP4 256×64 | *running* | | | | | | |
 
 ---
 
