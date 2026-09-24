@@ -19,7 +19,7 @@ export REORDER_HF_HOME=$MAIN/.joblib/huggingface PYTHON=$MAIN/.joblib/llama8b/bi
 source slurm/task_reorder_env.sh
 DEPS=$MAIN/.joblib/lmeval0492_x86
 if [[ ! -d "$DEPS/lm_eval" ]]; then
-  /home/u4320956/.local/bin/uv pip install --python "$PYTHON" --target "$DEPS" \
+  $MAIN/.joblib/bootstrap/bin/uv pip install --python "$PYTHON" --target "$DEPS" \
     lm_eval==0.4.9.2 "huggingface_hub>=0.34,<1.0" langdetect immutabledict
   rm -rf "$DEPS"/{transformers,tokenizers,torch,torchvision,torchaudio,triton,nvidia}
   rm -rf "$DEPS"/{transformers,tokenizers,torch,torchvision,torchaudio,triton}-*.dist-info
