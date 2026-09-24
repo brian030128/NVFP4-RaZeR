@@ -187,30 +187,56 @@ borderline tiles and compounds over rounds.
 lm-eval 0.4.5, 0-shot: `arc_easy`, `arc_challenge`, `hellaswag`, `openbookqa`,
 `boolq`, `winogrande`. The metric is `acc_norm` where defined, else `acc`, and the
 mean is unweighted over the six tasks. Activation fake-quantization uses one
-tensor-wide scale **per document**, not per lm-eval batch, so results do not
-depend on batch size. Padding positions are included in a document's scale.
-Batch size 64. All rows are evaluated with this protocol on the §5 maps (jobs
-428890–428892).
+tensor-wide scale **per document**, not per lm-eval batch; padding positions are
+included in a document's scale. Batch size is 64 for every row, and the MixFP4
+rows use the §5 maps (jobs 428890, 428891, 430876). Paired differences are
+computed per document within each task and averaged over the six tasks, ± 2 SE.
 
 ### Llama-3.1-8B
 
 | Policy | arc_easy | arc_challenge | hellaswag | openbookqa | boolq | winogrande | mean |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| BF16 (reference) | *running* | | | | | | |
-| NVFP4 | *running* | | | | | | |
-| NVFP4 FourOverSix | *running* | | | | | | |
-| MixFP4 8×64 | *running* | | | | | | |
-| MixFP4 256×64 | *running* | | | | | | |
+| BF16 (reference) | 0.8123 | 0.5367 | 0.7884 | 0.4460 | 0.8196 | 0.7356 | 0.6898 |
+| NVFP4 | 0.7500 | 0.5111 | 0.7754 | 0.4600 | 0.7920 | 0.7135 | 0.6670 |
+| NVFP4 FourOverSix | 0.7567 | 0.5111 | 0.7776 | 0.4420 | 0.8049 | 0.7072 | 0.6666 |
+| **MixFP4 8×64** (SM120) | 0.7757 | 0.5111 | 0.7787 | 0.4380 | 0.8141 | 0.7135 | **0.6718** |
+| **MixFP4 256×64** (SM100) | 0.7740 | 0.5077 | 0.7751 | 0.4440 | 0.8083 | 0.7080 | **0.6695** |
+
+| Comparison | Δ mean accuracy ± 2 SE |
+|---|---|
+| MixFP4 8×64 − FourOverSix | +0.0053 ± 0.0065 |
+| MixFP4 8×64 − NVFP4 | +0.0048 ± 0.0070 |
+| MixFP4 256×64 − FourOverSix | +0.0029 ± 0.0065 |
+| MixFP4 256×64 − NVFP4 | +0.0025 ± 0.0070 |
 
 ### Qwen3.8-27B
 
 | Policy | arc_easy | arc_challenge | hellaswag | openbookqa | boolq | winogrande | mean |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| BF16 (reference) | *running* | | | | | | |
-| NVFP4 | *running* | | | | | | |
-| NVFP4 FourOverSix | *running* | | | | | | |
-| MixFP4 8×64 | *running* | | | | | | |
-| MixFP4 256×64 | *running* | | | | | | |
+| BF16 (reference) | 0.7306 | 0.5887 | 0.8288 | 0.4640 | 0.8657 | 0.7561 | 0.7057 |
+| NVFP4 | 0.7496 | 0.5700 | 0.8227 | 0.4320 | 0.7700 | 0.7380 | 0.6804 |
+| NVFP4 FourOverSix | 0.7273 | 0.5725 | 0.8242 | 0.4540 | 0.8061 | 0.7514 | 0.6893 |
+| **MixFP4 8×64** (SM120) | 0.7306 | 0.5708 | 0.8231 | 0.4520 | 0.8076 | 0.7466 | **0.6885** |
+| **MixFP4 256×64** (SM100) | 0.7462 | 0.5922 | 0.8227 | 0.4540 | 0.8119 | 0.7514 | **0.6964** |
+
+| Comparison | Δ mean accuracy ± 2 SE |
+|---|---|
+| MixFP4 8×64 − FourOverSix | −0.0008 ± 0.0062 |
+| MixFP4 8×64 − NVFP4 | **+0.0081 ± 0.0066** |
+| MixFP4 256×64 − FourOverSix | **+0.0071 ± 0.0062** |
+| MixFP4 256×64 − NVFP4 | **+0.0160 ± 0.0066** |
+
+**Reading.**
+- MixFP4 never loses accuracy to FourOverSix or NVFP4 beyond noise.
+- **Significant gains:**
+  - Qwen 256×64 beats both baselines, mostly on arc_challenge (+0.020) and
+    arc_easy (+0.019).
+  - Qwen 8×64 beats NVFP4.
+- **Within noise:** the Llama gains (+0.003 to +0.005) and Qwen 8×64 versus
+  FourOverSix. These comparisons are underpowered: 2 SE is ±0.006–0.007 on the
+  six-task mean.
+- PPL gains (§5) and accuracy gains do not rank the same way. On Qwen, 8×64 has
+  the larger PPL gain but the smaller accuracy gain.
 
 ---
 
