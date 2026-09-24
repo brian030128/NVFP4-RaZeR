@@ -36,15 +36,20 @@ from run_math_code_calibration import load_model, math_code_data
 from run_task_reorder_eval import validate_evaluation_data
 
 CALIBRATIONS = {'llama8b': Path('/work/u4320956/task_reorder/transfer_20260920/llama8b/calibration'),
-                'qwen27b': Path('/work/u4320956/task_reorder/pilot_20260919/qwen27b/calibration')}
+                'qwen27b': Path('/work/u4320956/task_reorder/pilot_20260919/qwen27b/calibration'),
+                # Instruct shares the base tokenizer, so the base development documents
+                # and published windows apply unchanged (make_instruct_prior.py).
+                'llama8b_ins': Path('/work/u4320956/mixfp4_potential/llama8b_ins_calibration')}
 # Held-out math/code documents from recorded earlier confirmation gates, tokenized per model.
 DEVELOPMENT = {
     'llama8b': [Path('/work/u4320956/task_reorder/transfer_20260920/llama8b') / s
                 for s in ('confirmation', 'gate_up_confirm', 'tile_refine_confirm')],
     'qwen27b': [Path('/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2') / s
                 for s in ('fisher_subset_validate_v2_confirm', 'preserved_row_confirm', 'ce_target_combinations_confirm')]}
+DEVELOPMENT['llama8b_ins'] = DEVELOPMENT['llama8b']
 PUBLISHED = {'llama8b': 'results/kse_paper/job_336566/llama8b/report.json',
-             'qwen27b': 'results/kse_paper/job_336969/qwen27b/report.json'}
+             'qwen27b': 'results/kse_paper/job_336969/qwen27b/report.json',
+             'llama8b_ins': 'results/kse_paper/job_336566/llama8b/report.json'}
 
 
 def load_development(model):

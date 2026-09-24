@@ -24,7 +24,8 @@ from run_c4_frozen import digest_file
 from run_conditional_format import sha
 
 CALIBRATIONS = {'llama8b': '/work/u4320956/task_reorder/transfer_20260920/llama8b/calibration',
-                'qwen27b': '/work/u4320956/task_reorder/pilot_20260919/qwen27b/calibration'}
+                'qwen27b': '/work/u4320956/task_reorder/pilot_20260919/qwen27b/calibration',
+                'llama8b_ins': '/work/u4320956/mixfp4_potential/llama8b_ins_calibration'}
 TASKS = ('arc_easy', 'arc_challenge', 'hellaswag', 'openbookqa', 'boolq', 'winogrande')
 METRIC_KEYS = ('acc_norm,none', 'acc,none')
 
@@ -46,7 +47,13 @@ def main():
     ap.add_argument('--baselines', default='bf16,nvfp4,four_over_six',
                     help='Comma-separated baseline policies evaluated before the maps')
     ap.add_argument('--samples-dir', type=Path, default=None)
+    ap.add_argument('--tasks', default=','.join(TASKS),
+                    help='Comma-separated lm-eval tasks (e.g. gsm8k_llama,mmlu_cot_llama for the RaZeR CoT benchmark)')
+    ap.add_argument('--chat', action='store_true',
+                    help='apply_chat_template and fewshot_as_multiturn, as in run_llama_cot.py')
+    ap.add_argument('--limit', type=int, default=None, help='Documents per task (smoke runs only)')
     args = ap.parse_args()
+    tasks = tuple(t for t in args.tasks.split(',') if t)
     torch.backends.cuda.matmul.allow_tf32 = False
     qwen = args.model == 'qwen27b'
     prior = json.loads((Path(CALIBRATIONS[args.model]) / 'report.json').read_text())
@@ -56,8 +63,8 @@ def main():
         path, _, rows = rest.rpartition(':')
         specs[label] = (Path(path), int(rows))
     args.out.mkdir(parents=True, exist_ok=True)
-    r = dict(status='running', model=args.model, job_id=os.environ['SLURM_JOB_ID'], tasks=list(TASKS),
-             num_fewshot=0, batch_size=args.batch_size, lm_eval_version=lm_eval.__version__ if hasattr(lm_eval, '__version__') else None,
+    r = dict(status='running', model=args.model, job_id=os.environ['SLURM_JOB_ID'], tasks=list(tasks), chat=args.chat, limit=args.limit,
+             num_fewshot=None if args.chat else 0, batch_size=args.batch_size, lm_eval_version=lm_eval.__version__ if hasattr(lm_eval, '__version__') else None,
              transformers_version=transformers.__version__,
              maps={k: dict(path=str(p), tile_rows=rows, sha256=digest_file(p)) for k, (p, rows) in specs.items()},
              accuracy={})
@@ -132,23 +139,35 @@ def main():
         install(policy)
         torch.cuda.empty_cache()
         lm = HFLM(pretrained=model, tokenizer=tok, batch_size=args.batch_size)
-        full = lm_eval.simple_evaluate(model=lm, tasks=list(TASKS), num_fewshot=0, batch_size=args.batch_size,
-                                       bootstrap_iters=0, log_samples=args.samples_dir is not None)
+        extra = dict(apply_chat_template=True, fewshot_as_multiturn=True) if args.chat else dict(num_fewshot=0)
+        full = lm_eval.simple_evaluate(model=lm, tasks=list(tasks), batch_size=args.batch_size, limit=args.limit,
+                                       bootstrap_iters=0, log_samples=args.samples_dir is not None, **extra)
         if args.samples_dir:
             args.samples_dir.mkdir(parents=True, exist_ok=True)
-            keep = {task: [{'doc_id': rec.get('doc_id'), **{k: v for k, v in rec.items() if k in ('acc', 'acc_norm')}}
+            keep = {task: [{'doc_id': rec.get('doc_id'), **{k: v for k, v in rec.items() if k in ('acc', 'acc_norm', 'exact_match')}}
                            for rec in records] for task, records in (full.get('samples') or {}).items()}
             (args.samples_dir / f'{policy}.json').write_text(json.dumps(keep))
-        acc = {}
-        for task in TASKS:
-            values = full['results'][task]
-            key = next(k for k in METRIC_KEYS if k in values)
-            acc[task] = dict(metric=key.split(',')[0], value=values[key],
-                             stderr=values.get(key.replace(',none', '_stderr,none')))
-        acc['mean'] = sum(acc[t]['value'] for t in TASKS) / len(TASKS)
-        r['accuracy'][policy] = acc
+        # Every numeric metric of every returned task/group, e.g. exact_match with its
+        # strict/flexible filters for generation tasks.
+        r.setdefault('metrics', {})[policy] = {
+            task: {k: v for k, v in values.items() if isinstance(v, (int, float))}
+            for task, values in full['results'].items()}
+        if set(tasks) <= set(TASKS):
+            acc = {}
+            for task in tasks:
+                values = full['results'][task]
+                key = next(k for k in METRIC_KEYS if k in values)
+                acc[task] = dict(metric=key.split(',')[0], value=values[key],
+                                 stderr=values.get(key.replace(',none', '_stderr,none')))
+            acc['mean'] = sum(acc[t]['value'] for t in tasks) / len(tasks)
+            r['accuracy'][policy] = acc
+            print(f'ACC {policy} mean {acc["mean"]:.4f} ' + ' '.join(f'{t}={acc[t]["value"]:.4f}' for t in tasks), flush=True)
+        else:
+            for task in tasks:
+                em = {k: round(v, 4) for k, v in r['metrics'][policy].get(task, {}).items()
+                      if k.startswith('exact_match') and 'stderr' not in k}
+                print(f'ACC {policy} {task} {json.dumps(em)}', flush=True)
         save()
-        print(f'ACC {policy} mean {acc["mean"]:.4f} ' + ' '.join(f'{t}={acc[t]["value"]:.4f}' for t in TASKS), flush=True)
     for h in handles:
         h.remove()
     r['status'] = 'complete'
