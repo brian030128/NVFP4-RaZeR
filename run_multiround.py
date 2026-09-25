@@ -154,6 +154,9 @@ def main():
                     help='Fused (Triton) FourOverSix activation quantizers: per-token rows for scoring (quantize_rows) '
                          'and per-document for the fake evaluator (quant_per_document); bitwise identical, the first '
                          '64 calls of each are checked against the reference')
+    ap.add_argument('--tile-score-kernel', action='store_true',
+                    help='B1: fused per-sequence tile scores in the scoring backward (repro_local/realquant/tile_score.py; '
+                         'lean mode); FP32 summation order differs from the legacy hook, nothing else')
     ap.add_argument('--single-pass-epilogue', action='store_true',
                     help='Native evaluator: write bf16(D * gs) in one pass (torch.mul into a bf16 output); bitwise identical')
     ap.add_argument('--profile', type=Path, default=None, metavar='JSON',
@@ -166,6 +169,7 @@ def main():
     rows, cols = UNITS[args.unit]
     qwen = args.model == 'qwen27b'
     lean = args.memory_mode == 'lean'
+    assert not args.tile_score_kernel or lean, '--tile-score-kernel reads the lean candidate store'
     assert not args.skip_ce_backward or args.objective == 'kl', '--skip-ce-backward needs --objective kl'
     if args.deterministic:
         assert os.environ.get('CUBLAS_WORKSPACE_CONFIG') in (':4096:8', ':16:8'), 'set CUBLAS_WORKSPACE_CONFIG=:4096:8'
@@ -197,7 +201,8 @@ def main():
                             torch=torch.__version__, cuda=torch.version.cuda, transformers=transformers.__version__),
                   data_root=None if args.data_root is None else str(args.data_root), deviations=deviations,
                   skip_ce_backward=args.skip_ce_backward, memory_mode=args.memory_mode,
-                  speedups=dict(fused_act_quant=args.fused_act_quant, single_pass_epilogue=args.single_pass_epilogue),
+                  speedups=dict(fused_act_quant=args.fused_act_quant, single_pass_epilogue=args.single_pass_epilogue,
+                                tile_score_kernel=args.tile_score_kernel),
                   model=args.model, unit=args.unit, objective=args.objective,
                   eval_batch=args.eval_batch, score_batch=args.score_batch,
                   significant_steps=args.significant_steps, warm_start=args.warm_start,
@@ -208,7 +213,8 @@ def main():
                                                              'quantize/causal_four_over_six.py',
                                                              'repro_local/realquant/native_dev.py',
                                                              'repro_local/realquant/candidate_store.py',
-                                                             'quantize/fused_fourover6.py')},
+                                                             'quantize/fused_fourover6.py',
+                                                             'repro_local/realquant/tile_score.py')},
                   rounds=[])
     save(args.out, report)
     if qwen:
@@ -334,6 +340,8 @@ def main():
                 return store.decode(n, key[1])
         return weight_for
 
+    if args.tile_score_kernel:
+        from tile_score import tile_scores
     if lean and not bf16_only:
         from candidate_store import lean_forward
         for n, m in modules.items():
@@ -566,6 +574,13 @@ def main():
                     # Each sequence's loss reaches only its own slice of dy, so
                     # dy[i]^T x[i] is exactly sequence i's weight gradient.
                     dy = dy.detach().reshape(x.shape[0], -1, dy.shape[-1])
+                    if args.tile_score_kernel:
+                        # B1: every sequence's tile scores in one launch, added into the FP64 sums in sequence order
+                        with region('hook: B1 fused tile scores'):
+                            s = sums[n]
+                            tile_scores(dy, x, store.cand[n], sel[n], rows, cols, store._luts(dy.device),
+                                        s[2 * phase[0]], s[2 * phase[0] + 1])
+                        return
                     with region('hook: candidate decode + D'):
                         b = base(n)
                         d = (alt(n).float() - b.float()) * torch.where(expand(sel[n], rows, cols, b.shape[0]), -1., 1.)
@@ -718,6 +733,7 @@ def main():
                                                           if native is not None else []) + ['phase: scoring pass']
         regions = ['act_quant_rows (scoring)', 'act_quant_doc (fake evaluation)', 'hook: candidate decode + D',
                    'hook: G = dy^T x (FP32 matmul)', 'hook: G*D, tile reduction, FP64 accumulation',
+                   'hook: B1 fused tile scores',
                    'lean weight decode', 'logits log_softmax + CE/KL', 'teacher host-to-device',
                    'native weight build', 'native: activation quantization', 'native: FP4 GEMM',
                    'native: epilogue']
