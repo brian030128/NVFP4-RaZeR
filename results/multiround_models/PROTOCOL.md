@@ -175,3 +175,15 @@ Nothing is selected or tuned on WikiText-2 or C4.
    - **The criterion:** its fake and native initial per-document development CE and KL and its
      round-0 scores must be bitwise identical to Part B's lean DET-NATIVE-256x64 run.
    - **If it fails,** Part C stops and the failure is reported.
+
+2. **2026-09-25 11:22 UTC: PAUSED Part C before Phi-4 by user decision** (relayed by the
+   nvfp4-razer-c9 session).
+   - **Why:** the Qwen3-4B native-decision addendum (`qwen4b/det_fake/REPORT.md`) showed strong
+     path dependence and early stopping in the multi-round search at 8x64, so the algorithm may
+     change before the remaining models are run.
+   - **What stopped:** Phi-4 and Qwen3.8-27B are not started. Phi-4 had already been registered
+     (`phi4/registration.json`, 07:33:14 UTC) and its data prepared, but none of its runs started.
+   - **Mechanics:** the queue the last chain would have started was replaced by a no-op stub
+     (`queue_model.sh`; the real one is kept as `queue_model.sh.paused`).
+   - **Allowed to finish:** the one-shot k=3 map evaluation (Qwen3-4B addendum) finishes normally.
+   - **Next:** nothing further starts until the user decides the next step.
