@@ -98,6 +98,13 @@ class Kernel:
         lib.sm120_gemm.argtypes = [_c_ptr, _c_ptr, _c_ptr, _c_ptr, _c_ptr, _c_int, _c_int, _c_int,
                                    _c_ptr, _c_float, _c_ptr, _c_float, _c_ptr, _c_int, _c_int, _c_ptr, _c_size, _c_ptr]
         lib.sm120_gemm.restype = _c_int
+        self.has_quant = hasattr(lib, 'sm120_quant_rows')
+        if self.has_quant:
+            lib.sm120_quant_rows.argtypes = [_c_ptr, _c_i64, _c_int, _c_int, _c_int, _c_ptr, _c_ptr, _c_ptr, _c_ptr]
+            lib.sm120_quant_rows.restype = _c_int
+            lib.sm120_linear.argtypes = [_c_ptr, _c_i64, _c_int, _c_int, _c_int, _c_ptr, _c_ptr, _c_ptr,
+                                         _c_ptr, _c_ptr, _c_float, _c_ptr, _c_int, _c_ptr, _c_ptr, _c_size, _c_ptr]
+            lib.sm120_linear.restype = _c_int
         self.lib = lib
         buf = ctypes.create_string_buffer(4096)
         lib.sm120_describe(buf, 4096)
@@ -203,3 +210,25 @@ class Kernel:
         if rc != 0:
             raise LibraryError(f'sm120_gemm({m}, {n}, {k}) failed with code {rc}')
         return out
+
+    # -------------------------------------------------------------------------------- activation quantizer
+
+    QUANT_MODES = {'nvfp4_rows': 0, 'four_over_six_rows': 1}
+
+    def quant_rows(self, x2d, kind):
+        """CUDA per-token quantizer (csrc/quant_act.cuh): x [T, K] bf16 (unit column stride) ->
+        (packed [T, K/2], scale bytes in the kernel layout, gs [T]); same outputs as quant_act.quantize."""
+        if not self.has_quant:
+            raise LibraryError(f'{self.cfg.name} was built without the CUDA quantizer; rebuild it')
+        t, k = x2d.shape
+        if x2d.dtype != torch.bfloat16 or x2d.stride(1) != 1 or k % 32:
+            raise ValueError('x must be bf16 with unit column stride and K % 32 == 0')
+        dev = x2d.device
+        packed = torch.empty((t, k // 2), dtype=torch.uint8, device=dev)
+        sf = torch.empty(sf_buffer_size(t, k), dtype=torch.uint8, device=dev)
+        gs = torch.empty(t, dtype=torch.float32, device=dev)
+        rc = self.lib.sm120_quant_rows(x2d.data_ptr(), x2d.stride(0), t, k, self.QUANT_MODES[kind], packed.data_ptr(),
+                                       sf.data_ptr(), gs.data_ptr(), torch.cuda.current_stream(dev).cuda_stream)
+        if rc != 0:
+            raise LibraryError(f'sm120_quant_rows failed with code {rc}')
+        return packed, sf, gs

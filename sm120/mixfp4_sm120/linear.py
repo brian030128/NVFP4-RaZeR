@@ -1,9 +1,11 @@
 """NativeLinear: an nn.Linear replacement that runs the patched SM120 mixed FP4 GEMM.
 
-forward(x) = two launches, no other device work:
-  1. quant_act.quantize: per-token FP32 global scale, E2M1 codes packed two per byte, UE4M3 scale
-     bytes written directly into the kernel's scale-factor layout (padding zeroed in-kernel);
-  2. Kernel.gemm with the fused epilogue
+forward(x) = two launches issued by ONE ctypes call (sm120_linear), no other device work:
+  1. the per-token quantizer (csrc/quant_act.cuh; the Triton quant_act.quantize is the fallback for
+     libraries built without it -- both are bit-identical to the reference): FP32 global scale per
+     token, E2M1 codes packed two per byte, UE4M3 scale bytes written directly into the kernel's
+     scale-factor layout (padding zeroed in-kernel);
+  2. the GEMM with the fused epilogue
         weights on A (n16k64_wA):  D[out, t] = bf16((gs_w * gs_x[t]) * acc + bias[out]),
         D column-major, i.e. the row-major [t, out] tensor returned as is (no transpose, no copy);
         weights on B (n8k64_wB):   D[t, out] = bf16((gs_x[t] * gs_w) * acc + bias[out]), row-major.
@@ -54,6 +56,8 @@ class NativeLinear(torch.nn.Module):
                              persistent=False)
         self.weights_on_a = kernel.weight_operand == 0
         self.kernel_set = kernel if isinstance(kernel, KernelSet) else None
+        self.quant_mode = Kernel.QUANT_MODES[act_kind]
+        self.fused = True          # use sm120_linear when the selected library provides it
         self.calls = 0
         self.tokens = 0
 
@@ -81,13 +85,36 @@ class NativeLinear(torch.nn.Module):
         self.tokens += t
         if t == 0:
             return x.new_empty((*lead, n))
-        packed_x, sf_x, gs_x = quant_act.quantize(x2, self.act_kind)
         kern = self.kernel if self.kernel_set is None else self.kernel_set.pick(n, k, t)
+        if self.fused and kern.has_quant:
+            if x2.dtype != torch.bfloat16 or x2.stride(1) != 1:
+                x2 = x2.to(torch.bfloat16).contiguous()
+            dev = x2.device
+            # one scratch allocation for the quantized activation: packed codes | scale bytes | gs,
+            # each 256-byte aligned (TMA needs 16-byte aligned global addresses). Stream-ordered reuse
+            # by the caching allocator is safe: both kernels run before any later user on this stream.
+            off_sf = (t * k // 2 + 255) // 256 * 256
+            off_gs = (off_sf + sf_buffer_size(t, k) + 255) // 256 * 256
+            scratch = torch.empty(off_gs + 4 * t, dtype=torch.uint8, device=dev)
+            base = scratch.data_ptr()
+            y = torch.empty((t, n), dtype=torch.bfloat16, device=dev)
+            ws = kern.workspace(n, t, k, dev) if self.weights_on_a else kern.workspace(t, n, k, dev)
+            bias = self.bias_bf16
+            rc = kern.lib.sm120_linear(x2.data_ptr(), x2.stride(0), t, k, self.quant_mode, base,
+                                       base + off_sf, base + off_gs, self.packed.data_ptr(), self.sf.data_ptr(),
+                                       self.global_scale, None if bias is None else bias.data_ptr(), n, y.data_ptr(),
+                                       None if ws is None else ws.data_ptr(), 0 if ws is None else ws.numel(),
+                                       torch.cuda.current_stream(dev).cuda_stream)
+            if rc != 0:
+                raise RuntimeError(f'{self.name}: sm120_linear failed with code {rc}')
+            y = y.view(*lead, n)
+            return y if y.dtype == x.dtype else y.to(x.dtype)
+        packed_x, sf_x, gs_x = quant_act.quantize(x2, self.act_kind)
         if self.weights_on_a:
             y = kern.gemm(self.packed, self.sf, packed_x, sf_x, n, t, k,
-                                 scale_m_default=self.global_scale, scale_n=gs_x, bias=self.bias_bf16, check=False)
+                          scale_m_default=self.global_scale, scale_n=gs_x, bias=self.bias_bf16, check=False)
         else:
             y = kern.gemm(packed_x, sf_x, self.packed, self.sf, t, n, k,
-                                 scale_m=gs_x, scale_n_default=self.global_scale, bias=self.bias_bf16, check=False)
+                          scale_m=gs_x, scale_n_default=self.global_scale, bias=self.bias_bf16, check=False)
         y = y.view(*lead, n)
         return y if y.dtype == x.dtype else y.to(x.dtype)

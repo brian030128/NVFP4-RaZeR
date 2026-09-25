@@ -155,6 +155,8 @@ using LayoutSFB = typename Gemm::GemmKernel::CollectiveMainloop::LayoutSFB;
 #include "mixed_nvfp4_gemm.cu"
 #endif
 
+#include "quant_act.cuh"
+
 namespace {
 
 using SfConfig = typename Gemm::GemmKernel::CollectiveMainloop::Sm1xxBlkScaledConfig;
@@ -232,8 +234,6 @@ typename Gemm::Arguments make_arguments(Call const &c) {
 #ifndef SM120_CONFIG_NAME
 #define SM120_CONFIG_NAME "unnamed"
 #endif
-#define SM120_STR2(x) #x
-#define SM120_STR(x) SM120_STR2(x)
 
 }  // namespace
 
@@ -371,6 +371,41 @@ size_t sm120_workspace_size(int m, int n, int k, int splits, int decomposition) 
 // scale_m / scale_n / bias may be null: the scale then is the given default, the bias zero.
 // splits / decomposition select the K split of Stream-K builds (must be 1 / 0 otherwise).
 // Returns 0 on success; negative codes identify the failing step.
+// Per-token activation quantization (quant_act.cuh): x [T, K] bf16 with row stride x_stride ->
+// packed [T, K/2], scale bytes in the kernel layout (padding zeroed), gs [T]. mode 0 = nvfp4_rows,
+// 1 = four_over_six_rows.
+int sm120_quant_rows(void const *x, int64_t x_stride, int T, int K, int mode, void *packed, void *sf, void *gs,
+                     void *stream) {
+  if (K % 32 != 0 || T < 0) { return -1; }
+  if (T == 0) { return 0; }
+  cudaError_t err = sm120_quant::quant_rows(x, x_stride, T, K, mode, packed, sf, static_cast<float *>(gs),
+                                            static_cast<cudaStream_t>(stream));
+  return err == cudaSuccess ? 0 : -5000 - int(err);
+}
+
+int sm120_gemm(void const *a, void const *sfa, void const *b, void const *sfb, void *d,
+               int m, int n, int k,
+               float const *scale_m, float scale_m_default,
+               float const *scale_n, float scale_n_default,
+               void const *bias, int splits, int decomposition,
+               void *workspace, size_t workspace_size, void *stream);
+
+// One native Linear: quantize x [T, K] into the given buffers, then y = x W^T (+ bias) through
+// whichever operand this build puts the weights on. y is the row-major [T, N] bf16 output.
+int sm120_linear(void const *x, int64_t x_stride, int T, int K, int mode, void *x_packed, void *x_sf, void *x_gs,
+                 void const *w_packed, void const *w_sf, float gs_w, void const *bias, int N, void *y,
+                 void *workspace, size_t workspace_size, void *stream) {
+  int rc = sm120_quant_rows(x, x_stride, T, K, mode, x_packed, x_sf, x_gs, stream);
+  if (rc != 0 || T == 0) { return rc; }
+#if defined(SM120_BIAS_ON_N) && SM120_BIAS_ON_N      // weights on B: D[T, N] row-major
+  return sm120_gemm(x_packed, x_sf, w_packed, w_sf, y, T, N, K, static_cast<float const *>(x_gs), 1.0f, nullptr,
+                    gs_w, bias, 1, 0, workspace, workspace_size, stream);
+#else                                                // weights on A: D[N, T] column-major = y
+  return sm120_gemm(w_packed, w_sf, x_packed, x_sf, y, N, T, K, nullptr, gs_w, static_cast<float const *>(x_gs),
+                    1.0f, bias, 1, 0, workspace, workspace_size, stream);
+#endif
+}
+
 int sm120_gemm(void const *a, void const *sfa, void const *b, void const *sfb, void *d,
                int m, int n, int k,
                float const *scale_m, float scale_m_default,

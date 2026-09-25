@@ -55,3 +55,24 @@ def test_strided_rows(device):
     p, sf, gs = QA.quantize(x, 'four_over_six_rows')
     rp, rsf, rgs = reference(x.contiguous(), 'four_over_six_rows')
     assert torch.equal(p, rp) and torch.equal(sf, rsf) and torch.equal(gs, rgs)
+
+
+@pytest.mark.parametrize('kind', ['four_over_six_rows', 'nvfp4_rows'])
+@pytest.mark.parametrize('shape', SHAPES)
+def test_cuda_quantizer_bitwise(device, kind, shape):
+    """The CUDA C++ quantizer compiled into the kernel library matches the reference bit for bit."""
+    from mixfp4_sm120.lib import Kernel
+    try:
+        kern = Kernel.load('n16k64_wA')
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(str(e))
+    if not kern.has_quant:
+        pytest.skip('library built without the CUDA quantizer')
+    t, k = shape
+    for i, dist in enumerate(('llm', 'heavy', 'normal')):
+        x = make_x(t, k, 20 + i, dist)
+        rp, rsf, rgs = reference(x, kind)
+        p, sf, gs = kern.quant_rows(x, kind)
+        assert torch.equal(p, rp), (kind, shape, dist, 'packed')
+        assert torch.equal(sf, rsf), (kind, shape, dist, 'scale layout')
+        assert torch.equal(gs, rgs), (kind, shape, dist, 'global scale')

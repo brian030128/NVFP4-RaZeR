@@ -76,6 +76,10 @@ For `y = x Wᵀ (+ b)` with weights on operand A (`n16k64_wA`):
 
 - Each product of two decoded elements is exact; accumulation is FP32 on the tensor core (the
   summation order is the hardware's, not sequential).
+- The per-element accumulation sequence does not depend on the CTA tile width or warp arrangement
+  selected for a call (all builds of `select.FAMILIES` produce bitwise-identical outputs, tested),
+  so results are independent of the batch size. Split-K / Stream-K decompositions (the `*_sk`
+  builds; deterministic reduction) change the FP32 summation order and are not used by default.
 - The epilogue multiplies the two FP32 global scales (one rounding), does one FP32 FMA with the
   accumulator and the bias, and rounds once to BF16 (round-to-nearest-even). Output dtype: BF16,
   row-major `[tokens, out]` (the kernel stores D = W Xᵀ column-major, which is that tensor).

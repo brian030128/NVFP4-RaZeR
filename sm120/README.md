@@ -8,7 +8,8 @@ E2M1/E0M3 kernel from the mixfp4 project.
 ```
 gradient-guided selector (research/n16k64 campaign)  ->  frozen map  (MIXFP4MAP/1, maps/)
   -> eval/export_artifact.py   packed codes + tagged UE4M3 scales + global scales (artifacts/)
-  -> mixfp4_sm120.NativeLinear fused Triton activation quantizer -> patched SM120 GEMM (fused epilogue)
+  -> mixfp4_sm120.NativeLinear per-token activation quantizer -> patched SM120 GEMM (fused epilogue),
+                               both launched by one C call; tile width chosen per shape (configs/<gpu>.json)
   -> eval/ppl.py, bench/*      full-model quality and performance
 ```
 
@@ -22,17 +23,22 @@ gradient-guided selector (research/n16k64 campaign)  ->  frozen map  (MIXFP4MAP/
 
 | | |
 |---|---|
-| `kernel/` | the mixfp4 kernel, vendored from `brian030128/mixfp4@7b3ab34` (`VENDORED.json`: per-file upstream hashes). Three macro-guarded hooks were added to `src/mixed_nvfp4_gemm.cu` (`LOCAL_CHANGES.md`); with the macros unset it is the upstream code. |
+| `kernel/` | the mixfp4 kernel, vendored from `brian030128/mixfp4@7b3ab34` (`VENDORED.json`: per-file upstream hashes). Four macro-guarded hooks were added to `src/mixed_nvfp4_gemm.cu` (`LOCAL_CHANGES.md`); with the macros unset it is the upstream code. |
 | `third_party/cutlass` | CUTLASS submodule pinned to `e64a913` (v4.6.0-8), the commit mixfp4 was validated with |
-| `csrc/mixfp4_sm120.cu` | C ABI: GEMM with the fused epilogue, scale-factor layout, granule map, config description |
+| `csrc/mixfp4_sm120.cu` | C ABI: `sm120_linear` (quantize + GEMM), `sm120_gemm` with the fused epilogue, scale-factor layout, granule map, config description |
 | `build.py` | build → patch → verify → manifest, one shared library per configuration |
-| `mixfp4_sm120/` | Python: `configs`, `lib` (verified loading), `numerics` (the spec), `quant_act` (Triton), `mapio`, `artifact`, `linear`, `model` |
+| `mixfp4_sm120/` | Python: `configs`, `lib` (verified loading), `numerics` (the spec), `quant_act` (Triton quantizer, fallback/reference), `mapio`, `artifact`, `linear`, `model`, `select` (per-shape kernel choice) |
+| `csrc/quant_act.cuh` | the CUDA activation quantizer (bit-identical to the reference) that `sm120_linear` launches before the GEMM in one call |
+| `configs/<gpu>.json` | the frozen per-GPU kernel configuration: CTA-tile width per (out, in, token bucket), measured by `bench/tune_tiles.py` (raw timings in `<gpu>.raw.json`) |
+| `reproduce_gpu.sh` | build → test → tune → bench → quality on the current GPU, outputs under `results/<gpu>/` |
 | `maps/` | frozen N16K64 / N8K64 k=3 selector maps of the five campaign models, with provenance |
 | `tests/` | pytest suite (numerics, quantizer, kernel, artifact, Linear) |
-| `eval/` | artifact export, perplexity (bf16 / fake / native on one model), layer-by-layer diagnostics |
-| `bench/` | kernel-only, complete-Linear and full-model benchmarks |
+| `eval/` | artifact export, perplexity (bf16 / fake / native on one model), downstream accuracy (lm-eval), layer-by-layer diagnostics, full-model ownership proof, KV-cache decode check |
+| `bench/` | kernel-only, decomposition (Stream-K / split-K), tile tuning, complete-Linear and full-model benchmarks |
 | `results/` | committed raw results (JSON) of the runs reported in `RESULTS.md` |
-| `NUMERICS.md` | frozen numeric specification; `RESULTS.md`: measured results and open items |
+| `NUMERICS.md` | frozen numeric specification |
+| `RESULTS.md` | measured results, checklist status with evidence, open items |
+| `requirements.lock.txt` | exact Python environment of the recorded runs |
 
 ## Requirements (pinned)
 
@@ -42,16 +48,16 @@ gradient-guided selector (research/n16k64 campaign)  ->  frozen map  (MIXFP4MAP/
   validated with 13.1. Driver ≥ the one shipping CUDA 13.1.
 - Host compiler: any g++ supported by CUDA 13.1 (built and tested with g++ 13.3).
 - Python 3.12 with `torch==2.9.0+cu128`, `triton==3.5.0`, `transformers==5.16.1`,
-  `safetensors==0.8.0`, `numpy==2.4.4`, `pyarrow==25.0.1`, `pytest` (the research branch's
-  `main.lock.txt` versions). The fused quantizer's bit-exactness was established against these
-  torch arithmetic semantics; re-run `tests/test_quant_act.py` after any torch upgrade.
+  `safetensors==0.8.0`, `numpy==2.4.4`, `pyarrow==25.0.1`, `pytest`, `lm-eval==0.4.11` (the
+  research branch's `main.lock.txt` versions; full list in `requirements.lock.txt`). The
+  activation quantizers' bit-exactness is defined against these torch arithmetic semantics;
+  re-run `tests/test_quant_act.py` after any torch upgrade.
 
 ```bash
 git submodule update --init sm120/third_party/cutlass
 uv venv --python 3.12 ~/envs/sm120 && VIRTUAL_ENV=~/envs/sm120 uv pip install \
   --extra-index-url https://download.pytorch.org/whl/cu128 --index-strategy unsafe-best-match \
-  torch==2.9.0+cu128 triton==3.5.0 transformers==5.16.1 accelerate==1.13.0 safetensors==0.8.0 \
-  numpy==2.4.4 pyarrow==25.0.1 tokenizers==0.23.2 huggingface-hub==1.31.0 pytest
+  -r sm120/requirements.lock.txt          # exact environment of the recorded runs (incl. lm-eval 0.4.11)
 ```
 
 ## Build → patch → verify → run
@@ -101,8 +107,12 @@ In code:
 
 ```python
 from mixfp4_sm120 import model as NM
-rep = NM.install(hf_model, 'sm120/artifacts/qwen4b_n16_k3', kernel='n16k64_wA')   # strict by default
+rep = NM.install(hf_model, 'sm120/artifacts/qwen4b_n16_k3')   # kernel='auto', strict by default
 ```
+
+On a new GPU model, run `python sm120/bench/tune_tiles.py` once (idle GPU) and commit the resulting
+`configs/<gpu>.json`; without it `kernel='auto'` falls back to the rule "narrowest tile width holding
+all tokens". The whole sequence for a GPU is `sm120/reproduce_gpu.sh`.
 
 ## Kernel configurations
 
@@ -113,8 +123,22 @@ rep = NM.install(hf_model, 'sm120/artifacts/qwen4b_n16_k3', kernel='n16k64_wA') 
 | `n8k64_wB` | B | 8 cols × 64 K (contiguous) | 1×8 | N8K64 comparison |
 | `n16k64_wA_nodisp` | A | — (E2M1 only) | 4×2 | dispatch-free ceiling (latency only) |
 | `stock_wA`, `stock_wB` | A / B | — (E2M1 only) | CUTLASS default | stock NVFP4 baseline, same epilogue |
+| `n16k64_wA_n64/_n32/_n16` | A | 16 rows × 64 K | 4×2, token tile 64/32/16 | small-T (decode) kernels |
+| `stock_wA_n64/_n32/_n16` | A | — (E2M1 only) | CUTLASS default, token tile 64/32/16 | small-T baseline |
+| `n16k64_wA_sk`, `stock_wA_sk` | A | as above | 4×2, Stream-K scheduler | split-K study (not selected: see RESULTS.md) |
 
-All use a 128×128×128 CTA tile, 4 mainloop stages, 168 registers, no stack.
+Default CTA tile 128×128×128 (4 stages); the narrow-tile builds keep 128 rows and use 6-8 stages.
+All have 168 registers and no stack, and no predicated OMMA.
+
+### Shape-dependent selection (`kernel='auto'`)
+
+With weights on A, the token count is the GEMM's N. A 128-wide token tile computes 128 columns per
+k-tile however few tokens are real, so decode is MMA-bound on padding (measured: ~0.37 µs per
+128×128×128 k-tile per CTA regardless of T). `select.KernelSet` therefore holds the 16/32/64/128-wide
+builds of a family and picks one per call from `configs/<gpu>.json`. All widths execute the same
+per-element MMA sequence: outputs are **bitwise identical** across widths (tests/test_select.py), so
+the selection never changes a result and a token's output does not depend on the batch it is in.
+`kernel='auto_stock'` gives the stock NVFP4 family with the same selection (the fair baseline).
 
 ## Format ownership (selector block ↔ kernel granule ↔ MMA format)
 

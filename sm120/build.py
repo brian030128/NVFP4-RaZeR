@@ -241,7 +241,7 @@ def check_description(cfg, d):
 
 
 def source_hashes(blob):
-    files = [CSRC, PATCHER, BLOBGEN, Path(__file__), HERE / 'mixfp4_sm120' / 'configs.py']
+    files = [CSRC, CSRC.parent / 'quant_act.cuh', PATCHER, BLOBGEN, Path(__file__), HERE / 'mixfp4_sm120' / 'configs.py']
     files += sorted((KERNEL / 'src').rglob('*'))
     out = {}
     for p in files:

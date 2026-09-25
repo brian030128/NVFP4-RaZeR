@@ -65,13 +65,46 @@ def decode_eager(model, batch, prompt, gen):
         out = model(input_ids=nxt, past_key_values=cache, use_cache=True)
         nxt = out.logits[:, -1:].argmax(-1)
     torch.cuda.synchronize()
+    toks = []
     t0 = time.perf_counter()
     for _ in range(gen):
         out = model(input_ids=nxt, past_key_values=cache, use_cache=True)
         nxt = out.logits[:, -1:].argmax(-1)
+        toks.append(nxt)
     torch.cuda.synchronize()
     dt = time.perf_counter() - t0
-    return dict(ms_per_token=dt / gen * 1e3, tokens_per_s=batch * gen / dt)
+    return dict(ms_per_token=dt / gen * 1e3, tokens_per_s=batch * gen / dt), torch.cat(toks, 1)
+
+
+def rewind(cache, s_pos, pos):
+    """Set the next write position of a StaticCache and the graph's position input together.
+
+    transformers 5.x StaticLayer writes at its own device counter `cumulative_length` (advanced in
+    place by every update, including warm-up and capture calls), not at the cache_position it is
+    given; RoPE and the mask use cache_position. Both must point at the same slot."""
+    for layer in getattr(cache, 'layers', []):
+        if hasattr(layer, 'cumulative_length') and torch.is_tensor(layer.cumulative_length):
+            layer.cumulative_length.fill_(pos)
+    s_pos.fill_(pos)
+
+
+@torch.no_grad()
+def decode_eager_tokens(model, batch, prompt, n):
+    """Greedy tokens [first, ...] of an eager StaticCache decode (the reference for the graph run)."""
+    from transformers import StaticCache
+    L = prompt + n + 8
+    try:
+        cache = StaticCache(config=model.config, max_batch_size=batch, max_cache_len=L, device='cuda', dtype=torch.bfloat16)
+    except TypeError:
+        cache = StaticCache(config=model.config, max_cache_len=L)
+    ids = torch.randint(100, 20000, (batch, prompt), device='cuda', generator=torch.Generator('cuda').manual_seed(1))
+    out = model(input_ids=ids, past_key_values=cache, cache_position=torch.arange(prompt, device='cuda'), use_cache=True)
+    toks = [out.logits[:, -1:].argmax(-1)]
+    for i in range(n - 1):
+        out = model(input_ids=toks[-1], past_key_values=cache, cache_position=torch.tensor([prompt + i], device='cuda'),
+                    use_cache=True)
+        toks.append(out.logits[:, -1:].argmax(-1))
+    return None, torch.cat(toks, 1)
 
 
 @torch.no_grad()
@@ -101,7 +134,18 @@ def decode_graph(model, batch, prompt, gen):
     with torch.cuda.graph(g):
         nxt = step()
     # replay: feed the argmax back and advance the position in place
-    s_pos.fill_(prompt)
+    # correctness: replay from the prompt's first token and compare with an eager greedy decode
+    first = out.logits[:, -1:].argmax(-1)
+    s_ids.copy_(first)
+    rewind(cache, s_pos, prompt)
+    toks = []
+    for i in range(min(gen, 32)):
+        g.replay()
+        toks.append(nxt.clone())
+        s_ids.copy_(nxt)
+        s_pos.add_(1)
+    s_ids.copy_(first)
+    rewind(cache, s_pos, prompt)
     torch.cuda.synchronize()
     t0 = time.perf_counter()
     for i in range(gen):
@@ -110,7 +154,7 @@ def decode_graph(model, batch, prompt, gen):
         s_pos.add_(1)
     torch.cuda.synchronize()
     dt = time.perf_counter() - t0
-    return dict(ms_per_token=dt / gen * 1e3, tokens_per_s=batch * gen / dt)
+    return dict(ms_per_token=dt / gen * 1e3, tokens_per_s=batch * gen / dt), torch.cat([first] + toks, 1)
 
 
 def main():
@@ -146,10 +190,16 @@ def main():
         print(args.policy, 'prefill', spec, res['prefill'][spec], flush=True)
     res['peak_prefill_gib'] = torch.cuda.max_memory_allocated() / 2 ** 30
     for b in [int(v) for v in args.decode.split(',')]:
-        res['decode_eager'][b] = decode_eager(model, b, args.decode_prompt, args.gen)
+        res['decode_eager'][b], eager_toks = decode_eager(model, b, args.decode_prompt, args.gen)
         print(args.policy, 'decode eager', b, res['decode_eager'][b], flush=True)
         try:
-            res['decode_graph'][b] = decode_graph(model, b, args.decode_prompt, args.gen)
+            res['decode_graph'][b], graph_toks = decode_graph(model, b, args.decode_prompt, args.gen)
+            # eager_toks start after the prompt's argmax + 3 warm-up tokens; compare from the start instead
+            _, ref = decode_eager_tokens(model, b, args.decode_prompt, graph_toks.shape[1])
+            n = min(ref.shape[1], graph_toks.shape[1])
+            same = (ref[:, :n] == graph_toks[:, :n])
+            prefix = int(same.long().cumprod(1).sum(1).min())
+            res['decode_graph'][b].update(tokens_compared=n, token_match=float(same.double().mean()), min_identical_prefix=prefix)
         except Exception as e:  # noqa: BLE001
             res['decode_graph'][b] = dict(error=f'{type(e).__name__}: {str(e)[:300]}')
         print(args.policy, 'decode graph', b, res['decode_graph'][b], flush=True)
