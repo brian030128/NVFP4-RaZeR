@@ -1,0 +1,64 @@
+--- upstream/src/mixed_nvfp4_gemm.cu
++++ sm120/kernel/src/mixed_nvfp4_gemm.cu
+@@ -64,8 +64,17 @@
+ 
+ using ElementC = cutlass::bfloat16_t;
+ using ElementD = cutlass::bfloat16_t;
++// [NVFP4-RaZeR local hook, see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_D_COLMAJOR=1 stores C/D
++// column-major. With the weights on A the kernel computes D = W X^T (out x tokens); column-major D
++// is then the row-major [tokens, out] tensor a linear layer returns, so no transpose is needed.
++// Mainloop, dispatch and SASS sites are unaffected.
++#if defined(MIXFP4_D_COLMAJOR) && MIXFP4_D_COLMAJOR
++using LayoutCTag = cutlass::layout::ColumnMajor;
++using LayoutDTag = cutlass::layout::ColumnMajor;
++#else
+ using LayoutCTag = cutlass::layout::RowMajor;
+ using LayoutDTag = cutlass::layout::RowMajor;
++#endif
+ constexpr int AlignmentC = 128 / cutlass::sizeof_bits<ElementC>::value;
+ constexpr int AlignmentD = 128 / cutlass::sizeof_bits<ElementD>::value;
+ 
+@@ -150,6 +159,17 @@
+ using MixedEpilogueTile = cutlass::epilogue::collective::EpilogueTileAuto;
+ #endif
+ 
++// [NVFP4-RaZeR local hook, see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_EPILOGUE_FUSION_T=<name>
++// replaces the epilogue's fusion with a callbacks type the including translation unit declared as
++// `template <class CtaTileMNK> using <name> = ...;` before including this file. Unset, it is
++// exactly the builder's default (LinearCombination with ElementCompute = ElementAccumulator).
++#if defined(MIXFP4_EPILOGUE_FUSION_T)
++using MixedEpilogueFusion = MIXFP4_EPILOGUE_FUSION_T<ThreadBlockShape>;
++#else
++using MixedEpilogueFusion = cutlass::epilogue::fusion::LinearCombination<
++    ElementD, ElementAccumulator, ElementC, ElementAccumulator>;
++#endif
++
+ using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
+     ArchTag, OperatorClass,
+     ThreadBlockShape, ClusterShape,
+@@ -157,7 +177,8 @@
+     ElementAccumulator, ElementAccumulator,
+     ElementC, LayoutCTag, AlignmentC,
+     ElementD, LayoutDTag, AlignmentD,
+-    cutlass::epilogue::collective::EpilogueScheduleAuto>::CollectiveOp;
++    cutlass::epilogue::collective::EpilogueScheduleAuto,
++    MixedEpilogueFusion>::CollectiveOp;
+ 
+ // The standard builder: reused purely for its derived types (TiledMma, SmemLayoutAtoms, etc.),
+ // not instantiated as an actual mainloop -- CollectiveOp below deliberately isn't used.
+@@ -470,6 +491,10 @@
+   }
+ }
+ 
++// [NVFP4-RaZeR local hook, see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_NO_SELFTEST=1 omits the
++// self-test driver (run/main) so the kernel types can be included by a library whose epilogue
++// arguments differ from the LinearCombination ones run() constructs.
++#if !(defined(MIXFP4_NO_SELFTEST) && MIXFP4_NO_SELFTEST)
+ int run(int m, int n, int k, int warmup_iters, int bench_iters) {
+   using Sm1xxBlkScaledConfig = typename Gemm::GemmKernel::CollectiveMainloop::Sm1xxBlkScaledConfig;
+ 
+@@ -773,3 +798,4 @@
+ 
+   return run(m, n, k, warmup_iters, bench_iters);
+ }
++#endif  // !MIXFP4_NO_SELFTEST
