@@ -81,7 +81,10 @@ def main():
                 pol['map_sha256'] = digest
             fq.install(pol['weight'], masks, tb)
         else:
-            fq.remove()
+            if fq.modules:                  # first native policy: free the BF16 Linear weights
+                fq.release()
+                mods = None
+                torch.cuda.empty_cache()
             r = NM.install(model, pol['artifact'], kernel=pol['kernel'], loader=C.MODELS[args.model]['loader'])
             pol['install'] = r.as_dict()
             pol['artifact_map_sha256'] = r.map_sha256
@@ -98,6 +101,10 @@ def main():
             if task in res.get('samples', {}):
                 samples[(pol['name'], task)] = per_example(res['samples'][task], m)
                 pr[task]['n'] = len(samples[(pol['name'], task)])
+                # per-example correctness, doc_id order: lets separate runs be paired later
+                ids = sorted(samples[(pol['name'], task)])
+                pr[task]['doc_ids_sha'] = __import__('hashlib').sha256(json.dumps(ids).encode()).hexdigest()
+                pr[task]['correct'] = ''.join('1' if samples[(pol['name'], task)][i] else '0' for i in ids)
         rec = dict(primary=pr, seconds=time.time() - t0)
         if pol['kind'] == 'native':
             cov = NM.coverage(model)

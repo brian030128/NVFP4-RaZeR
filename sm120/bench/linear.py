@@ -74,6 +74,11 @@ def main():
                 'native_n16k64_map_w128': NativeLinear(pack_module(proj, lin.weight, None, 'map', mask, (16, 64)), wide,
                                                        'four_over_six_rows', proj),
             }
+            # a benchmark calls one module on one unchanged input over and over: shared-input
+            # quantization would (correctly) skip the quantizer after the first call and hide its cost
+            for mod in pols.values():
+                if isinstance(mod, NativeLinear):
+                    mod.share_input = False
             for t in [int(x) for x in args.tokens.split(',')]:
                 x = torch.randn(t, k, generator=g).cuda().bfloat16()
                 for pname, mod in pols.items():

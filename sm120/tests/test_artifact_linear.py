@@ -198,3 +198,84 @@ def test_repeat_determinism_and_cuda_graph(device, kern, tmp_path):
         graph.replay()
         torch.cuda.synchronize()
         assert torch.equal(static_y, w)
+
+
+def test_shared_input_quantization(device, kern, tmp_path):
+    """q/k/v-style calls on one input reuse its quantized activation; results are bitwise equal to
+    unshared calls; an in-place update of the input, or a different tensor, is never served stale."""
+    from mixfp4_sm120.linear import clear_quant_cache
+    mods = make_modules()
+    path, digest, _ = write_map(tmp_path, mods)
+    A.export(tmp_path / 'art', mods, kind='map', map_path=path, map_sha256=digest)
+    meta, weights = A.load(tmp_path / 'art')
+    names = ['layers.0.q_proj', 'layers.1.v_proj', 'layers.1.up_proj']      # all take 512 inputs
+    nls = [NativeLinear(weights[n], kern, 'four_over_six_rows', n) for n in names]
+    if not kern.has_quant:
+        pytest.skip('library without the CUDA quantizer')
+    x = torch.randn(2, 9, 512, device='cuda').bfloat16()
+    for nl in nls:
+        nl.share_input = False
+    want = [nl(x) for nl in nls]
+    clear_quant_cache()
+    for nl in nls:
+        nl.share_input = True
+    got = [nl(x) for nl in nls]
+    assert all(torch.equal(a, b) for a, b in zip(got, want))
+    assert [nl.quant_reused for nl in nls] == [0, 1, 1]
+    x.mul_(2.0)                                     # in place: the cached quantization is stale
+    y = nls[1](x)
+    nls[1].share_input = False
+    assert torch.equal(y, nls[1](x)) and nls[1].quant_reused == 1
+    nls[1].share_input = True
+    x2 = x.clone()                                  # same values, different tensor: recomputed,
+    assert torch.equal(nls[2](x2), nls[2](x)) and nls[2].quant_reused == 1   # never served stale
+
+
+def test_shared_quantization_not_reused_across_capture(device, kern, tmp_path):
+    """An eager call right before capture on the same stream must not let the graph skip quantization."""
+    from mixfp4_sm120.linear import clear_quant_cache
+    mods = make_modules()
+    path, digest, _ = write_map(tmp_path, mods)
+    A.export(tmp_path / 'art', mods, kind='map', map_path=path, map_sha256=digest)
+    meta, weights = A.load(tmp_path / 'art')
+    nl = NativeLinear(weights['layers.0.q_proj'], kern, 'four_over_six_rows', 'q')
+    if not kern.has_quant:
+        pytest.skip('library without the CUDA quantizer')
+    clear_quant_cache()
+    static_x = torch.randn(4, 512, device='cuda').bfloat16()
+    s = torch.cuda.Stream()
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.stream(s):
+        nl(static_x)                                # eager, then capture on the same stream
+        torch.cuda.synchronize()
+        with torch.cuda.graph(graph, stream=s):
+            static_y = nl(static_x)
+    new = torch.randn(4, 512, device='cuda').bfloat16()
+    static_x.copy_(new)
+    graph.replay()
+    torch.cuda.synchronize()
+    nl.share_input = False
+    assert torch.equal(static_y, nl(new))
+
+
+@pytest.mark.parametrize('bias', [False, True])
+def test_native_linear_weights_on_b(device, tmp_path, bias):
+    """N8K64 map artifact on the weights-on-B build (fused path when available), vs FP64."""
+    try:
+        kb = Kernel.load('n8k64_wB')
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(str(e))
+    mods = make_modules(bias=bias)
+    g = torch.Generator(device='cpu').manual_seed(8)
+    masks = {n: torch.rand(m.weight.shape[0] // 8, m.weight.shape[1] // 64, generator=g) < 0.3 for n, m in mods.items()}
+    header = mapio.build_header(protocol_id='unit-test', policy=dict(name='synthetic-n8'),
+                                model=dict(model_id='synthetic', revision='0'), type_block=(8, 64), masks=masks,
+                                weight_shapes={n: tuple(m.weight.shape) for n, m in mods.items()},
+                                source_manifest_sha256='none', calibration_manifest_sha256='none')
+    digest, path = mapio.write_map(tmp_path / 'n8.mixfp4map', header, masks)
+    A.export(tmp_path / 'art', mods, kind='map', map_path=path, map_sha256=digest)
+    meta, weights = A.load(tmp_path / 'art')
+    for n, m in mods.items():
+        nl = NativeLinear(weights[n], kb, meta['activation_quantizer'], name=n)
+        x = torch.randn(3, 11, m.in_features, generator=g).cuda().bfloat16()
+        assert rel(nl(x), fp64_linear(weights[n], x, meta['activation_quantizer'])) < 3e-3

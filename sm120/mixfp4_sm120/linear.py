@@ -20,6 +20,18 @@ from .lib import Kernel, sf_buffer_size, sf_offset_formula
 from .select import KernelSet
 
 
+# The last quantized activation per (device, stream): q/k/v (and gate/up) projections receive the
+# SAME input tensor, so the second and third quantize it again for nothing. The entry holds a
+# reference to that input, so its storage cannot be freed and handed to another tensor at the same
+# address while cached, and the key includes the tensor version counter, so an in-place update
+# invalidates it. Only the fused (CUDA-quantizer) path uses it; NativeLinear.share_input disables it.
+_LAST_QUANT = {}
+
+
+def clear_quant_cache():
+    _LAST_QUANT.clear()
+
+
 def place_scales(scales, k):
     """Row-major [rows, k/16] scale bytes -> the kernel's block-scaled layout (zero padding)."""
     rows = scales.shape[0]
@@ -58,6 +70,8 @@ class NativeLinear(torch.nn.Module):
         self.kernel_set = kernel if isinstance(kernel, KernelSet) else None
         self.quant_mode = Kernel.QUANT_MODES[act_kind]
         self.fused = True          # use sm120_linear when the selected library provides it
+        self.share_input = True    # reuse the previous call's quantized activation of the same tensor
+        self.quant_reused = 0
         self.calls = 0
         self.tokens = 0
 
@@ -90,6 +104,26 @@ class NativeLinear(torch.nn.Module):
             if x2.dtype != torch.bfloat16 or x2.stride(1) != 1:
                 x2 = x2.to(torch.bfloat16).contiguous()
             dev = x2.device
+            stream = torch.cuda.current_stream(dev).cuda_stream
+            y = torch.empty((t, n), dtype=torch.bfloat16, device=dev)
+            bias = self.bias_bf16
+            # capture state is part of the key: a graph must never skip its own quantizer because of
+            # an eager call made before the capture (the replay would then read stale activations)
+            key = (x2.data_ptr(), tuple(x2.shape), tuple(x2.stride()), x2._version, self.quant_mode, stream,
+                   torch.cuda.is_current_stream_capturing())
+            last = _LAST_QUANT.get(dev.index) if self.share_input else None
+            if last is not None and last[1] == key:
+                _, _, _, base, off_sf, off_gs = last
+                self.quant_reused += 1
+                bptr = None if bias is None else bias.data_ptr()
+                if self.weights_on_a:
+                    kern.gemm_ptr(self.packed.data_ptr(), self.sf.data_ptr(), base, base + off_sf, n, t, k,
+                                  None, self.global_scale, base + off_gs, 1.0, bptr, y, stream)
+                else:
+                    kern.gemm_ptr(base, base + off_sf, self.packed.data_ptr(), self.sf.data_ptr(), t, n, k,
+                                  base + off_gs, 1.0, None, self.global_scale, bptr, y, stream)
+                y = y.view(*lead, n)
+                return y if y.dtype == x.dtype else y.to(x.dtype)
             # one scratch allocation for the quantized activation: packed codes | scale bytes | gs,
             # each 256-byte aligned (TMA needs 16-byte aligned global addresses). Stream-ordered reuse
             # by the caching allocator is safe: both kernels run before any later user on this stream.
@@ -97,14 +131,14 @@ class NativeLinear(torch.nn.Module):
             off_gs = (off_sf + sf_buffer_size(t, k) + 255) // 256 * 256
             scratch = torch.empty(off_gs + 4 * t, dtype=torch.uint8, device=dev)
             base = scratch.data_ptr()
-            y = torch.empty((t, n), dtype=torch.bfloat16, device=dev)
             ws = kern.workspace(n, t, k, dev) if self.weights_on_a else kern.workspace(t, n, k, dev)
-            bias = self.bias_bf16
+            if self.share_input:
+                _LAST_QUANT[dev.index] = (x2, key, scratch, base, off_sf, off_gs)
             rc = kern.lib.sm120_linear(x2.data_ptr(), x2.stride(0), t, k, self.quant_mode, base,
                                        base + off_sf, base + off_gs, self.packed.data_ptr(), self.sf.data_ptr(),
                                        self.global_scale, None if bias is None else bias.data_ptr(), n, y.data_ptr(),
                                        None if ws is None else ws.data_ptr(), 0 if ws is None else ws.numel(),
-                                       torch.cuda.current_stream(dev).cuda_stream)
+                                       stream)
             if rc != 0:
                 raise RuntimeError(f'{self.name}: sm120_linear failed with code {rc}')
             y = y.view(*lead, n)

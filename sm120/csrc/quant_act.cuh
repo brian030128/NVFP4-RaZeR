@@ -7,8 +7,12 @@
 //                               against the E2M1 midpoints; the /4 candidate iff its squared error
 //                               (16-term adjacent pairwise tree, every op separately rounded) is lower
 // Every multiply/add/divide is an explicitly rounded intrinsic, so the compiler cannot contract or
-// reassociate them. One CTA per padded token row; rows >= T and K blocks >= K/16 inside the last
-// 64-K atom get zero scale bytes (the GEMM reads them; 0x7F would be an E4M3 NaN).
+// reassociate them. Rows >= T and K blocks >= K/16 inside the last 64-K atom get zero scale bytes
+// (the GEMM reads them; 0x7F would be an E4M3 NaN).
+// Grid: (padded token rows) x (K chunks). Few tokens (decode) cannot fill the GPU one CTA per row,
+// so a row is then split into up to K/2048 chunks: every CTA of the row recomputes the row amax
+// (exact and order-independent, but a full re-read of the row) and quantizes only its chunk. With
+// enough rows there is one chunk per row, so the row is read once for the amax.
 #pragma once
 
 #include <cuda_bf16.h>
@@ -58,13 +62,17 @@ __device__ __forceinline__ int64_t sf_offset(int64_t row, int kb, int k_atoms) {
 template <int MODE>
 __global__ void __launch_bounds__(kThreads)
 quant_rows_kernel(__nv_bfloat16 const *__restrict__ x, int64_t x_stride, uint8_t *__restrict__ packed,
-                  uint8_t *__restrict__ sf, float *__restrict__ gs_out, int T, int K, float inv2688, float inv6) {
+                  uint8_t *__restrict__ sf, float *__restrict__ gs_out, int T, int K, int chunk_blocks,
+                  float inv2688, float inv6) {
   int64_t const row = blockIdx.x;
   int const KB = K / 16;
   int const KB_PAD = (KB + 3) / 4 * 4;
   int const k_atoms = KB_PAD / 4;
+  int const kb_begin = blockIdx.y * chunk_blocks;                 // this CTA's chunk of scale blocks
+  int const kb_end_pad = min(kb_begin + chunk_blocks, KB_PAD);
+  int const kb_end = min(kb_begin + chunk_blocks, KB);
   if (row >= T) {
-    for (int kb = threadIdx.x; kb < KB_PAD; kb += kThreads) { sf[sf_offset(row, kb, k_atoms)] = 0; }
+    for (int kb = kb_begin + threadIdx.x; kb < kb_end_pad; kb += kThreads) { sf[sf_offset(row, kb, k_atoms)] = 0; }
     return;
   }
   __nv_bfloat16 const *xr = x + row * x_stride;
@@ -80,9 +88,9 @@ quant_rows_kernel(__nv_bfloat16 const *__restrict__ x, int64_t x_stride, uint8_t
 #pragma unroll
   for (int w = 1; w < kThreads / 32; ++w) { amax = fmaxf(amax, red[w]); }
   float const gs = fmaxf(__fmul_rn(amax, inv2688), 1.17549435e-38f);
-  if (threadIdx.x == 0) { gs_out[row] = gs; }
-  // pass 2: one 16-element scale block per thread iteration
-  for (int kb = threadIdx.x; kb < KB; kb += kThreads) {
+  if (threadIdx.x == 0 && blockIdx.y == 0) { gs_out[row] = gs; }
+  // pass 2: this CTA's chunk of 16-element scale blocks
+  for (int kb = kb_begin + threadIdx.x; kb < kb_end; kb += kThreads) {
     float s[16];
     float peak = 0.f;
 #pragma unroll
@@ -142,12 +150,25 @@ quant_rows_kernel(__nv_bfloat16 const *__restrict__ x, int64_t x_stride, uint8_t
     *dst = make_uint2(w0, w1);
     sf[sf_offset(row, kb, k_atoms)] = e4m3_byte(scale);
   }
-  for (int kb = KB + threadIdx.x; kb < KB_PAD; kb += kThreads) { sf[sf_offset(row, kb, k_atoms)] = 0; }
+  for (int kb = max(KB, kb_begin) + threadIdx.x; kb < kb_end_pad; kb += kThreads) { sf[sf_offset(row, kb, k_atoms)] = 0; }
 }
 
 inline cudaError_t quant_rows(void const *x, int64_t x_stride, int T, int K, int mode, void *packed, void *sf,
                               float *gs, cudaStream_t stream) {
   int const rows_pad = (T + 127) / 128 * 128;
+  int const kb_pad = (K / 16 + 3) / 4 * 4;
+  static int num_sms = 0;
+  if (num_sms == 0) {
+    int dev = 0;
+    cudaGetDevice(&dev);
+    cudaDeviceGetAttribute(&num_sms, cudaDevAttrMultiProcessorCount, dev);
+    if (num_sms <= 0) { num_sms = 1; }
+  }
+  int const max_chunks = (kb_pad + kThreads - 1) / kThreads;      // at least one block per thread
+  int const want = (2 * num_sms + T - 1) / T;                      // ~2 CTAs per SM from the real rows
+  int const chunks = want < 1 ? 1 : (want > max_chunks ? max_chunks : want);
+  int const chunk_blocks = (kb_pad + chunks - 1) / chunks;
+  dim3 const grid(rows_pad, chunks);
   // torch divides by a Python scalar as a multiply by its FP32 reciprocal
   float const inv2688 = 1.0f / 2688.0f;
   float const inv6 = 1.0f / 6.0f;
@@ -155,9 +176,9 @@ inline cudaError_t quant_rows(void const *x, int64_t x_stride, int T, int K, int
   auto *p = static_cast<uint8_t *>(packed);
   auto *s = static_cast<uint8_t *>(sf);
   if (mode == 1) {
-    quant_rows_kernel<1><<<rows_pad, kThreads, 0, stream>>>(xb, x_stride, p, s, gs, T, K, inv2688, inv6);
+    quant_rows_kernel<1><<<grid, kThreads, 0, stream>>>(xb, x_stride, p, s, gs, T, K, chunk_blocks, inv2688, inv6);
   } else {
-    quant_rows_kernel<0><<<rows_pad, kThreads, 0, stream>>>(xb, x_stride, p, s, gs, T, K, inv2688, inv6);
+    quant_rows_kernel<0><<<grid, kThreads, 0, stream>>>(xb, x_stride, p, s, gs, T, K, chunk_blocks, inv2688, inv6);
   }
   return cudaGetLastError();
 }

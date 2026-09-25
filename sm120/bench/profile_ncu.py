@@ -69,9 +69,10 @@ def main():
     ap.add_argument('--out', required=True)
     args = ap.parse_args()
     B.require_idle()
-    runner = Path(args.out).with_suffix('.runner.py')
-    runner.parent.mkdir(parents=True, exist_ok=True)
+    import tempfile
+    runner = Path(tempfile.mkdtemp(prefix='sm120_ncu_')) / 'runner.py'     # generated, not a result
     runner.write_text(RUNNER.format(sm120=str(HERE.parent), bench=str(HERE)))
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     res = dict(gpu=B.gpu_info(), metrics=METRICS, rows=[])
     for shape in args.shapes.split(','):
         n, k, t = (int(v) for v in shape.split('x'))

@@ -1,8 +1,9 @@
 #!/bin/bash
-# Post-quality-chain queue on the RTX 5090 (sequential; the GPU is otherwise idle).
+# Post-quality-chain queue as run on the RTX 5090 (sequential; the GPU is otherwise idle).
+# Its lm-eval step failed on this machine's read-only shared datasets cache; see lmeval_queue.sh.
 set -uo pipefail
-cd /home/JAAAAAA/NVFP4-RaZeR
-PY=/home/JAAAAAA/envs/sm120/bin/python
+cd "$(dirname "$0")/../.."
+PY=${PY:-python}      # the recorded run used the sm120 venv (requirements.lock.txt)
 S=sm120; R=sm120/results
 until grep -q "done mistral7b" $R/ppl/run_quality.log; do sleep 30; done
 echo "[queue] start $(date -u +%FT%TZ)"

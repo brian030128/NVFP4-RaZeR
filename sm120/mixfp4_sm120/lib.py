@@ -211,6 +211,16 @@ class Kernel:
             raise LibraryError(f'sm120_gemm({m}, {n}, {k}) failed with code {rc}')
         return out
 
+    def gemm_ptr(self, a, sfa, b, sfb, m, n, k, scale_m, scale_m_default, scale_n, scale_n_default, bias, out, stream):
+        """Unchecked GEMM on raw device pointers (ints / None); `out` is a preallocated bf16 tensor."""
+        ws = self.workspace(m, n, k, out.device)
+        rc = self.lib.sm120_gemm(a, sfa, b, sfb, out.data_ptr(), m, n, k, scale_m, float(scale_m_default), scale_n,
+                                 float(scale_n_default), bias, 1, 0, None if ws is None else ws.data_ptr(),
+                                 0 if ws is None else ws.numel(), stream)
+        if rc != 0:
+            raise LibraryError(f'sm120_gemm({m}, {n}, {k}) failed with code {rc}')
+        return out
+
     # -------------------------------------------------------------------------------- activation quantizer
 
     QUANT_MODES = {'nvfp4_rows': 0, 'four_over_six_rows': 1}

@@ -1,0 +1,348 @@
+{
+ "model": "qwen4b",
+ "spec": {
+  "model_id": "Qwen/Qwen3-4B",
+  "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+  "loader": "causal_lm"
+ },
+ "suite": "representative",
+ "tasks": [
+  "arc_challenge",
+  "piqa",
+  "winogrande",
+  "boolq"
+ ],
+ "batch_size": 16,
+ "limit": null,
+ "lm_eval": "0.4.11",
+ "torch": "2.9.0+cu128",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "started_utc": "2026-09-25T08:26:51+00:00",
+ "policies": [
+  {
+   "name": "bf16",
+   "kind": "bf16"
+  },
+  {
+   "name": "fake_four_over_six",
+   "kind": "fake",
+   "weight": "four_over_six",
+   "map": null
+  },
+  {
+   "name": "fake_n16_k3",
+   "kind": "fake",
+   "weight": "map",
+   "map": "sm120/maps/qwen4b_seed0_n16_k3.mixfp4map",
+   "map_sha256": "d8e3e0fae552b135341aa80fc09cea0f1abc5de8837f4c39d1fb4d15a5cd1ff2"
+  },
+  {
+   "name": "native_four_over_six",
+   "kind": "native",
+   "artifact": "sm120/artifacts/qwen4b_four_over_six",
+   "kernel": "auto",
+   "install": {
+    "kernel": "KernelSet(mixed)",
+    "kernel_sha256": {
+     "n16k64_wA_n16": "8c478a04719d50d38b6e07490a4ee2e47e1cd6c187e65442d19920a9b058b34f",
+     "n16k64_wA_n32": "9ec62cb925a29c4a176108785b5822963773cb5392c97e8e25bbf12725b8e72d",
+     "n16k64_wA_n64": "a24b17fd5091f71a32921d7cd83ce672d165725accf357e163cadbcab59eebce",
+     "n16k64_wA": "8feccff55061da117cf80811df52d09c99253f0d5642b1e1e2712ca35b2ffd50"
+    },
+    "artifact_weights_sha256": "b6a9034d54020657f1862cbb0cd9d6adbd43b9d3e9594057039b42cdd87a88ce",
+    "map_sha256": null,
+    "native_modules": 252,
+    "fallback": [],
+    "bf16_by_design": [
+     "lm_head (output head)"
+    ],
+    "e0m3_tiles": 0,
+    "device_bytes": {
+     "packed": 1816657920,
+     "scales_placed": 227082240,
+     "scales_padding": 0,
+     "bias": 0
+    },
+    "kernel_set": {
+     "family": "mixed",
+     "kernels": {
+      "n16k64_wA_n16": "8c478a04719d50d38b6e07490a4ee2e47e1cd6c187e65442d19920a9b058b34f",
+      "n16k64_wA_n32": "9ec62cb925a29c4a176108785b5822963773cb5392c97e8e25bbf12725b8e72d",
+      "n16k64_wA_n64": "a24b17fd5091f71a32921d7cd83ce672d165725accf357e163cadbcab59eebce",
+      "n16k64_wA": "8feccff55061da117cf80811df52d09c99253f0d5642b1e1e2712ca35b2ffd50"
+     },
+     "table": "/home/JAAAAAA/NVFP4-RaZeR/sm120/configs/nvidia_geforce_rtx_5090.json",
+     "table_shapes": 9,
+     "calls_by_width": {}
+    }
+   },
+   "artifact_map_sha256": null
+  },
+  {
+   "name": "native_n16_k3",
+   "kind": "native",
+   "artifact": "sm120/artifacts/qwen4b_n16_k3",
+   "kernel": "auto",
+   "install": {
+    "kernel": "KernelSet(mixed)",
+    "kernel_sha256": {
+     "n16k64_wA_n16": "8c478a04719d50d38b6e07490a4ee2e47e1cd6c187e65442d19920a9b058b34f",
+     "n16k64_wA_n32": "9ec62cb925a29c4a176108785b5822963773cb5392c97e8e25bbf12725b8e72d",
+     "n16k64_wA_n64": "a24b17fd5091f71a32921d7cd83ce672d165725accf357e163cadbcab59eebce",
+     "n16k64_wA": "8feccff55061da117cf80811df52d09c99253f0d5642b1e1e2712ca35b2ffd50"
+    },
+    "artifact_weights_sha256": "bd4594977aceb6cd5702b35aaaab1df472bf646225bf8e3eebdaf4a5e2d8dafd",
+    "map_sha256": "d8e3e0fae552b135341aa80fc09cea0f1abc5de8837f4c39d1fb4d15a5cd1ff2",
+    "native_modules": 252,
+    "fallback": [],
+    "bf16_by_design": [
+     "lm_head (output head)"
+    ],
+    "e0m3_tiles": 4399,
+    "device_bytes": {
+     "packed": 1816657920,
+     "scales_placed": 227082240,
+     "scales_padding": 0,
+     "bias": 0
+    },
+    "kernel_set": {
+     "family": "mixed",
+     "kernels": {
+      "n16k64_wA_n16": "8c478a04719d50d38b6e07490a4ee2e47e1cd6c187e65442d19920a9b058b34f",
+      "n16k64_wA_n32": "9ec62cb925a29c4a176108785b5822963773cb5392c97e8e25bbf12725b8e72d",
+      "n16k64_wA_n64": "a24b17fd5091f71a32921d7cd83ce672d165725accf357e163cadbcab59eebce",
+      "n16k64_wA": "8feccff55061da117cf80811df52d09c99253f0d5642b1e1e2712ca35b2ffd50"
+     },
+     "table": "/home/JAAAAAA/NVFP4-RaZeR/sm120/configs/nvidia_geforce_rtx_5090.json",
+     "table_shapes": 9,
+     "calls_by_width": {}
+    }
+   },
+   "artifact_map_sha256": "d8e3e0fae552b135341aa80fc09cea0f1abc5de8837f4c39d1fb4d15a5cd1ff2"
+  }
+ ],
+ "results": {
+  "bf16": {
+   "primary": {
+    "arc_challenge": {
+     "metric": "acc_norm",
+     "value": 0.5401023890784983,
+     "stderr": 0.01456431885692496,
+     "n": 1172
+    },
+    "piqa": {
+     "metric": "acc_norm",
+     "value": 0.7480957562568009,
+     "stderr": 0.010128421335088757,
+     "n": 1838
+    },
+    "winogrande": {
+     "metric": "acc",
+     "value": 0.6582478295185478,
+     "stderr": 0.013330103018622926,
+     "n": 1267
+    },
+    "boolq": {
+     "metric": "acc",
+     "value": 0.8495412844036697,
+     "stderr": 0.006253072429211556,
+     "n": 3270
+    }
+   },
+   "seconds": 71.09471392631531
+  },
+  "fake_four_over_six": {
+   "primary": {
+    "arc_challenge": {
+     "metric": "acc_norm",
+     "value": 0.48378839590443684,
+     "stderr": 0.014603708567414945,
+     "n": 1172
+    },
+    "piqa": {
+     "metric": "acc_norm",
+     "value": 0.7399347116430903,
+     "stderr": 0.010234893249061136,
+     "n": 1838
+    },
+    "winogrande": {
+     "metric": "acc",
+     "value": 0.6337805840568271,
+     "stderr": 0.013540144376588965,
+     "n": 1267
+    },
+    "boolq": {
+     "metric": "acc",
+     "value": 0.8256880733944955,
+     "stderr": 0.006635353989048526,
+     "n": 3270
+    }
+   },
+   "seconds": 165.42879438400269
+  },
+  "fake_n16_k3": {
+   "primary": {
+    "arc_challenge": {
+     "metric": "acc_norm",
+     "value": 0.5042662116040956,
+     "stderr": 0.014610858923956936,
+     "n": 1172
+    },
+    "piqa": {
+     "metric": "acc_norm",
+     "value": 0.7442872687704026,
+     "stderr": 0.010178690109459992,
+     "n": 1838
+    },
+    "winogrande": {
+     "metric": "acc",
+     "value": 0.6306235201262825,
+     "stderr": 0.013564470596053486,
+     "n": 1267
+    },
+    "boolq": {
+     "metric": "acc",
+     "value": 0.8409785932721713,
+     "stderr": 0.006396064074649892,
+     "n": 3270
+    }
+   },
+   "seconds": 166.9478952884674
+  },
+  "native_four_over_six": {
+   "primary": {
+    "arc_challenge": {
+     "metric": "acc_norm",
+     "value": 0.49658703071672355,
+     "stderr": 0.014611050403244159,
+     "n": 1172
+    },
+    "piqa": {
+     "metric": "acc_norm",
+     "value": 0.7453754080522307,
+     "stderr": 0.010164432237060617,
+     "n": 1838
+    },
+    "winogrande": {
+     "metric": "acc",
+     "value": 0.6140489344909235,
+     "stderr": 0.013682036993397323,
+     "n": 1267
+    },
+    "boolq": {
+     "metric": "acc",
+     "value": 0.8345565749235474,
+     "stderr": 0.006498979804999334,
+     "n": 3270
+    }
+   },
+   "seconds": 43.6346492767334,
+   "coverage": {
+    "calls": 217224,
+    "tokens": 208575360,
+    "native": 252,
+    "native_not_called": [],
+    "remaining_bf16_linears": []
+   }
+  },
+  "native_n16_k3": {
+   "primary": {
+    "arc_challenge": {
+     "metric": "acc_norm",
+     "value": 0.4991467576791809,
+     "stderr": 0.014611369529813302,
+     "n": 1172
+    },
+    "piqa": {
+     "metric": "acc_norm",
+     "value": 0.7513601741022851,
+     "stderr": 0.010084511234296841,
+     "n": 1838
+    },
+    "winogrande": {
+     "metric": "acc",
+     "value": 0.6471981057616417,
+     "stderr": 0.013429728101789013,
+     "n": 1267
+    },
+    "boolq": {
+     "metric": "acc",
+     "value": 0.8345565749235474,
+     "stderr": 0.006498979804999334,
+     "n": 3270
+    }
+   },
+   "seconds": 43.93131375312805,
+   "coverage": {
+    "calls": 217224,
+    "tokens": 208575360,
+    "native": 252,
+    "native_not_called": [],
+    "remaining_bf16_linears": []
+   }
+  }
+ },
+ "native_vs_fake": {
+  "native_four_over_six": {
+   "arc_challenge": {
+    "partner": "fake_four_over_six",
+    "n": 1172,
+    "delta": 0.012798634812286689,
+    "two_se": 0.019224767835961287,
+    "disagreements": 127
+   },
+   "piqa": {
+    "partner": "fake_four_over_six",
+    "n": 1838,
+    "delta": 0.00544069640914037,
+    "two_se": 0.013679065225665463,
+    "disagreements": 158
+   },
+   "winogrande": {
+    "partner": "fake_four_over_six",
+    "n": 1267,
+    "delta": -0.01973164956590371,
+    "two_se": 0.026448220785245734,
+    "disagreements": 281
+   },
+   "boolq": {
+    "partner": "fake_four_over_six",
+    "n": 3270,
+    "delta": 0.008868501529051987,
+    "two_se": 0.009047228431968432,
+    "disagreements": 219
+   }
+  },
+  "native_n16_k3": {
+   "arc_challenge": {
+    "partner": "fake_n16_k3",
+    "n": 1172,
+    "delta": -0.005119453924914676,
+    "two_se": 0.018542667582816245,
+    "disagreements": 118
+   },
+   "piqa": {
+    "partner": "fake_n16_k3",
+    "n": 1838,
+    "delta": 0.007072905331882481,
+    "two_se": 0.012453339976937055,
+    "disagreements": 131
+   },
+   "winogrande": {
+    "partner": "fake_n16_k3",
+    "n": 1267,
+    "delta": 0.016574585635359115,
+    "two_se": 0.024800880381238392,
+    "disagreements": 247
+   },
+   "boolq": {
+    "partner": "fake_n16_k3",
+    "n": 3270,
+    "delta": -0.006422018348623854,
+    "two_se": 0.008755535009658314,
+    "disagreements": 205
+   }
+  }
+ },
+ "finished_utc": "2026-09-25T08:35:06+00:00"
+}

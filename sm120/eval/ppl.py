@@ -119,7 +119,10 @@ def main():
                 maps[digest] = pol['name']
             pol['installed_weight_sha256'] = fq.install(pol['weight'], masks, tb)
         else:
-            fq.remove()
+            if fq.modules:                  # first native policy: free the BF16 Linear weights
+                fq.release()
+                mods = None
+                torch.cuda.empty_cache()
             rep = NM.install(model, pol['artifact'], kernel=pol['kernel'], loader=C.MODELS[args.model]['loader'])
             meta = json.loads(Path(pol['artifact'], 'artifact.json').read_text())
             pol['artifact_map_sha256'] = (meta.get('map') or {}).get('sha256')

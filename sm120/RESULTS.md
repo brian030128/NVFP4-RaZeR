@@ -13,21 +13,24 @@ consistent with the measurements but not isolated by an experiment).
 
 - The mixfp4 SM120 kernel is vendored, builds reproducibly from a clean clone
   (`build.py`: pinned toolchain, SASS patch census gate, self-test gate, manifest), and passes
-  390 tests on this GPU [tested].
-- Format ownership: the selector's N16K64 tile, the stored E0M3 tag and the executed MMA format
-  coincide for every weight element of the real Qwen3-4B / Llama-3.1-8B artifacts
-  (`eval/ownership_check.py`: 0 mismatches) [tested].
+  the full test suite (394 tests) on this GPU [tested].
+- Format ownership: the selector's tile, the stored E0M3 tag and the executed MMA format coincide
+  for every weight element of the real Qwen3-4B, Llama-3.1-8B and Mistral-7B artifacts, N16K64 and
+  N8K64 (`eval/ownership_check.py`: 0 mismatches over 2.6 × 10¹⁰ elements) [tested].
 - Numerics: packed weights decode bit for bit to the fake-quant weights; the activation
   quantizers (CUDA and Triton) are bit-identical to the PyTorch reference; the native GEMM is
   closer to the exact product than fake quant in 216/216 operator cases and 252/252 real layers
   [tested / measured].
-- Quality: on Qwen3-4B and Llama-3.1-8B (and Mistral-7B, *pending in this file*), native
-  perplexity equals fake-quant perplexity within 2 SE for NVFP4, FourOverSix, N16K64 and N8K64;
-  the N16K64 map's gain over FourOverSix is preserved natively [measured].
+- Quality: on Qwen3-4B, Llama-3.1-8B and Mistral-7B, native perplexity equals fake-quant
+  perplexity within 2 SE in all 24 paired comparisons (NVFP4, FourOverSix, N16K64, N8K64 × two
+  corpora); the N16K64 map's gain over FourOverSix is preserved natively; downstream accuracy
+  (4 tasks) agrees within 2 SE per example [measured].
 - Performance: with the real selector map the N16K64 kernel costs +1.6…+2.3 % over the stock
-  CUTLASS NVFP4 GEMM at the same tile, and is 4.2–5.8× faster than BF16 cuBLAS for T ≥ 512
-  [measured]. Decode-size GEMMs were MMA-bound on token-tile padding; narrow-tile builds selected
-  per shape give 2.2–3.2× at T = 1 without changing any result [measured / tested].
+  CUTLASS NVFP4 GEMM at the same tile, and is 4.2–5.8× faster than BF16 cuBLAS for T ≥ 512.
+  Decode-size GEMMs were MMA-bound on token-tile padding; narrow-tile builds selected per shape
+  give 2.2–3.1× at T = 1 without changing any result. Full model: prefill 2.1× (Qwen3-4B) /
+  2.9× (Llama-3.1-8B) faster than BF16, decode 1.35× / 1.49× at batch 1, weights 2.7–2.8× smaller
+  [measured / tested].
 
 ## 0. Starting point (checklist 1, first item)
 
@@ -58,12 +61,13 @@ benchmarks listed below.
 | 4 | padding / non-divisible dimensions | done for the scale layout (padding written in-kernel, tested with garbage-filled buffers); weights must satisfy out % 16 = 0 and in % 64 = 0 for N16K64 maps (all evaluated models do) | `tests/test_quant_act.py`, `NativeLinear` checks |
 | 5 | native Linear, output layout, bias/scale | done | `linear.py` (column-major D = row-major [T, out], no copy), `tests/test_gemm.py::test_epilogue_vectors_and_bias` |
 | 5 | no forward-time sync / copy / repacking | done | forward = one ctypes call, two kernels; weights placed once at install |
-| 6 | operator correctness incl. error split | done on RTX 5090 | `results/errors/gemm_errors_rtx5090.json`, `results/layerwise/`, 390 tests |
+| 6 | operator correctness incl. error split | done on RTX 5090 | `results/errors/gemm_errors_rtx5090.json`, `results/layerwise/`, 394 tests |
 | 7 | full-model integration, coverage, fallback | done | `model.install` (strict), coverage counters, profiler GEMM audit in every PPL run, `eval/decode_check.py` |
-| 8 | native PPL with the same frozen map | done: Qwen3-4B, Llama-3.1-8B; Mistral-7B *pending in this file*; Phi-4 / Qwen3.8-27B not run (not cached / exceeds 32 GB) | `results/ppl/*.json` |
-| 8 | native downstream accuracy | *pending (queued)* | `eval/lmeval.py` → `results/lmeval/` |
-| 9 | kernel / Linear / model benchmarks | kernel done; Linear + model *pending (queued)*; PRO 6000 pending | `results/bench/` |
-| 10 | profiling and optimization | small-T bottleneck found and fixed; `ncu` comparison *pending (queued)* | `results/bench/splitk_rtx5090.json`, `configs/nvidia_geforce_rtx_5090*.json` |
+| 8 | native PPL with the same frozen map | done: Qwen3-4B, Llama-3.1-8B, Mistral-7B; Phi-4 / Qwen3.8-27B not run (not cached / exceeds 32 GB) | `results/ppl/*.json` |
+| 8 | native downstream accuracy | done: Qwen3-4B, Llama-3.1-8B (representative suite; 16/16 paired native − fake within 2 SE) | `results/lmeval/` |
+| 8 | layer-by-layer / logit diagnosis | done (Qwen3-4B, Llama-3.1-8B) | `results/layerwise/`, `eval/ppl.py` first-window logit comparison |
+| 9 | kernel / Linear / model benchmarks | done on RTX 5090; PRO 6000 pending | `results/bench/` |
+| 10 | profiling and optimization | done: ncu comparison, small-T bottleneck (tile width), quantizer (row split, shared input), host overhead (one C call) | `results/bench/`, section 5 |
 | 11 | frozen per-GPU configuration, docs | RTX 5090 frozen (`configs/nvidia_geforce_rtx_5090.json`); PRO 6000 pending | README, NUMERICS, this file |
 | 11 | merge into main | not done: left for review | branch `SM120-kernel` |
 | 12 | N8 native path | export, Linear (weights on B), correctness, PPL, kernel timing done | `n8k64_wB`, PPL tables |
@@ -78,9 +82,15 @@ benchmarks listed below.
   bit-identical codes, scale bytes (including all layout padding) and per-token scales to the
   PyTorch reference on 18 shape × mode cases × 3 distributions, and on every real activation of a
   Qwen3-4B forward (`results/layerwise/`) [tested].
-- Ownership on real artifacts (`results/ownership/`): Qwen3-4B N16K64 — 252 modules exact,
-  3.33 × 10⁹ informative elements, **0 format mismatches**, E0M3 executed in exactly the map's
-  4 399 tiles. *(Llama-3.1-8B, Mistral-7B, N8K64: pending in this file.)*
+- Ownership on real artifacts (`results/ownership/`), every module, exact decode probe:
+
+  | artifact | kernel | modules | elements checked | format mismatches | E0M3 tiles (= map) |
+  |---|---|---:|---:|---:|---:|
+  | Qwen3-4B N16K64 | n16k64_wA | 252 | 3.33 × 10⁹ | 0 | 4 399 |
+  | Qwen3-4B N8K64 | n8k64_wB | 252 | 3.33 × 10⁹ | 0 | 8 149 |
+  | Llama-3.1-8B N16K64 | n16k64_wA | 224 | 6.39 × 10⁹ | 0 | 1 866 |
+  | Llama-3.1-8B N8K64 | n8k64_wB | 224 | 6.39 × 10⁹ | 0 | 3 365 |
+  | Mistral-7B N16K64 | n16k64_wA | 224 | 6.39 × 10⁹ | 0 | 3 824 |
 - Kernel selection never changes a result: all tile widths / arrangements of a family produce
   bitwise-identical outputs, so a token's output is independent of its batch [tested].
 
@@ -97,8 +107,292 @@ all E0M3} tags × T ∈ {1, 128, 2048}), relative Frobenius error [measured]:
 | quantization error (fake quant vs BF16 layer) | 3.9 % … 30.6 % |
 | worst element / tolerance `2^-8·|exact| + 2^-20·Σ|a·b|` | 0.995 (all within) |
 
-Real Qwen3-4B activations, one C4 window, all 252 layers (`results/layerwise/qwen4b_n16_k3_c4w0.json`):
-native vs exact mean 0.17 % (max 0.33 %), fake vs exact mean 0.25 % (max 0.35 %); native closer in
-252 / 252 layers [measured].
+Real activations, one C4 window, every layer (`results/layerwise/`) [measured]:
 
-<!-- sections 4-6 are filled in from the queued runs -->
+| Model | layers | activation codes bitwise = reference | native vs exact mean / max | fake vs exact mean / max | native closer |
+|---|---:|---|---:|---:|---:|
+| Qwen3-4B | 252 | all | 0.17 % / 0.33 % | 0.25 % / 0.35 % | 252 / 252 |
+| Llama-3.1-8B | 224 | all | 0.17 % / 0.17 % | 0.24 % / 0.42 % | 224 / 224 |
+
+## 4. Model quality
+
+Protocol: the N16K64 campaign's (`eval/common.py`): WikiText-2 test in 2 048-token windows,
+256 C4 validation crops, SDPA, no TF32; the window token hashes equal the campaign's recorded ones.
+Fake quant = the campaign's weights + per-token FourOverSix (NVFP4) activation pre-hooks; native =
+`model.install(artifact, kernel='auto')`. Maps: the frozen seed0 k=3 maps in `maps/`. One process
+per model evaluates every policy on the same windows (`results/ppl/<model>.json`: per-window NLL).
+
+### 4.1 Perplexity [measured]
+
+| Model | Corpus | BF16 | NVFP4 fake / native | FourOverSix fake / native | N16K64 k=3 fake / native | N8K64 k=3 fake / native |
+|---|---|---:|---:|---:|---:|---:|
+| Qwen3-4B | WikiText-2 | 13.6588 | 13.9584 / 13.9456 | 14.2183 / 14.2010 | 12.1095 / 12.1010 | 11.7066 / 11.6905 |
+| Qwen3-4B | C4 | 16.6409 | 17.2493 / 17.2688 | 17.3175 / 17.2977 | 15.9714 / 15.9558 | 15.7092 / 15.7117 |
+| Llama-3.1-8B | WikiText-2 | 6.2401 | 6.9294 / 6.9338 | 6.8759 / 6.8706 | 6.8438 / 6.8419 | 6.8476 / 6.8507 |
+| Llama-3.1-8B | C4 | 8.9586 | 9.9188 / 9.9284 | 9.8231 / 9.8257 | 9.7703 / 9.7861 | 9.7823 / 9.7833 |
+| Mistral-7B-v0.3 | WikiText-2 | 5.3184 | 5.5511 / 5.5506 | 5.5200 / 5.5224 | 5.5053 / 5.5008 | 5.5025 / 5.5039 |
+| Mistral-7B-v0.3 | C4 | 7.8299 | 8.0908 / 8.0895 | 8.0676 / 8.0623 | 8.0489 / 8.0489 | 8.0472 / 8.0493 |
+
+Native − fake, paired over windows (mean ΔNLL per token ± 2 SE) [measured]:
+
+| Model | Corpus | NVFP4 | FourOverSix | N16K64 | N8K64 |
+|---|---|---:|---:|---:|---:|
+| Qwen3-4B | WikiText-2 | -0.0009 ± 0.0032 | -0.0012 ± 0.0037 | -0.0007 ± 0.0024 | -0.0014 ± 0.0020 |
+| Qwen3-4B | C4 | +0.0011 ± 0.0015 | -0.0011 ± 0.0014 | -0.0010 ± 0.0012 | +0.0002 ± 0.0011 |
+| Llama-3.1-8B | WikiText-2 | +0.0006 ± 0.0014 | -0.0008 ± 0.0016 | -0.0003 ± 0.0016 | +0.0004 ± 0.0014 |
+| Llama-3.1-8B | C4 | +0.0010 ± 0.0017 | +0.0003 ± 0.0017 | +0.0016 ± 0.0020 | +0.0001 ± 0.0015 |
+| Mistral-7B-v0.3 | WikiText-2 | -0.0001 ± 0.0008 | +0.0004 ± 0.0008 | -0.0008 ± 0.0008 | +0.0003 ± 0.0008 |
+| Mistral-7B-v0.3 | C4 | -0.0002 ± 0.0008 | -0.0007 ± 0.0013 | -0.0000 ± 0.0008 | +0.0003 ± 0.0008 |
+
+All 24 are within 2 SE; 13 are negative and 11 non-negative. The map's effect is preserved (ΔlogPPL
+N16K64 − FourOverSix, fake → native): Qwen3-4B −0.1605 → −0.1600 (WikiText), −0.0809 → −0.0808
+(C4); Llama-3.1-8B −0.0047 → −0.0042, −0.0054 → −0.0040; Mistral-7B −0.0027 → −0.0039,
+−0.0023 → −0.0017 [measured]. The Llama/Mistral effects are of the size of the per-window noise
+(2 SE of a paired difference ≈ 0.002), as in the original campaign.
+
+Cross-GPU check against the repro branch (RTX PRO 6000, same code for fake quant): Qwen3-4B fake
+quant is identical to 4 decimals for all five policies; Llama and Mistral differ by ≤ 0.12 % (BF16
+≤ 0.01 %), inside the campaign's pre-registered cross-GPU tolerance (0.5 % W4A4, 0.1 % BF16) [measured].
+**[inference]** the difference is cuBLAS choosing different BF16 kernels on the two GPUs.
+
+### 4.2 Coverage and fallback [tested, every native policy]
+
+Every scoped Linear (252 in Qwen3-4B, 224 in Llama/Mistral) is a NativeLinear and is called exactly
+once per forward (`coverage_total.calls == expected_calls`); `fallback` is empty; the profiler audit
+of a native forward finds one dense BF16 GEMM, the output head (`aten::linear [T, hidden] × [vocab,
+hidden]`), plus the rotary-embedding frequency outer product. The installed artifact's weights hash
+and map hash are recorded with each result.
+
+### 4.3 Decode with the KV cache (`results/decode/`) [measured]
+
+Greedy generation of 64 tokens after 256-token prompts (batch 4): incremental decode with a
+DynamicCache vs one full forward over the same sequence. Every decode step calls all native
+Linears. The gap is a property of W4A4, not of the native path: the fake-quant model shows the
+same order of gap.
+
+| Model | policy | top-1 agreement | mean KL (full ‖ incremental) |
+|---|---|---:|---:|
+| Qwen3-4B | BF16 | 98.0 % | 0.0008 |
+| Qwen3-4B | fake N16K64 | 87.5 % | 0.077 |
+| Qwen3-4B | native N16K64 | 90.6 % | 0.051 |
+| Llama-3.1-8B | BF16 | 99.2 % | 0.0005 |
+| Llama-3.1-8B | fake N16K64 | 92.6 % | 0.038 |
+| Llama-3.1-8B | native N16K64 | 87.5 % | 0.054 |
+
+CUDA-graph decode (StaticCache) produces tokens identical to eager decode for 33 tokens at batch 1,
+4 and 16 for every policy benchmarked [tested, `results/bench/model_*.json`].
+
+### 4.4 Downstream accuracy (`results/lmeval/`) [measured]
+
+lm-eval 0.4.11, the campaign's `representative` suite (0-shot; acc_norm for ARC-Challenge / PIQA,
+acc for WinoGrande / BoolQ), batch 16, same frozen map and artifacts as the perplexity runs.
+
+**Qwen3-4B**
+
+| Policy | ARC-C | PIQA | WinoGrande | BoolQ | mean |
+|---|---:|---:|---:|---:|---:|
+| BF16 | 54.01 | 74.81 | 65.82 | 84.95 | 69.90 |
+| fake FourOverSix | 48.38 | 73.99 | 63.38 | 82.57 | 67.08 |
+| fake N16K64 k=3 | 50.43 | 74.43 | 63.06 | 84.10 | 68.00 |
+| native FourOverSix | 49.66 | 74.54 | 61.40 | 83.46 | 67.26 |
+| native N16K64 k=3 | 49.91 | 75.14 | 64.72 | 83.46 | 68.31 |
+
+Native − fake, paired per example (percentage points ± 2 SE): FourOverSix ARC-C +1.28 ± 1.92,
+PIQA +0.54 ± 1.37, WinoGrande −1.97 ± 2.64, BoolQ +0.89 ± 0.90; N16K64 ARC-C −0.51 ± 1.85,
+PIQA +0.71 ± 1.25, WinoGrande +1.66 ± 2.48, BoolQ −0.64 ± 0.88. All 8 within 2 SE; 5–15 % of
+examples flip between the two paths, in both directions, which is the per-example scale of W4A4
+rounding noise. N16K64 over FourOverSix: +0.92 (fake) and +1.05 (native) mean points.
+
+**Llama-3.1-8B** (BF16 from the first run, `llama8b_partial_oom.json`, which stopped with an
+out-of-memory error at its last policy because the fake-quant helper kept the BF16 Linear weights
+alive; fixed by `FakeQuant.release()`. The re-run reproduced both fake policies to the last digit.)
+
+| Policy | ARC-C | PIQA | WinoGrande | BoolQ | mean |
+|---|---:|---:|---:|---:|---:|
+| BF16 | 54.69 | 81.28 | 74.11 | 83.00 | 73.27 |
+| fake FourOverSix | 52.82 | 79.54 | 72.14 | 81.44 | 71.48 |
+| fake N16K64 k=3 | 52.73 | 79.43 | 72.30 | 80.64 | 71.28 |
+| native FourOverSix | 53.84 | 80.47 | 71.82 | 81.10 | 71.81 |
+| native N16K64 k=3 | 53.67 | 79.54 | 72.30 | 80.58 | 71.52 |
+
+Native − fake, paired per example: FourOverSix ARC-C +1.02 ± 1.72, PIQA +0.92 ± 1.10, WinoGrande
+−0.32 ± 2.06, BoolQ −0.34 ± 0.96; N16K64 ARC-C +0.94 ± 1.68, PIQA +0.11 ± 1.08, WinoGrande
++0.00 ± 2.03, BoolQ −0.06 ± 1.01. All 8 within 2 SE. On Llama-3.1-8B the N16K64 map does not
+raise these four accuracies over FourOverSix (−0.20 fake, −0.29 native mean points), consistent
+with its small perplexity effect on this model; the native path reproduces the fake path's result
+either way.
+
+## 5. Performance (RTX 5090)
+
+Timing method (`bench/common.py`): device time by CUDA events over back-to-back calls (median of 7
+repeats, warm-up first) or per-kernel CUPTI durations; host time by wall clock with the GPU not the
+bottleneck; the benchmarks refuse to run on a busy GPU. GPU: 600 W limit, default clocks
+(`nvidia-smi` in each JSON). All native timings include every kernel the policy launches.
+
+### 5.1 Kernel only (`results/bench/kernel_rtx5090.json`, 128-wide tile) [measured]
+
+Time relative to the stock CUTLASS SM120 NVFP4 GEMM with the same tile and epilogue, geometric
+mean over the 14 Linear shapes of Llama-3.1-8B and Qwen3-4B:
+
+| T | no dispatch | N16K64, tags clear | N16K64, real selector map | random 50 % | all E0M3 | 8×1, selector | N8K64 on B, selector |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | +1.0 % | +1.6 % | +2.1 % | +6.7 % | +9.1 % | +3.4 % | +4.3 % |
+| 128 | +1.1 % | +1.8 % | +2.1 % | +7.6 % | +11.6 % | +4.1 % | +6.5 % |
+| 512 | +1.5 % | +1.4 % | +1.6 % | +5.8 % | +8.7 % | +3.9 % | +6.3 % |
+| 2048 | +0.6 % | +2.2 % | +2.3 % | +5.5 % | +7.5 % | +4.6 % | +6.0 % |
+| 8192 | +4.0 % | +5.3 % | +2.1 % | +4.3 % | +5.9 % | +4.6 % | +5.9 % |
+
+BF16 cuBLAS is 4.2× (T=512) to 5.8× (T=8192) slower than the N16K64 kernel with the selector map.
+On this GPU the 4×2 arrangement beats 8×1 for these shapes (the upstream report measured 8×1 as
+the better 5090 choice at 4096³ with a plain epilogue); `n16k64_wA` (4×2) is the frozen choice.
+
+`ncu` at 4096×4096×4096 (clocks locked by ncu, `results/bench/ncu_rtx5090.json`) [measured]:
+
+| kernel / tags | time µs | tensor-pipe instr. | instructions | shared ld wavefronts | stall `no_instruction` |
+|---|---:|---:|---:|---:|---:|
+| stock NVFP4 | 167.6 | 8 388 608 | 30.3 M | 17.0 M | 1 268 |
+| N16K64, dispatch compiled out | 169.6 | 8 388 608 | 31.3 M | 17.0 M | 1 345 |
+| N16K64, tags clear | 173.1 | 8 388 608 | 37.2 M | 18.0 M | 2 345 |
+| N16K64, sparse (selector-like) | 173.3 | 8 388 608 | 37.2 M | 18.0 M | 2 464 |
+| N16K64, random 50 % | 179.9 | 8 388 608 | 37.0 M | 18.0 M | 6 259 |
+| N16K64, all E0M3 | 186.0 | 8 388 608 | 36.7 M | 18.0 M | 6 181 |
+| N16K64 8×1, random 50 % | 177.5 | 8 388 608 | 37.7 M | 25.2 M | 4 027 |
+
+- No MMA issue slot is wasted: the tensor-pipe instruction count equals the stock kernel's for every
+  tag pattern (no predicated OMMA; the build also checks the SASS).
+- The dispatch adds ~23 % instructions but +3 % time with sparse maps: the kernel stays tensor-bound.
+- Dense E0M3 patterns cost more through instruction-fetch stalls (`no_instruction` ×2.6), not
+  through the E0M3 MMA itself, whose throughput equals E2M1 in the upstream instruction probe.
+  **[inference]** the E0M3-heavy arms are laid out off the fall-through path of the 16-arm
+  dispatch; selector maps (0.05–0.2 % E0M3 tiles) almost always take the E2M1 arm.
+- 8×1 reads 40 % more shared memory (every warp reads all of B), as the upstream report predicted.
+
+### 5.2 Small token counts: tile width, not split-K [measured]
+
+Decode-size GEMMs were not bandwidth- or launch-bound: after a ~3.2 µs floor, each CTA spends
+~0.37 µs per 128×128×128 k-tile *whatever T is* (`M=128, K=14336, T=1`: 44 µs), i.e. a 128-wide
+token tile is MMA-bound on padding (ncu: 8× fewer tensor instructions at T=1 with a 16-wide tile).
+Stream-K / split-K (the `*_sk` builds, deterministic reduction) reach at best 1.09× geo-mean and
+split-8 is 0.35–0.63× (`results/bench/splitk_rtx5090.json`). Narrow token tiles fix it:
+
+| out × in, T=1 | 128-wide | best width | speed-up |
+|---|---:|---:|---:|
+| 4096 × 4096 | 15.0 µs | 6.9 µs (16) | 2.2× |
+| 14336 × 4096 | 34.9 µs | 11.1 µs (16) | 3.1× |
+| 4096 × 14336 | 45.2 µs | 18.6 µs (16) | 2.4× |
+| 2560 × 9728 | 31.5 µs | 13.5 µs (16) | 2.3× |
+
+`configs/nvidia_geforce_rtx_5090.json` selects 16 up to T=16–64, 32/64 up to T=128–1024, and 128
+beyond, per shape; outputs are bitwise identical across widths.
+
+### 5.3 Activation quantizer [measured]
+
+The quantizer reproduces the fake quantizer's arithmetic exactly (three IEEE divisions and both
+FourOverSix candidates per element) and is ALU-bound (ncu: 80 % SM, 28 % DRAM throughput,
+~120 instructions per element). Two changes made it cheaper without changing a bit:
+- a token row is split over several CTAs when there are too few rows to fill the GPU: T=1,
+  K=14336 16.1 → 4.4 µs; T=1, K=4096 5.2 → 3.2 µs; large T unchanged or faster;
+- q/k/v and gate/up quantize their shared input once (`NativeLinear.share_input`, keyed on the
+  tensor, its version counter, stream and capture state; tested for staleness and graph safety).
+Relaxing bit-exactness (reciprocal multiplies) would cut the instruction count further but would
+change `NUMERICS.md`; not done.
+
+### 5.4 Complete Linear (`results/bench/linear_rtx5090.json`) [measured]
+
+Everything one `y = Linear(x)` costs (activation quantization, GEMM with the fused scale/bias
+epilogue, output already `[T, out]`), per call, CUDA graph (launch overhead removed) unless noted;
+input sharing disabled (the benchmark calls one module on one unchanged input). Geometric mean
+over the 14 shapes of Llama-3.1-8B and Qwen3-4B:
+
+| T | BF16 ÷ N16K64 (graph) | BF16 ÷ N16K64 (eager) | N16K64 vs FourOverSix | N16K64 vs NVFP4 stock | tile selection gain | host µs BF16 / native | quantizer µs | GEMM µs |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 1.48× | 0.92× | +0.1 % | +0.8 % | 1.81× | 7.1 / 23.3 | 3.3 | 7.8 |
+| 16 | 1.75× | 0.91× | +0.7 % | +1.6 % | 1.81× | 7.7 / 23.2 | 3.4 | 7.5 |
+| 128 | 2.02× | 1.24× | +0.3 % | +1.0 % | 1.35× | 8.5 / 23.2 | 4.2 | 10.3 |
+| 512 | 2.87× | 2.57× | +0.9 % | +3.4 % | 1.05× | 8.0 / 23.6 | 9.0 | 18.5 |
+| 2048 | 3.37× | 3.39× | +0.5 % | +5.8 % | 1.00× | 7.8 / 23.5 | 27.6 | 52.0 |
+| 8192 | 3.34× | 3.37× | +0.2 % | +8.0 % | 1.00× | 7.6 / 23.4 | 102.5 | 201.9 |
+
+The map itself costs < 1 % at Linear level (vs FourOverSix on the same kernels). Against the
+stock NVFP4 policy the gap grows with T because its activation quantizer has one scale candidate
+instead of FourOverSix's two. Per shape, Llama-3.1-8B (µs, graph):
+
+| shape | T | BF16 | NVFP4 stock | FourOverSix | N16K64 map | map, 128-wide only | quantizer | GEMM |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| q_proj 4096×4096 | 1 | 16.5 | 12.4 | 12.4 | 12.4 | 20.6 | 3.2 | 7.0 |
+| q_proj 4096×4096 | 128 | 26.8 | 14.5 | 16.5 | 16.2 | 20.6 | 3.7 | 10.1 |
+| q_proj 4096×4096 | 2048 | 371.2 | 81.9 | 84.0 | 86.1 | 86.1 | 24.1 | 61.5 |
+| q_proj 4096×4096 | 8192 | 1304.8 | 317.8 | 331.4 | 330.9 | 333.9 | 96.8 | 238.3 |
+| gate_proj 14336×4096 | 1 | 72.2 | 16.6 | 16.5 | 16.6 | 41.2 | 3.2 | 11.4 |
+| gate_proj 14336×4096 | 128 | 189.3 | 20.7 | 20.7 | 20.7 | 20.7 | 3.7 | 16.3 |
+| gate_proj 14336×4096 | 2048 | 1119.2 | 221.6 | 239.1 | 236.8 | 237.6 | 30.2 | 207.9 |
+| gate_proj 14336×4096 | 8192 | 4138.9 | 891.5 | 916.2 | 922.1 | 917.9 | 103.8 | 819.7 |
+| down_proj 4096×14336 | 1 | 78.2 | 22.6 | 24.7 | 24.7 | 51.4 | 4.4 | 18.7 |
+| down_proj 4096×14336 | 128 | 93.6 | 37.0 | 41.0 | 41.1 | 57.5 | 10.6 | 28.3 |
+| down_proj 4096×14336 | 2048 | 1283.8 | 305.0 | 313.1 | 313.9 | 312.0 | 97.7 | 219.0 |
+| down_proj 4096×14336 | 8192 | 4521.2 | 1103.2 | 1149.5 | 1150.0 | 1150.1 | 352.3 | 799.6 |
+
+Host time per native call (~23 µs: Python, ctypes, CUTLASS argument set-up, two launches) is
+what bounds eager decode; see 5.5.
+
+### 5.5 Full model (`results/bench/model_*.json`) [measured]
+
+Prefill (one forward writing the KV cache, median ms):
+
+| Model | policy | weights GiB | peak GiB | 1×128 | 1×512 | 1×2048 | 4×512 | 4×2048 | 16×512 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Qwen3-4B | BF16 | 7.49 | 11.28 | 12.3 | 27.3 | 99.9 | 94.5 | 414.8 | 394.8 |
+| Qwen3-4B | NVFP4 (stock kernels) | 2.66 | 6.52 | 17.3 | 17.7 | 46.2 | 40.9 | 209.5 | 191.5 |
+| Qwen3-4B | FourOverSix | 2.66 | 6.52 | 17.0 | 17.6 | 46.8 | 41.4 | 212.8 | 194.9 |
+| Qwen3-4B | **N16K64 k=3** | 2.66 | 6.52 | 17.1 | 18.3 | 47.0 | 41.5 | 212.9 | 194.9 |
+| Llama-3.1-8B | BF16 | 14.96 | 18.24 | 21.3 | 48.1 | 173.9 | 168.6 | 669.8 | 653.1 |
+| Llama-3.1-8B | NVFP4 (stock kernels) | 5.64 | 9.11 | 13.0 | 15.8 | 58.8 | 54.4 | 259.2 | 243.8 |
+| Llama-3.1-8B | **N16K64 k=3** | 5.64 | 9.11 | 12.8 | 15.9 | 59.7 | 55.2 | 262.4 | 247.1 |
+
+Decode (greedy, prompt 512, 64 tokens; tokens/s; *graph* = the step captured in a CUDA graph over
+a StaticCache, token-identical to eager):
+
+| Model | policy | B=1 eager | B=1 graph | B=4 eager | B=4 graph | B=16 eager | B=16 graph |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Qwen3-4B | BF16 | 95.2 | 102.0 | 370.3 | 342.4 | 1255.3 | 735.3 |
+| Qwen3-4B | NVFP4 (stock kernels) | 64.3 | 136.1 | 258.5 | 466.0 | 1033.6 | 901.1 |
+| Qwen3-4B | **N16K64 k=3** | 64.0 | 137.2 | 255.3 | 467.4 | 1018.2 | 903.5 |
+| Qwen3-4B | N16K64, 128-wide tile only | 65.0 | 107.9 | 262.5 | 382.4 | 1054.6 | 820.5 |
+| Llama-3.1-8B | BF16 | 88.1 | 79.1 | 324.4 | 279.6 | 1027.3 | 678.5 |
+| Llama-3.1-8B | NVFP4 (stock kernels) | 86.8 | 130.3 | 345.7 | 448.0 | 1395.0 | 949.4 |
+| Llama-3.1-8B | **N16K64 k=3** | 87.1 | 130.9 | 349.2 | 450.4 | 1405.6 | 951.4 |
+
+- Prefill (T ≥ 512 tokens in total) with the N16K64 map is +1.3…+1.8 % slower than stock NVFP4
+  through the same pipeline; most of that is the FourOverSix activation quantizer's second
+  candidate (NVFP4 uses the one-candidate quantizer): against FourOverSix on the same kernels the
+  map costs +0.0…+0.4 %. Decode shows no measurable difference.
+- Against BF16: prefill 2.1× (Qwen3-4B) / 2.9× (Llama-3.1-8B) at 1×2048; decode at the best mode
+  of each: 1.35× / 1.49× (B=1), 1.26× / 1.39× (B=4), 0.81× / 1.37× (B=16); weights 2.8× / 2.7×
+  smaller, peak memory 1.7× / 2.0× lower.
+- Eager single-token decode is host-bound: a NativeLinear call costs ~20 µs of host time against
+  ~7 µs for `nn.Linear` (ctypes, CUTLASS argument set-up, allocation); CUDA graphs remove it.
+  With graphs, the StaticCache's full-length attention costs more than the DynamicCache's at B=16,
+  which is why graph < eager there for every policy (a property of the HF StaticCache path).
+- Qwen3-4B at 1×128 is slower natively than BF16 (17 vs 12 ms): host-bound as above.
+
+### 5.6 The optimizations did not change results [tested]
+
+After the quantizer, selection and input-sharing changes, a native Qwen3-4B PPL run on 16 windows
+per corpus reproduces the original native run's per-window NLL **bitwise** for N16K64 and N8K64
+(`results/ppl/qwen4b_regression_final_code.json` vs `results/ppl/qwen4b.json`).
+
+## 6. Open items and limitations
+
+- **RTX PRO 6000 Blackwell: nothing measured.** Run `sm120/reproduce_gpu.sh` there; it builds,
+  tests (including the ownership proofs), tunes and commits `configs/<gpu>.json`, and repeats every
+  benchmark and quality run into `results/<gpu>/`. The upstream report found the best warp
+  arrangement differs between the two GPUs; the tile table and the 4×2-vs-8×1 comparison must be
+  re-measured, not assumed.
+- Models: Phi-4 is not in this machine's HF cache and Qwen3.8-27B does not fit 32 GB in BF16 for
+  the fake-quant comparison; both maps are included and `run_quality.sh` supports them.
+- Only Hugging Face transformers is integrated (no vLLM / SGLang / TensorRT-LLM).
+- E0M3 depends on an undocumented SASS encoding patched after compilation (CUDA 13.1, sm_120);
+  `build.py` refuses other CUDA releases, and the gates must be re-run on new drivers / steppings.
+- Weights must satisfy `out % 16 == 0` and `in % 64 == 0` for N16K64 maps (`% 32` for E2M1-only);
+  no evaluated model violates it. The output head stays BF16 by design.
+- The branch has not been merged into `main`.

@@ -157,6 +157,14 @@ class FakeQuant:
             h.remove()
         self.handles = []
 
+    def release(self):
+        """Drop the references to the original nn.Linear modules (and so their BF16 weights) once
+        native modules have replaced them; the pristine CPU copies go too. Fake policies can no
+        longer be installed afterwards."""
+        self.remove()
+        self.modules = {}
+        self.pristine = {}
+
     @torch.no_grad()
     def restore(self):
         self.remove()
