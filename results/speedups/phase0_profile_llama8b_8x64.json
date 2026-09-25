@@ -1,0 +1,61 @@
+{
+ "model": "llama8b",
+ "unit": "8x64",
+ "memory_mode": "lean",
+ "eval_batch": 16,
+ "score_batch": 8,
+ "breakdown": {
+  "phase: fake development evaluation": {
+   "gpu_ms": {
+    "act_quant_doc (fake evaluation)": 23881.353805003062,
+    "GEMM (model Linear/lm_head, fwd+bwd)": 3853.290986000002,
+    "other kernels (norms, rotary, elementwise, ...)": 2554.5085019996445,
+    "teacher host-to-device": 1565.5073430000007,
+    "logits log_softmax + CE/KL": 427.09808400000014,
+    "lean weight decode": 181.6503800000003,
+    "attention": 63.31414000000004,
+    "memcpy (outside named regions)": 0.09487299999999997
+   },
+   "gpu_ms_total": 32526.81811300271,
+   "wall_ms": 37438.125844726565,
+   "wall_seconds_with_profiler": 37.43827438354492
+  },
+  "phase: native development evaluation": {
+   "gpu_ms": {
+    "native: activation quantization": 3169.2461700001045,
+    "native: epilogue": 2202.1502650000043,
+    "teacher host-to-device": 1572.4777299999996,
+    "other kernels (norms, rotary, elementwise, ...)": 1402.6781490000021,
+    "native: FP4 GEMM": 1284.819019999997,
+    "logits log_softmax + CE/KL": 426.9980409999997,
+    "GEMM (model Linear/lm_head, fwd+bwd)": 271.7243550000001,
+    "native weight build": 109.13955299999898,
+    "attention": 63.63376799999999,
+    "memcpy (outside named regions)": 0.05350299999999998
+   },
+   "gpu_ms_total": 10502.920554000106,
+   "wall_ms": 14139.089962890625,
+   "wall_seconds_with_profiler": 14.139100313186646
+  },
+  "phase: scoring pass": {
+   "gpu_ms": {
+    "hook: G = dy^T x (FP32 matmul)": 14673.84413899324,
+    "hook: G*D, tile reduction, FP64 accumulation": 14630.003172999084,
+    "act_quant_rows (scoring)": 12473.487920998148,
+    "GEMM (model Linear/lm_head, fwd+bwd)": 6021.033563000014,
+    "hook: candidate decode + D": 4262.951474999775,
+    "other kernels (norms, rotary, elementwise, ...)": 2394.0683540000314,
+    "teacher host-to-device": 1112.213667,
+    "lean weight decode": 480.642030999993,
+    "logits log_softmax + CE/KL": 423.2122479999998,
+    "attention": 254.15852199999983,
+    "memcpy (outside named regions)": 88.94631200000016
+   },
+   "gpu_ms_total": 56814.56140499028,
+   "wall_ms": 59978.41421484375,
+   "wall_seconds_with_profiler": 59.97842764854431
+  },
+  "kernels_counted": 1335352,
+  "trace": "/home/dev/n16k64_campaign/speedups/profile_8x64.trace.json"
+ }
+}

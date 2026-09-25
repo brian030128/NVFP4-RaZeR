@@ -24,6 +24,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fused_quant  # noqa: E402
 import rq  # noqa: E402
+from profile_regions import region  # noqa: E402
 from quantize.fast_act import quant_per_document  # noqa: E402
 from quantize.quantizer import quant_nvfp4  # noqa: E402
 
@@ -130,6 +131,7 @@ class NativeDev:
             assert (store.rows, store.cols) == (rows, cols) and store.alt_signed_zero == alt_signed_zero
             self.cand = store.cand
         self.fixed = False
+        self.single_pass_epilogue = False      # run_multiround.py --single-pass-epilogue
         # the fake activation quantizer the first calls are checked against (bitwise)
         self.set_activation('four_over_six_rows')
 
@@ -221,23 +223,32 @@ class NativeDev:
 
         def forward(x):
             k, docs = w.k, self.documents
-            x2 = x.reshape(-1, k).contiguous()
-            t = x2.shape[0]
-            # The operand-B scale layout does not depend on the token count, so the weights
-            # placed for `tokens` serve every batch shape (checked: m = 1 ... 16384).
-            assert t % docs == 0, (tuple(x.shape), docs)
-            # quant_per_document's global scale, one per document, broadcast to its tokens
-            gs_doc = x.reshape(docs, -1, 16).float().abs().amax(dim=(1, 2)) / (6 * 448)
-            gs_rows = gs_doc.repeat_interleave(t // docs).contiguous()
-            idx, size = kern.sf_index(0, t, w.n, k, x2.device)
-            packed, asf, _ = fused_quant.quantize(x2, self.act_kind, idx, size, gs=gs_rows, signed_zero=True)
-            if self.checked < self.check_calls:
-                got = decode_packed(packed, asf[idx].reshape(t, k // 16), gs_rows[:, None], t, k)
-                ref = self.reference(x, docs).reshape(t, k)
-                if not torch.equal(got.view(torch.int16), ref.view(torch.int16)):
-                    raise AssertionError(f'{name}: native activation differs from quant_per_document in '
-                                         f'{(got != ref).sum().item()} elements')
-                self.checked += 1
-            d = kern.gemm(packed, asf, w.packed, w.sf_bytes, t, w.n, k, w.gs)
-            return (d.float() * gs_rows[:, None]).to(x.dtype).reshape(*x.shape[:-1], w.n)
+            with region('native: activation quantization'):
+                x2 = x.reshape(-1, k).contiguous()
+                t = x2.shape[0]
+                # The operand-B scale layout does not depend on the token count, so the weights
+                # placed for `tokens` serve every batch shape (checked: m = 1 ... 16384).
+                assert t % docs == 0, (tuple(x.shape), docs)
+                # quant_per_document's global scale, one per document, broadcast to its tokens
+                gs_doc = x.reshape(docs, -1, 16).float().abs().amax(dim=(1, 2)) / (6 * 448)
+                gs_rows = gs_doc.repeat_interleave(t // docs).contiguous()
+                idx, size = kern.sf_index(0, t, w.n, k, x2.device)
+                packed, asf, _ = fused_quant.quantize(x2, self.act_kind, idx, size, gs=gs_rows, signed_zero=True)
+                if self.checked < self.check_calls:
+                    got = decode_packed(packed, asf[idx].reshape(t, k // 16), gs_rows[:, None], t, k)
+                    ref = self.reference(x, docs).reshape(t, k)
+                    if not torch.equal(got.view(torch.int16), ref.view(torch.int16)):
+                        raise AssertionError(f'{name}: native activation differs from quant_per_document in '
+                                             f'{(got != ref).sum().item()} elements')
+                    self.checked += 1
+            with region('native: FP4 GEMM'):
+                d = kern.gemm(packed, asf, w.packed, w.sf_bytes, t, w.n, k, w.gs)
+            with region('native: epilogue'):
+                if self.single_pass_epilogue:
+                    # one pass: bf16 * fp32 promotes to one FP32 multiply, rounded once to the bf16 output,
+                    # exactly as the two-pass (d.float() * gs).to(bf16)
+                    out = torch.empty((t, w.n), dtype=x.dtype, device=x.device)
+                    torch.mul(d, gs_rows[:, None], out=out)
+                    return out.reshape(*x.shape[:-1], w.n)
+                return (d.float() * gs_rows[:, None]).to(x.dtype).reshape(*x.shape[:-1], w.n)
         return forward

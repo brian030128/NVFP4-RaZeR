@@ -1,0 +1,17 @@
+2026-09-25T13:07:56Z START llama_det_native_256x64 /home/dev/.conda/envs/n16k64/bin/python run_multiround.py --model llama8b --objective kl --data-root /home/dev/n16k64_campaign/cost_comparison/data --transformers-deviation --memory-mode lean --dev-backend native --deterministic --skip-ce-backward --eval-batch 16 --score-batch 8 --budget-hours 12 --record-dev-values --dump-round0-scores --unit 256x64 --fused-act-quant --single-pass-epilogue --out /home/dev/n16k64_campaign/speedups/phase1/llama_det_native_256x64
+2026-09-25T13:29:41Z END llama_det_native_256x64 rc=0
+2026-09-25T13:29:42Z CHECK llama_det_native_256x64 rc=0
+2026-09-25T13:29:42Z START llama_det_native_8x64 /home/dev/.conda/envs/n16k64/bin/python run_multiround.py --model llama8b --objective kl --data-root /home/dev/n16k64_campaign/cost_comparison/data --transformers-deviation --memory-mode lean --dev-backend native --deterministic --skip-ce-backward --eval-batch 16 --score-batch 8 --budget-hours 12 --record-dev-values --dump-round0-scores --unit 8x64 --fused-act-quant --single-pass-epilogue --out /home/dev/n16k64_campaign/speedups/phase1/llama_det_native_8x64
+2026-09-25T14:02:00Z END llama_det_native_8x64 rc=0
+2026-09-25T14:02:04Z CHECK llama_det_native_8x64 rc=0
+2026-09-25T14:02:04Z START phi4_legacy_16x8 /home/dev/.conda/envs/n16k64/bin/python run_multiround.py --model phi4 --objective kl --data-root /home/dev/n16k64_campaign/multimodel/data --memory-mode lean --unit 8x64 --dev-backend native --deterministic --skip-ce-backward --stop-after-scoring --dump-round0-scores --record-dev-values --eval-batch 16 --score-batch 8 --out /home/dev/n16k64_campaign/speedups/phase1/phi4_legacy_16x8
+2026-09-25T14:06:57Z END phi4_legacy_16x8 rc=0
+2026-09-25T14:06:57Z START phi4_new_16x8 /home/dev/.conda/envs/n16k64/bin/python run_multiround.py --model phi4 --objective kl --data-root /home/dev/n16k64_campaign/multimodel/data --memory-mode lean --unit 8x64 --dev-backend native --deterministic --skip-ce-backward --stop-after-scoring --dump-round0-scores --record-dev-values --eval-batch 16 --score-batch 8 --fused-act-quant --single-pass-epilogue --out /home/dev/n16k64_campaign/speedups/phase1/phi4_new_16x8
+2026-09-25T14:11:13Z END phi4_new_16x8 rc=0
+2026-09-25T14:11:16Z CHECK phi4_legacy_vs_new identical=True
+2026-09-25T14:11:16Z START qwen27b_legacy_16x8 /home/dev/.conda/envs/n16k64/bin/python run_multiround.py --model qwen27b --objective kl --data-root /home/dev/n16k64_campaign/multimodel/data --memory-mode lean --unit 8x64 --dev-backend native --deterministic --skip-ce-backward --stop-after-scoring --dump-round0-scores --record-dev-values --gpus 1 --eval-batch 16 --score-batch 8 --out /home/dev/n16k64_campaign/speedups/phase1/qwen27b_legacy_16x8
+2026-09-25T14:17:41Z END qwen27b_legacy_16x8 rc=1
+2026-09-25T14:17:41Z SKIP qwen27b check: out of memory at batch 16/8 in lean mode (see its log)
+2026-09-25T14:17:41Z START qwen27b_new_1x1 /home/dev/.conda/envs/n16k64/bin/python run_multiround.py --model qwen27b --objective kl --data-root /home/dev/n16k64_campaign/multimodel/data --memory-mode lean --unit 8x64 --dev-backend native --deterministic --skip-ce-backward --stop-after-scoring --dump-round0-scores --record-dev-values --gpus 1 --eval-batch 1 --score-batch 1 --fused-act-quant --single-pass-epilogue --out /home/dev/n16k64_campaign/speedups/phase1/qwen27b_new_1x1
+2026-09-25T14:36:47Z END qwen27b_new_1x1 rc=0
+2026-09-25T14:36:47Z PHASE1 QUEUE DONE

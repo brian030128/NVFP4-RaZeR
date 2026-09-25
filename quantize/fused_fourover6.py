@@ -161,6 +161,21 @@ def fourover6(x, documents=1, block=1024):
     return out
 
 
+def fourover6_rows(x, block=1024):
+    """quantize_rows(x) (quantize/causal_four_over_six.py): one FP32 global scale per token row, clamped
+    at the smallest normal as there, codes and scales as fourover6. Bitwise equal to quantize_rows."""
+    assert x.dtype == torch.bfloat16 and x.is_cuda and x.shape[-1] % 16 == 0
+    x = x.contiguous()
+    k = x.shape[-1]
+    rows = x.numel() // k
+    gs = (x.reshape(rows, k // 16, 16).float().abs().amax((1, 2), keepdim=True) / (6 * 448)).clamp_min(
+        torch.finfo(torch.float32).tiny).reshape(rows).contiguous()
+    out = torch.empty_like(x)
+    _fourover6_kernel[(triton.cdiv(k, block), rows)](x, out, gs, k, INV6=INV_6, BLOCK=block, num_warps=4,
+                                                    enable_fp_fusion=False)
+    return out
+
+
 def scaled_e2m1(x, scales, global_scale, block=1024):
     """E2M1 round-to-nearest of x (one tensor) with given per-block scales; BF16 dequantized."""
     assert x.dtype == torch.bfloat16 and scales.dtype == torch.float32 and scales.numel() * 16 == x.numel()

@@ -27,9 +27,12 @@ import torch.nn.functional as F
 import transformers
 from transformers import AutoTokenizer
 
+import profile_regions
 from cost_monitor import PhaseMonitor
+from profile_regions import region
 from quantize.causal_four_over_six import quantize_rows
 from quantize.fast_act import check as check_act, quant_per_document
+from quantize.fused_fourover6 import fourover6, fourover6_rows
 from quantize.packed_candidates import decode_alt, decode_base, nbytes, pack
 from quantize.quantizer import quant_mix_4_6, quant_nvfp4, quant_nvfp4_4over6
 from run_baseline_protocol_audit import data
@@ -147,6 +150,15 @@ def main():
                     help='Save round 0\'s per-unit CE/KL score mean and SE (round0_scores.pt)')
     ap.add_argument('--stop-after-scoring', action='store_true',
                     help='Stop after round 0\'s scoring pass (batching equivalence check, with --dump-round0-scores)')
+    ap.add_argument('--fused-act-quant', action='store_true',
+                    help='Fused (Triton) FourOverSix activation quantizers: per-token rows for scoring (quantize_rows) '
+                         'and per-document for the fake evaluator (quant_per_document); bitwise identical, the first '
+                         '64 calls of each are checked against the reference')
+    ap.add_argument('--single-pass-epilogue', action='store_true',
+                    help='Native evaluator: write bf16(D * gs) in one pass (torch.mul into a bf16 output); bitwise identical')
+    ap.add_argument('--profile', type=Path, default=None, metavar='JSON',
+                    help='Profile one fake development evaluation, one native one (native runs) and one scoring '
+                         'pass with torch.profiler, write the GPU-time breakdown by region to JSON, and stop')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     started = time.time()
@@ -185,6 +197,7 @@ def main():
                             torch=torch.__version__, cuda=torch.version.cuda, transformers=transformers.__version__),
                   data_root=None if args.data_root is None else str(args.data_root), deviations=deviations,
                   skip_ce_backward=args.skip_ce_backward, memory_mode=args.memory_mode,
+                  speedups=dict(fused_act_quant=args.fused_act_quant, single_pass_epilogue=args.single_pass_epilogue),
                   model=args.model, unit=args.unit, objective=args.objective,
                   eval_batch=args.eval_batch, score_batch=args.score_batch,
                   significant_steps=args.significant_steps, warm_start=args.warm_start,
@@ -194,7 +207,8 @@ def main():
                   source_sha256={p: digest_file(p) for p in ('run_multiround.py', 'quantize/quantizer.py',
                                                              'quantize/causal_four_over_six.py',
                                                              'repro_local/realquant/native_dev.py',
-                                                             'repro_local/realquant/candidate_store.py')},
+                                                             'repro_local/realquant/candidate_store.py',
+                                                             'quantize/fused_fourover6.py')},
                   rounds=[])
     save(args.out, report)
     if qwen:
@@ -246,6 +260,7 @@ def main():
         from native_dev import NativeDev
         native = NativeDev(modules, rows, cols, tokens=args.eval_batch * dev[0]['ids'].shape[1] if dev else 2048,
                            store=store)
+        native.single_pass_epilogue = args.single_pass_epilogue
     pristine = {}
     for n, m in modules.items():
         assert sha(m.weight) == prior['matrices'][n]['source_sha256'], n
@@ -313,9 +328,10 @@ def main():
         def weight_for(key):
             if key[0] == 'bf16':
                 return pristine[n].to(device)
-            if key[0] == 'nvfp4':
-                return store.decode(n, which='nvfp4')
-            return store.decode(n, key[1])
+            with region('lean weight decode'):
+                if key[0] == 'nvfp4':
+                    return store.decode(n, which='nvfp4')
+                return store.decode(n, key[1])
         return weight_for
 
     if lean and not bf16_only:
@@ -375,6 +391,7 @@ def main():
     act_kind = ['four_over_six']            # fake evaluation activation rule: FourOverSix, or NVFP4 (its map)
 
     act_checks = [0]
+    row_checks = [0]
     current_batch = [1]
     input_layouts = {}
 
@@ -400,10 +417,20 @@ def main():
             # NVFP4 baseline: quant_nvfp4 with one tensor-wide scale per document
             docs = view if view.dim() >= 3 else view[None]
             return (torch.stack([quant_nvfp4(d, 4, 16) for d in docs]).reshape(x.shape), *inputs[1:])
+        if args.fused_act_quant:
+            with region('act_quant_doc (fake evaluation)'):
+                q = fourover6(view, documents=view.shape[0] if view.dim() >= 3 else 1)
+            if act_checks[0] < 64:
+                assert torch.equal(q.view(torch.int16), quant_per_document(view).view(torch.int16)) and check_act(view), \
+                    'fused per-document activation quantizer differs from quant_per_document / quant_nvfp4_4over6'
+                act_checks[0] += 1
+            return (q.reshape(x.shape), *inputs[1:])
         if act_checks[0] < 64:
             assert check_act(view), 'vectorized activation quantizer differs from quant_nvfp4_4over6'
             act_checks[0] += 1
-        return (quant_per_document(view).reshape(x.shape), *inputs[1:])
+        with region('act_quant_doc (fake evaluation)'):
+            q = quant_per_document(view)
+        return (q.reshape(x.shape), *inputs[1:])
 
     def per_sequence_losses(lp, ids, t):
         # lp, t: (B, T-1, V) log-probabilities; CE and KL averaged over each sequence's tokens.
@@ -425,8 +452,10 @@ def main():
             ids = torch.cat([r['ids'] for r in chunk]).to(device)
             current_batch[0] = ids.shape[0]
             lp = model(input_ids=ids, use_cache=False).logits[:, :-1].float().log_softmax(-1)
-            t = torch.cat(dev_teacher[start:start + args.eval_batch]).to(lp.device).float()
-            c, k = per_sequence_losses(lp, ids, t)
+            with region('teacher host-to-device'):
+                t = torch.cat(dev_teacher[start:start + args.eval_batch]).to(lp.device).float()
+            with region('logits log_softmax + CE/KL'):
+                c, k = per_sequence_losses(lp, ids, t)
             ce.extend(c.tolist()); kl.extend(k.tolist())
             del lp, t
         current_batch[0] = 1
@@ -435,15 +464,18 @@ def main():
 
     def native_dev_eval():
         # dev_eval with every scoped Linear on the native kernel instead of the activation hooks
-        native.install(sel)
+        with region('native weight build'):
+            native.install(sel)
         ce, kl = [], []
         for start in range(0, len(dev), args.eval_batch):
             chunk = dev[start:start + args.eval_batch]
             ids = torch.cat([r['ids'] for r in chunk]).to(device)
             native.documents = ids.shape[0]
             lp = model(input_ids=ids, use_cache=False).logits[:, :-1].float().log_softmax(-1)
-            t = torch.cat(dev_teacher[start:start + args.eval_batch]).to(lp.device).float()
-            c, k = per_sequence_losses(lp, ids, t)
+            with region('teacher host-to-device'):
+                t = torch.cat(dev_teacher[start:start + args.eval_batch]).to(lp.device).float()
+            with region('logits log_softmax + CE/KL'):
+                c, k = per_sequence_losses(lp, ids, t)
             ce.extend(c.tolist()); kl.extend(k.tolist())
             del lp, t
         native.remove()
@@ -513,7 +545,17 @@ def main():
 
         def act(module, inputs):
             x = inputs[0]
-            return (quantize_rows(x.detach()) + (x - x.detach()), *inputs[1:])
+            with region('act_quant_rows (scoring)'):
+                if args.fused_act_quant:
+                    q = fourover6_rows(x.detach())
+                    if row_checks[0] < 64:
+                        assert torch.equal(q.view(torch.int16), quantize_rows(x.detach()).view(torch.int16)), \
+                            'fused per-token activation quantizer differs from quantize_rows'
+                        row_checks[0] += 1
+                else:
+                    q = quantize_rows(x.detach())
+            # straight-through: the same expression either way (it also turns a -0 of q into +0)
+            return (q + (x - x.detach()), *inputs[1:])
 
         def make_hook(n):
             def forward(module, inputs, output):
@@ -524,14 +566,22 @@ def main():
                     # Each sequence's loss reaches only its own slice of dy, so
                     # dy[i]^T x[i] is exactly sequence i's weight gradient.
                     dy = dy.detach().reshape(x.shape[0], -1, dy.shape[-1])
-                    b = base(n)
-                    d = (alt(n).float() - b.float()) * torch.where(expand(sel[n], rows, cols, b.shape[0]), -1., 1.)
-                    del b
+                    with region('hook: candidate decode + D'):
+                        b = base(n)
+                        d = (alt(n).float() - b.float()) * torch.where(expand(sel[n], rows, cols, b.shape[0]), -1., 1.)
+                        del b
                     s = sums[n]
                     for i in range(x.shape[0]):
-                        value = reduce((dy[i].float().T @ x[i].float()) * d, rows, cols).double()
-                        s[2 * phase[0]] += value
-                        s[2 * phase[0] + 1] += value.square()
+                        # the same operations as reduce((dy[i]^T x[i]) * d), with the same tensor lifetimes
+                        with region('hook: G = dy^T x (FP32 matmul)'):
+                            g = dy[i].float().T @ x[i].float()
+                        with region('hook: G*D, tile reduction, FP64 accumulation'):
+                            gd = g * d
+                            del g
+                            value = reduce(gd, rows, cols).double()
+                            del gd
+                            s[2 * phase[0]] += value
+                            s[2 * phase[0] + 1] += value.square()
                 output.register_hook(backward)
             return forward
 
@@ -541,9 +591,17 @@ def main():
             for start in range(0, len(fit), args.score_batch):
                 ids = torch.cat(fit[start:start + args.score_batch]).to(device)
                 embeds = model.get_input_embeddings()(ids).detach().requires_grad_()
-                lp = model(inputs_embeds=embeds, use_cache=False).logits[:, :-1].float().log_softmax(-1)
-                t = torch.cat(teacher[start:start + args.score_batch]).to(lp.device).float()
-                ce, kl = per_sequence_losses(lp, ids, t)
+                if profile_regions.ON[0]:
+                    logits = model(inputs_embeds=embeds, use_cache=False).logits
+                    with region('logits log_softmax + CE/KL'):
+                        lp = logits[:, :-1].float().log_softmax(-1)
+                        del logits
+                else:
+                    lp = model(inputs_embeds=embeds, use_cache=False).logits[:, :-1].float().log_softmax(-1)
+                with region('teacher host-to-device'):
+                    t = torch.cat(teacher[start:start + args.score_batch]).to(lp.device).float()
+                with region('logits log_softmax + CE/KL'):
+                    ce, kl = per_sequence_losses(lp, ids, t)
                 if not args.skip_ce_backward:
                     phase[0] = 0; ce.sum().backward(retain_graph=True)
                 phase[0] = 1; kl.sum().backward()
@@ -651,6 +709,43 @@ def main():
                                    cpu_peak_rss_gib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2 ** 20,
                                    phases=phases)
         report['status'] = 'complete'
+        save(args.out, report)
+        return
+    if args.profile is not None:
+        # One fake development evaluation, one native one (native runs) and one scoring pass under
+        # torch.profiler; the GPU time of every kernel goes to its innermost named region.
+        phases = ['phase: fake development evaluation'] + (['phase: native development evaluation']
+                                                          if native is not None else []) + ['phase: scoring pass']
+        regions = ['act_quant_rows (scoring)', 'act_quant_doc (fake evaluation)', 'hook: candidate decode + D',
+                   'hook: G = dy^T x (FP32 matmul)', 'hook: G*D, tile reduction, FP64 accumulation',
+                   'lean weight decode', 'logits log_softmax + CE/KL', 'teacher host-to-device',
+                   'native weight build', 'native: activation quantization', 'native: FP4 GEMM',
+                   'native: epilogue']
+        profile_regions.ON[0] = True
+        wall = {}
+        with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU,
+                                                torch.profiler.ProfilerActivity.CUDA]) as prof:
+            for phase, fn in zip(phases, [dev_eval] + ([native_dev_eval] if native is not None else []) + [score]):
+                torch.cuda.synchronize()
+                t0 = time.time()
+                with torch.profiler.record_function(phase):
+                    fn()
+                    torch.cuda.synchronize()
+                wall[phase] = time.time() - t0
+        profile_regions.ON[0] = False
+        trace = args.profile.with_suffix('.trace.json')
+        prof.export_chrome_trace(str(trace))
+        result, counted = profile_regions.breakdown_trace(trace, phases, regions)
+        result['kernels_counted'] = counted
+        for phase in phases:
+            result[phase]['wall_seconds_with_profiler'] = wall[phase]
+        result['trace'] = str(trace)
+        args.profile.write_text(json.dumps(dict(model=args.model, unit=args.unit, memory_mode=args.memory_mode,
+                                                eval_batch=args.eval_batch, score_batch=args.score_batch,
+                                                breakdown=result), indent=1) + '\n')
+        print('PROFILE ' + json.dumps({p: dict(gpu_ms_total=result[p]['gpu_ms_total'],
+                                              wall=result[p]['wall_seconds_with_profiler']) for p in phases}), flush=True)
+        report['status'] = 'profile_complete'
         save(args.out, report)
         return
     monitor.enter('initial_dev_eval')
