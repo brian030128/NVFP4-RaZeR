@@ -1,0 +1,12 @@
+2026-09-25T15:50:09Z END chunked_unit_tests rc=0
+2026-09-25T15:50:09Z START llama_det_native_256x64_chunked /home/dev/.conda/envs/n16k64/bin/python run_multiround.py --model llama8b --objective kl --data-root /home/dev/n16k64_campaign/cost_comparison/data --transformers-deviation --memory-mode lean --dev-backend native --deterministic --skip-ce-backward --eval-batch 16 --score-batch 8 --budget-hours 12 --record-dev-values --dump-round0-scores --unit 256x64 --fused-act-quant --single-pass-epilogue --chunked-loss --out /home/dev/n16k64_campaign/speedups/chunked/llama_det_native_256x64_chunked
+2026-09-25T16:12:39Z END llama_det_native_256x64_chunked rc=0
+2026-09-25T16:12:41Z CHECK llama_det_native_256x64_chunked rc=0
+2026-09-25T16:12:41Z START phi4_chunked_16x8 /home/dev/.conda/envs/n16k64/bin/python run_multiround.py --model phi4 --objective kl --data-root /home/dev/n16k64_campaign/multimodel/data --memory-mode lean --unit 8x64 --dev-backend native --deterministic --skip-ce-backward --stop-after-scoring --dump-round0-scores --record-dev-values --fused-act-quant --single-pass-epilogue --eval-batch 16 --score-batch 8 --chunked-loss --out /home/dev/n16k64_campaign/speedups/chunked/phi4_chunked_16x8
+2026-09-25T16:17:00Z END phi4_chunked_16x8 rc=0
+2026-09-25T16:17:03Z CHECK phi4_whole_vs_chunked identical=True
+2026-09-25T16:17:03Z START qwen27b_whole_4x4 /home/dev/.conda/envs/n16k64/bin/python run_multiround.py --model qwen27b --objective kl --data-root /home/dev/n16k64_campaign/multimodel/data --memory-mode lean --unit 8x64 --dev-backend native --deterministic --skip-ce-backward --stop-after-scoring --dump-round0-scores --record-dev-values --fused-act-quant --single-pass-epilogue --gpus 1 --eval-batch 4 --score-batch 4 --out /home/dev/n16k64_campaign/speedups/chunked/qwen27b_whole_4x4
+2026-09-25T16:24:50Z END qwen27b_whole_4x4 rc=1
+2026-09-25T16:24:50Z STOP run failed
+2026-09-25T16:26:28Z START qwen27b_chunked_16x8 (criterion 4b; deviation 1)
+2026-09-25T16:34:16Z END qwen27b_chunked_16x8 rc=0

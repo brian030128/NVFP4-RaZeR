@@ -27,6 +27,7 @@ import torch.nn.functional as F
 import transformers
 from transformers import AutoTokenizer
 
+import chunked_loss
 import profile_regions
 from cost_monitor import PhaseMonitor
 from profile_regions import region
@@ -154,6 +155,9 @@ def main():
                     help='Fused (Triton) FourOverSix activation quantizers: per-token rows for scoring (quantize_rows) '
                          'and per-document for the fake evaluator (quant_per_document); bitwise identical, the first '
                          '64 calls of each are checked against the reference')
+    ap.add_argument('--chunked-loss', action='store_true',
+                    help='CE/KL (development evaluation) and the scoring KL backward over chunks of >= 2 documents '
+                         '(chunked_loss.py): no FP32 [batch, T, vocab] tensor for the whole batch; bitwise identical')
     ap.add_argument('--tile-score-kernel', action='store_true',
                     help='B1: fused per-sequence tile scores in the scoring backward (repro_local/realquant/tile_score.py; '
                          'lean mode); FP32 summation order differs from the legacy hook, nothing else')
@@ -170,6 +174,8 @@ def main():
     qwen = args.model == 'qwen27b'
     lean = args.memory_mode == 'lean'
     assert not args.tile_score_kernel or lean, '--tile-score-kernel reads the lean candidate store'
+    assert not (args.chunked_loss and not args.skip_ce_backward and not args.evaluate_map), \
+        '--chunked-loss scores the KL objective only (--skip-ce-backward)'
     assert not args.skip_ce_backward or args.objective == 'kl', '--skip-ce-backward needs --objective kl'
     if args.deterministic:
         assert os.environ.get('CUBLAS_WORKSPACE_CONFIG') in (':4096:8', ':16:8'), 'set CUBLAS_WORKSPACE_CONFIG=:4096:8'
@@ -202,7 +208,8 @@ def main():
                   data_root=None if args.data_root is None else str(args.data_root), deviations=deviations,
                   skip_ce_backward=args.skip_ce_backward, memory_mode=args.memory_mode,
                   speedups=dict(fused_act_quant=args.fused_act_quant, single_pass_epilogue=args.single_pass_epilogue,
-                                tile_score_kernel=args.tile_score_kernel),
+                                tile_score_kernel=args.tile_score_kernel, chunked_loss=args.chunked_loss,
+                                pytorch_cuda_alloc_conf=os.environ.get('PYTORCH_CUDA_ALLOC_CONF')),
                   model=args.model, unit=args.unit, objective=args.objective,
                   eval_batch=args.eval_batch, score_batch=args.score_batch,
                   significant_steps=args.significant_steps, warm_start=args.warm_start,
@@ -214,9 +221,24 @@ def main():
                                                              'repro_local/realquant/native_dev.py',
                                                              'repro_local/realquant/candidate_store.py',
                                                              'quantize/fused_fourover6.py',
-                                                             'repro_local/realquant/tile_score.py')},
+                                                             'repro_local/realquant/tile_score.py',
+                                                             'chunked_loss.py')},
                   rounds=[])
     save(args.out, report)
+
+    def record_out_of_memory(kind, error, trace):
+        # On a CUDA out-of-memory exit, keep the per-phase memory peaks and the allocator summary in the report.
+        if issubclass(kind, torch.OutOfMemoryError):
+            try:
+                monitor.close()
+                report['out_of_memory'] = dict(message=str(error).split('\n')[0], phases=monitor.summary(),
+                                               allocator_summary=torch.cuda.memory_summary(abbreviated=True))
+                report['status'] = 'out_of_memory'
+                save(args.out, report)
+            except Exception:
+                pass
+        sys.__excepthook__(kind, error, trace)
+    sys.excepthook = record_out_of_memory
     if qwen:
         from transformers import Qwen3_5ForConditionalGeneration
         model, loading = Qwen3_5ForConditionalGeneration.from_pretrained(
@@ -459,6 +481,12 @@ def main():
             chunk = dev[start:start + args.eval_batch]
             ids = torch.cat([r['ids'] for r in chunk]).to(device)
             current_batch[0] = ids.shape[0]
+            if args.chunked_loss:
+                logits = model(input_ids=ids, use_cache=False).logits
+                c, k = chunked_loss.per_sequence_losses(logits, ids, dev_teacher[start:start + args.eval_batch], logits.device)
+                ce.extend(c.tolist()); kl.extend(k.tolist())
+                del logits
+                continue
             lp = model(input_ids=ids, use_cache=False).logits[:, :-1].float().log_softmax(-1)
             with region('teacher host-to-device'):
                 t = torch.cat(dev_teacher[start:start + args.eval_batch]).to(lp.device).float()
@@ -479,6 +507,12 @@ def main():
             chunk = dev[start:start + args.eval_batch]
             ids = torch.cat([r['ids'] for r in chunk]).to(device)
             native.documents = ids.shape[0]
+            if args.chunked_loss:
+                logits = model(input_ids=ids, use_cache=False).logits
+                c, k = chunked_loss.per_sequence_losses(logits, ids, dev_teacher[start:start + args.eval_batch], logits.device)
+                ce.extend(c.tolist()); kl.extend(k.tolist())
+                del logits
+                continue
             lp = model(input_ids=ids, use_cache=False).logits[:, :-1].float().log_softmax(-1)
             with region('teacher host-to-device'):
                 t = torch.cat(dev_teacher[start:start + args.eval_batch]).to(lp.device).float()
@@ -606,6 +640,14 @@ def main():
             for start in range(0, len(fit), args.score_batch):
                 ids = torch.cat(fit[start:start + args.score_batch]).to(device)
                 embeds = model.get_input_embeddings()(ids).detach().requires_grad_()
+                if args.chunked_loss:
+                    # the KL backward's logit gradient chunk by chunk, then the model's backward from the logits
+                    logits = model(inputs_embeds=embeds, use_cache=False).logits
+                    grad = chunked_loss.kl_logit_gradient(logits, teacher[start:start + args.score_batch], logits.device)
+                    phase[0] = 1
+                    logits.backward(grad)
+                    del embeds, logits, grad
+                    continue
                 if profile_regions.ON[0]:
                     logits = model(inputs_embeds=embeds, use_cache=False).logits
                     with region('logits log_softmax + CE/KL'):
@@ -818,6 +860,12 @@ def main():
             if args.record_dev_values:
                 torch.save(dev_values, args.out / 'dev_values.pt')
             report['score_seconds'] = time.time() - t0
+            monitor.close()
+            phases = monitor.summary()
+            report['resources'] = dict(gpu_peak_allocated_gib=phases['gpu_peak_allocated_gib'],
+                                       gpu_peak_reserved_gib=phases['gpu_peak_reserved_gib'],
+                                       cpu_peak_rss_gib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2 ** 20,
+                                       phases=phases)
             report['status'] = 'scores_complete'
             save(args.out, report)
             print('STOP after round 0 scoring', flush=True)
