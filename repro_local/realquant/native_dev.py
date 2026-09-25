@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fused_quant  # noqa: E402
 import rq  # noqa: E402
 from quantize.fast_act import quant_per_document  # noqa: E402
+from quantize.quantizer import quant_nvfp4  # noqa: E402
 
 CONFIG = 'b8x64'
 
@@ -128,8 +129,22 @@ class NativeDev:
         if store is not None:
             assert (store.rows, store.cols) == (rows, cols) and store.alt_signed_zero == alt_signed_zero
             self.cand = store.cand
+        self.fixed = False
         # the fake activation quantizer the first calls are checked against (bitwise)
-        self.reference = lambda x, docs: quant_per_document(x.reshape(docs, -1, x.shape[-1]))
+        self.set_activation('four_over_six_rows')
+
+    def set_activation(self, kind):
+        """Per-document tensor-wide activation rule: 'four_over_six_rows' (quant_per_document, the default)
+        or 'nvfp4_rows' (quant_nvfp4 on each document, the NVFP4 baseline); fused_quant's kind of that name
+        is run with the document's global scale given."""
+        self.act_kind = kind
+        if kind == 'four_over_six_rows':
+            self.reference = lambda x, docs: quant_per_document(x.reshape(docs, -1, x.shape[-1]))
+        elif kind == 'nvfp4_rows':
+            self.reference = lambda x, docs: torch.stack([quant_nvfp4(d, 4, 16) for d in
+                                                          x.reshape(docs, -1, x.shape[-1])])
+        else:
+            raise ValueError(kind)
 
     @torch.no_grad()
     def add(self, name, w, base, alt):
@@ -177,11 +192,29 @@ class NativeDev:
         self.build_seconds_total += self.rebuild_seconds
         self.builds += 1
 
+    @torch.no_grad()
+    def install_fixed(self, weights):
+        """Native forwards for fixed weights, weights(name) -> (packed, row-major scale bytes, gs, n, k),
+        e.g. NVFP4; built now, freed by remove()."""
+        assert not self.fixed
+        t0 = time.time()
+        self.saved = {n: m.forward for n, m in self.modules.items()}
+        self.built.clear()
+        for name, mod in self.modules.items():
+            packed, sbytes, gs, n, k = weights(name)
+            sf = self.kern.place_scales(sbytes, 1, self.tokens, n, k)
+            self.current[name] = rq.PackedWeight(packed, sf, gs, n, k, 0)
+            mod.forward = self._forward(name)
+        torch.cuda.synchronize()
+        self.fixed = True
+        self.rebuild_seconds = time.time() - t0
+
     def remove(self):
         for name, mod in self.modules.items():
             mod.forward = self.saved[name]
-        if self.store is not None:
+        if self.store is not None or self.fixed:
             self.current.clear()
+            self.fixed = False
 
     def _forward(self, name):
         w, kern = self.current[name], self.kern
@@ -197,8 +230,7 @@ class NativeDev:
             gs_doc = x.reshape(docs, -1, 16).float().abs().amax(dim=(1, 2)) / (6 * 448)
             gs_rows = gs_doc.repeat_interleave(t // docs).contiguous()
             idx, size = kern.sf_index(0, t, w.n, k, x2.device)
-            packed, asf, _ = fused_quant.quantize(x2, 'four_over_six_rows', idx, size, gs=gs_rows,
-                                                  signed_zero=True)
+            packed, asf, _ = fused_quant.quantize(x2, self.act_kind, idx, size, gs=gs_rows, signed_zero=True)
             if self.checked < self.check_calls:
                 got = decode_packed(packed, asf[idx].reshape(t, k // 16), gs_rows[:, None], t, k)
                 ref = self.reference(x, docs).reshape(t, k)

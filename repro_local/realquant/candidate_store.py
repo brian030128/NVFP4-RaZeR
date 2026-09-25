@@ -63,6 +63,7 @@ class CandidateStore:
         self.rows, self.cols = rows, cols
         self.alt_signed_zero = alt_signed_zero
         self.cand = {}
+        self.nvfp4 = {}
         self.lut = {}
 
     def _luts(self, device):
@@ -82,13 +83,31 @@ class CandidateStore:
         """Pack both candidates of the source weight w; their decode must equal base and alt bitwise."""
         self.cand[name] = native_dev.pack_candidates(name, w, base, alt, self.alt_signed_zero)
 
+    @torch.no_grad()
+    def add_nvfp4(self, name, w, reference):
+        """Optional third candidate for evaluation: plain NVFP4 (quant_nvfp4) in the native format, checked
+        bitwise (signed zeros included) against reference = quant_nvfp4(w, 4, 16)."""
+        n, k = w.shape
+        code, scale, gs = rq.weight_nvfp4(w)
+        packed, sbytes, gs = rq.pack_nibbles(native_dev.e2m1_nibbles(code)), rq.scale_bytes(scale), gs.reshape(()).float()
+        got = native_dev.decode_packed(packed, sbytes, gs, n, k)
+        if not torch.equal(got.view(torch.int16), reference.view(torch.int16)):
+            raise AssertionError(f'{name}: packed NVFP4 differs from quant_nvfp4 in {(got != reference).sum().item()} elements')
+        self.nvfp4[name] = (packed, sbytes, gs, n, k)
+
     def shape(self, name):
         return self.cand[name][5:7]
 
     @torch.no_grad()
     def decode(self, name, sel=None, which=None, block=1024):
-        """bf16 [n, k]: the map `sel`'s weight (which=None), or the whole 'base' / 'alt' candidate."""
-        b4, b0, sb4, sb0, gs, n, k = self.cand[name]
+        """bf16 [n, k]: the map `sel`'s weight (which=None), or the whole 'base' / 'alt' / 'nvfp4' candidate."""
+        if which == 'nvfp4':
+            packed, sbytes, gs, n, k = self.nvfp4[name]
+            b4 = b0 = packed
+            sb4 = sb0 = sbytes
+            which = 'base'
+        else:
+            b4, b0, sb4, sb0, gs, n, k = self.cand[name]
         values, scales = self._luts(b4.device)
         if which is None:
             assert sel.shape == (-(-n // self.rows), k // self.cols) and sel.dtype == torch.bool
@@ -106,6 +125,8 @@ class CandidateStore:
     @torch.no_grad()
     def reference_decode(self, name, sel=None, which=None):
         """The same weight through the PyTorch path: NativeDev.select + decode_packed."""
+        if which == 'nvfp4':
+            return native_dev.decode_packed(*self.nvfp4[name])
         b4, b0, sb4, sb0, gs, n, k = self.cand[name]
         if which == 'base':
             return native_dev.decode_packed(b4, sb4, gs, n, k)
@@ -122,7 +143,8 @@ class CandidateStore:
                                    self.reference_decode(name, sel[name]).view(torch.int16))]
 
     def nbytes(self):
-        return sum(t.numel() * t.element_size() for c in self.cand.values() for t in c[:4])
+        return (sum(t.numel() * t.element_size() for c in self.cand.values() for t in c[:4])
+                + sum(t.numel() * t.element_size() for c in self.nvfp4.values() for t in c[:2]))
 
 
 def lean_forward(weight_for, current, bias):
