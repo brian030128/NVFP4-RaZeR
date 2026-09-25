@@ -158,6 +158,12 @@ def omma_census(cuobjdump, binary):
     return dict(formats=dict(formats), total=len(ops), predicated=predicated)
 
 
+def sass_sha256(cuobjdump, binary):
+    """Hash of the disassembled device code: identical for identical kernels wherever the checkout
+    lives (the file hash is not -- nvcc names host-side internal symbols after the absolute path)."""
+    return hashlib.sha256(run([cuobjdump, '--dump-sass', binary]).encode()).hexdigest()
+
+
 def resource_usage(cuobjdump, binary):
     out = run([cuobjdump, '--dump-resource-usage', binary])
     kernels = []
@@ -269,6 +275,7 @@ def build(cfg, tc, selftest=False):
         toolchain=tc, nvcc_command=[str(c) for c in cmd], nvcc_warnings=clog.strip()[-4000:],
         sources=source_hashes(blob), patcher_sha256=sha256(PATCHER),
         library=lib.name, unpatched_sha256=sha256(f'{lib}.unpatched'), library_sha256=sha256(lib),
+        sass_sha256=sass_sha256(tc['cuobjdump'], lib), unpatched_sass_sha256=sass_sha256(tc['cuobjdump'], f'{lib}.unpatched'),
         patch=pinfo, compiled_description=desc, resource_usage=res,
     )
     if selftest:
@@ -335,7 +342,7 @@ def main():
         try:
             m = build(cfg, tc, args.selftest)
             p = m['patch']
-            print(f'[ok] {name}: {m["library"]} sha256={m["library_sha256"][:16]} '
+            print(f'[ok] {name}: {m["library"]} sass_sha256={m["sass_sha256"][:16]} '
                   f'census={p["census_patched"]["formats"]} predicated={p["census_patched"]["predicated"]} '
                   f'regs={[r["reg"] for r in m["resource_usage"]]} stages={m["compiled_description"]["mainloop_stages"]}'
                   + (f' selftest={m["selftest"].get("gate", m["selftest"])}' if 'selftest' in m else ''), flush=True)

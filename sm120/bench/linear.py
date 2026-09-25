@@ -9,8 +9,9 @@ Per (shape, T) and policy it reports
     host_us      host time per call (Python + ctypes + CUTLASS argument setup + Triton launch),
                  the floor on latency when the GPU is idle (decode);
     quant_us / gemm_us   CUPTI device time of the quantizer kernel and the GEMM kernel.
-Policies: bf16 (nn.Linear, cuBLAS), native NVFP4 on the stock CUTLASS kernel (same quantizer and
-epilogue: the fair E2M1 baseline), native FourOverSix and N16K64-map on the mixed kernel.
+Policies: bf16 (nn.Linear, cuBLAS); native NVFP4 on the stock CUTLASS kernel family (same
+quantizer, epilogue and per-GPU tile selection: the fair E2M1 baseline); native FourOverSix and
+N16K64-map on the mixed family with tile selection; and N16K64-map on the single 128-wide build.
 
     python sm120/bench/linear.py --models llama8b,qwen4b --out sm120/results/bench/linear_rtx5090.json
 """
@@ -27,6 +28,7 @@ from kernel import selector_masks  # noqa: E402
 from mixfp4_sm120.artifact import pack_module  # noqa: E402
 from mixfp4_sm120.lib import Kernel  # noqa: E402
 from mixfp4_sm120.linear import NativeLinear  # noqa: E402
+from mixfp4_sm120.select import KernelSet  # noqa: E402
 
 
 def graph_time(fn, x, iters=20):
@@ -52,8 +54,8 @@ def main():
     args = ap.parse_args()
     if not args.allow_busy:
         B.require_idle()
-    mixed, stock = Kernel.load('n16k64_wA'), Kernel.load('stock_wA')
-    res = dict(gpu=B.gpu_info(), kernels={k.cfg.name: k.sha256 for k in (mixed, stock)}, rows=[])
+    mixed, stock, wide = KernelSet('mixed'), KernelSet('stock'), Kernel.load('n16k64_wA')
+    res = dict(gpu=B.gpu_info(), kernel_sets={'mixed': mixed.describe(), 'stock': stock.describe()}, rows=[])
     for model in args.models.split(','):
         sel = selector_masks(model, 16)
         for proj, (n, k) in B.MODEL_SHAPES[model].items():
@@ -69,6 +71,8 @@ def main():
                                                      'four_over_six_rows', proj),
                 'native_n16k64_map': NativeLinear(pack_module(proj, lin.weight, None, 'map', mask, (16, 64)), mixed,
                                                   'four_over_six_rows', proj),
+                'native_n16k64_map_w128': NativeLinear(pack_module(proj, lin.weight, None, 'map', mask, (16, 64)), wide,
+                                                       'four_over_six_rows', proj),
             }
             for t in [int(x) for x in args.tokens.split(',')]:
                 x = torch.randn(t, k, generator=g).cuda().bfloat16()

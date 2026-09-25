@@ -15,6 +15,19 @@ import torch
 from . import artifact as A
 from .lib import Kernel
 from .linear import NativeLinear
+from .select import KernelSet
+
+
+def resolve_kernel(kernel):
+    """'auto' -> the mixed KernelSet with this GPU's tile table; 'auto_stock' -> the stock NVFP4 set;
+    a configuration name -> that single build; Kernel / KernelSet instances pass through."""
+    if isinstance(kernel, (Kernel, KernelSet)):
+        return kernel
+    if kernel in ('auto', 'auto_mixed'):
+        return KernelSet('mixed')
+    if kernel == 'auto_stock':
+        return KernelSet('stock')
+    return Kernel.load(kernel)
 
 
 def scope(model, loader='causal_lm'):
@@ -41,24 +54,28 @@ class InstallReport:
     fallback: list = field(default_factory=list)      # (name, reason)
     bf16_by_design: list = field(default_factory=list)
     e0m3_tiles: int = 0
+    device_bytes: dict = field(default_factory=lambda: dict(packed=0, scales_placed=0, scales_padding=0, bias=0))
+    kernel_set: dict | None = None
 
     def as_dict(self):
         return dict(kernel=self.kernel, kernel_sha256=self.kernel_sha256,
                     artifact_weights_sha256=self.artifact_weights_sha256, map_sha256=self.map_sha256,
                     native_modules=len(self.native), fallback=self.fallback, bf16_by_design=self.bf16_by_design,
-                    e0m3_tiles=self.e0m3_tiles)
+                    e0m3_tiles=self.e0m3_tiles, device_bytes=self.device_bytes, kernel_set=self.kernel_set)
 
 
 @torch.no_grad()
-def install(model, art_dir, kernel='n16k64_wA', loader='causal_lm', strict=True, device='cuda'):
+def install(model, art_dir, kernel='auto', loader='causal_lm', strict=True, device='cuda'):
     """Replace every scoped Linear by a NativeLinear from the artifact. Returns an InstallReport.
 
     Modules that already are NativeLinears (a previous install) are replaced as well, so artifacts
     can be swapped on one loaded model."""
-    kern = kernel if isinstance(kernel, Kernel) else Kernel.load(kernel)
+    kern = resolve_kernel(kernel)
     meta, weights = A.load(art_dir, device=device)
     act_kind = meta['activation_quantizer']
-    rep = InstallReport(kern.cfg.name, kern.sha256, meta['weights_sha256'], (meta.get('map') or {}).get('sha256'))
+    name = kern.cfg.name if isinstance(kern, Kernel) else f'KernelSet({kern.family})'
+    rep = InstallReport(name, kern.sha256, meta['weights_sha256'], (meta.get('map') or {}).get('sha256'))
+    rep.kernel_set = kern.describe() if isinstance(kern, KernelSet) else None
     mods = dict(scope(model, loader))
     mods.update(native_modules(model))
     mods = {n: m for n, m in model.named_modules() if n in mods}      # model order
@@ -91,6 +108,10 @@ def install(model, art_dir, kernel='n16k64_wA', loader='causal_lm', strict=True,
         _set_module(model, n, nl)
         rep.native.append(n)
         rep.e0m3_tiles += pw.e0m3_tiles
+        rep.device_bytes['packed'] += nl.packed.numel()
+        rep.device_bytes['scales_placed'] += nl.sf.numel()
+        rep.device_bytes['scales_padding'] += nl.sf.numel() - pw.scales.numel()
+        rep.device_bytes['bias'] += 0 if nl.bias_bf16 is None else nl.bias_bf16.numel() * 2
         del lin
     torch.cuda.empty_cache()
     return rep

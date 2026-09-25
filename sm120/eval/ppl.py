@@ -42,7 +42,7 @@ def parse_policy(s):
     if parts[0] == 'fake':
         return dict(name=name, kind='fake', weight=parts[1], map=parts[2] if len(parts) > 2 else None)
     if parts[0] == 'native':
-        return dict(name=name, kind='native', artifact=parts[1], kernel=parts[2] if len(parts) > 2 else 'n16k64_wA')
+        return dict(name=name, kind='native', artifact=parts[1], kernel=parts[2] if len(parts) > 2 else 'auto')
     raise SystemExit(f'bad policy {s!r}')
 
 

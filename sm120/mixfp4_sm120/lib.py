@@ -93,9 +93,10 @@ class Kernel:
         lib.sm120_sf_size.argtypes, lib.sm120_sf_size.restype = [_c_int, _c_int, _c_int, _c_int], _c_i64
         lib.sm120_sf_offsets.argtypes, lib.sm120_sf_offsets.restype = [_c_int, _c_int, _c_int, _c_int, _c_ptr], _c_int
         lib.sm120_granule_map.argtypes, lib.sm120_granule_map.restype = [_c_int, _c_ptr, _c_int], _c_int
-        lib.sm120_workspace_size.argtypes, lib.sm120_workspace_size.restype = [_c_int, _c_int, _c_int], _c_size
+        lib.sm120_workspace_size.argtypes = [_c_int, _c_int, _c_int, _c_int, _c_int]
+        lib.sm120_workspace_size.restype = _c_size
         lib.sm120_gemm.argtypes = [_c_ptr, _c_ptr, _c_ptr, _c_ptr, _c_ptr, _c_int, _c_int, _c_int,
-                                   _c_ptr, _c_float, _c_ptr, _c_float, _c_ptr, _c_ptr, _c_size, _c_ptr]
+                                   _c_ptr, _c_float, _c_ptr, _c_float, _c_ptr, _c_int, _c_int, _c_ptr, _c_size, _c_ptr]
         lib.sm120_gemm.restype = _c_int
         self.lib = lib
         buf = ctypes.create_string_buffer(4096)
@@ -107,6 +108,7 @@ class Kernel:
         self.weight_operand = self.cfg.weight_operand
         self.act_operand = 1 - self.weight_operand
         self.d_colmajor = bool(self.desc['d_colmajor'])
+        self.stream_k = bool(self.desc.get('stream_k', 0))
         self.type_block = self.cfg.type_block
         self._ws = {}
         self._offsets = {}
@@ -148,11 +150,11 @@ class Kernel:
             raise LibraryError('granule map buffer too small')
         return list(buf[:n])
 
-    def workspace(self, m, n, k, device):
-        key = (m, n, k, device)
+    def workspace(self, m, n, k, device, splits=1, decomposition=0):
+        key = (m, n, k, device, splits, decomposition)
         ws = self._ws.get(key)
         if ws is None:
-            size = int(self.lib.sm120_workspace_size(m, n, k))
+            size = int(self.lib.sm120_workspace_size(m, n, k, splits, decomposition))
             ws = torch.empty(max(size, 16), dtype=torch.uint8, device=device) if size else None
             self._ws[key] = ws
         return ws
@@ -160,12 +162,15 @@ class Kernel:
     # -------------------------------------------------------------------------------- GEMM
 
     def gemm(self, a, sfa, b, sfb, m, n, k, *, scale_m=None, scale_m_default=1.0, scale_n=None,
-             scale_n_default=1.0, bias=None, out=None, check=True):
+             scale_n_default=1.0, bias=None, out=None, check=True, splits=1, decomposition=0):
         """D = bf16((s_m[m] * s_n[n]) * decode(A) @ decode(B)^T + bias).
 
         a: uint8 [m, k/2], b: uint8 [n, k/2] (element 2j in the low nibble); sfa / sfb: placed scale
         bytes (bit 7 = E0M3 tag). Returns D as a [m, n] tensor, or for column-major-D builds as its
-        row-major transpose [n, m] (the same memory)."""
+        row-major transpose [n, m] (the same memory). Stream-K builds accept `splits` (> 1: split-K
+        into that many K slices) and `decomposition` (0 heuristic, 1 data-parallel, 2 split-K, 3 stream-K)."""
+        if (splits != 1 or decomposition != 0) and not self.stream_k:
+            raise ValueError(f'{self.cfg.name} is not a Stream-K build')
         dev = a.device
         if check:
             for name, t in (('a', a), ('sfa', sfa), ('b', b), ('sfb', sfb)):
@@ -189,12 +194,12 @@ class Kernel:
             out = torch.empty(shape, dtype=torch.bfloat16, device=dev)
         elif check and (out.shape != shape or out.dtype != torch.bfloat16 or not out.is_contiguous()):
             raise ValueError(f'out must be a contiguous bf16 {shape} tensor')
-        ws = self.workspace(m, n, k, dev)
+        ws = self.workspace(m, n, k, dev, splits, decomposition)
         stream = torch.cuda.current_stream(dev).cuda_stream
         ptr = lambda t: None if t is None else t.data_ptr()  # noqa: E731
         rc = self.lib.sm120_gemm(ptr(a), ptr(sfa), ptr(b), ptr(sfb), ptr(out), m, n, k,
                                  ptr(scale_m), float(scale_m_default), ptr(scale_n), float(scale_n_default),
-                                 ptr(bias), ptr(ws), 0 if ws is None else ws.numel(), stream)
+                                 ptr(bias), int(splits), int(decomposition), ptr(ws), 0 if ws is None else ws.numel(), stream)
         if rc != 0:
             raise LibraryError(f'sm120_gemm({m}, {n}, {k}) failed with code {rc}')
         return out

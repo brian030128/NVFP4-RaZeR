@@ -288,11 +288,17 @@ using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
     MixedSmemCopyAtomsB,
     cute::identity>;
 
+// [NVFP4-RaZeR local hook, see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_TILE_SCHEDULER=<type>
+// selects the kernel's tile scheduler (e.g. cutlass::gemm::StreamKScheduler to split K across CTAs
+// when the output has fewer tiles than the GPU has SMs). Unset, it is the upstream default (void).
+#ifndef MIXFP4_TILE_SCHEDULER
+#define MIXFP4_TILE_SCHEDULER void
+#endif
 using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
     Shape<int, int, int, int>,
     CollectiveMainloop,
     CollectiveEpilogue,
-    void>;
+    MIXFP4_TILE_SCHEDULER>;
 
 using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 

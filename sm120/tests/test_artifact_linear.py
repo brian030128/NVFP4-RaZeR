@@ -168,3 +168,33 @@ def test_e2m1_artifacts(device, kern, tmp_path):
             nl = NativeLinear(weights[n], kern, meta['activation_quantizer'], name=n)
             x = torch.randn(33, m.in_features, device='cuda').bfloat16()
             assert rel(nl(x), fp64_linear(weights[n], x, meta['activation_quantizer'])) < 3e-3
+
+
+def test_repeat_determinism_and_cuda_graph(device, kern, tmp_path):
+    """Repeated calls are bitwise identical; a captured CUDA graph replays the same result and
+    picks up new inputs written into its static input buffer."""
+    mods = make_modules(bias=True)
+    path, digest, _ = write_map(tmp_path, mods)
+    A.export(tmp_path / 'art', mods, kind='map', map_path=path, map_sha256=digest)
+    meta, weights = A.load(tmp_path / 'art')
+    n = 'layers.0.down_proj'
+    nl = NativeLinear(weights[n], kern, 'four_over_six_rows', name=n)
+    g = torch.Generator(device='cpu').manual_seed(4)
+    xs = [torch.randn(3, 1536, generator=g).cuda().bfloat16() for _ in range(3)]
+    want = [nl(x) for x in xs]
+    assert all(torch.equal(nl(x), w) for x, w in zip(xs, want))
+    static_x = xs[0].clone()
+    s = torch.cuda.Stream()
+    s.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(s):
+        for _ in range(2):
+            nl(static_x)
+    torch.cuda.current_stream().wait_stream(s)
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        static_y = nl(static_x)
+    for x, w in zip(xs, want):
+        static_x.copy_(x)
+        graph.replay()
+        torch.cuda.synchronize()
+        assert torch.equal(static_y, w)

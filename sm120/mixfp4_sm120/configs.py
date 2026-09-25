@@ -60,6 +60,41 @@ CONFIGS = {c.name: c for c in [
         description='Same granule via the 8x1 warp arrangement (4 joint arms), epilogue N=32. '
                     'The report measured it best on the RTX 5090 and worse on the RTX PRO 6000.'),
     KernelConfig(
+        'n16k64_wA_sk', 'mixed', 0, (16, 64), dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, SM120_STREAMK=1), _WT_AS_A_GEN,
+        expected_census={0: 512, 1: 512},
+        description='n16k64_wA with the Stream-K tile scheduler (deterministic reduction): splits K '
+                    'across CTAs when out/128 x tokens/128 tiles do not fill the GPU (decode, small batches).'),
+    KernelConfig(
+        'stock_wA_sk', 'stock', 0, None, dict(MIXFP4_D_COLMAJOR=1, SM120_STREAMK=1), {}, patch=False,
+        description='stock_wA with the Stream-K tile scheduler (baseline for n16k64_wA_sk).'),
+    # Narrow token tiles for small T (decode): with weights on A the token count is the GEMM's N, and
+    # a 128-wide CTA tile computes 128 token columns per k-tile however few are real, which makes
+    # decode MMA-bound on padding. bench/splitk.py and bench/kernel.py measure the crossover.
+    KernelConfig(
+        'n16k64_wA_n64', 'mixed', 0, (16, 64),
+        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_TILE_N=64, MIXFP4_B_ATOMS_PER_GRANULE=4),
+        dict(_WT_AS_A_GEN, MMA_N=4, B_ATOMS=4),
+        expected_census={0: 256, 1: 256},
+        description='n16k64_wA with a 128 x 64 CTA tile (warp 32 x 32): small-T kernel.'),
+    KernelConfig(
+        'n16k64_wA_n32', 'mixed', 0, (16, 64),
+        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_TILE_N=32, MIXFP4_B_ATOMS_PER_GRANULE=2),
+        dict(_WT_AS_A_GEN, MMA_N=2, B_ATOMS=2),
+        expected_census={0: 128, 1: 128},
+        description='n16k64_wA with a 128 x 32 CTA tile (warp 32 x 16): small-T kernel.'),
+    KernelConfig(
+        'n16k64_wA_n16', 'mixed', 0, (16, 64),
+        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_TILE_N=16, MIXFP4_B_ATOMS_PER_GRANULE=1, MIXFP4_LDSM_B=2),
+        dict(_WT_AS_A_GEN, MMA_N=1, B_ATOMS=1),
+        expected_census={0: 64, 1: 64},
+        description='n16k64_wA with a 128 x 16 CTA tile (warp 32 x 8): decode kernel.'),
+    KernelConfig('stock_wA_n64', 'stock', 0, None, dict(MIXFP4_D_COLMAJOR=1, MIXFP4_TILE_N=64), {}, patch=False,
+                 description='stock_wA with a 128 x 64 CTA tile.'),
+    KernelConfig('stock_wA_n32', 'stock', 0, None, dict(MIXFP4_D_COLMAJOR=1, MIXFP4_TILE_N=32), {}, patch=False,
+                 description='stock_wA with a 128 x 32 CTA tile.'),
+    KernelConfig('stock_wA_n16', 'stock', 0, None, dict(MIXFP4_D_COLMAJOR=1, MIXFP4_TILE_N=16), {}, patch=False,
+                 description='stock_wA with a 128 x 16 CTA tile.'),
+    KernelConfig(
         'n8k64_wB', 'mixed', 1, (8, 64), dict(_B8X64, SM120_BIAS_ON_N=1), _B8X64_GEN,
         expected_census={0: 512, 2: 512},
         description='Comparison. Weights on B, 8 columns x 64 K granule, 1x8 arrangement, '

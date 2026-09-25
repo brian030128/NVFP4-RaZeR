@@ -15,6 +15,7 @@ import torch
 from . import quant_act
 from .artifact import PackedWeight
 from .lib import Kernel, sf_buffer_size, sf_offset_formula
+from .select import KernelSet
 
 
 def place_scales(scales, k):
@@ -30,7 +31,8 @@ def place_scales(scales, k):
 class NativeLinear(torch.nn.Module):
     """Holds only packed weights; `calls` / `tokens` count native GEMMs for coverage evidence."""
 
-    def __init__(self, pw: PackedWeight, kernel: Kernel, act_kind: str, name: str = ''):
+    def __init__(self, pw: PackedWeight, kernel, act_kind: str, name: str = ''):
+        """kernel: a lib.Kernel, or a select.KernelSet choosing the CTA-tile width per call."""
         super().__init__()
         n, k = pw.shape
         if k % 32:
@@ -51,6 +53,7 @@ class NativeLinear(torch.nn.Module):
         self.register_buffer('bias_bf16', None if pw.bias is None else pw.bias.to(torch.bfloat16).contiguous(),
                              persistent=False)
         self.weights_on_a = kernel.weight_operand == 0
+        self.kernel_set = kernel if isinstance(kernel, KernelSet) else None
         self.calls = 0
         self.tokens = 0
 
@@ -79,11 +82,12 @@ class NativeLinear(torch.nn.Module):
         if t == 0:
             return x.new_empty((*lead, n))
         packed_x, sf_x, gs_x = quant_act.quantize(x2, self.act_kind)
+        kern = self.kernel if self.kernel_set is None else self.kernel_set.pick(n, k, t)
         if self.weights_on_a:
-            y = self.kernel.gemm(self.packed, self.sf, packed_x, sf_x, n, t, k,
+            y = kern.gemm(self.packed, self.sf, packed_x, sf_x, n, t, k,
                                  scale_m_default=self.global_scale, scale_n=gs_x, bias=self.bias_bf16, check=False)
         else:
-            y = self.kernel.gemm(packed_x, sf_x, self.packed, self.sf, t, n, k,
+            y = kern.gemm(packed_x, sf_x, self.packed, self.sf, t, n, k,
                                  scale_m=gs_x, scale_n_default=self.global_scale, bias=self.bias_bf16, check=False)
         y = y.view(*lead, n)
         return y if y.dtype == x.dtype else y.to(x.dtype)

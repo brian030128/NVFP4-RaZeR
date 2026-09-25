@@ -131,7 +131,7 @@ def main():
     model = C.load_model(args.model)
     if args.policy != 'bf16':
         _, art, *k = args.policy.split(':')
-        rep = NM.install(model, art, kernel=k[0] if k else 'n16k64_wA', loader=C.MODELS[args.model]['loader'])
+        rep = NM.install(model, art, kernel=k[0] if k else 'auto', loader=C.MODELS[args.model]['loader'])
         res['install'] = rep.as_dict()
     torch.cuda.synchronize()
     torch.cuda.reset_peak_memory_stats()

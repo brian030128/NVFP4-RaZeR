@@ -19,7 +19,7 @@ from mixfp4_sm120.lib import Kernel, sf_buffer_size, sf_offset_formula
 
 pytestmark = pytest.mark.gpu
 
-MIXED = ['n16k64_wA', 'n16k64_wA_8x1', 'n8k64_wB']
+MIXED = ['n16k64_wA', 'n16k64_wA_8x1', 'n16k64_wA_n64', 'n16k64_wA_n32', 'n16k64_wA_n16', 'n8k64_wB']
 
 
 def linear_gemm(kern, wp, wsf, gs_w, xp, xsf, gs_x, n, t, k, **kw):
@@ -235,3 +235,41 @@ def test_async_repeat_and_streams(device, name):
     torch.cuda.synchronize()
     for i, o in results:
         assert torch.equal(o, cases[i][1])
+
+
+DECOMP = [('heuristic', 1, 0), ('data_parallel', 1, 1), ('split2', 2, 2), ('split4', 4, 2), ('split8', 8, 2),
+          ('stream_k', 1, 3)]
+
+
+@pytest.mark.parametrize('dname,splits,mode', DECOMP)
+@pytest.mark.parametrize('t,n,k', [(1, 4096, 4096), (7, 1024, 4096), (64, 4096, 14336), (200, 2560, 9728), (1, 48, 2560)])
+def test_stream_k(device, dname, splits, mode, t, n, k):
+    """Stream-K build: every decomposition is correct, deterministic, and executes the same formats."""
+    kern = kernel('n16k64_wA_sk')
+    tb = kern.type_block
+    g = torch.Generator(device='cpu').manual_seed(t + n + k + splits)
+    mask = torch.rand((n // tb[0], k // tb[1]), generator=g) < 0.4
+    w = (torch.randn(n, k, generator=g) * 0.02).cuda().bfloat16()
+    x = torch.randn(t, k, generator=g).cuda().bfloat16()
+    wnib, wsb, gs_w = N.quantize_weight(w, 'map', mask, tb)
+    xnib, xsb, gs_x = N.quantize_act(x, 'four_over_six_rows')
+    args = (N.pack_nibbles(wnib), place(wsb, k), float(gs_w), N.pack_nibbles(xnib), place(xsb, k), gs_x, n, t, k)
+    d = linear_gemm(kern, *args, splits=splits, decomposition=mode)
+    ref, absdot = fp64_reference(wnib, wsb, gs_w, xnib, xsb, gs_x)
+    err = (d.double() - ref).abs()
+    assert bool((err <= 2.0 ** -8 * ref.abs() + 2.0 ** -20 * absdot + 1e-30).all())
+    assert torch.equal(d, linear_gemm(kern, *args, splits=splits, decomposition=mode))   # deterministic
+    # exact decode probe through the split path
+    if t == 1 and n <= 4096:
+        pn, psb = random_weight_operand(n, 256, torch.rand((n // tb[0], 4), generator=g) < 0.5, tb, seed=t)
+        inib, isb = identity_operand(256, 256)
+        pd = linear_gemm(kern, N.pack_nibbles(pn), place(psb, 256), 1.0, N.pack_nibbles(inib), place(isb, 256), None,
+                         n, 256, 256, splits=splits, decomposition=mode)
+        assert torch.equal(pd.double().t(), N.decode_exact(pn, psb, 1.0))
+
+
+def test_non_stream_k_rejects_splits(device):
+    kern = kernel('n16k64_wA')
+    z = torch.zeros(128, 64, dtype=torch.uint8, device='cuda')
+    with pytest.raises(ValueError):
+        kern.gemm(z, z, z, z, 128, 128, 128, splits=2)

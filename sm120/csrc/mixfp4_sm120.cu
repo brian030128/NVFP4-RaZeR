@@ -14,6 +14,8 @@
 //   SM120_STOCK=1        stock CUTLASS SM120 NVFP4 mainloop (E2M1 only, no format dispatch), the
 //                        baseline; same tile, same epilogue as the mixed builds.
 //   SM120_BIAS_ON_N=1    bias is indexed by N (weights on operand B); default M (weights on A).
+//   SM120_STREAMK=1      Stream-K tile scheduler: sm120_gemm's `splits` / `decomposition` then split
+//                        K across CTAs (deterministic reduction), for outputs with fewer tiles than SMs.
 //   MIXFP4_*             forwarded to the vendored kernel (granule, arrangement, D layout, ...).
 //
 // Every mixed build must be run through sm120/kernel/scripts/patch_mixed_nvfp4_gemm.py before use:
@@ -100,7 +102,10 @@ constexpr int AlignmentD = 128 / cutlass::sizeof_bits<ElementD>::value;
 using ElementAccumulator = float;
 using ArchTag = cutlass::arch::Sm120;
 using OperatorClass = cutlass::arch::OpClassBlockScaledTensorOp;
-using ThreadBlockShape = Shape<_128, _128, _128>;
+#ifndef MIXFP4_TILE_N
+#define MIXFP4_TILE_N 128
+#endif
+using ThreadBlockShape = Shape<_128, cute::Int<MIXFP4_TILE_N>, _128>;
 using ClusterShape = Shape<_1, _1, _1>;
 
 using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
@@ -121,8 +126,13 @@ using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder
         static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
     cutlass::gemm::collective::KernelScheduleAuto>::CollectiveOp;
 
+#if defined(SM120_STREAMK) && SM120_STREAMK
+using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
+    Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue, cutlass::gemm::StreamKScheduler>;
+#else
 using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
     Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue, void>;
+#endif
 using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 using StrideA = typename Gemm::GemmKernel::StrideA;
 using StrideB = typename Gemm::GemmKernel::StrideB;
@@ -136,6 +146,9 @@ using LayoutSFB = typename Gemm::GemmKernel::CollectiveMainloop::LayoutSFB;
 // The vendored mixed kernel, verbatim, with our epilogue substituted through its fusion hook.
 // ------------------------------------------------------------------------------------------------
 #define MIXFP4_EPILOGUE_FUSION_T sm120_epi::Fusion
+#if defined(SM120_STREAMK) && SM120_STREAMK
+#define MIXFP4_TILE_SCHEDULER cutlass::gemm::StreamKScheduler
+#endif
 #ifndef MIXFP4_NO_SELFTEST
 #define MIXFP4_NO_SELFTEST 1
 #endif
@@ -161,6 +174,8 @@ struct Call {
   float const *scale_m, *scale_n;
   float scale_m_default, scale_n_default;
   void const *bias;
+  int splits = 1;          // Stream-K builds only
+  int decomposition = 0;   // 0 heuristic, 1 data-parallel, 2 split-K, 3 stream-K
 };
 
 typename Gemm::Arguments make_arguments(Call const &c) {
@@ -203,6 +218,14 @@ typename Gemm::Arguments make_arguments(Call const &c) {
   bias.dCol = {};
 #endif
   bias.null_default = cutlass::bfloat16_t(0.0f);
+#if defined(SM120_STREAMK) && SM120_STREAMK
+  using Mode = cutlass::gemm::kernel::detail::DecompositionMode;
+  args.scheduler.splits = c.splits;
+  args.scheduler.decomposition_mode = c.decomposition == 1 ? Mode::DataParallel
+                                    : c.decomposition == 2 ? Mode::SplitK
+                                    : c.decomposition == 3 ? Mode::StreamK : Mode::Heuristic;
+  args.scheduler.reduction_mode = cutlass::gemm::kernel::detail::ReductionMode::Deterministic;
+#endif
   return args;
 }
 
@@ -262,6 +285,10 @@ int sm120_describe(char *out, int capacity) {
 #if defined(SM120_BIAS_ON_N) && SM120_BIAS_ON_N
   bias_on_n = 1;
 #endif
+  int streamk = 0;
+#if defined(SM120_STREAMK) && SM120_STREAMK
+  streamk = 1;
+#endif
   using TM = typename Gemm::GemmKernel::CollectiveMainloop::TiledMma;
   int const atom_m = int(size<1>(typename TM::ThrLayoutVMNK{}));
   int const atom_n = int(size<2>(typename TM::ThrLayoutVMNK{}));
@@ -273,11 +300,12 @@ int sm120_describe(char *out, int capacity) {
       "{\"config\":\"%s\",\"stock\":%d,\"tile_mnk\":[%d,%d,%d],\"warp_atoms_mn\":[%d,%d],"
       "\"granule_a\":[%d,%d],\"granule_b\":[%d,%d],\"pinned_e2m1\":[%d,%d],"
       "\"blobgen_mma_mn\":[%d,%d],\"d_colmajor\":%d,\"bias_on_n\":%d,\"mainloop_stages\":%d,"
-      "\"shared_storage_bytes\":%d,\"cutlass_version\":\"%d.%d.%d\",\"epilogue\":\"bf16((s_m*s_n)*acc+bias)\"}",
+      "\"shared_storage_bytes\":%d,\"cutlass_version\":\"%d.%d.%d\",\"epilogue\":\"bf16((s_m*s_n)*acc+bias)\","
+      "\"stream_k\":%d}",
       SM120_CONFIG_NAME, stock, int(size<0>(ThreadBlockShape{})), int(size<1>(ThreadBlockShape{})),
       int(size<2>(ThreadBlockShape{})), atom_m, atom_n, a_rows, a_k, b_cols, b_k, pin_a, pin_b,
       blob_mma_m, blob_mma_n, d_colmajor, bias_on_n, stages, smem, CUTLASS_MAJOR, CUTLASS_MINOR,
-      CUTLASS_PATCH);
+      CUTLASS_PATCH, streamk);
   if (out != nullptr && capacity > 0) {
     int const n = len < capacity - 1 ? len : capacity - 1;
     for (int i = 0; i < n; ++i) { out[i] = buf[i]; }
@@ -328,9 +356,10 @@ int sm120_granule_map(int operand, int *out, int capacity) {
 #endif
 }
 
-size_t sm120_workspace_size(int m, int n, int k) {
+size_t sm120_workspace_size(int m, int n, int k, int splits, int decomposition) {
   Call c{};
   c.m = m; c.n = n; c.k = k;
+  c.splits = splits; c.decomposition = decomposition;
   c.scale_m_default = c.scale_n_default = 1.0f;
   return Gemm::get_workspace_size(make_arguments(c));
 }
@@ -340,14 +369,18 @@ size_t sm120_workspace_size(int m, int n, int k) {
 // sfa / sfb: scale bytes in the kernel layout (sm120_sf_offsets), bit 7 = E0M3 format tag.
 // D: bf16, row-major [m, n] or, for column-major-D builds, column-major (= row-major [n, m]).
 // scale_m / scale_n / bias may be null: the scale then is the given default, the bias zero.
+// splits / decomposition select the K split of Stream-K builds (must be 1 / 0 otherwise).
 // Returns 0 on success; negative codes identify the failing step.
 int sm120_gemm(void const *a, void const *sfa, void const *b, void const *sfb, void *d,
                int m, int n, int k,
                float const *scale_m, float scale_m_default,
                float const *scale_n, float scale_n_default,
-               void const *bias,
+               void const *bias, int splits, int decomposition,
                void *workspace, size_t workspace_size, void *stream) {
-  Call c{a, sfa, b, sfb, d, m, n, k, scale_m, scale_n, scale_m_default, scale_n_default, bias};
+#if !(defined(SM120_STREAMK) && SM120_STREAMK)
+  if (splits != 1 || decomposition != 0) { return -6000; }   // not a Stream-K build
+#endif
+  Call c{a, sfa, b, sfb, d, m, n, k, scale_m, scale_n, scale_m_default, scale_n_default, bias, splits, decomposition};
   auto args = make_arguments(c);
   if (Gemm::get_workspace_size(args) > workspace_size) { return -1000; }
   Gemm gemm_op;
