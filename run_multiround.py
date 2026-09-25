@@ -17,6 +17,7 @@ import math
 import os
 import resource
 import socket
+import sys
 import time
 from pathlib import Path
 
@@ -131,12 +132,22 @@ def main():
                          'fourover6 or bf16); repeatable')
     ap.add_argument('--deterministic', action='store_true',
                     help='torch.use_deterministic_algorithms(True); needs CUBLAS_WORKSPACE_CONFIG=:4096:8')
+    ap.add_argument('--memory-mode', choices=('legacy', 'lean'), default='legacy',
+                    help='lean: both candidates only in the native packed format (one store, the fake path '
+                         'decodes from it), native weights built per evaluation and freed after it, and no '
+                         'resident BF16 weight for the quantized matrices (each is decoded on use and '
+                         'recomputed for the backward). The values are bitwise those of legacy')
+    ap.add_argument('--record-dev-values', action='store_true',
+                    help='Save every development evaluation\'s per-document CE and KL (dev_values.pt)')
+    ap.add_argument('--dump-round0-scores', action='store_true',
+                    help='Save round 0\'s per-unit CE/KL score mean and SE (round0_scores.pt)')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     started = time.time()
     torch.backends.cuda.matmul.allow_tf32 = False
     rows, cols = UNITS[args.unit]
     qwen = args.model == 'qwen27b'
+    lean = args.memory_mode == 'lean'
     assert not args.skip_ce_backward or args.objective == 'kl', '--skip-ce-backward needs --objective kl'
     if args.deterministic:
         assert os.environ.get('CUBLAS_WORKSPACE_CONFIG') in (':4096:8', ':16:8'), 'set CUBLAS_WORKSPACE_CONFIG=:4096:8'
@@ -164,7 +175,7 @@ def main():
                             gpus=[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())],
                             torch=torch.__version__, cuda=torch.version.cuda, transformers=transformers.__version__),
                   data_root=None if args.data_root is None else str(args.data_root), deviations=deviations,
-                  skip_ce_backward=args.skip_ce_backward,
+                  skip_ce_backward=args.skip_ce_backward, memory_mode=args.memory_mode,
                   model=args.model, unit=args.unit, objective=args.objective,
                   eval_batch=args.eval_batch, score_batch=args.score_batch,
                   significant_steps=args.significant_steps, warm_start=args.warm_start,
@@ -172,7 +183,9 @@ def main():
                   acceptance={'both': 'mean dev CE and mean dev KL must both decrease', 'ce': 'mean dev CE must decrease',
                               'kl': 'mean dev KL must decrease'}[args.objective],
                   source_sha256={p: digest_file(p) for p in ('run_multiround.py', 'quantize/quantizer.py',
-                                                             'quantize/causal_four_over_six.py')},
+                                                             'quantize/causal_four_over_six.py',
+                                                             'repro_local/realquant/native_dev.py',
+                                                             'repro_local/realquant/candidate_store.py')},
                   rounds=[])
     save(args.out, report)
     if qwen:
@@ -212,13 +225,18 @@ def main():
     # quantizers, and any module that fails keeps dequantized BF16 copies instead.
     monitor.enter('candidate_packing')
     packed, dense, sel = {}, {}, {}
-    native = None
-    if args.shadow_native or args.dev_backend == 'native' or args.eval_backend == 'native':
-        import sys
-        assert not qwen and len(dev) % args.eval_batch == 0
+    native = store = None
+    if lean or args.shadow_native or args.dev_backend == 'native' or args.eval_backend == 'native':
         sys.path.insert(0, str(Path(__file__).resolve().parent / 'repro_local' / 'realquant'))
+    if lean:
+        # ONE candidate store, in the native packed format; the fake path decodes from it
+        from candidate_store import CandidateStore
+        store = CandidateStore(rows, cols)
+    if args.shadow_native or args.dev_backend == 'native' or args.eval_backend == 'native':
+        assert not qwen and len(dev) % args.eval_batch == 0
         from native_dev import NativeDev
-        native = NativeDev(modules, rows, cols, tokens=args.eval_batch * dev[0]['ids'].shape[1] if dev else 2048)
+        native = NativeDev(modules, rows, cols, tokens=args.eval_batch * dev[0]['ids'].shape[1] if dev else 2048,
+                           store=store)
     pristine = {}
     for n, m in modules.items():
         assert sha(m.weight) == prior['matrices'][n]['source_sha256'], n
@@ -227,32 +245,65 @@ def main():
         p = pack(m.weight, b, a)
         if p is None:
             dense[n] = (b, a)
-        else:
+        elif not lean:
             packed[n] = p
-        if native is not None:
-            # both native candidates must decode to exactly what decode_base / decode_alt return
+        # both native candidates must decode to exactly what decode_base / decode_alt return
+        if lean:
+            store.add(n, m.weight, *((b, a) if p is None else (decode_base(p), decode_alt(p))))
+        elif native is not None:
             native.add(n, m.weight, *((b, a) if p is None else (decode_base(p), decode_alt(p))))
         o, k = m.weight.shape
         assert k % cols == 0
         sel[n] = torch.zeros(-(-o // rows), k // cols, dtype=torch.bool, device=m.weight.device)
         if 'bf16' in maps_to_evaluate.values():
             pristine[n] = m.weight.detach().to('cpu', copy=True)
-        m.weight.copy_(b)
-        del a, b
+        if lean:
+            # the store holds the candidates: free this matrix's BF16 weight (the placeholder keeps its dtype)
+            m.weight = torch.nn.Parameter(torch.empty(0, dtype=m.weight.dtype, device=m.weight.device),
+                                          requires_grad=False)
+        else:
+            m.weight.copy_(b)
+        del a, b, p
+    if lean:
+        dense_fallback, dense = sorted(dense), {}      # the store verified these against (b, a) directly
     torch.cuda.empty_cache()
-    report['candidate_storage'] = dict(packed_modules=len(packed), dense_fallback_modules=sorted(dense),
-                                       packed_gib=sum(nbytes(p) for p in packed.values()) / 2 ** 30)
+    if lean:
+        report['candidate_storage'] = dict(store='native packed (lean)', modules=len(store.cand),
+                                           dense_fallback_modules=dense_fallback,
+                                           store_gib=store.nbytes() / 2 ** 30)
+    else:
+        report['candidate_storage'] = dict(packed_modules=len(packed), dense_fallback_modules=sorted(dense),
+                                           packed_gib=sum(nbytes(p) for p in packed.values()) / 2 ** 30)
     print('CANDIDATES ' + json.dumps(report['candidate_storage']), flush=True)
 
     def base(n):
+        if lean:
+            return store.decode(n, which='base')
         return dense[n][0] if n in dense else decode_base(packed[n])
 
     def alt(n):
+        if lean:
+            return store.decode(n, which='alt')
         return dense[n][1] if n in dense else decode_alt(packed[n])
 
     def apply(n):
+        if lean:
+            return                          # lean forwards decode sel's weight on use
         b = base(n)
         modules[n].weight.copy_(torch.where(expand(sel[n], rows, cols, b.shape[0]), alt(n), b))
+
+    weight_source = ['map']                 # lean: 'map' (the store under sel) or 'bf16' (pristine)
+
+    def lean_weight(n):
+        # the weight of module n for a key (source, map): the store decoded under the map, or pristine
+        def weight_for(key):
+            return pristine[n].to(device) if key[0] == 'bf16' else store.decode(n, key[1])
+        return weight_for
+
+    if lean:
+        from candidate_store import lean_forward
+        for n, m in modules.items():
+            m.forward = lean_forward(lean_weight(n), lambda n=n: (weight_source[0], sel[n]), m.bias)
 
     if args.init_map is not None:
         start_map = torch.load(args.init_map, map_location='cpu', weights_only=True)
@@ -263,32 +314,44 @@ def main():
         report['init_map'] = dict(path=str(args.init_map), sha256=digest_file(args.init_map),
                                   e0m3_units=sum(int(s.sum()) for s in sel.values()))
     def installed(n):
-        return modules[n].weight
+        # legacy: the weight apply() installed; lean: the weight the lean forward decodes for sel
+        return store.decode(n, sel[n]) if lean else modules[n].weight
 
-    if native is not None:
+    if native is not None or lean:
         # The packed native weight of a map must decode to the weight apply() installs, bitwise:
-        # the start map, one random mixed map, and the start map again after restoring it.
-        check = dict(start_map_mismatches=native.verify_map(sel, installed))
+        # the start map, one random mixed map, and the start map again after restoring it. Lean: the
+        # Triton decode of each map must equal the PyTorch select + decode_packed path bitwise.
+        verify = (lambda: native.verify_map(sel, installed)) if native is not None else (lambda: store.verify_map(sel))
+        check = dict(start_map_mismatches=verify())
+        if lean and native is not None:
+            check['lean_start_map_mismatches'] = store.verify_map(sel)
         start_sel = {n: s.clone() for n, s in sel.items()}
         mixer = torch.Generator(device=device).manual_seed(0)
         for n in sel:
             sel[n].copy_(torch.rand(sel[n].shape, generator=mixer, device=sel[n].device) < 0.5)
             apply(n)
         check['mixed_map_units'] = sum(int(s.sum()) for s in sel.values())
-        check['mixed_map_mismatches'] = native.verify_map(sel, installed)
+        check['mixed_map_mismatches'] = verify()
+        if lean and native is not None:
+            check['lean_mixed_map_mismatches'] = store.verify_map(sel)
         for n in sel:
             sel[n].copy_(start_sel[n])
             apply(n)
-        check['restored_start_mismatches'] = native.verify_map(sel, installed)
-        assert not (check['start_map_mismatches'] or check['mixed_map_mismatches']
-                    or check['restored_start_mismatches']), check
-        record = dict(kernel=native.kern.cfg, library=str(native.kern.path), tokens_per_forward=native.tokens,
-                      verification=check)
-        if args.shadow_native:
-            report['shadow_native'] = dict(record, tries=[])
-        else:
-            report['native'] = record
-        print('NATIVE ' + json.dumps(check), flush=True)
+        check['restored_start_mismatches'] = verify()
+        if lean and native is not None:
+            check['lean_restored_start_mismatches'] = store.verify_map(sel)
+        assert not any(v for key, v in check.items() if key.endswith('mismatches')), check
+        if native is not None:
+            record = dict(kernel=native.kern.cfg, library=str(native.kern.path), tokens_per_forward=native.tokens,
+                          verification=check)
+            if args.shadow_native:
+                report['shadow_native'] = dict(record, tries=[])
+            else:
+                report['native'] = record
+            print('NATIVE ' + json.dumps(check), flush=True)
+        if lean:
+            report['lean'] = dict(verification=check)
+            print('LEAN ' + json.dumps(check), flush=True)
 
     eval_handles = []
 
@@ -476,11 +539,17 @@ def main():
         for label, path in maps_to_evaluate.items():
             entry = report['evaluations'][label] = dict(path=path, backend='fake' if path == 'bf16' else args.eval_backend)
             if path == 'bf16':
-                for n, m in modules.items():
-                    m.weight.copy_(pristine[n].to(m.weight.device))
+                if lean:
+                    weight_source[0] = 'bf16'
+                else:
+                    for n, m in modules.items():
+                        m.weight.copy_(pristine[n].to(m.weight.device))
                 entry['evaluation'] = final_eval('bf16', batches, label)
-                for n in sel:
-                    apply(n)
+                if lean:
+                    weight_source[0] = 'map'
+                else:
+                    for n in sel:
+                        apply(n)
                 save(args.out, report)
                 continue
             if path == 'fourover6':
@@ -495,6 +564,9 @@ def main():
                     apply(n)
                 entry['sha256'] = digest_file(path)
             entry['e0m3_units'] = sum(int(s.sum()) for s in sel.values())
+            if lean:
+                entry['lean_map_mismatches'] = store.verify_map(sel)
+                assert not entry['lean_map_mismatches'], label
             if native is not None:
                 entry['native_map_mismatches'] = native.verify_map(sel, installed)
                 assert not entry['native_map_mismatches'], label
@@ -526,6 +598,12 @@ def main():
         current = native_dev_eval()
         report['initial_dev'] = current
         monitor.enter('initial_dev_eval')
+    dev_values = dict(initial=dict(ce=torch.tensor(current['ce_nll'], dtype=torch.float64),
+                                   kl=torch.tensor(current['kl_values'], dtype=torch.float64)),
+                      fake_initial=None, tries=[])
+    if 'fake_initial_dev' in report:
+        dev_values['fake_initial'] = dict(ce=torch.tensor(report['fake_initial_dev']['ce_nll'], dtype=torch.float64),
+                                          kl=torch.tensor(report['fake_initial_dev']['kl_values'], dtype=torch.float64))
     if args.shadow_native:
         monitor.enter('native_dev_evaluation')
         t_native = time.time()
@@ -554,6 +632,10 @@ def main():
         monitor.enter('scoring')
         t0 = time.time()
         stats = score()
+        if rnd == 0 and args.dump_round0_scores:
+            torch.save({n: dict(ce_mean=cm.cpu(), ce_se=cse.cpu(), kl_mean=km.cpu(), kl_se=kse.cpu())
+                        for n, ((cm, cse), (km, kse)) in stats.items()}, args.out / 'round0_scores.pt')
+            report['round0_scores_sha256'] = digest_file(args.out / 'round0_scores.pt')
         bounds, flat_mean_ce, flat_mean_kl, owners = [], [], [], []
         for i, n in enumerate(names):
             (cm, cse), (km, kse) = stats[n]
@@ -594,6 +676,9 @@ def main():
             pce, pkl = float(flat_mean_ce[chosen].sum()), float(flat_mean_kl[chosen].sum())
             entry['tries'].append(dict(size=size, predicted_ce=pce, predicted_kl=pkl,
                                        dev_delta_ce=new['ce'] - current['ce'], dev_delta_kl=new['kl'] - current['kl']))
+            dev_values['tries'].append(dict(round=rnd, try_index=len(entry['tries']) - 1, size=size,
+                                            ce=torch.tensor(new['ce_nll'], dtype=torch.float64),
+                                            kl=torch.tensor(new['kl_values'], dtype=torch.float64)))
             print(f'ROUND {rnd} try size={size} pred CE {pce:+.6f} KL {pkl:+.6f} | dev dCE {new["ce"] - current["ce"]:+.6f} '
                   f'dKL {new["kl"] - current["kl"]:+.6f}', flush=True)
             fake_accepts = improves(new, current)
@@ -633,6 +718,8 @@ def main():
         entry['round_seconds'] = time.time() - t0
         report['rounds'].append(entry)
         torch.save({n: s.cpu() for n, s in sel.items()}, args.out / 'map.pt')
+        if args.record_dev_values:
+            torch.save(dev_values, args.out / 'dev_values.pt')
         save(args.out, report)
         print(f'ROUND {rnd} accepted={accepted} e0m3={entry["e0m3_units"]} dev CE {current["ce"]:.6f} KL {current["kl"]:.6f} '
               f'{entry["round_seconds"]:.0f}s', flush=True)
@@ -640,6 +727,11 @@ def main():
             report['stopped'] = 'no step lowers the development objective'; break
     report['final_dev'] = current
     timing['optimization_seconds'] = time.time() - started - timing['setup_seconds']
+    if args.record_dev_values:
+        torch.save(dev_values, args.out / 'dev_values.pt')
+        report['dev_values_sha256'] = digest_file(args.out / 'dev_values.pt')
+    if native is not None:
+        report['native_builds'] = dict(count=native.builds, seconds=native.build_seconds_total)
     report['final_e0m3_units'] = sum(int(s.sum()) for s in sel.values())
     report['map_sha256'] = digest_file(args.out / 'map.pt') if (args.out / 'map.pt').exists() else None
     save(args.out, report)

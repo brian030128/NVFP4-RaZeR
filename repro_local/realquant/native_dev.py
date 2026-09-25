@@ -70,11 +70,48 @@ def decode_packed(packed, sbytes, gs, n, k):
     return rq.decode(unpack_nibbles(packed, n, k), flags, scale, gs)
 
 
+@torch.no_grad()
+def pack_candidates(name, w, base, alt, alt_signed_zero=False):
+    """Both candidates of the source weight w in the native format: (E2M1 codes, E0M3 codes, E2M1
+    scale bytes, E0M3 scale bytes with bit 7 set, FP32 global scale, n, k). Their decode must equal
+    base and alt bitwise (signed zeros included), else AssertionError."""
+    n, k = w.shape
+    c4, s4, g4 = rq.weight_four_over_six(w)
+    c0, s0, g0 = rq.weight_e0m3(w)
+    if not torch.equal(g4, g0):
+        raise AssertionError(f'{name}: E0M3 and FourOverSix global scales differ')
+    sb4 = rq.scale_bytes(s4)
+    sb0 = rq.scale_bytes(s0) | 128
+    alt_nibbles = e0m3_signed_nibbles(c0) if alt_signed_zero else rq.e0m3_nibbles(c0)
+    b4, b0 = rq.pack_nibbles(e2m1_nibbles(c4)), rq.pack_nibbles(alt_nibbles)
+    gs = g4.reshape(()).float()
+    for packed, sb, ref, label in ((b4, sb4, base, 'base'), (b0, sb0, alt, 'alternative')):
+        got = decode_packed(packed, sb, gs, n, k)
+        if not torch.equal(got.view(torch.int16), ref.view(torch.int16)):
+            raise AssertionError(f'{name}: packed {label} differs from the fake-quant candidate in '
+                                 f'{(got != ref).sum().item()} elements')
+    return b4, b0, sb4, sb0, gs, n, k
+
+
+@torch.no_grad()
+def select_candidates(cand, sel, rows, cols):
+    """Codes and row-major scale bytes of map `sel` [ceil(n/rows), k/cols] from pack_candidates' tuple."""
+    b4, b0, sb4, sb0, gs, n, k = cand
+    tile_rows = sel.repeat_interleave(rows, 0)[:n]
+    packed = torch.where(tile_rows.repeat_interleave(cols // 2, 1), b0, b4).contiguous()
+    sbytes = torch.where(tile_rows.repeat_interleave(cols // 16, 1), sb0, sb4).contiguous()
+    return packed, sbytes, gs, n, k
+
+
 class NativeDev:
-    def __init__(self, modules, rows, cols, tokens, check_calls=64, alt_signed_zero=False):
+    def __init__(self, modules, rows, cols, tokens, check_calls=64, alt_signed_zero=False, store=None):
         # alt_signed_zero: store an E0M3 code rounded to zero from a negative value as -0, as
         # quant_mix_4_6 itself returns it (the zero-shot script's reference weights). The default
         # (+0) matches decode_alt, whose offset-binary codes have no negative zero (run_multiround).
+        # store: a candidate_store.CandidateStore (run_multiround.py --memory-mode lean). The
+        # candidates are then read from it instead of packed again, and install() builds every
+        # module's packed weight for the map while remove() frees them all: no native weight is
+        # resident outside an evaluation.
         if (rows, cols) not in ((256, 64), (8, 64)):
             raise ValueError('a map unit must be a union of the kernel\'s 8x64 format granules')
         self.kern = rq.Kernel(CONFIG)
@@ -86,37 +123,25 @@ class NativeDev:
         self.documents = 1
         self.rebuild_seconds = 0.0
         self.alt_signed_zero = alt_signed_zero
+        self.store = store
+        self.build_seconds_total, self.builds = 0.0, 0
+        if store is not None:
+            assert (store.rows, store.cols) == (rows, cols) and store.alt_signed_zero == alt_signed_zero
+            self.cand = store.cand
         # the fake activation quantizer the first calls are checked against (bitwise)
         self.reference = lambda x, docs: quant_per_document(x.reshape(docs, -1, x.shape[-1]))
 
     @torch.no_grad()
     def add(self, name, w, base, alt):
         """Pack both candidates of the source weight w; their decode must equal base and alt bitwise."""
-        n, k = w.shape
-        c4, s4, g4 = rq.weight_four_over_six(w)
-        c0, s0, g0 = rq.weight_e0m3(w)
-        if not torch.equal(g4, g0):
-            raise AssertionError(f'{name}: E0M3 and FourOverSix global scales differ')
-        sb4 = rq.scale_bytes(s4)
-        sb0 = rq.scale_bytes(s0) | 128
-        alt_nibbles = e0m3_signed_nibbles(c0) if self.alt_signed_zero else rq.e0m3_nibbles(c0)
-        b4, b0 = rq.pack_nibbles(e2m1_nibbles(c4)), rq.pack_nibbles(alt_nibbles)
-        gs = g4.reshape(()).float()
-        for packed, sb, ref, label in ((b4, sb4, base, 'base'), (b0, sb0, alt, 'alternative')):
-            got = decode_packed(packed, sb, gs, n, k)
-            if not torch.equal(got.view(torch.int16), ref.view(torch.int16)):
-                raise AssertionError(f'{name}: packed {label} differs from the fake-quant candidate in '
-                                     f'{(got != ref).sum().item()} elements')
-        self.cand[name] = (b4, b0, sb4, sb0, gs, n, k)
+        if self.store is not None:
+            raise RuntimeError('a store-backed NativeDev reads the candidates the store packed')
+        self.cand[name] = pack_candidates(name, w, base, alt, self.alt_signed_zero)
 
     @torch.no_grad()
     def select(self, name, sel):
         """Codes and row-major scale bytes of module `name` for map `sel` [ceil(n/rows), k/cols]."""
-        b4, b0, sb4, sb0, gs, n, k = self.cand[name]
-        rows = sel.repeat_interleave(self.rows, 0)[:n]
-        packed = torch.where(rows.repeat_interleave(self.cols // 2, 1), b0, b4).contiguous()
-        sbytes = torch.where(rows.repeat_interleave(self.cols // 16, 1), sb0, sb4).contiguous()
-        return packed, sbytes, gs, n, k
+        return select_candidates(self.cand[name], sel, self.rows, self.cols)
 
     @torch.no_grad()
     def verify_map(self, sel, installed):
@@ -131,22 +156,32 @@ class NativeDev:
 
     @torch.no_grad()
     def install(self, sel):
-        """Native forwards for map `sel`; only modules whose map changed since the last build are repacked."""
+        """Native forwards for map `sel`; only modules whose map changed since the last build are repacked.
+        Store-backed: every module is built for `sel` (they were all freed by the last remove())."""
         t0 = time.time()
+        if self.store is not None:
+            # the forwards to restore are the ones in place now (run_multiround's lean forwards)
+            assert not self.current, 'install() again before remove()'
+            self.saved = {n: m.forward for n, m in self.modules.items()}
         for name, mod in self.modules.items():
             snap = self.built.get(name)
-            if snap is None or not torch.equal(snap, sel[name]):
+            if self.store is not None or snap is None or not torch.equal(snap, sel[name]):
                 packed, sbytes, gs, n, k = self.select(name, sel[name])
                 sf = self.kern.place_scales(sbytes, 1, self.tokens, n, k)
                 self.current[name] = rq.PackedWeight(packed, sf, gs, n, k, int(sel[name].sum()))
-                self.built[name] = sel[name].clone()
+                if self.store is None:
+                    self.built[name] = sel[name].clone()
             mod.forward = self._forward(name)
         torch.cuda.synchronize()
         self.rebuild_seconds = time.time() - t0
+        self.build_seconds_total += self.rebuild_seconds
+        self.builds += 1
 
     def remove(self):
         for name, mod in self.modules.items():
             mod.forward = self.saved[name]
+        if self.store is not None:
+            self.current.clear()
 
     def _forward(self, name):
         w, kern = self.current[name], self.kern
