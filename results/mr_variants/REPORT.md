@@ -1,10 +1,8 @@
 # MR-OPT variants: significant steps and warm start — report
 
-**Status (2026-09-25 22:40 UTC).**
-- **Llama-3.1-8B:** done.
-- **Mistral-7B-v0.3:** done.
-- **Phi-4:** running.
-- **Qwen3.8-27B:** not started. The study stops at its gate until the user confirms.
+**Status (2026-09-26 02:00 UTC): Llama-3.1-8B, Mistral-7B-v0.3 and Phi-4 are done.** The queue
+stopped at the Qwen3.8-27B gate at 01:58:45 UTC. Nothing runs until the user confirms Qwen3.8-27B
+and its settings. The study so far took 8 h 29 min of wall time.
 
 **Protocol.** [PROTOCOL.md](PROTOCOL.md), registered 2026-09-25 17:28:59 UTC (sha256 c6f29d27…),
 before any run. Two deviations have been appended since:
@@ -15,43 +13,69 @@ before any run. Two deviations have been appended since:
 MR-OPT satisfies mean − 2 SE ≤ 0 on both WikiText-2 and C4. The secondary reading
 (mean + 2 SE ≤ 0) is also reported.
 
-## Verdict so far: MR-OPT stays
+## Verdict: MR-OPT stays
 
-- **No variant is acceptable on Llama-3.1-8B** under the official rule. Each one is significantly
-  worse than MR-OPT on at least one corpus at at least one unit. In brackets is the lower end of
-  each failing comparison, mean − 2 SE of the paired ΔNLL:
+**No variant is acceptable at both units on every model, so the recommendation is MR-OPT.** This
+is a report only; the user decides.
 
-  | variant | significantly worse than MR-OPT (native evaluation) |
-  |---|---|
-  | MR-OPT+SIG | 256x64: WikiText-2 (+0.0011) and C4 (+0.0013); 8x64: WikiText-2 (+0.0033) |
-  | MR-OPT+WS | 256x64: C4 (+0.0006); 8x64: WikiText-2 (+0.0018) |
-  | MR-OPT+SIG+WS | 256x64: WikiText-2 (+0.0004); 8x64: WikiText-2 (+0.0031) |
+| variant | Llama 256x64 | Llama 8x64 | Mistral 256x64 | Mistral 8x64 | Phi-4 256x64 | Phi-4 8x64 |
+|---|---|---|---|---|---|---|
+| MR-OPT+SIG | NO | NO | NO | NO | yes (better on WikiText-2) | yes (better on both) |
+| MR-OPT+WS | NO | NO | yes | NO | NO (C4, lower end +0.00001) | yes |
+| MR-OPT+SIG+WS | NO | NO | NO | NO | yes (better on both) | yes |
 
-  Two failures are marginal (+0.0004, +0.0006). Every variant also has a clear failure, with a
-  lower end of at least +0.0018 at 8x64, so the verdict does not depend on the marginal ones.
+"Better" means significantly better than MR-OPT: mean + 2 SE < 0.
 
-- **On Mistral-7B-v0.3, only MR-OPT+WS at 256x64 is acceptable.**
-  - MR-OPT+WS at 8x64 is significantly worse on WikiText-2 (lower end +0.0009).
-  - MR-OPT+SIG and MR-OPT+SIG+WS fail at both units, on WikiText-2 (lower ends +0.0009 to +0.0016)
-    and, at 256x64, also on C4 (+0.0004).
-- **Llama alone decides the recommendation.** The recommendation needs a variant that is
-  acceptable at both units on *every* tested model. No variant can now meet that, whatever Phi-4
-  shows, so **MR-OPT stays**.
-  - The remaining variant runs on Phi-4 can only describe how the variants behave on another
-    model.
-  - This is a report only; the user decides.
-- **The secondary reading gives the same answer.** No variant passes it on either model.
+- **Llama alone rules out every variant.** Each variant has a clear failure at 8x64, on WikiText-2,
+  with a lower end (mean − 2 SE of the paired ΔNLL) of at least +0.0018 (details below).
+- **Under the secondary reading** (mean + 2 SE ≤ 0) no variant passes at both units on any model.
+- **The effect of significant steps is model-dependent.**
+  - **On Llama and Mistral, SIG stops early**, with a higher final dev KL than MR-OPT:
+    - on Llama after 3–4 rounds, with 39–46 % of MR-OPT's tiles;
+    - on Mistral after 3 and 9 rounds, against MR-OPT's 14 and 20.
+
+    SIG and SIG+WS are significantly worse than MR-OPT on WikiText-2 at both units on both models.
+    The smallest margin is Llama's SIG+WS at 256x64 (lower end +0.0004).
+  - **On Phi-4, SIG and SIG+WS are significantly better than MR-OPT.** Examples: SIG at 8x64 is
+    −0.0051 ± 0.0015 on WikiText-2 and −0.0031 ± 0.0009 on C4; SIG+WS at 256x64 is
+    −0.0044 ± 0.0014 and −0.0015 ± 0.0008.
+  - **Why on Phi-4:** MR-OPT reaches the lowest dev KL there but accepts large steps that barely
+    lower it. One such step is 39,279 tiles for a dev KL change of −0.00006. Those steps do not
+    carry over to WikiText-2 and C4.
+  - **What this does not allow:** picking a variant per model from these results would be
+    selecting on WikiText-2 and C4, which this project does not do. A per-model rule would need a
+    criterion fixed on development data only.
 - **The variants are much faster.** Total optimization time over both units:
 
-  | configuration | Llama-3.1-8B | Mistral-7B-v0.3 | both |
-  |---|---:|---:|---:|
-  | MR-OPT | 45.5 min | 62.8 min | 108.3 min |
-  | MR-OPT+SIG | 20.1 min | 21.3 min | 41.4 min (−62 %) |
-  | MR-OPT+WS | 20.6 min | 22.8 min | 43.4 min (−60 %) |
-  | MR-OPT+SIG+WS | 12.7 min | 12.2 min | 24.9 min (−77 %) |
+  | configuration | Llama-3.1-8B | Mistral-7B-v0.3 | Phi-4 | all three |
+  |---|---:|---:|---:|---:|
+  | MR-OPT | 45.5 min | 62.8 min | 71.3 min | 179.6 min |
+  | MR-OPT+SIG | 20.1 min | 21.3 min | 18.1 min | 59.5 min (−67 %) |
+  | MR-OPT+WS | 20.6 min | 22.8 min | 32.4 min | 75.8 min (−58 %) |
+  | MR-OPT+SIG+WS | 12.7 min | 12.2 min | 15.1 min | 40.0 min (−78 %) |
 
-  Every variant map is still significantly better than FourOverSix on both corpora at both units,
-  on both models. They keep part of MR-OPT's gain, not all of it (tables below).
+- **Every variant map is significantly better than FourOverSix** on both corpora at both units,
+  on all three models.
+
+### Llama details
+
+In brackets is the lower end of each failing comparison, mean − 2 SE of the paired ΔNLL:
+
+| variant | significantly worse than MR-OPT on Llama (native evaluation) |
+|---|---|
+| MR-OPT+SIG | 256x64: WikiText-2 (+0.0011) and C4 (+0.0013); 8x64: WikiText-2 (+0.0033) |
+| MR-OPT+WS | 256x64: C4 (+0.0006); 8x64: WikiText-2 (+0.0018) |
+| MR-OPT+SIG+WS | 256x64: WikiText-2 (+0.0004); 8x64: WikiText-2 (+0.0031) |
+
+Two failures are marginal (+0.0004, +0.0006). Every variant also has a clear failure, with a lower
+end of at least +0.0018 at 8x64, so the verdict does not depend on the marginal ones.
+
+### Mistral details
+
+- **Only MR-OPT+WS at 256x64 is acceptable.**
+- **MR-OPT+WS at 8x64** is significantly worse on WikiText-2 (lower end +0.0009).
+- **MR-OPT+SIG and MR-OPT+SIG+WS** fail at both units. On WikiText-2 the lower ends are +0.0009 to
+  +0.0016; at 256x64 they also fail on C4 (+0.0004).
 
 ## Llama-3.1-8B
 
@@ -255,13 +279,124 @@ native ΔNLL, the batch-16/8 MR-OPT map minus the batch-1/1 Part C map:
 
 ## Phi-4
 
-Pending.
+**Checks.**
+- All evaluation processes used identical windows (token hashes).
+- The 256x64 maps expanded exactly to 8x64 tiles with no element-mask mismatch.
+- For every map, the first 64 native activation quantizations were bitwise equal to the reference
+  quantizer.
+- Every run recorded source hashes equal to `registration.json`.
+
+### Calibration
+
+| unit | configuration | rounds / dev evaluations | E0M3 tiles | dev KL start → end | setup | optimization | scoring per pass | dev evaluation per try | peak GPU allocated / reserved | host RSS |
+|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|
+| 256x64 | MR-OPT | 14 / 85 | 59,953 | 0.03765 → 0.03492 | 2.6 min | **35.3 min** | 67.0 s | 14.0 s | 59.0 / 61.7 GiB | 33.6 GiB |
+| 256x64 | MR-OPT+SIG | 3 / 27 | 13,273 | 0.03765 → 0.03568 | 2.6 min | **9.4 min** | 67.0 s | 14.0 s | 59.0 / 62.0 GiB | 33.6 GiB |
+| 256x64 | MR-OPT+WS | 8 / 30 | 28,561 | 0.03765 → 0.03537 | 2.5 min | **15.7 min** | 67.1 s | 14.0 s | 59.0 / 61.9 GiB | 33.6 GiB |
+| 256x64 | MR-OPT+SIG+WS | 2 / 18 | 13,237 | 0.03765 → 0.03633 | 2.6 min | **6.2 min** | 67.1 s | 14.0 s | 59.0 / 61.8 GiB | 33.7 GiB |
+| 8x64 | MR-OPT | 10 / 108 | 57,098 | 0.03765 → 0.03481 | 2.6 min | **36.0 min** | 65.3 s | 14.1 s | 61.3 / 64.2 GiB | 33.6 GiB |
+| 8x64 | MR-OPT+SIG | 2 / 29 | 5,470 | 0.03765 → 0.03675 | 2.6 min | **8.7 min** | 65.4 s | 14.0 s | 61.3 / 64.1 GiB | 33.7 GiB |
+| 8x64 | MR-OPT+WS | 8 / 35 | 12,478 | 0.03765 → 0.03517 | 2.6 min | **16.7 min** | 65.5 s | 14.0 s | 61.3 / 64.3 GiB | 33.6 GiB |
+| 8x64 | MR-OPT+SIG+WS | 3 / 25 | 5,653 | 0.03765 → 0.03577 | 2.6 min | **8.9 min** | 65.3 s | 14.1 s | 61.3 / 64.2 GiB | 33.7 GiB |
+
+- **Stop reason:** every run stopped because no step was accepted.
+- **MR-OPT accepts large steps that barely lower the dev KL:**
+  - In round 0 at 256x64 it accepts all 26,474 candidates at the first try, reaching a dev KL of
+    0.03691. SIG rejects that step as not significant. Its half step of 13,237 tiles reaches a
+    *lower* dev KL, 0.03633.
+  - Later, MR-OPT accepts 24,478 tiles for a dev KL change of −0.00009 (256x64, round 4), and
+    39,279 tiles for −0.00006 (8x64, round 8).
+  - It ends with 59,953 and 57,098 tiles, against SIG's 13,273 and 5,470.
+- **The lowest dev KL is not the best test loss.** MR-OPT has the lowest final dev KL at both units.
+  Yet SIG, with fewer tiles and a higher dev KL, is significantly better on WikiText-2 at both
+  units, and on C4 at 8x64 (below).
+
+### Native evaluation (primary) and acceptability
+
+| unit | configuration | tiles shared with MR-OPT / only MR-OPT / only variant | WikiText-2 | C4 | ΔWiki vs FourOverSix | ΔC4 vs FourOverSix | ΔWiki vs MR-OPT | ΔC4 vs MR-OPT | acceptable: official / secondary |
+|---|---|---|---:|---:|---|---|---|---|---|
+| 256x64 | MR-OPT | — | 6.6519 | 10.5237 | −0.00195 ± 0.00147 (better) | −0.00208 ± 0.00083 (better) | — | — | — |
+| 256x64 | MR-OPT+SIG | 12,539 / 47,414 / 734 | 6.6420 | 10.5218 | −0.00344 ± 0.00131 (better) | −0.00226 ± 0.00080 (better) | −0.00149 ± 0.00130 (better) | −0.00018 ± 0.00071 | **yes** / no |
+| 256x64 | MR-OPT+WS | 27,059 / 32,894 / 1,502 | 6.6525 | 10.5321 | −0.00185 ± 0.00137 (better) | −0.00128 ± 0.00083 (better) | +0.00010 ± 0.00149 | +0.00079 ± 0.00078 (worse) | **NO** / no |
+| 256x64 | MR-OPT+SIG+WS | 12,482 / 47,471 / 755 | 6.6225 | 10.5081 | −0.00638 ± 0.00152 (better) | −0.00357 ± 0.00082 (better) | −0.00443 ± 0.00138 (better) | −0.00149 ± 0.00082 (better) | **yes** / yes |
+| 8x64 | MR-OPT | — | 6.6373 | 10.5216 | −0.00415 ± 0.00131 (better) | −0.00228 ± 0.00080 (better) | — | — | — |
+| 8x64 | MR-OPT+SIG | 5,058 / 52,040 / 412 | 6.6036 | 10.4893 | −0.00923 ± 0.00161 (better) | −0.00535 ± 0.00089 (better) | −0.00508 ± 0.00146 (better) | −0.00307 ± 0.00085 (better) | **yes** / yes |
+| 8x64 | MR-OPT+WS | 11,424 / 45,674 / 1,054 | 6.6314 | 10.5145 | −0.00504 ± 0.00137 (better) | −0.00296 ± 0.00074 (better) | −0.00089 ± 0.00121 | −0.00068 ± 0.00073 | **yes** / no |
+| 8x64 | MR-OPT+SIG+WS | 5,299 / 51,799 / 354 | 6.6376 | 10.5239 | −0.00410 ± 0.00112 (better) | −0.00206 ± 0.00077 (better) | +0.00005 ± 0.00123 | +0.00023 ± 0.00075 | **yes** / no |
+
+ΔNLL is the paired per-window mean ± 2 SE (ddof = 1): 141 WikiText-2 windows and 256 C4 windows.
+
+- **MR-OPT+WS at 256x64 fails by a hair:** on C4 the lower end is +0.000014. Even if it passed,
+  MR-OPT+WS would still fail on Llama and Mistral, so the recommendation does not depend on it.
+- **Phi-4's MR-OPT gains over FourOverSix are the smallest of the three models.** At 256x64 the
+  WikiText-2 gain (−0.00195 ± 0.00147) is barely significant.
+
+**Share of MR-OPT's gain over FourOverSix kept, and share of its optimization time** (above 100 %
+means a larger gain than MR-OPT's):
+
+| unit | configuration | WikiText-2 | C4 | dev KL reduction | optimization time |
+|---|---|---:|---:|---:|---:|
+| 256x64 | MR-OPT+SIG | 177 % | 109 % | 72 % | 27 % |
+| 256x64 | MR-OPT+WS | 95 % | 62 % | 84 % | 45 % |
+| 256x64 | MR-OPT+SIG+WS | 327 % | 172 % | 48 % | 18 % |
+| 8x64 | MR-OPT+SIG | 223 % | 234 % | 32 % | 24 % |
+| 8x64 | MR-OPT+WS | 121 % | 130 % | 87 % | 46 % |
+| 8x64 | MR-OPT+SIG+WS | 99 % | 90 % | 66 % | 25 % |
+
+### Reference maps
+
+| backend | map | WikiText-2 | C4 | ΔWiki vs FourOverSix | ΔC4 vs FourOverSix |
+|---|---|---:|---:|---|---|
+| native | FourOverSix | 6.6649 | 10.5456 | — | — |
+| native | NVFP4 | 6.7046 | 10.5866 | +0.00594 ± 0.00182 (worse) | +0.00388 ± 0.00104 (worse) |
+| native | MR-OPT 256x64 | 6.6519 | 10.5237 | −0.00195 ± 0.00147 (better) | −0.00208 ± 0.00083 (better) |
+| native | MR-OPT 8x64 | 6.6373 | 10.5216 | −0.00415 ± 0.00131 (better) | −0.00228 ± 0.00080 (better) |
+| fake | FourOverSix | 6.6667 | 10.5437 | — | — |
+| fake | NVFP4 | 6.7029 | 10.5882 | +0.00543 ± 0.00181 (worse) | +0.00421 ± 0.00106 (worse) |
+| fake | MR-OPT 256x64 | 6.6458 | 10.5293 | −0.00314 ± 0.00129 (better) | −0.00136 ± 0.00083 (better) |
+| fake | MR-OPT 8x64 | 6.6369 | 10.5149 | −0.00448 ± 0.00129 (better) | −0.00273 ± 0.00078 (better) |
+| fake | BF16 | 6.4615 | 10.3098 | | |
+
+The MR-OPT maps are Part C's Phi-4 candidates. Part C has no earlier Phi-4 maps to compare with.
+
+### Phi-4 wall time
+
+3 h 26 min in all (22:32:46 → 01:58:45 UTC):
+
+| part | wall time |
+|---|---:|
+| MR-OPT runs | 82 min |
+| SIG runs | 28 min |
+| WS runs | 43 min |
+| SIG+WS runs | 25 min |
+| evaluations | 28 min |
+
+## Gate: Qwen3.8-27B (waiting for the user)
+
+The queue has stopped, and nothing runs until the user decides:
+
+1. **Which configurations.** Given the verdict: MR-OPT alone (the Part C candidate), or all four.
+2. **The scoring batch.**
+   - **Development evaluation** at batch 16 fits.
+   - **Scoring at batch 8 or 4** runs out of memory ([REPORT_CHUNKED.md](../speedups/REPORT_CHUNKED.md)).
+   - **Batch 2** fits at a 91.2 GiB peak and takes 209 s per pass; **batch 1** fits at 62.3 GiB and
+     takes 360 s per pass ([PROBE_QWEN27B_BATCH.md](../speedups/PROBE_QWEN27B_BATCH.md)).
+   - Either departs from the 16/8 rule. Batched forwards are not batch-invariant, so the choice
+     changes the search path.
+3. **Units:** 256x64 and 8x64, as for the other models, unless the user says otherwise.
+
+**Rough time, at scoring batch 2** (209 s per pass, 43 s per native development evaluation, about
+6 min of setup per run):
+- **MR-OPT at both units:** about 3.5–7 h. The range depends on whether Qwen needs Llama-like
+  (8–9) or Mistral-like (14–20) rounds.
+- **All four configurations:** about 7–16 h.
+- **Evaluations:** roughly another hour.
 
 ## Reproduction
 
 ```
 /home/dev/n16k64_campaign/mr_variants/queue.sh          # copy in runs/queue.sh, log in runs/commands.log
-python results/mr_variants/analyze_variants.py MODEL    # MODEL/summary.json, MODEL/tables.md (llama8b, mistral7b)
+python results/mr_variants/analyze_variants.py MODEL    # MODEL/summary.json, MODEL/tables.md (llama8b, mistral7b, phi4)
 ```
 
 The run records (`report.json`) are in `runs/<model>/`. The maps and per-document development
