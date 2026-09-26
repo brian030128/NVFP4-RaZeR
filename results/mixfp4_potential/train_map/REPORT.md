@@ -66,6 +66,25 @@ double the C4 gain over FourOverSix.
 - **Sigmoid** settles: flips fall from 42k/epoch to 3.5k as τ anneals; the
   rounded map's dev KL tracks STE's.
 
+## Calibration time
+
+One H200 each. Selection time excludes setup (~1.5-1.8 min, both methods) and
+the final PPL evaluation, as in `MIXFP4_REPORT.md` §4.
+
+| Run | Selection time | Work | Peak GPU |
+|---|---:|---|---:|
+| multi-round 256×64 | 15.3 min | 4 scoring passes + 33 dev evals | 64.5 GiB |
+| train STE 256×64 | 19.2 min | 20 epochs + 12 dev evals | 60.4 GiB |
+| multi-round 8×64 | 45.5 min | 9 scoring passes + 118 dev evals | 63.7 GiB |
+| train STE 8×64 | 19.1 min | 20 epochs + 12 dev evals | 60.6 GiB |
+| train sigmoid 8×64 | 19.9 min | 20 epochs + 12 dev evals | 60.7 GiB |
+
+Training cost is independent of tile size (fixed 20 × ~46 s epochs; one
+batched gradient per step, versus per-sequence gradients plus FP64 statistics
+in a ~50-83 s multi-round scoring pass). The 12 dev evaluations (~4 min) are
+monitor-only; without them training is ~15.5 min. 20 epochs is a chosen
+budget, not a convergence criterion.
+
 ## Caveats
 
 - One seed and one hyperparameter setting per arm; no selection-variance

@@ -51,6 +51,10 @@ realistic mixed map.
 
 ## 3. How tile selection works: multi-round KL-only election
 
+> **Newer alternative (Llama only so far):** training the map directly with Adam
+> on the same KL loss, with no filter and no backtracking, beats this method on
+> both datasets at both tile sizes. See §7.
+
 Each tile is either FourOverSix E2M1 (the default) or E0M3. Selection is a greedy
 descent on a distillation loss. First-order scores propose which tiles to flip, and
 measured loss on held-out documents decides how many flips to take. It works like
@@ -322,6 +326,7 @@ MixFP4 rows are the converged maps from the optimized calibration of §4. Paired
 Versus FourOverSix:
 - **MixFP4 8×64:** −0.0579 WikiText / −0.0638 C4.
 - **MixFP4 256×64:** −0.0401 / −0.0521.
+- Trained maps (§7) reach −0.0908 / −0.1483 (8×64) and −0.0700 / −0.1002 (256×64).
 
 ### Qwen3.8-27B
 
@@ -409,6 +414,88 @@ computed per document within each task and averaged over the six tasks, ± 2 SE.
   six-task mean.
 - PPL gains (§5) and accuracy gains do not rank the same way. On Qwen, 8×64 has
   the larger PPL gain but the smaller accuracy gain.
+
+## 7. Training the map with an optimizer (no backtracking)
+
+This treats the map as trainable parameters and optimizes the §3 KL objective
+directly, like training, instead of electing flips in rounds. Everything else
+is the same as §3: candidates $A$ and $B$, the 128 calibration sequences, the
+BF16 teacher, the scoring forward pass (per-token FourOverSix activations with
+a straight-through estimator), and the evaluation windows. So far it has been
+run on Llama-3.1-8B only (jobs 441206–441208).
+
+**Parametrization.** Each tile $u$ gets a real latent logit $\theta_u$, and the
+weights are $\hat W(\theta) = B + \sum_u m_u(\theta_u)\, P_u \odot (A - B)$.
+- **STE:** $m_u = \mathbb 1[\theta_u > 0]$ in the forward pass, so training
+  always runs the deployable hard map. The backward pass uses
+  $\partial m_u / \partial \theta_u = 1$ (BinaryConnect-style latent weights).
+  Init $\theta = -1$, lr 0.02.
+- **Sigmoid:** $m_u = \sigma(\theta_u / \tau)$, with $\tau$ annealed
+  geometrically from 1 to 0.1. The map is rounded at $\theta > 0$ for every
+  evaluation. Init $\theta = -3$, lr 0.05.
+
+**Gradient.** A backward hook on each linear layer forms $G = \delta^\top \tilde x$
+for the minibatch. It hands the optimizer
+$\partial \mathrm{KL} / \partial m_u = \sum_{(i,j) \in u} G_{ij} (A - B)_{ij}$,
+which is the §3 tile score without the flip sign, computed on a minibatch.
+No weight gradient is stored.
+
+**Optimizer.**
+- Adam with $\beta = (0.9, 0.999)$ and $\epsilon = 10^{-12}$. Tile gradients
+  are about $10^{-6}$, so the default $10^{-8}$ would dominate the update.
+- Constant learning rate, no weight decay.
+- Batch 8, 16 steps per epoch, 20 epochs (320 steps).
+- **No candidate filter, no backtracking, no acceptance test.** The development
+  documents are evaluated every 2 epochs to monitor training only; the map
+  reported is the last epoch's.
+
+Adam moves each logit by about lr per step, so the starting margin works like a
+soft significance threshold. No tile flips during the first 3 epochs. A tile
+whose gradient keeps one sign crosses zero, while one dominated by noise barely
+moves.
+
+**Results.** ΔPPL is versus FourOverSix. ΔNLL is paired per window, ± 2 SE,
+versus the §5 multi-round maps; the multi-round rows reproduce §5's paired
+numbers exactly.
+
+| Policy | E0M3 tiles | final dev KL | WikiText-2 | C4 | ΔPPL vs FourOverSix (wiki / c4) | ΔNLL vs multi-round (wiki / c4) |
+|---|---:|---:|---:|---:|---|---|
+| Multi-round 256×64 (§5) | 8,393 | 0.09572 | 6.835411 | 9.771621 | −0.0401 / −0.0521 | — |
+| **Trained STE 256×64** | 38,176 | 0.08868 | **6.805528** | **9.723484** | **−0.0700 / −0.1002** | −0.00438±0.00148 / −0.00494±0.00193 |
+| Multi-round 8×64 (§5) | 3,645 | 0.09374 | 6.817620 | 9.759931 | −0.0579 / −0.0638 | — |
+| **Trained STE 8×64** | 329,837 | 0.08349 | **6.784682** | **9.675402** | **−0.0908 / −0.1483** | −0.00484±0.00142 / −0.00870±0.00240 |
+| **Trained sigmoid 8×64** | 212,778 | 0.08418 | **6.781821** | **9.681478** | **−0.0937 / −0.1423** | −0.00526±0.00152 / −0.00807±0.00226 |
+
+Every trained map beats multi-round significantly, on both datasets and at both
+tile sizes. At 8×64 the C4 gain over FourOverSix more than doubles.
+
+**Calibration time.** One H200 per run; setup and final PPL evaluation are
+excluded, as in §4.
+
+| Run | Selection time | Work |
+|---|---:|---|
+| Multi-round 256×64 | 15.3 min | 4 scoring passes + 33 dev evaluations |
+| Trained STE 256×64 | 19.2 min | 20 epochs + 12 dev evaluations |
+| Multi-round 8×64 | 45.5 min | 9 scoring passes + 118 dev evaluations |
+| Trained STE / sigmoid 8×64 | 19.1 / 19.9 min | 20 epochs + 12 dev evaluations |
+
+Training cost does not depend on tile size: it is a fixed 20 epochs of about
+46 s each. The 12 monitor-only dev evaluations take about 4 minutes; without
+them, training takes about 15.5 min.
+
+**Caveats.**
+- One seed and one hyperparameter setting per arm. The ± 2 SE does not include
+  selection variance.
+- 256×64 had not converged: dev KL was still falling at epoch 20.
+- 8×64 STE dev KL bottomed at epoch 16 (0.08318) and ended at 0.08349, while
+  train KL fell to 0.039. This is a mild sign of fitting the calibration set.
+- Trained maps elect 4.5× (256×64) to 90× (8×64) more E0M3 tiles than
+  multi-round. The GEMM cost of heterogeneous maps is still unmeasured (§2).
+- Qwen and zero-shot accuracy have not been run on trained maps.
+
+Implementation: `run_train_map.py`, `slurm/train_map.sbatch`,
+`summarize_train_map.py`. Details and per-epoch curves are in
+[results/mixfp4_potential/train_map/REPORT.md](results/mixfp4_potential/train_map/REPORT.md).
 
 ---
 
