@@ -542,6 +542,62 @@ them, training takes about 15.5 min.
 - Qwen3.8-27B runs were started and then stopped before finishing, so they have
   no results. Zero-shot accuracy has not been run on trained maps.
 
+### Control: NVFP4 block-scale search trained with the same KL loss
+
+Does the gain come from E0M3, or from training *any* binary weight choice on the KL
+loss? The control keeps every weight E2M1 and replaces candidate $A$ with the
+FourOverSix candidate that uses the **other** block scale (block max → 6 ↔ block
+max → 4) in every 16-element scale block (`--alt scale`,
+`quant_nvfp4_4over6_pair`). Everything else is the same as above: the same B
+(bitwise FourOverSix; initial dev KL is identical), STE, Adam, lr 0.02, init −1,
+20 epochs, and the same data and evaluation windows.
+- **1×16** is the natural NVFP4 version: one logit per scale block. It is plain
+  NVFP4 on existing kernels, because only the value written into the existing
+  ue4m3 scale changes, so it needs no type metadata.
+- **8×64 and 256×64** use the MixFP4 geometries: every block in a tile flips its
+  scale together.
+
+Llama-3.2-1B-Instruct, jobs 442285–442287, 4.6 min of training each on one H200.
+ΔNLL is paired per window, ± 2 SE.
+
+| Policy | switched units | final dev KL | WikiText-2 | C4 | ΔNLL vs FourOverSix (wiki / c4) |
+|---|---:|---:|---:|---:|---|
+| NVFP4 FourOverSix | 0 | 0.16656 | 15.356671 | 21.532633 | — |
+| MixFP4 trained STE 256×64 | 17,064 | 0.12436 | 14.717933 | 20.049759 | −0.04248±0.00298 / −0.07135±0.00392 |
+| NVFP4 KL scale search 256×64 | 15,125 | 0.12643 | 14.778975 | 20.190540 | −0.03834±0.00285 / −0.06436±0.00346 |
+| MixFP4 trained STE 8×64 | 138,907 | 0.10905 | 14.505991 | 19.653187 | −0.05699±0.00275 / −0.09133±0.00416 |
+| NVFP4 KL scale search 8×64 | 134,717 | 0.11029 | 14.461707 | 19.689047 | −0.06005±0.00290 / −0.08951±0.00410 |
+| **NVFP4 KL scale search 1×16** | 1,170,936 (1.9%) | 0.11092 | **14.443117** | **19.451303** | −0.06133±0.00307 / −0.10166±0.00469 |
+
+Direct paired comparisons (NVFP4 scale search − MixFP4 trained, ΔNLL ± 2 SE, wiki / c4):
+
+| Scale search | vs MixFP4 256×64 | vs MixFP4 8×64 |
+|---|---|---|
+| 256×64 | +0.00414±0.00239 / +0.00700±0.00189 (MixFP4 better) | +0.01864±0.00236 / +0.02697±0.00195 |
+| 8×64 | −0.01756±0.00263 / −0.01815±0.00182 | −0.00306±0.00209 / +0.00182±0.00144 (tie-ish) |
+| 1×16 | −0.01885±0.00243 / −0.03030±0.00201 | **−0.00434±0.00214 / −0.01033±0.00166** (NVFP4 better) |
+
+**Reading (1B only, one seed):**
+- Most of the §7 gain over FourOverSix comes from KL-training the choice, not from
+  E0M3. The E2M1-only control recovers at least 90% of the MixFP4 gain at the same tile (and more
+  than 100% on 8×64 WikiText).
+- At a matched tile, E0M3 is worth a small but significant amount at 256×64
+  (−0.004 / −0.007). At 8×64 it is split: MixFP4 is better on C4 by 0.0018 (just
+  outside 2 SE), and the scale search is better on WikiText by 0.0031 (not
+  significant).
+- **The deployable NVFP4 baseline, per-block KL scale search at 1×16, beats every
+  MixFP4 trained map on both datasets.** A reviewer can therefore argue that
+  E0M3 is unnecessary on this model. The per-block choice is free in NVFP4 but
+  costs a tile-wide type field in MixFP4, and that granularity advantage
+  outweighs what E0M3 adds.
+- The 1×16 dev KL bottomed at epoch 14 (0.10892) and ended at 0.11092, while
+  train KL fell to 0.055. With 60.8 million logits it fits the calibration set
+  more than the tile runs do. Tuning it (early stop, lower lr) would only
+  strengthen the baseline.
+- The fair test of E0M3 is therefore additive: MixFP4 whose E2M1 branch *also*
+  uses the KL-trained per-block scale, versus that scale search alone. That run
+  has not been done yet.
+
 Implementation: `run_train_map.py`, `slurm/train_map.sbatch`,
 `summarize_train_map.py`. Details and per-epoch curves are in
 [results/mixfp4_potential/train_map/REPORT.md](results/mixfp4_potential/train_map/REPORT.md).

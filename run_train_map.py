@@ -4,6 +4,12 @@ Every type tile u of every text linear layer gets a real latent logit theta_u.
 The weights are W(theta) = B + expand(m(theta)) * (A - B), with B the FourOverSix
 E2M1 candidate and A the E0M3 alpha=1 candidate (identical to run_multiround.py).
 
+  --alt scale      NVFP4-only control: A is instead the FourOverSix E2M1 candidate
+                   with the OTHER block scale (block max -> 6 <-> block max -> 4) in
+                   every 16-element scale block (quant_nvfp4_4over6_pair). With
+                   --unit 1x16 this is a KL-trained FourOverSix block-scale search:
+                   plain NVFP4, no E0M3, no metadata beyond the existing ue4m3 scale.
+
   --param ste      m = 1[theta > 0] in the forward pass (the deployable hard map),
                    straight-through backward dm/dtheta = 1 (BinaryConnect-style
                    latent weights). The gradient dKL/dm_u = <G, P_u (A - B)> is the
@@ -39,7 +45,7 @@ from transformers import AutoTokenizer
 from quantize.causal_four_over_six import quantize_rows
 from quantize.fast_act import check as check_act, quant_per_document
 from quantize.packed_candidates import decode_alt, decode_base, nbytes, pack
-from quantize.quantizer import quant_mix_4_6, quant_nvfp4_4over6
+from quantize.quantizer import quant_mix_4_6, quant_nvfp4_4over6, quant_nvfp4_4over6_pair
 from run_baseline_protocol_audit import data
 from run_c4_frozen import digest_file
 from run_conditional_format import save, sha
@@ -62,6 +68,8 @@ def main():
     ap.add_argument('--model', choices=tuple(CALIBRATIONS), default='llama8b')
     ap.add_argument('--unit', choices=tuple(UNITS), required=True)
     ap.add_argument('--param', choices=('ste', 'sigmoid'), default='ste')
+    ap.add_argument('--alt', choices=('e0m3', 'scale'), default='e0m3',
+                    help='Candidate A: E0M3 alpha=1 (MixFP4), or the other FourOverSix block scale (NVFP4 control)')
     ap.add_argument('--optimizer', choices=('adam', 'sgd'), default='adam')
     ap.add_argument('--lr', type=float, default=0.02)
     ap.add_argument('--eps', type=float, default=1e-12,
@@ -129,8 +137,14 @@ def main():
     for n, m in modules.items():
         assert sha(m.weight) == prior['matrices'][n]['source_sha256'], n
         b = quant_nvfp4_4over6(m.weight, 4, 16)
-        a = quant_mix_4_6(m.weight, 4, 16, type_block=(8, 64), clip='a1', elect='always')
-        p = pack(m.weight, b, a)
+        if args.alt == 'scale':
+            chosen, a, _ = quant_nvfp4_4over6_pair(m.weight, 4, 16)
+            assert torch.equal(chosen, b), n
+            del chosen
+            p = None  # pack() stores only the E0M3 alternative; keep both candidates dense
+        else:
+            a = quant_mix_4_6(m.weight, 4, 16, type_block=(8, 64), clip='a1', elect='always')
+            p = pack(m.weight, b, a)
         if p is None:
             dense[n] = (b, a)
         else:
@@ -352,7 +366,7 @@ def main():
         losses = torch.tensor(values, dtype=torch.float32) * 2048
         key = 'c4' if domain == 'c4_paper' else domain
         report['evaluation'][key] = dict(nll=values, ppl=float(torch.exp(losses.sum() / (len(values) * 2048))))
-        print(f'PPL train_{args.param}_{args.unit} {key} {report["evaluation"][key]["ppl"]:.6f}', flush=True)
+        print(f'PPL train_{args.alt}_{args.param}_{args.unit} {key} {report["evaluation"][key]["ppl"]:.6f}', flush=True)
         save(args.out, report)
     eval_hooks(False)
     report['resources'] = dict(

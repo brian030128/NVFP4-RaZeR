@@ -42,6 +42,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--model', choices=tuple(FOUR_OVER_SIX), default='llama8b')
     ap.add_argument('runs', nargs='+', type=Path)
+    ap.add_argument('--against', nargs='*', type=Path, default=[],
+                    help='Also pair every run against each of these runs (e.g. trained MixFP4 maps)')
     args = ap.parse_args()
     fo = four_over_six(args.model)
     multi = {u: json.loads(p.read_text()) for u, p in MULTIROUND.get(args.model, {}).items()}
@@ -65,6 +67,15 @@ def main():
         print(f'| {run.name} | {r["final_e0m3_units"]:,} | {r["final_dev"]["kl"]:.5f} | {ev["wiki"]["ppl"]:.6f} | '
               f'{ev["c4"]["ppl"]:.6f} | {ev["wiki"]["ppl"] - fo["wiki"]["ppl"]:+.4f} / {ev["c4"]["ppl"] - fo["c4"]["ppl"]:+.4f} | '
               + ' / '.join(f'{m:+.5f}±{s:.5f}' for m, s in vs_fo) + f' | {vs_mr} |')
+    if args.against:
+        print('\n| Run | minus | ΔNLL ±2SE (wiki / c4) |\n|---|---|---|')
+        for run in args.runs:
+            ev = json.loads((run / 'report.json').read_text())['evaluation']
+            for ref in args.against:
+                r = json.loads((ref / 'report.json').read_text())
+                assert r['status'] == 'complete' and r['args']['model'] == args.model, ref
+                print(f'| {run.name} | {ref.name} | ' + ' / '.join(
+                    '{:+.5f}±{:.5f}'.format(*paired(ev[d]['nll'], r['evaluation'][d]['nll'])) for d in ('wiki', 'c4')) + ' |')
 
 
 if __name__ == '__main__':
