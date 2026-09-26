@@ -28,8 +28,8 @@ choice. E0M3 is an undocumented encoding.
 | SM100 (B200/GB200, `tcgen05.mma`) | **256×64**: the kernel's MMA tile N (256) × one 64-K block | Operand-format field of the MMA descriptor, rewritten per K-block |
 | SM120 (`mma.sync …m16n8k64`) | **8×64** minimum: the weight (B) operand tile n8 × k64 | Compiled E0M3 instruction variants, dispatched per MMA |
 
-Anything coarser than 8×64 is a union of operand tiles and is also expressible.
-8×64 and 256×64 are the two geometries reported here.
+The two geometries reported here are platform-specific: **256×64 is the SM100
+path and 8×64 is the SM120 path.**
 
 ## 2. GEMM overhead: 8×64 and 256×64
 
@@ -41,7 +41,6 @@ All overheads are relative to the same GEMM with every weight tile in E2M1
 | 256×64 | GB200 (SM100) | 8192³, uniform E0M3 vs uniform E2M1 weights, same executable | **−0.012%** (launch) / **−0.093%** (CUDA graph): within run-to-run noise, i.e. ≈ 0 |
 | 256×64 | GB200 (SM100) | Heterogeneous per-tile maps from §3 | *not yet measured* |
 | 8×64 | SM120 | Heterogeneous per-tile maps | *to be provided* |
-| 8×64 | SM100 | — | *not measured* |
 
 The 256×64 uniform result comes from job 400605 (median of three samples,
 256×256×256 GEMM tile, BF16 output, FP32 accumulation, PDL on):
@@ -52,37 +51,213 @@ realistic mixed map.
 
 ## 3. How tile selection works: multi-round KL-only election
 
-Each tile is either FourOverSix E2M1 (the default) or E0M3. Selection minimizes
-KL(BF16 teacher ‖ quantized model) and works like training with a line search.
+> **Newer alternative (Llama only so far):** training the map directly with Adam
+> on the same KL loss, with no filter and no backtracking, beats this method on
+> both datasets at both tile sizes. See §7.
+
+Each tile is either FourOverSix E2M1 (the default) or E0M3. Selection is a greedy
+descent on a distillation loss. First-order scores propose which tiles to flip, and
+measured loss on held-out documents decides how many flips to take. It works like
+gradient descent with a backtracking line search, over a discrete set of moves.
 
 **Data.**
 - 128 calibration sequences of 512 tokens: 64 OpenWebMath and 64 CodeParrot.
 - 192 separate held-out math/code **development** documents of 512 tokens.
 - No WikiText or C4 is used anywhere in selection.
 
-**Loop.** Start from all-E2M1 (FourOverSix), then repeat:
+**Weights as a function of the map.** For each weight matrix $W$, two quantized
+candidates are computed once from the BF16 weights and never change:
+- $B$, the FourOverSix E2M1 quantization;
+- $A$, the E0M3 quantization with $\alpha = 1$.
 
-1. **Score every flip at the current model.**
-   - For each calibration sequence, compute the weight gradient `G` of the KL
-     between the BF16 teacher's and the current quantized model's next-token
-     distributions. Activations are quantized with a straight-through estimator.
-   - A tile's flip score is `⟨G, ΔW_tile⟩`, where `ΔW_tile` is the weight change of
-     switching that tile to the other type. Undoing an earlier flip is also a flip.
-2. **Filter and rank.** Keep flips whose per-sequence mean + 2 SE < 0, i.e.
-   predicted to lower KL with confidence. Rank them by that bound.
-3. **Backtrack on measured loss.**
-   - Apply the top n candidates, starting with n = all, and measure mean KL on the
-     development documents.
-   - Accept the first step that lowers it; otherwise halve n and retry.
-4. **Stop** when no step lowers development KL.
+Both share the tensor's FP32 global scale, and each 16-element scale block keeps
+its own E4M3 scale. A map $m \in \{0,1\}^{\text{tiles}}$ gives the weights
 
-**Why multiple rounds.** First-order scores are only valid near the current point.
-Summed over thousands of tiles, they overstate the combined effect of a step by
-5–50×. Electing everything that passes the filter in one step (one-shot election)
-overshoots, and in later rounds most flips that pass the filter are rejected. On
-Llama 256×64, for example, round 1 had 29,820 candidates but accepted 465; applying
-all of them *raised* development KL by 0.11. Re-scoring after every accepted step,
-with the step size set by measured loss, avoids this.
+$$\hat W(m) = B + \sum_{u:\,m_u = 1} P_u \odot (A - B),$$
+
+where $P_u$ is the 0/1 mask of tile $u$ (256×64 or 8×64 elements). Flipping tile
+$u$ changes only the entries of that tile, by
+
+$$\Delta W_u = \sigma_u\, P_u \odot (A - B), \qquad
+\sigma_u = \begin{cases} +1 & u \text{ is currently E2M1} \\ -1 & u \text{ is currently E0M3 (an undo)} \end{cases}$$
+
+**Objective.** Let $p_t$ be the BF16 teacher's next-token distribution at position
+$t$, and $q_{m,t}$ that of the W4A4 model with map $m$. For a sequence $s$ of $T$
+tokens,
+
+$$\mathrm{KL}_s(m) = \frac{1}{T-1} \sum_{t=1}^{T-1} \sum_{v \in \text{vocab}}
+p_t(v)\, \big[\log p_t(v) - \log q_{m,t}(v)\big].$$
+
+The development objective is the mean over the 192 development documents:
+$L_{\text{dev}}(m) = \frac{1}{192} \sum_d \mathrm{KL}_d(m)$. It is measured with
+the evaluation protocol: a forward pass only, with one tensor-wide FourOverSix
+activation scale per document.
+
+**Step 1: score every flip with one backward pass.** The score of flipping tile $u$
+is its first-order effect on each calibration sequence's KL. A first-order Taylor
+expansion at the current weights $\hat W$ gives
+
+$$\mathrm{KL}_s\big(\hat W + \Delta W_u\big) \approx \mathrm{KL}_s(\hat W) + g_{u,s},
+\qquad g_{u,s} = \langle G_s, \Delta W_u \rangle = \sum_{(i,j) \in u} (G_s)_{ij}\, (\Delta W_u)_{ij},$$
+
+where $G_s = \partial\, \mathrm{KL}_s / \partial \hat W$ is sequence $s$'s gradient
+with respect to that layer's weights. The scoring pass computes every $g_{u,s}$
+without storing a single weight gradient.
+
+*Forward pass, for each batch of calibration sequences at the current map $m$:*
+
+1. **Teacher.** The BF16 teacher's log-probabilities $\log p_t$ were computed once,
+   before any quantization, and are reused in every round.
+2. **Weights.** Every text linear layer holds $\hat W(m)$, decoded from the packed
+   candidates. The weights are frozen (`requires_grad=False`), so autograd never
+   builds or stores a weight gradient.
+3. **Graph.** The token embeddings are detached and marked `requires_grad`. The
+   backward pass then flows through the activations of every layer, even though no
+   parameter requires a gradient.
+4. **Activation quantization with a straight-through estimator.** A pre-hook on each
+   linear layer replaces its input $x$ with
+
+   $$\tilde x = Q(x) + \big(x - \operatorname{sg}(x)\big),$$
+
+   where $\operatorname{sg}$ is stop-gradient (`detach`). The value is $Q(x)$, but
+   the Jacobian is the identity: $\partial \tilde x / \partial x = I$. Here $Q$ is
+   FourOverSix with one FP32 factor per token (`quantize_rows`). Each token gets
+   its own global scale $\max|x_t| / (6 \cdot 448)$. Each 16-element block then
+   picks the E4M3 block scale that maps its maximum to 6 or to 4, whichever has the
+   smaller block squared error. Every token is quantized from its own values only.
+   This keeps the scoring forward causal.
+5. **Save the layer input.** A forward hook on each linear layer keeps its quantized
+   input $\tilde x_s \in \mathbb R^{T \times K}$ for each sequence. It also
+   registers a hook on the layer's output $y$, which fires during the backward pass.
+6. **Loss.** For each sequence, $\mathrm{KL}_s$ is its token-mean KL against the
+   teacher, as defined above. The batch loss is $\sum_s \mathrm{KL}_s$.
+
+*Backward pass: one `backward()` per batch.* When it reaches a linear layer, the
+output hook receives $\delta = \partial \big(\sum_s \mathrm{KL}_s\big) / \partial y$.
+Sequences in a batch never interact: attention is within a sequence and activation
+scales are per token. Sequence $s$'s loss therefore reaches only its own slice
+$\delta_s \in \mathbb R^{T \times N}$. The hook then does four things, entirely in
+FP32:
+
+1. **Per-sequence weight gradient.** Because $y_{s,t} = \hat W \tilde x_{s,t}$, the
+   gradient sums outer products over the sequence's tokens, i.e. one matmul:
+
+   $$G_s = \sum_{t} \delta_{s,t}\, \tilde x_{s,t}^{\top} = \delta_s^{\top} \tilde x_s \in \mathbb R^{N \times K}.$$
+
+   $\delta_s$ already contains the effect of this layer's output on every later
+   layer and on the logits. The score therefore measures a weight change's effect
+   on the model's output distribution, not the local reconstruction error of the
+   layer.
+2. **Flip direction for the whole matrix.** For every element,
+   $D = (A - B) \odot \Sigma$, where $\Sigma$ is $-1$ on currently-E0M3 tiles and
+   $+1$ elsewhere. $D$ restricted to tile $u$ is exactly $\Delta W_u$, so a single
+   elementwise product serves every tile.
+3. **Tile sums.** $E_s = G_s \odot D$ is summed within each tile. For $r \times c$
+   tiles, pad the rows up to a multiple of $r$, reshape to
+   $(\lceil N/r \rceil, r, K/c, c)$, and sum over the two within-tile axes
+   (`reduce`). The result is a $\lceil N/r \rceil \times K/c$ array holding
+   $g_{u,s} = \sum_{(i,j) \in u} (E_s)_{ij}$ for every tile of the layer.
+4. **Accumulate.** Add $g_{u,s}$ and $g_{u,s}^2$ into FP64 running sums, one pair
+   per tile. $G_s$ and $E_s$ are discarded immediately.
+
+Every linear layer's hook fires within the same backward pass, so one forward and
+one backward per batch score every tile of every layer. In total that's 128
+sequences (16 batches of 8 on Llama, 128 of 1 on Qwen). What persists is two FP64
+numbers per tile. Testing each flip directly would instead need one forward pass
+per tile, millions of them at 8×64.
+
+In pseudocode, for one linear layer:
+
+```
+forward:   x̃ = Q_per_token(x).detach() + (x - x.detach())      # value Q(x), gradient identity
+           y = Ŵ x̃ ;  save x̃ ;  y.register_hook(on_backward)
+on_backward(δ):                                                  # δ = ∂ Σ_s KL_s / ∂y
+           D = (A - B) * where(tile_is_E0M3, -1, +1)             # flip direction, all tiles
+           for s in batch:
+               G = δ[s].T @ x̃[s]                                  # N×K gradient of KL_s
+               g = tile_sum(G * D)                                # ⌈N/r⌉ × K/c scores g_{u,s}
+               sum_g += g ; sum_g2 += g**2                        # FP64
+after 128 sequences:
+           μ  = sum_g / S
+           SE = sqrt((sum_g2 - S μ²) / (S - 1)) / sqrt(S)
+```
+
+*What the score is not.* It is exact for the model it differentiates, but that
+model differs from the one that is deployed and evaluated in two ways:
+- the straight-through estimator ignores how a weight change moves the activation
+  quantization grid;
+- scoring uses per-token activation scales, while the development evaluation, like
+  deployment, uses one tensor-wide scale per document.
+
+Both gaps, and the finite size of each flip, are why a score only *proposes* a flip.
+Step 3 decides with the measured development KL under the evaluation protocol.
+
+**Step 2: keep flips predicted to help, with confidence.** Over the $S = 128$
+calibration sequences, take each tile's mean score and its standard error:
+
+$$\mu_u = \frac{1}{S} \sum_s g_{u,s}, \qquad
+\mathrm{SE}_u = \frac{1}{\sqrt S} \sqrt{\frac{1}{S-1} \sum_s \big(g_{u,s} - \mu_u\big)^2}.$$
+
+Tile $u$ is a candidate only if
+
+$$b_u = \mu_u + 2\, \mathrm{SE}_u < 0.$$
+
+$b_u$ is an approximate one-sided 97.7% upper confidence bound on the expected
+first-order change in KL per sequence. The filter therefore keeps flips that lower
+KL across the calibration sequences, not ones driven by a few sequences. This is
+the "decisive margin" principle from earlier rounds of this work. Candidates are
+ranked by $b_u$, most negative first: $c_1, c_2, \dots, c_M$.
+
+**Step 3: choose the step size by backtracking on measured loss.** Try
+$n = M, \lfloor M/2 \rfloor, \lfloor M/4 \rfloor, \dots, 1$, with at most 22 tries:
+1. Flip the top $n$ candidates together, giving map $m'$.
+2. Measure $L_{\text{dev}}(m')$.
+3. If $L_{\text{dev}}(m') < L_{\text{dev}}(m)$, accept $m'$ and end the round.
+   Otherwise undo the flips and halve $n$.
+
+Each try logs the predicted change $\sum_{i \le n} \mu_{c_i}$ next to the measured
+change.
+
+**Step 4: re-score at the new point and stop when nothing helps.** The next round
+repeats steps 1–3 at the accepted map, with fresh gradients. The loop stops when no
+tile passes the filter, or when even $n = 1$ fails to lower $L_{\text{dev}}$. An
+accepted step always lowers $L_{\text{dev}}$, so development KL decreases strictly
+from round to round.
+
+**Why multiple rounds: the linear prediction overstates a combined step.** For a
+step $\Delta = \sum_{u \in C} \Delta W_u$, the second-order expansion is
+
+$$\mathrm{KL}(\hat W + \Delta) \approx \mathrm{KL}(\hat W)
++ \underbrace{\sum_{u \in C} \langle G, \Delta W_u \rangle}_{\text{what the scores add up}}
++ \tfrac12 \sum_{u \in C} \sum_{v \in C} \mathrm{vec}(\Delta W_u)^{\top} H\, \mathrm{vec}(\Delta W_v),$$
+
+where $H$ is the Hessian of KL with respect to all weights. The scores capture only
+the linear term, which grows like $n$. The quadratic term has $n^2$ pairwise terms:
+- tiles in the same layer interact through shared inputs;
+- tiles in different layers interact because each layer's error changes what later
+  layers see.
+
+Each flip is also a finite jump (the full E2M1-to-E0M3 difference on its tile), not
+an infinitesimal step. The sum of scores therefore overstates the combined effect.
+First-round tries from the reported runs:
+
+| Run, first round | Flips | Predicted Δ dev KL | Measured Δ dev KL | Result |
+|---|---:|---:|---:|---|
+| Llama 8×64, all candidates | 412,228 | −0.405 | **+0.389** | rejected |
+| Llama 8×64, 6 halvings | 6,441 | −0.043 | **+0.011** | rejected |
+| Llama 8×64, 7 halvings | 3,220 | −0.032 | −0.0014 | accepted (23× smaller than predicted) |
+| Qwen 8×64, 6 halvings | 17,215 | −0.024 | −0.0011 | accepted (22× smaller) |
+| Qwen 256×64, all candidates | 39,093 | −0.064 | −0.0024 | accepted (27× smaller) |
+
+Even accepted steps realize only about 1/20 to 1/30 of the predicted gain. Large
+steps cross over to a net loss, because the quadratic term grows faster than the
+linear one.
+
+Electing every candidate in one step (one-shot election) overshoots. Once a step is
+taken, the gradients $G_s$ change, and so do the right flips. Re-scoring at every
+accepted map, with the step size set by measured loss, avoids both problems. Each
+round's candidate count and accepted flips are in the run reports; for example,
+Llama 8×64 accepted 3,220, 1,208, 826, 423, 199, 91, 5 and 5 flips before stopping.
 
 **Output.** A per-tile E2M1/E0M3 map, the only runtime artifact. Selection is
 deterministic for a fixed setup: an independent re-run reproduced the Llama map
@@ -91,54 +266,52 @@ and every evaluation loss bitwise. Implementation: `run_multiround.py
 
 ## 4. Calibration time and cost
 
-These are **one-time, offline tile-selection costs**. Inference memory is not
-reported: this is fake quantization, and peak inference memory will be measured
-on the target device.
+These are **one-time, offline tile-selection costs** of the optimized
+implementation that produced every MixFP4 map in §5 and §6. Inference memory is
+not reported: this is fake quantization, and peak inference memory will be
+measured on the target device.
 
-| Run | Hardware | Implementation | Scoring passes | Dev evaluations | Selection time | Peak GPU memory | Peak CPU memory |
-|---|---|---|---:|---:|---:|---|---:|
-| Llama-3.1-8B, 256×64 | 1× H200 | reference | 5 | 42 | 43.9 min | 46.1 GiB | 41.2 GiB |
-| Llama-3.1-8B, 256×64 | 1× H200 | **optimized** | 4 | 33 | **15.3 min** | 64.5 GiB | 42.9 GiB |
-| Llama-3.1-8B, 8×64 | 1× H200 | reference | 10 | 133 | 2 h 15 min | 47.3 GiB | 41.3 GiB |
-| Qwen3.8-27B, 256×64 (run 1, to round 5) | 2× H200 | reference | 6 | 63 | 3 h 58 min | ~82 + 94 GiB¹ | 78.1 GiB |
-| Qwen3.8-27B, 256×64 (run 2, 2 rounds) | **1× H200** | optimized | 2 | 11 | 47 min | **107.1 GiB** | 78.2 GiB |
-| Qwen3.8-27B, 8×64 | 2× H200 | reference | 9 | 137 | 8 h 20 min | 82.2 + 94.2 GiB | 78.2 GiB |
+| Run | Hardware | Scoring passes | Dev evaluations | Setup | Selection time | Peak GPU memory | Peak CPU memory |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Llama-3.1-8B, 256×64 | 1× H200 | 4 | 33 | 1.5 min | **15.3 min** | 64.5 GiB | 42.9 GiB |
+| Llama-3.1-8B, 8×64 | 1× H200 | 9 | 118 | 1.8 min | **45.5 min** | 63.7 GiB | 42.9 GiB |
+| Qwen3.8-27B, 256×64 | 1× H200 | 3 | 28 | 6.0 min | **1 h 16 min** | 106.6 GiB | 78.1 GiB |
+| Qwen3.8-27B, 8×64 | 1× H200 | 10 | 143 | 6.0 min | **5 h 34 min** | 110.7 GiB | 78.2 GiB |
 
-¹ Not logged for this run; the Qwen 8×64 run has the same model, candidates and
-teachers on the same two GPUs.
+- **Selection time** covers all scoring passes and development evaluations. It
+  excludes setup (loading model, teachers and packed candidates) and the final PPL
+  evaluation.
+- **Scoring pass:** 128 × 512 tokens, forward plus the KL backward.
+- **Development evaluation:** 192 × 512 tokens, forward only. These dominate late
+  rounds, where backtracking evaluates several step sizes per accepted step.
 
-Selection time excludes setup (loading model and teachers, 2–8 min) and the final
-evaluation.
-
-**Where the time goes.**
-
-| Model | Scoring pass (reference) | Development evaluation (reference) | Development evaluation (optimized) |
-|---|---:|---:|---:|
-| Llama-3.1-8B | ~2 min | 0.9 min | 0.3 min |
-| Qwen3.8-27B | ~8 min | 3 min | 1.8 min |
-
-Scoring is 128 × 512 tokens, forward plus KL backward. A development evaluation is
-192 × 512 tokens, forward only. Late rounds that accept few flips spend most of
-their time on backtracking evaluations, while round 0 alone gives most of the
-gain.
-
-**The optimized implementation** changes no weight value.
-- Both candidates are stored packed as 4-bit codes plus FP8 scales and decoded per
-  module, verified bitwise. This lets Qwen run on one GPU.
-- Activation fake-quantization is vectorized and verified bitwise at the start of
+**What makes it fast**, none of it changing a weight value:
+- Both candidates are stored packed as 4-bit codes plus FP8 scales, decoded per
+  module and verified bitwise. This is what lets Qwen run on one GPU.
+- Activation fake-quantization is vectorized and bitwise-verified at the start of
   every run.
+- The CE backward is skipped, because KL-only selection never uses it.
 - Llama batches 16 documents per evaluation and 8 sequences per scoring pass.
-  Qwen evaluates one document per pass, because its batched forward is not
+  Qwen uses one document per pass, because its batched forward is not
   numerically identical to one-at-a-time.
-- Floating-point summation order changes which borderline tiles are selected.
-  The Llama 256×64 optimized run selected 8,393 tiles vs 8,405.
+
+**Speed-up over the earlier reference implementation**, which used unpacked BF16
+candidates, looped quantization and a CE backward:
+
+| Run | Reference | Optimized |
+|---|---:|---:|
+| Llama 256×64 | 43.9 min | **15.3 min (2.9×)** |
+| Llama 8×64 | 2 h 15 min | **45.5 min (3.0×)** |
+| Qwen 8×64 | 8 h 20 min on 2× H200 | **5 h 34 min on 1× H200** (≈3× fewer GPU-hours) |
+| Qwen 256×64 round 0 | 671 s on 2× H200 | **586 s on 1× H200** |
 
 ## 5. Perplexity
 
 W4A4 fake quantization: weights as listed, activations FourOverSix (NVFP4
 activations for the NVFP4 row). Evaluation uses the released protocol: WikiText-2
 test in 2,048-token windows and 256 seed-0 C4 validation crops. Lower is better.
-Paired ΔNLL is per window versus FourOverSix, ± 2 SE.
+MixFP4 rows are the converged maps from the optimized calibration of §4. Paired
+ΔNLL is per window versus FourOverSix, ± 2 SE.
 
 ### Llama-3.1-8B
 
@@ -147,13 +320,13 @@ Paired ΔNLL is per window versus FourOverSix, ± 2 SE.
 | BF16 (reference) | — | 6.240087 | 8.958212 | — |
 | NVFP4 | 0 | 6.940252 | 9.925099 | — |
 | NVFP4 FourOverSix | 0 | 6.875525 | 9.823733 | — |
-| **MixFP4 8×64** | 3,654 | **6.819751** | **9.750492** | −0.00815±0.00173 / −0.00748±0.00240 |
-| **MixFP4 256×64** (run 1) | 8,405 | 6.841998 | 9.774137 | −0.00489±0.00185 / −0.00506±0.00220 |
-| MixFP4 256×64 (run 2, optimized) | 8,393 | 6.835411 | 9.771621 | −0.00585±0.00187 / −0.00532±0.00220 |
+| **MixFP4 8×64** (SM120) | 3,645 | **6.817620** | **9.759931** | −0.00846±0.00171 / −0.00652±0.00203 |
+| **MixFP4 256×64** (SM100) | 8,393 | **6.835411** | **9.771621** | −0.00585±0.00187 / −0.00532±0.00220 |
 
 Versus FourOverSix:
-- **MixFP4 8×64:** −0.0558 WikiText / −0.0732 C4.
-- **MixFP4 256×64:** −0.0335 / −0.0496 (run 1) and −0.0401 / −0.0521 (run 2).
+- **MixFP4 8×64:** −0.0579 WikiText / −0.0638 C4.
+- **MixFP4 256×64:** −0.0401 / −0.0521.
+- Trained maps (§7) reach −0.0908 / −0.1483 (8×64) and −0.0700 / −0.1002 (256×64).
 
 ### Qwen3.8-27B
 
@@ -162,54 +335,167 @@ Versus FourOverSix:
 | BF16 (reference) | — | 7.050375 | 9.893323 | — |
 | NVFP4 | 0 | 7.579994 | 10.230958 | — |
 | NVFP4 FourOverSix | 0 | 7.287076 | 10.188365 | — |
-| **MixFP4 8×64** | 17,441 | **7.166357** | **10.155802** | −0.01671±0.00381 / −0.00320±0.00084 |
-| **MixFP4 256×64** (run 1) | 39,099 | 7.246839 | 10.157245 | −0.00554±0.00343 / −0.00306±0.00092 |
-| MixFP4 256×64 (run 2) | 39,092 | 7.201498 | 10.149290 | −0.01181±0.00353 / −0.00384±0.00089 |
+| **MixFP4 8×64** (SM120) | 17,571 | **7.205417** | **10.148049** | −0.01127±0.00442 / −0.00396±0.00089 |
+| **MixFP4 256×64** (SM100) | 39,095 | **7.223045** | **10.152189** | −0.00883±0.00361 / −0.00356±0.00089 |
 
 Versus FourOverSix:
-- **MixFP4 8×64:** −0.1207 WikiText / −0.0326 C4.
-- **MixFP4 256×64:** −0.0402 / −0.0311 (run 1) and −0.0856 / −0.0391 (run 2).
+- **MixFP4 8×64:** −0.0817 WikiText / −0.0403 C4.
+- **MixFP4 256×64:** −0.0640 / −0.0362.
 
-**Qwen results depend on the selection path.**
-- The two 256×64 runs differ in only 999 of ~39,100 tiles. The difference comes
-  from floating-point summation order in scoring (two GPUs vs one), compounded
-  over rounds. Yet their WikiText gains differ by 2×.
-- In the 8×64 run, the map after round 4 scored better on both corpora
-  (7.153788 / 10.145843) than the converged map. Rounds 5–8 lowered development KL
-  but not test PPL.
-- The paired ±2 SE above does not include this selection variance.
-- A reliable Qwen number needs repeated selections, e.g. on different
-  calibration halves. Llama shows neither effect.
+**Run-to-run variation.** Earlier reference-implementation runs of the same
+algorithm give the spread caused by floating-point summation order, which moves
+borderline tiles and compounds over rounds.
+
+| Model | Tile | Optimized run (above) | Reference runs, ΔPPL vs FourOverSix (wiki / c4) |
+|---|---|---|---|
+| Llama | 8×64 | −0.0579 / −0.0638 | −0.0558 / −0.0732 |
+| Llama | 256×64 | −0.0401 / −0.0521 | −0.0335 / −0.0496 |
+| Qwen | 8×64 | −0.0817 / −0.0403 | −0.1207 / −0.0326 |
+| Qwen | 256×64 | −0.0640 / −0.0362 | −0.0402 / −0.0311 and −0.0856 / −0.0391 |
+
+- **Llama** is stable to within about ±0.01.
+- **Qwen varies by up to ±0.04 on WikiText.** Its reference 8×64 map also scored
+  better after round 4 than when converged, so late rounds can overfit the 192
+  development documents.
+- The paired ±2 SE in the tables above does not include this selection variance.
 
 ## 6. Zero-shot accuracy
 
-lm-eval 0.4.5, 0-shot, batch size 8: `arc_easy`, `arc_challenge`, `hellaswag`,
-`openbookqa`, `boolq`, `winogrande`. The metric is `acc_norm` where defined, else
-`acc`, and the mean is unweighted over the six tasks. BF16 and NVFP4 rows are from
-the earlier zero-shot study with the same protocol
-([details](MIXFP4_REPORT_DETAILS.md)). FourOverSix and MixFP4 rows are evaluated
-together in jobs 427938–427940.
+lm-eval 0.4.5, 0-shot: `arc_easy`, `arc_challenge`, `hellaswag`, `openbookqa`,
+`boolq`, `winogrande`. The metric is `acc_norm` where defined, else `acc`, and the
+mean is unweighted over the six tasks. Activation fake-quantization uses one
+tensor-wide scale **per document**, not per lm-eval batch; padding positions are
+included in a document's scale. Batch size is 64 for every row, and the MixFP4
+rows use the §5 maps (jobs 428890, 428891, 430876). Paired differences are
+computed per document within each task and averaged over the six tasks, ± 2 SE.
 
 ### Llama-3.1-8B
 
 | Policy | arc_easy | arc_challenge | hellaswag | openbookqa | boolq | winogrande | mean |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| BF16 (reference) | 0.8106 | 0.5350 | 0.7885 | 0.4480 | 0.8196 | 0.7380 | 0.6899 |
-| NVFP4 | 0.7496 | 0.5085 | 0.7743 | 0.4280 | 0.7969 | 0.7182 | 0.6626 |
-| NVFP4 FourOverSix | *running* | | | | | | |
-| MixFP4 8×64 | *running* | | | | | | |
-| MixFP4 256×64 (run 1) | *running* | | | | | | |
+| BF16 (reference) | 0.8123 | 0.5367 | 0.7884 | 0.4460 | 0.8196 | 0.7356 | 0.6898 |
+| NVFP4 | 0.7500 | 0.5111 | 0.7754 | 0.4600 | 0.7920 | 0.7135 | 0.6670 |
+| NVFP4 FourOverSix | 0.7567 | 0.5111 | 0.7776 | 0.4420 | 0.8049 | 0.7072 | 0.6666 |
+| **MixFP4 8×64** (SM120) | 0.7757 | 0.5111 | 0.7787 | 0.4380 | 0.8141 | 0.7135 | **0.6718** |
+| **MixFP4 256×64** (SM100) | 0.7740 | 0.5077 | 0.7751 | 0.4440 | 0.8083 | 0.7080 | **0.6695** |
+
+| Comparison | Δ mean accuracy ± 2 SE |
+|---|---|
+| MixFP4 8×64 − FourOverSix | +0.0053 ± 0.0065 |
+| MixFP4 8×64 − NVFP4 | +0.0048 ± 0.0070 |
+| MixFP4 256×64 − FourOverSix | +0.0029 ± 0.0065 |
+| MixFP4 256×64 − NVFP4 | +0.0025 ± 0.0070 |
 
 ### Qwen3.8-27B
 
 | Policy | arc_easy | arc_challenge | hellaswag | openbookqa | boolq | winogrande | mean |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| BF16 (reference) | 0.7298 | 0.5896 | 0.8291 | 0.4620 | 0.8670 | 0.7561 | 0.7056 |
-| NVFP4 | 0.7542 | 0.5828 | 0.8237 | 0.4460 | 0.7783 | 0.7451 | 0.6883 |
-| NVFP4 FourOverSix | *running* | | | | | | |
-| MixFP4 8×64 | *running* | | | | | | |
-| MixFP4 256×64 (run 1) | *running* | | | | | | |
-| MixFP4 256×64 (run 2) | *running* | | | | | | |
+| BF16 (reference) | 0.7306 | 0.5887 | 0.8288 | 0.4640 | 0.8657 | 0.7561 | 0.7057 |
+| NVFP4 | 0.7496 | 0.5700 | 0.8227 | 0.4320 | 0.7700 | 0.7380 | 0.6804 |
+| NVFP4 FourOverSix | 0.7273 | 0.5725 | 0.8242 | 0.4540 | 0.8061 | 0.7514 | 0.6893 |
+| **MixFP4 8×64** (SM120) | 0.7306 | 0.5708 | 0.8231 | 0.4520 | 0.8076 | 0.7466 | **0.6885** |
+| **MixFP4 256×64** (SM100) | 0.7462 | 0.5922 | 0.8227 | 0.4540 | 0.8119 | 0.7514 | **0.6964** |
+
+| Comparison | Δ mean accuracy ± 2 SE |
+|---|---|
+| MixFP4 8×64 − FourOverSix | −0.0008 ± 0.0062 |
+| MixFP4 8×64 − NVFP4 | **+0.0081 ± 0.0066** |
+| MixFP4 256×64 − FourOverSix | **+0.0071 ± 0.0062** |
+| MixFP4 256×64 − NVFP4 | **+0.0160 ± 0.0066** |
+
+**Reading.**
+- MixFP4 never loses accuracy to FourOverSix or NVFP4 beyond noise.
+- **Significant gains:**
+  - Qwen 256×64 beats both baselines, mostly on arc_challenge (+0.020) and
+    arc_easy (+0.019).
+  - Qwen 8×64 beats NVFP4.
+- **Within noise:** the Llama gains (+0.003 to +0.005) and Qwen 8×64 versus
+  FourOverSix. These comparisons are underpowered: 2 SE is ±0.006–0.007 on the
+  six-task mean.
+- PPL gains (§5) and accuracy gains do not rank the same way. On Qwen, 8×64 has
+  the larger PPL gain but the smaller accuracy gain.
+
+## 7. Training the map with an optimizer (no backtracking)
+
+This treats the map as trainable parameters and optimizes the §3 KL objective
+directly, like training, instead of electing flips in rounds. Everything else
+is the same as §3: candidates $A$ and $B$, the 128 calibration sequences, the
+BF16 teacher, the scoring forward pass (per-token FourOverSix activations with
+a straight-through estimator), and the evaluation windows. So far it has been
+run on Llama-3.1-8B only (jobs 441206–441208).
+
+**Parametrization.** Each tile $u$ gets a real latent logit $\theta_u$, and the
+weights are $\hat W(\theta) = B + \sum_u m_u(\theta_u)\, P_u \odot (A - B)$.
+- **STE:** $m_u = \mathbb 1[\theta_u > 0]$ in the forward pass, so training
+  always runs the deployable hard map. The backward pass uses
+  $\partial m_u / \partial \theta_u = 1$ (BinaryConnect-style latent weights).
+  Init $\theta = -1$, lr 0.02.
+- **Sigmoid:** $m_u = \sigma(\theta_u / \tau)$, with $\tau$ annealed
+  geometrically from 1 to 0.1. The map is rounded at $\theta > 0$ for every
+  evaluation. Init $\theta = -3$, lr 0.05.
+
+**Gradient.** A backward hook on each linear layer forms $G = \delta^\top \tilde x$
+for the minibatch. It hands the optimizer
+$\partial \mathrm{KL} / \partial m_u = \sum_{(i,j) \in u} G_{ij} (A - B)_{ij}$,
+which is the §3 tile score without the flip sign, computed on a minibatch.
+No weight gradient is stored.
+
+**Optimizer.**
+- Adam with $\beta = (0.9, 0.999)$ and $\epsilon = 10^{-12}$. Tile gradients
+  are about $10^{-6}$, so the default $10^{-8}$ would dominate the update.
+- Constant learning rate, no weight decay.
+- Batch 8, 16 steps per epoch, 20 epochs (320 steps).
+- **No candidate filter, no backtracking, no acceptance test.** The development
+  documents are evaluated every 2 epochs to monitor training only; the map
+  reported is the last epoch's.
+
+Adam moves each logit by about lr per step, so the starting margin works like a
+soft significance threshold. No tile flips during the first 3 epochs. A tile
+whose gradient keeps one sign crosses zero, while one dominated by noise barely
+moves.
+
+**Results.** ΔPPL is versus FourOverSix. ΔNLL is paired per window, ± 2 SE,
+versus the §5 multi-round maps; the multi-round rows reproduce §5's paired
+numbers exactly.
+
+| Policy | E0M3 tiles | final dev KL | WikiText-2 | C4 | ΔPPL vs FourOverSix (wiki / c4) | ΔNLL vs multi-round (wiki / c4) |
+|---|---:|---:|---:|---:|---|---|
+| Multi-round 256×64 (§5) | 8,393 | 0.09572 | 6.835411 | 9.771621 | −0.0401 / −0.0521 | — |
+| **Trained STE 256×64** | 38,176 | 0.08868 | **6.805528** | **9.723484** | **−0.0700 / −0.1002** | −0.00438±0.00148 / −0.00494±0.00193 |
+| Multi-round 8×64 (§5) | 3,645 | 0.09374 | 6.817620 | 9.759931 | −0.0579 / −0.0638 | — |
+| **Trained STE 8×64** | 329,837 | 0.08349 | **6.784682** | **9.675402** | **−0.0908 / −0.1483** | −0.00484±0.00142 / −0.00870±0.00240 |
+| **Trained sigmoid 8×64** | 212,778 | 0.08418 | **6.781821** | **9.681478** | **−0.0937 / −0.1423** | −0.00526±0.00152 / −0.00807±0.00226 |
+
+Every trained map beats multi-round significantly, on both datasets and at both
+tile sizes. At 8×64 the C4 gain over FourOverSix more than doubles.
+
+**Calibration time.** One H200 per run; setup and final PPL evaluation are
+excluded, as in §4.
+
+| Run | Selection time | Work |
+|---|---:|---|
+| Multi-round 256×64 | 15.3 min | 4 scoring passes + 33 dev evaluations |
+| Trained STE 256×64 | 19.2 min | 20 epochs + 12 dev evaluations |
+| Multi-round 8×64 | 45.5 min | 9 scoring passes + 118 dev evaluations |
+| Trained STE / sigmoid 8×64 | 19.1 / 19.9 min | 20 epochs + 12 dev evaluations |
+
+Training cost does not depend on tile size: it is a fixed 20 epochs of about
+46 s each. The 12 monitor-only dev evaluations take about 4 minutes; without
+them, training takes about 15.5 min.
+
+**Caveats.**
+- One seed and one hyperparameter setting per arm. The ± 2 SE does not include
+  selection variance.
+- 256×64 had not converged: dev KL was still falling at epoch 20.
+- 8×64 STE dev KL bottomed at epoch 16 (0.08318) and ended at 0.08349, while
+  train KL fell to 0.039. This is a mild sign of fitting the calibration set.
+- Trained maps elect 4.5× (256×64) to 90× (8×64) more E0M3 tiles than
+  multi-round. The GEMM cost of heterogeneous maps is still unmeasured (§2).
+- Qwen and zero-shot accuracy have not been run on trained maps.
+
+Implementation: `run_train_map.py`, `slurm/train_map.sbatch`,
+`summarize_train_map.py`. Details and per-epoch curves are in
+[results/mixfp4_potential/train_map/REPORT.md](results/mixfp4_potential/train_map/REPORT.md).
 
 ---
 

@@ -43,15 +43,20 @@ from run_math_code_calibration import load_model, math_code_data
 from run_task_reorder_eval import validate_evaluation_data
 
 CALIBRATIONS = {'llama8b': Path('/work/u4320956/task_reorder/transfer_20260920/llama8b/calibration'),
-                'qwen27b': Path('/work/u4320956/task_reorder/pilot_20260919/qwen27b/calibration')}
+                'qwen27b': Path('/work/u4320956/task_reorder/pilot_20260919/qwen27b/calibration'),
+                # Instruct shares the base tokenizer, so the base development documents
+                # and published windows apply unchanged (make_instruct_prior.py).
+                'llama8b_ins': Path('/work/u4320956/mixfp4_potential/llama8b_ins_calibration')}
 # Held-out math/code documents from recorded earlier confirmation gates, tokenized per model.
 DEVELOPMENT = {
     'llama8b': [Path('/work/u4320956/task_reorder/transfer_20260920/llama8b') / s
                 for s in ('confirmation', 'gate_up_confirm', 'tile_refine_confirm')],
     'qwen27b': [Path('/work/u4320956/task_reorder/pilot_20260919/qwen27b/fine_rows_v2') / s
                 for s in ('fisher_subset_validate_v2_confirm', 'preserved_row_confirm', 'ce_target_combinations_confirm')]}
+DEVELOPMENT['llama8b_ins'] = DEVELOPMENT['llama8b']
 PUBLISHED = {'llama8b': 'results/kse_paper/job_336566/llama8b/report.json',
-             'qwen27b': 'results/kse_paper/job_336969/qwen27b/report.json'}
+             'qwen27b': 'results/kse_paper/job_336969/qwen27b/report.json',
+             'llama8b_ins': 'results/kse_paper/job_336566/llama8b/report.json'}
 # Models prepared only locally (prepare_model_data.py): three development draws with Llama's rule.
 LOCAL_DEVELOPMENT = {m: ('fresh_dev1', 'fresh_dev2', 'fresh_dev3') for m in ('qwen4b', 'mistral7b', 'phi4')}
 MODELS = tuple(CALIBRATIONS) + tuple(LOCAL_DEVELOPMENT)
@@ -68,6 +73,8 @@ def data_paths(model, data_root=None):
 
 
 def load_development(directories):
+    if isinstance(directories, str):
+        directories = DEVELOPMENT[directories]      # a model name (main's run_train_map.py): the cluster paths
     records, provenance = [], []
     for directory in directories:
         report = json.loads((directory / 'report.json').read_text())
@@ -659,6 +666,8 @@ def main():
                     t = torch.cat(teacher[start:start + args.score_batch]).to(lp.device).float()
                 with region('logits log_softmax + CE/KL'):
                     ce, kl = per_sequence_losses(lp, ids, t)
+                # KL-only selection never reads the CE scores. main skips their backward automatically
+                # for --objective kl; on this branch it stays opt-in (--skip-ce-backward), as verified.
                 if not args.skip_ce_backward:
                     phase[0] = 0; ce.sum().backward(retain_graph=True)
                 phase[0] = 1; kl.sum().backward()
