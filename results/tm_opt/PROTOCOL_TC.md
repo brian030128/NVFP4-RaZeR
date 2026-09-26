@@ -109,3 +109,19 @@ on speed and PPL on Llama-3.1-8B, Mistral-7B-v0.3 and Phi-4. The Qwen3.8-27B gat
      path. The threshold, max(2 × FP32 error, 2e-6), is exceeded in all 72 cases.
    - **Before the test:** the refactor check passed (bitwise) and both profiles completed.
    - **Next:** the user decides (REPORT_TC.md, options A–D).
+2. **2026-09-26 14:53 UTC: the user's decision, option A** (relayed by nvfp4-razer-c9): **the registered
+   end-to-end test runs despite the unit-test failure.**
+   - **Unchanged:** the FAIL of deviation 1 stays recorded as is; the tolerance is neither relaxed nor
+     relabelled.
+   - **Queue:** steps 3–5 of `queue_tc.sh` run unchanged from a new queue, `queue_tc_runs.sh` (sha256
+     be9aded25f20…): the nine runs, the evaluations, and the non-deterministic probe (3 epochs).
+     `run_train_map.py` is unchanged since registration (52c61ff39c40…).
+   - **Verdict:** per cell, as registered (mean − 2 SE ≤ 0 vs TM-OPT on both corpora), with the
+     differences set next to #2's seed spread.
+   - **Recommendation rule (the user's):**
+     - **If all 9 cells pass:** recommend TC, with an honest disclosure. The unit test failed, and the
+       precision equals the BF16 tensor-core, FP32-accumulate path that QAT's weight gradients use.
+     - **If any cell fails:** report which ones and suggest option C (a compensated, chunked TC
+       GEMM) as the next step, without implementing it.
+   - **Pinned-memory teacher copy:** not added now. The report mentions it as a separate,
+     bitwise-neutral speed-up that QAT could use too.
