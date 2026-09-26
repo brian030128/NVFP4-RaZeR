@@ -23,7 +23,9 @@ activations, as in evaluation) only to MONITOR training; they never change the
 map. WikiText-2 / C4 are evaluated once, on the final map.
 
 TM-OPT: the MR-OPT speed and memory optimizations of run_multiround.py, each behind a flag whose default is the
-legacy behaviour above. --tm-opt turns all of them on (the TM-OPT configuration); --no-<flag> turns one off again.
+legacy behaviour above. --tm-opt turns all of them on except --tile-grad-kernel (the TM-OPT configuration); --no-<flag>
+turns one off again. B1 stays opt-in: for the training step's single batch GEMM per module it is slower than the
+legacy hook, and its FP32 error is at the noise level of 4,096-token sums (results/tm_opt/PROTOCOL.md, deviations 1-2).
   --memory-mode lean     one native-format candidate store (candidate_store.CandidateStore). Every quantized Linear
                          decodes its weight on each call, in the forward and again for the backward (saved-tensor
                          hooks), so no BF16 copy of those matrices stays resident. STE: the store's decode of the hard
@@ -33,7 +35,8 @@ legacy behaviour above. --tm-opt turns all of them on (the TM-OPT configuration)
                          monitor and final evaluation: fourover6 per document (bit-exact to quant_per_document). The
                          first 64 calls of each are checked bitwise.
   --tile-grad-kernel     B1 for the tile gradient (tile_score.tile_sums, from the packed store): the batch sum of
-                         G * (A - B) per tile in FP32; only the summation order differs from the legacy hook. Lean only.
+                         G * (A - B) per tile in FP32; only the summation order differs from the legacy hook. Lean only;
+                         opt-in, not part of TM-OPT.
   --chunked-loss         the step's KL gradient into the logits two documents at a time (chunked_loss.train_kl_gradient),
                          and the monitor's per-document CE/KL the same way: bitwise the whole-batch expressions.
   --deterministic        torch.use_deterministic_algorithms(True) (CUBLAS_WORKSPACE_CONFIG must be set).
@@ -75,8 +78,9 @@ from run_math_code_calibration import load_model, math_code_data
 from run_multiround import MODELS, PUBLISHED, UNITS, data_paths, expand, load_development, reduce
 from run_task_reorder_eval import validate_evaluation_data
 
-# The TM-OPT configuration and the legacy one (every flag's default without --tm-opt).
-TM_OPT = dict(memory_mode='lean', fused_act_quant=True, tile_grad_kernel=True, chunked_loss=True, deterministic=True,
+# The TM-OPT configuration and the legacy one (every flag's default without --tm-opt). B1 (--tile-grad-kernel) is not
+# part of TM-OPT: slower than the legacy hook here and at FP32 noise level (results/tm_opt/PROTOCOL.md, deviation 2).
+TM_OPT = dict(memory_mode='lean', fused_act_quant=True, tile_grad_kernel=False, chunked_loss=True, deterministic=True,
               dev_backend='native', eval_backend='native', single_pass_epilogue=True)
 LEGACY = dict(memory_mode='legacy', fused_act_quant=False, tile_grad_kernel=False, chunked_loss=False,
               deterministic=False, dev_backend='fake', eval_backend='fake', single_pass_epilogue=False)
@@ -113,7 +117,8 @@ def main():
     ap.add_argument('--eval-batch', type=int, default=16)
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--gpus', type=int, default=None, help='Qwen: 1 loads on one device, else balanced')
-    ap.add_argument('--tm-opt', action='store_true', help='TM-OPT: every optimization flag below on unless turned off')
+    ap.add_argument('--tm-opt', action='store_true',
+                    help='TM-OPT: every optimization flag below on (except --tile-grad-kernel) unless turned off')
     ap.add_argument('--memory-mode', choices=('legacy', 'lean'), default=None)
     ap.add_argument('--fused-act-quant', action=argparse.BooleanOptionalAction, default=None)
     ap.add_argument('--tile-grad-kernel', action=argparse.BooleanOptionalAction, default=None)

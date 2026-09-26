@@ -129,3 +129,32 @@ before the next group; it is then reported.
        the legacy single FP32 GEMM: at best 76 ms vs 56 ms. B1's MR-OPT gain came from replacing
        per-sequence GEMMs and FP64 statistics; the training step has one GEMM per module anyway.
    - **Nothing else has run.** Groups 1 and 2 wait for the user's decision on B1.
+2. **2026-09-26 07:15 UTC: the user's decision, option A (relayed by nvfp4-razer-c9).
+   B1 is taken out of the TM-OPT preset.**
+   - **Unchanged record:** the 1(b) FAIL of deviation 1 stands as reported.
+   - **Why B1 is out** (the diagnostic of deviation 1):
+     - it is slower here: the training step needs one batch GEMM per module, so there is nothing to
+       fuse away;
+     - its error is at the FP32 noise level of 4,096-token sums: vs FP64 the legacy hook is up to
+       1.09e-6 off and B1 up to 1.32e-6.
+   - **Code:** `run_train_map.py`'s `TM_OPT` preset now has `tile_grad_kernel=False`.
+     `--tile-grad-kernel` stays an opt-in flag, default off. Nothing else changes.
+   - **Group 1:** runs exactly as registered, with the same commands; `--no-tile-grad-kernel` is now
+     redundant and resolves identically.
+   - **Group 2 becomes one full 20-epoch STE 8x64 run with the TM-OPT preset** (main's settings: lr
+     0.02, init −1, batch 8, monitor every 2 epochs, native monitor and final evaluation). There is
+     no B1 comparison. Reported:
+     - **Time and memory:** per-epoch time, total selection time, and peak GPU/host memory,
+       against legacy.
+       - **Legacy's per-epoch time** is estimated from group 1's legacy short run. If group 1
+         passes bitwise, the TM-OPT preset reproduces the legacy result on this machine, so no
+         separate legacy full run is made.
+       - **Legacy's selection time** is estimated from that run's per-epoch and per-evaluation
+         times.
+     - **PPL:** native (primary) and fake, with paired ΔNLL vs FourOverSix, from one native and one
+       fake evaluator process (`run_multiround.py --evaluate-map`: FourOverSix and the TM-OPT map).
+       The run's own native final evaluation must repeat bitwise in the joint process (reported).
+     - **For context only:** the H200 reference (STE 8x64 6.7847 / 9.6754).
+   - **New hashes** (the other registered files are unchanged; the new queue is `queue2.sh`):
+     `run_train_map.py` f32028f2b8fb…, `compare_tm.py` d51cfdf12ad3…,
+     `queue2.sh` 020ac7a8c46f….

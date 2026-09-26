@@ -1,7 +1,7 @@
 """TM-OPT verification checks and tables (PROTOCOL.md). Each subcommand adds its result to summary.json here.
 
 python results/tm_opt/compare_tm.py bitwise NAME RUN_A RUN_B   # group 1: every recorded value bitwise equal (exit 1 if not)
-python results/tm_opt/compare_tm.py e2e RUNS                    # group 2: B1 on vs off, time and memory; writes tables.md
+python results/tm_opt/compare_tm.py e2e RUNS                    # group 2 (deviation 2): the TM-OPT run, time and memory; writes tables.md
 """
 import hashlib
 import json
@@ -84,64 +84,62 @@ def timing(r):
 
 
 def e2e(runs):
+    """Group 2 after deviation 2: one full STE 8x64 run with the TM-OPT preset (no B1), evaluated with this branch's
+    evaluator (native primary, fake secondary), against legacy time and memory from group 1's legacy short run."""
     runs = Path(runs)
-    on, off = load(runs / 'g2_tmopt' / 'report.json'), load(runs / 'g2_tmopt_nob1' / 'report.json')
+    tm = load(runs / 'g2_tmopt' / 'report.json')
     nat, fake = load(runs / 'g2_eval_native' / 'report.json'), load(runs / 'g2_eval_fake' / 'report.json')
     ev, fev = nat['evaluations'], fake['evaluations']
-    ma = torch.load(runs / 'g2_tmopt' / 'map.pt', weights_only=True)
-    mb = torch.load(runs / 'g2_tmopt_nob1' / 'map.pt', weights_only=True)
-    ta = torch.load(runs / 'g2_tmopt' / 'theta.pt', weights_only=True)
-    tb = torch.load(runs / 'g2_tmopt_nob1' / 'theta.pt', weights_only=True)
-    theta_diff = max(float((ta[n] - tb[n]).abs().max()) for n in ta)
-    overlap = dict(shared=sum(int((ma[n] & mb[n]).sum()) for n in ma), only_b1=sum(int((ma[n] & ~mb[n]).sum()) for n in ma),
-                   only_no_b1=sum(int((mb[n] & ~ma[n]).sum()) for n in ma))
+    legacy, short = load(runs / 'g1_ste_legacy' / 'report.json'), load(runs / 'g1_ste_tmopt_nob1' / 'report.json')
     nll = {lab: {d: ev[lab]['evaluation'][d]['nll'] for d in D} for lab in ev}
-    b1_vs_off = {d: paired(nll['tmopt'][d], nll['tmopt-nob1'][d]) for d in D}
-    passed = all(b1_vs_off[d]['lower'] <= 0 for d in D)
-    own = {lab: all(r['evaluation'][d]['nll'] == nll[lab][d] for d in D) for lab, r in (('tmopt', on), ('tmopt-nob1', off))}
-    legacy = [load(runs / n / 'report.json') for n in ('g1_ste_legacy', 'g1_ste_tmopt_nob1')]
+    fnll = {lab: {d: fev[lab]['evaluation'][d]['nll'] for d in D} for lab in fev}
+    t_tm, t_legacy, t_short = timing(tm), timing(legacy), timing(short)
+    # legacy estimate for the full run: 20 epochs and 11 monitor evaluations (10 during training, the final one),
+    # at group 1's legacy per-epoch and per-evaluation (fake monitor) times
+    legacy_dev = [e['dev_seconds'] for e in legacy['epochs'] if 'dev_seconds' in e]
+    epochs, monitor = tm['args']['epochs'], sum('dev_kl' in e for e in tm['epochs']) + 1
+    legacy_estimate = dict(epoch_seconds=t_legacy['epoch_seconds_mean'], dev_evaluation_seconds=sum(legacy_dev) / len(legacy_dev),
+                           epochs=epochs, monitor_evaluations=monitor)
+    legacy_estimate['selection_seconds'] = epochs * legacy_estimate['epoch_seconds'] + monitor * legacy_estimate['dev_evaluation_seconds']
     value = dict(
-        criterion='B1 map minus no-B1 map, native paired ΔNLL: mean - 2 SE <= 0 on WikiText-2 and C4', passed=passed,
-        b1_minus_no_b1=b1_vs_off,
-        vs_fourover6={lab: {d: paired(nll[lab][d], nll['FourOverSix'][d]) for d in D} for lab in ('tmopt', 'tmopt-nob1')},
+        run=dict(configuration=tm['configuration'], settings=tm['settings'], final_e0m3_units=tm['final_e0m3_units'],
+                 map_sha256=tm['map_sha256'], tiles=tm['tiles'],
+                 per_epoch=[dict(epoch=e['epoch'] + 1, train_kl=e['train_kl'], e0m3_units=e['e0m3_units'], hard_flips=e['hard_flips'],
+                                 dev_kl=e.get('dev_kl'), epoch_seconds=e['epoch_seconds']) for e in tm['epochs']],
+                 initial_dev_kl=tm['initial_dev']['kl'], final_dev_kl=tm['final_dev']['kl'], monitor_backend=tm['settings']['dev_backend']),
         native_ppl={lab: {d: ev[lab]['evaluation'][d]['ppl'] for d in D} for lab in ev},
         fake_ppl={lab: {d: fev[lab]['evaluation'][d]['ppl'] for d in D} for lab in fev},
-        runs_own_native_evaluation_repeated=own,
-        final_e0m3_units=dict(b1=on['final_e0m3_units'], no_b1=off['final_e0m3_units']),
-        flip_count_difference=on['final_e0m3_units'] - off['final_e0m3_units'], map_overlap=overlap,
-        flips_per_epoch=dict(b1=[e['hard_flips'] for e in on['epochs']], no_b1=[e['hard_flips'] for e in off['epochs']]),
-        e0m3_per_epoch=dict(b1=[e['e0m3_units'] for e in on['epochs']], no_b1=[e['e0m3_units'] for e in off['epochs']]),
-        max_abs_theta_difference=theta_diff,
-        monitor_dev_kl=dict(b1=[e.get('dev_kl') for e in on['epochs']], no_b1=[e.get('dev_kl') for e in off['epochs']]),
-        timing=dict(tm_opt=timing(on), tm_opt_no_b1=timing(off), legacy_short=timing(legacy[0]),
-                    tm_opt_no_b1_short=timing(legacy[1])),
+        native_vs_fourover6={d: paired(nll['tmopt'][d], nll['FourOverSix'][d]) for d in D},
+        fake_vs_fourover6={d: paired(fnll['tmopt'][d], fnll['FourOverSix'][d]) for d in D},
+        run_own_native_evaluation_repeated=all(tm['evaluation'][d]['nll'] == nll['tmopt'][d] for d in D),
+        map_checks={lab: dict(native_map_mismatches=ev[lab].get('native_map_mismatches'), e0m3_units=ev[lab].get('e0m3_units'))
+                    for lab in ev},
+        timing=dict(tm_opt=t_tm, legacy_short=t_legacy, tm_opt_short_fake_monitor=t_short, legacy_full_run_estimate=legacy_estimate),
         h200_reference=H200)
-    record('e2e STE 8x64 B1', value)
-    t = value['timing']
-    lines = ['| run | configuration | epochs | training s / epoch | monitor evaluations | selection time | '
-             'peak GPU allocated / reserved (run) | training peak GPU allocated | host RSS |',
-             '|---|---|---:|---:|---:|---:|---:|---:|---:|']
-    for label, key in (('legacy (group 1 STE, 3 epochs)', 'legacy_short'), ('TM-OPT without B1 (group 1 STE, fake eval)', 'tm_opt_no_b1_short'),
-                       ('TM-OPT without B1 (full)', 'tm_opt_no_b1'), ('TM-OPT (full)', 'tm_opt')):
-        x = t[key]
-        lines.append(f"| {label} | {x['configuration']} | {x['epochs']} | {x['epoch_seconds_mean']:.1f} | {x['monitor_evaluations']} | "
+    record('e2e STE 8x64 TM-OPT', value)
+    lines = ['| run | configuration | epochs | training s / epoch | selection time | peak GPU allocated / reserved | '
+             'training peak GPU allocated | host RSS |', '|---|---|---:|---:|---:|---:|---:|---:|']
+    for label, x in (('legacy (group 1 STE, 3 epochs)', t_legacy), ('TM-OPT, fake monitor (group 1 STE, 3 epochs)', t_short),
+                     ('TM-OPT (group 2, 20 epochs, native monitor)', t_tm)):
+        lines.append(f"| {label} | {x['configuration']} | {x['epochs']} | {x['epoch_seconds_mean']:.1f} | "
                      f"{x['selection_seconds'] / 60:.1f} min | {x['gpu_peak_allocated_gib']:.1f} / {x['gpu_peak_reserved_gib']:.1f} GiB | "
                      f"{x['training_gpu_peak_allocated_gib']:.1f} GiB | {x['host_peak_rss_gib']:.1f} GiB |")
-    lines += ['', '| map | E0M3 tiles | native WikiText-2 | native C4 | ΔWiki vs FourOverSix | ΔC4 vs FourOverSix | fake WikiText-2 | fake C4 |',
-              '|---|---:|---:|---:|---|---|---:|---:|']
-    for lab, name in (('FourOverSix', 'FourOverSix'), ('tmopt', 'TM-OPT (B1)'), ('tmopt-nob1', 'TM-OPT without B1')):
-        v = value['vs_fourover6'].get(lab)
-        units = {'tmopt': on['final_e0m3_units'], 'tmopt-nob1': off['final_e0m3_units']}.get(lab, 0)
-        lines.append(f"| {name} | {units:,} | {value['native_ppl'][lab]['wiki']:.4f} | {value['native_ppl'][lab]['c4']:.4f} | "
-                     f"{fmt(v['wiki']) if v else '—'} | {fmt(v['c4']) if v else '—'} | {value['fake_ppl'][lab]['wiki']:.4f} | "
-                     f"{value['fake_ppl'][lab]['c4']:.4f} |")
-    lines += ['', f"B1 minus no-B1 (native): ΔWiki {fmt(b1_vs_off['wiki'])}, ΔC4 {fmt(b1_vs_off['c4'])} -> "
-              f"{'PASS' if passed else 'FAIL'}; tiles shared / only B1 / only no-B1: {overlap['shared']:,} / "
-              f"{overlap['only_b1']:,} / {overlap['only_no_b1']:,}; max |Δθ| {theta_diff:.3g}"]
+    lines.append(f"| legacy, full-run estimate | legacy | {epochs} | {legacy_estimate['epoch_seconds']:.1f} | "
+                 f"{legacy_estimate['selection_seconds'] / 60:.1f} min | | | |")
+    lines += ['', '| map | E0M3 tiles | native WikiText-2 | native C4 | native ΔWiki vs FourOverSix | native ΔC4 vs FourOverSix | '
+              'fake WikiText-2 | fake C4 | fake ΔWiki vs FourOverSix | fake ΔC4 vs FourOverSix |', '|---|---:|---:|---:|---|---|---:|---:|---|---|']
+    for lab, name in (('FourOverSix', 'FourOverSix'), ('tmopt', 'TM-OPT STE 8x64')):
+        nv = value['native_vs_fourover6'] if lab == 'tmopt' else None
+        fv = value['fake_vs_fourover6'] if lab == 'tmopt' else None
+        lines.append(f"| {name} | {tm['final_e0m3_units'] if lab == 'tmopt' else 0:,} | {value['native_ppl'][lab]['wiki']:.4f} | "
+                     f"{value['native_ppl'][lab]['c4']:.4f} | {fmt(nv['wiki']) if nv else '—'} | {fmt(nv['c4']) if nv else '—'} | "
+                     f"{value['fake_ppl'][lab]['wiki']:.4f} | {value['fake_ppl'][lab]['c4']:.4f} | {fmt(fv['wiki']) if fv else '—'} | "
+                     f"{fmt(fv['c4']) if fv else '—'} |")
+    h = H200['STE 8x64']
+    lines += ['', f"H200 reference (main, fake evaluation, context only): STE 8x64 {h['wiki']:.4f} / {h['c4']:.4f}, {h['e0m3']:,} E0M3 tiles.",
+              f"Run's own native final evaluation repeated in the joint process: {value['run_own_native_evaluation_repeated']}."]
     (HERE / 'tables.md').write_text('\n'.join(lines) + '\n')
     print('\n'.join(lines))
-    print(json.dumps({k: value[k] for k in ('passed', 'b1_minus_no_b1', 'final_e0m3_units', 'map_overlap',
-                                            'runs_own_native_evaluation_repeated')}, indent=1))
 
 
 if __name__ == '__main__':
