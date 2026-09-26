@@ -542,7 +542,7 @@ them, training takes about 15.5 min.
 - Qwen3.8-27B runs were started and then stopped before finishing, so they have
   no results. Zero-shot accuracy has not been run on trained maps.
 
-### Control: NVFP4 block-scale search trained with the same KL loss
+### Control: NVFP4 block-scale search trained with the same KL loss (FourOverSix init)
 
 Does the gain come from E0M3, or from training *any* binary weight choice on the KL
 loss? The control keeps every weight E2M1 and replaces candidate $A$ with the
@@ -595,8 +595,126 @@ Direct paired comparisons (NVFP4 scale search − MixFP4 trained, ΔNLL ± 2 SE,
   more than the tile runs do. Tuning it (early stop, lower lr) would only
   strengthen the baseline.
 - The fair test of E0M3 is therefore additive: MixFP4 whose E2M1 branch *also*
-  uses the KL-trained per-block scale, versus that scale search alone. That run
-  has not been done yet.
+  uses the KL-trained per-block scale, versus that scale search alone. See the
+  next subsection.
+
+### Joint: 1×16 NVFP4 scale search + E0M3 tiles, one KL loss
+
+This is the target method. The KL loss trains two sets of logits at once, with the
+same STE/Adam recipe as above:
+- one logit per 16-element scale block, choosing block max → 6 or block max → 4;
+- one logit per type tile (8×64 or 256×64), choosing E2M1 or E0M3 α=1.
+
+The weight is $W = E + t\,(A - E)$ with $E = S_{lo} + s\,(S_{hi} - S_{lo})$, where
+$t$ is the tile type and $s$ the per-block scale choice. The straight-through
+gradients are $\partial L/\partial t_u = \langle G, P_u (A - E)\rangle$ and
+$\partial L/\partial s_b = \langle G, P_b (1 - t)(S_{hi} - S_{lo})\rangle$, so a
+block's scale receives no gradient while its tile is E0M3 (`--alt joint`).
+
+FourOverSix is itself an MSE-driven scale search, so the method does **not** start
+from it:
+- **`--scale-init nvfp4`** (the target): the scale logits start at plain NVFP4
+  (block max → 6 everywhere, $S_{lo}$) with $S_{hi}$ = block max → 4, and KL alone
+  decides.
+- **`four_over_six`** (an ablation): the scale logits start at FourOverSix's MSE
+  choice.
+- In both, the matched E2M1-only arm is the 1×16 scale search with the same init.
+- Activations stay FourOverSix in every row.
+- The max → 6 branch equals `quant_nvfp4` except at exact rounding ties: the
+  FourOverSix code path rounds a midpoint down, and `quant_nvfp4` rounds it away
+  from zero.
+
+Llama-3.2-1B-Instruct, jobs 442320–442331, 5–6 min of training each.
+ΔNLL is paired per window, ± 2 SE.
+
+| Init | Policy | E0M3 tiles | flipped scale blocks in E2M1 tiles | final dev KL | WikiText-2 | C4 |
+|---|---|---:|---:|---:|---:|---:|
+| — | NVFP4 (0 epochs) | 0 | — | 0.17109 | 15.418092 | 21.608984 |
+| — | FourOverSix | 0 | — | 0.16656 | 15.356671 | 21.532633 |
+| nvfp4 | scale search 1×16 | 0 | 1,239,338 | 0.11687 | 14.554335 | 19.616772 |
+| nvfp4 | **joint 8×64** | 44,563 (2.3%) | 1,021,032 | 0.11819 | **14.513743** | **19.486712** |
+| nvfp4 | joint 256×64 | 5,075 (8.5%) | 1,099,886 | 0.12026 | 14.602059 | 19.581057 |
+| four_over_six | scale search 1×16 | 0 | 1,170,936 | 0.11092 | 14.443117 | 19.451303 |
+| four_over_six | **joint 8×64** | 42,211 (2.2%) | 979,886 | 0.11218 | **14.421883** | **19.339970** |
+| four_over_six | joint 256×64 | 4,050 (6.8%) | 1,065,865 | 0.11302 | 14.448973 | 19.462934 |
+
+What E0M3 adds on top of the KL-trained scale (joint − scale search 1×16, same
+init, ΔNLL ± 2 SE, wiki / c4):
+
+| Init | joint 8×64 | joint 256×64 |
+|---|---|---|
+| nvfp4 | **−0.00279±0.00170 / −0.00665±0.00145** | +0.00327±0.00190 / −0.00182±0.00137 |
+| four_over_six | −0.00147±0.00199 / **−0.00574±0.00144** | +0.00041±0.00210 / +0.00060±0.00133 |
+
+**Reading (1B, one seed):**
+- **At 8×64, E0M3 adds a significant gain on top of the best NVFP4 scale
+  search.** From NVFP4 init it is significant on both datasets; from FourOverSix
+  init it is significant on C4 and in the same direction on WikiText. The size is
+  small, about 0.003–0.007 ΔNLL, roughly a tenth of what the scale search itself
+  gains over FourOverSix.
+- **At 256×64, E0M3 adds nothing reliable:**
+  - NVFP4 init: WikiText is worse and C4 better, both beyond 2 SE.
+  - FourOverSix init: a tie.
+- **Initialization matters as much as E0M3.** The FourOverSix start beats the
+  NVFP4 start by about 0.008 ΔNLL in both arms (scale 1×16:
+  −0.00767±0.00264 / −0.00847±0.00156).
+  - With init −1 and lr 0.02, a block has to see a consistent gradient sign for
+    tens of steps before it flips. So 320 steps from the NVFP4 start rediscover
+    only part of the FourOverSix choice: 1.24 million blocks move to max → 4,
+    about 2% of the 60.8 million.
+  - FourOverSix is data-free, so using it only as the *starting point* of the KL
+    search would be defensible. Longer training or a smaller starting margin are
+    the other ways to close the gap.
+- **Best configuration measured on 1B:** FourOverSix-init joint 8×64, 14.4219 /
+  19.3400. That is −0.0628 / −0.1074 ΔNLL versus FourOverSix, and it beats the
+  earlier E0M3-only MixFP4 8×64 map by −0.00581±0.00194 / −0.01607±0.00198.
+- **Overfitting:** dev KL for the joint runs is lowest around epochs 12–16 and
+  ends 0.001–0.003 higher, while train KL keeps falling to 0.055–0.06.
+
+#### More calibration data and longer training
+
+These runs add 192 math and 192 code windows (`--extra-fit 192`) to the pinned
+64 + 64, for 512 sequences in total. The new windows come from the same parquet
+shards and exclude the pinned documents and every development document.
+- **40 epochs (jobs 442398–442403) overfits badly.** Every arm's dev KL is lowest
+  at epoch 8 (0.101–0.113, below every short run) and then climbs to 0.120–0.128,
+  while train KL falls to 0.043–0.056. The final maps are worse than the short
+  runs: for example, NVFP4-init joint 8×64 scores 14.8932 / 19.7139. Two of the six
+  jobs died near the end when `/work` filled up; their dev curves are kept.
+- **8 epochs, chosen from those dev curves (jobs 442443–442448):**
+
+| Init | Policy | E0M3 tiles | final dev KL | WikiText-2 | C4 |
+|---|---|---:|---:|---:|---:|
+| four_over_six | scale search 1×16 | 0 | 0.10092 | 14.412138 | 19.530315 |
+| four_over_six | joint 8×64 | 66,263 | 0.10211 | **14.396612** | 19.452019 |
+| four_over_six | joint 256×64 | 8,886 | 0.10645 | 14.451501 | 19.601044 |
+| nvfp4 | scale search 1×16 | 0 | 0.10753 | 14.492434 | 19.616920 |
+| nvfp4 | joint 8×64 | 71,851 | 0.10849 | 14.544625 | 19.599020 |
+| nvfp4 | joint 256×64 | 11,229 | 0.11152 | 14.579458 | 19.647200 |
+
+Joint − scale search 1×16, same init and budget (ΔNLL ± 2 SE, wiki / c4):
+four_over_six 8×64 −0.00108±0.00201 / −0.00402±0.00127; 256×64
++0.00273±0.00217 / +0.00362±0.00161. nvfp4 8×64 +0.00359±0.00206 /
+−0.00091±0.00130; 256×64 +0.00599±0.00230 / +0.00154±0.00154.
+
+- **More data improves dev KL (math/code) but hardly helps WikiText/C4.** C4 is
+  sometimes worse than the 128-sequence run: four_over_six scale 1×16 19.4513 →
+  19.5303. A larger math/code calibration set specializes the map to that domain.
+- **Joint 256×64 still loses to scale search alone, so this is an optimization
+  failure.** Leaving every tile E2M1 reproduces the scale-only solution, yet joint
+  256×64 has the higher dev KL at every checkpoint, in both inits and both
+  budgets.
+  - The likely cause is the first-order STE step. A scale flip changes 16
+    weights, where $\langle G, \Delta W\rangle$ predicts the loss change well; a
+    256×64 tile flip changes 16,384 weights, where it does not.
+  - A flipped tile also freezes the scale logits of its 1,024 blocks (their
+    gradient becomes zero).
+  - Proposed fix, not yet run: make tile flips more conservative than scale flips
+    (a larger initial tile margin or a smaller tile lr), or train the scale first
+    and flip tiles on top.
+- With this budget, E0M3's advantage over scale-only is significant only on C4
+  with the FourOverSix init at 8×64 (−0.004). Across all runs so far, the most
+  robust single configuration is four_over_six joint 8×64.
 
 Implementation: `run_train_map.py`, `slurm/train_map.sbatch`,
 `summarize_train_map.py`. Details and per-epoch curves are in
