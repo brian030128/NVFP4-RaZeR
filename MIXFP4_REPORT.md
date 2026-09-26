@@ -808,6 +808,39 @@ for example, four_over_six scale 1×16 scores 14.4746 / 19.2379 at 16 epochs.
   C4-calibrated, 8 epochs: 14.3516 / 19.1764 (FourOverSix: 15.3567 / 21.5326).
   It is plain NVFP4 with per-block scale choices and no E0M3.
 
+#### Why E0M3 adds nothing: its gain is per block, but its choice is per tile
+
+`analyze_e0m3_headroom.py` (job 442617) measures the squared error of every
+16-element block of Llama-3.2-1B-Instruct under three candidates: max → 6, max → 4
+and E0M3. It uses plain weight MSE and an output-error proxy that weights each
+input channel by E[x²] from 64 C4-train windows. Output:
+`results/mixfp4_potential/train_map/e0m3_headroom_1b.json`. Error reductions are
+relative to plain NVFP4 (max → 6):
+
+| | weight MSE | E[x²]-weighted |
+|---|---:|---:|
+| best of max → 6 / max → 4, per block | −16.0% | −20.8% |
+| E0M3 on top, per block (1×16), relative to that | −19.8% | −21.4% |
+| blocks where E0M3 beats the best E2M1 scale | 52.8% | 47.6% |
+| E0M3 on top, one choice per 8×64 tile | −3.5% (18% of the per-block gain) | −2.5% (12%) |
+| E0M3 on top, one choice per 256×64 tile | −0.37% (1.9%) | −0.07% (0.3%) |
+| tiles electing E0M3 (8×64 / 256×64) | 44% / 24% | 26% / 3.4% |
+
+- **Per block, E0M3 is valuable.** It beats the best per-block E2M1 scale on about
+  half of all blocks and would remove another ~20% of the error, as much as the
+  scale search itself. Blocks where E0M3 wins are only slightly flatter than
+  average (max/RMS 1.98 vs 2.14), so they are not a special class.
+- **The winners are scattered.** With a near 50/50 mix inside every tile, a
+  single tile-wide type keeps 12–18% of that gain at 8×64 and essentially none at
+  256×64. This predicts the KL results: no gain at 256×64 and a small, fragile one
+  at 8×64.
+- **The scale and the type differ in granularity.** The ue4m3 block scale is
+  stored per 16 elements, so choosing it per block is free. The MMA declares the
+  element type per operand tile (8×64 minimum on SM120, 256×64 on SM100).
+- **Capturing E0M3's per-block gain needs a per-block type**, e.g. K-splitting a
+  64-wide K block into per-type MMAs. Tile maps and row reordering cannot provide
+  it; earlier study: the disagreement runs along K.
+
 Implementation: `run_train_map.py`, `slurm/train_map.sbatch`,
 `summarize_train_map.py`. Details and per-epoch curves are in
 [results/mixfp4_potential/train_map/REPORT.md](results/mixfp4_potential/train_map/REPORT.md).
