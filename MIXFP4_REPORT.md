@@ -841,6 +841,26 @@ relative to plain NVFP4 (max → 6):
   64-wide K block into per-type MMAs. Tile maps and row reordering cannot provide
   it; earlier study: the disagreement runs along K.
 
+**With a learned per-block scale (FOCUS-style), E0M3's room shrinks further.**
+FOCUS (arXiv 2608.01847) learns each block's stored E4M3 scale, plus a decoupled
+rounding coefficient, on a KL loss. As a proxy, `--scale-search grid` (job 442705,
+`e0m3_headroom_1b_gridscale.json`) gives each block its best E4M3 scale for each
+type, over 42 multipliers of max/6 (E2M1) or max/7 (E0M3) from 0.7× to 3×,
+clipping included. E[x²]-weighted error, relative to plain NVFP4:
+
+| | {6, 4} scale (above) | best per-block scale |
+|---|---:|---:|
+| best E2M1 per block | 0.792 | 0.636 |
+| E0M3 alone | 0.919 | 0.719 |
+| E0M3 extra over best E2M1, per block | −21.4% | −15.3% |
+| E0M3 extra, per 8×64 tile | −2.5% | −1.4% |
+| E0M3 extra, per 256×64 tile | −0.07% | −0.03% |
+| 8×64 / 256×64 tiles electing E0M3 | 26% / 3.4% | 19.5% / 0.4% |
+
+A better per-block scale helps E2M1 more than it helps E0M3. What a tile-level
+E0M3 choice can still add roughly halves at 8×64, and it stays negligible at
+256×64. FOCUS's learned rounding is not modelled here.
+
 Implementation: `run_train_map.py`, `slurm/train_map.sbatch`,
 `summarize_train_map.py`. Details and per-epoch curves are in
 [results/mixfp4_potential/train_map/REPORT.md](results/mixfp4_potential/train_map/REPORT.md).

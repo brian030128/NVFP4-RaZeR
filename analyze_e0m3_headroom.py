@@ -23,6 +23,9 @@ from run_math_code_calibration import load_model
 from run_train_map import CALIBRATIONS, c4_train_windows
 
 TILES = {'8x64': (8, 64), '256x64': (256, 64)}
+# Scale multipliers for --scale-search grid: 40 geometric points in [0.7, 3], plus 1 and 1.5 exactly
+# (so the grid contains max->6, max->4 and the original E0M3 max->7 scale).
+MULTS = sorted({round(0.7 * (3 / 0.7) ** (i / 39), 6) for i in range(40)} | {1.0, 1.5})
 
 
 def block_sse(q, w, imp):
@@ -30,6 +33,33 @@ def block_sse(q, w, imp):
     if imp is not None:
         d = d * imp[None, :]
     return d.reshape(-1, 16).sum(-1)
+
+
+E2M1_LEVELS = (0., .5, 1., 1.5, 2., 3., 4., 6.)
+
+
+def grid_best_sse(w, imp, e2m1, mults):
+    """Per-block minimum squared error over stored E4M3 block scales peak * m / grid_max, m in `mults`
+    (a proxy for a learned per-block scale, FOCUS-style). Values beyond the grid saturate (clipping)."""
+    o, k = w.shape
+    x = w.float().reshape(o, k // 16, 16)
+    gs = x.abs().amax() / (6 * 448)
+    xs = x / gs
+    peak = xs.abs().amax(-1, keepdim=True)
+    wt = imp.reshape(1, k // 16, 16) if imp is not None else 1.
+    levels = torch.tensor(E2M1_LEVELS, device=w.device)
+    mids = (levels[:-1] + levels[1:]) / 2
+    best = None
+    for m in mults:
+        s = (peak * m / (6. if e2m1 else 7.)).clamp(2 ** -9, 448).to(torch.float8_e4m3fn).float()
+        v = xs / s
+        if e2m1:
+            q = levels[torch.bucketize(v.abs().contiguous(), mids)] * v.sign()
+        else:
+            q = v.round().clamp(-7, 7)
+        e = ((q * s - xs).square() * wt).sum(-1)
+        best = e if best is None else torch.minimum(best, e)
+    return (best * gs.square()).reshape(-1)
 
 
 def tile_sum(x, shape, rows, cols):
@@ -45,6 +75,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--model', default='llama1b_ins', choices=tuple(CALIBRATIONS))
     ap.add_argument('--windows', type=int, default=64)
+    ap.add_argument('--scale-search', choices=('four_over_six', 'grid'), default='four_over_six',
+                    help='E2M1 per-block scale in {max->6, max->4} and E0M3 at max->7, or each type\'s best '
+                         'per-block E4M3 scale over a multiplier grid (FOCUS-style learned-scale proxy)')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     prior = json.loads((CALIBRATIONS[args.model] / 'report.json').read_text())
@@ -84,6 +117,10 @@ def main():
         k = kinds.setdefault(kind, {})
         for metric, weight in (('mse', None), ('hess', imp)):
             a6, a4, a0 = (block_sse(q, w, weight).double() for q in (s6, s4, e0))
+            if args.scale_search == 'grid':
+                # Both types get their per-block best stored scale; "s4" then reports the E2M1 grid best.
+                a4 = grid_best_sse(w, weight, True, MULTS).double()
+                a0 = grid_best_sse(w, weight, False, MULTS).double()
             best2 = torch.minimum(a6, a4)
             best3 = torch.minimum(best2, a0)
             r = k.setdefault(metric, dict(blocks=0, s6=0., s4=0., e0=0., best2=0., best3=0.,
@@ -136,7 +173,7 @@ def main():
         summary[metric] = out
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(dict(model=args.model, job_id=os.environ['SLURM_JOB_ID'],
-                                        c4_windows=args.windows, summary=summary), indent=2) + '\n')
+                                        c4_windows=args.windows, scale_search=args.scale_search, summary=summary), indent=2) + '\n')
     print(json.dumps(summary, indent=2))
 
 
