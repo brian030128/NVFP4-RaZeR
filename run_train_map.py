@@ -44,6 +44,12 @@ legacy hook, and its FP32 error is at the noise level of 4,096-token sums (resul
                          the monitor development evaluations / the final WikiText-2 and C4 evaluation on the native
                          b8x64 kernel (native_dev.NativeDev, from the lean store), with --single-pass-epilogue. The
                          fake evaluation stays available.
+  --tile-grad-tc         method B (TM-OPT+TC, results/tm_opt/PROTOCOL_TC.md): the tile-gradient GEMM G = dy^T x of the
+                         legacy hook on the BF16 tensor cores with FP32 accumulation and FP32 output (tc_matmul). dy
+                         and x are bf16, so every product is exact; only the accumulation differs, and nothing is
+                         rounded to bf16. The model's GEMMs are unchanged. Opt-in, not part of TM-OPT.
+  --profile JSON         profile one training epoch after the setup (torch.profiler; GPU time by phase and region), write
+                         JSON and stop.
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True is set by the caller; the report records it. Locally (no Slurm),
 --data-root points at the data layout of run_multiround.data_paths.
 """
@@ -65,7 +71,9 @@ import transformers
 from transformers import AutoTokenizer
 
 import chunked_loss
+import profile_regions
 from cost_monitor import PhaseMonitor
+from profile_regions import region
 from quantize.causal_four_over_six import quantize_rows
 from quantize.fast_act import check as check_act, quant_per_document
 from quantize.fused_fourover6 import fourover6, fourover6_rows
@@ -87,6 +95,16 @@ LEGACY = dict(memory_mode='legacy', fused_act_quant=False, tile_grad_kernel=Fals
 SOURCES = ('run_train_map.py', 'run_multiround.py', 'quantize/quantizer.py', 'quantize/causal_four_over_six.py',
            'quantize/fused_fourover6.py', 'chunked_loss.py', 'repro_local/realquant/candidate_store.py',
            'repro_local/realquant/native_dev.py', 'repro_local/realquant/tile_score.py')
+
+
+def tc_matmul(a, b):
+    """TM-OPT+TC: a @ b of two bf16 tensors on the BF16 tensor cores with FP32 accumulation and FP32 output
+    (cuBLAS through torch.mm(..., out_dtype=torch.float32)); nothing is rounded to bf16. Every product of two bf16
+    values is exact in FP32; only the accumulation differs from the legacy FP32 SIMT GEMM over the float casts. No
+    global flag is touched (allow_tf32 stays False). Chosen over the TF32 variant, which was slower and less accurate
+    in the pre-registration check (results/tm_opt/PROTOCOL_TC.md)."""
+    assert a.dtype == b.dtype == torch.bfloat16
+    return torch.mm(a, b, out_dtype=torch.float32)
 
 
 @torch.no_grad()
@@ -127,6 +145,10 @@ def main():
     ap.add_argument('--dev-backend', choices=('fake', 'native'), default=None)
     ap.add_argument('--eval-backend', choices=('fake', 'native'), default=None)
     ap.add_argument('--single-pass-epilogue', action=argparse.BooleanOptionalAction, default=None)
+    ap.add_argument('--tile-grad-tc', action='store_true',
+                    help='TM-OPT+TC: the tile-gradient GEMM on BF16 tensor cores with FP32 accumulation and output')
+    ap.add_argument('--profile', type=Path, default=None, metavar='JSON',
+                    help='Profile one training epoch after the setup, write the GPU-time breakdown to JSON, and stop')
     ap.add_argument('--record-theta-hashes', action='store_true',
                     help='Record the sha256 of every logit after every optimizer step (bitwise comparisons)')
     ap.add_argument('--out', type=Path, required=True)
@@ -136,6 +158,9 @@ def main():
             setattr(args, key, value)
     settings = {key: getattr(args, key) for key in TM_OPT}
     configuration = 'TM-OPT' if settings == TM_OPT else 'legacy' if settings == LEGACY else 'custom'
+    if args.tile_grad_tc:
+        configuration = 'TM-OPT+TC' if configuration == 'TM-OPT' else configuration + '+TC'
+    assert not (args.tile_grad_tc and args.tile_grad_kernel), 'B1 and the TC tile-gradient GEMM are alternatives'
     lean = args.memory_mode == 'lean'
     assert not args.tile_grad_kernel or lean, '--tile-grad-kernel reads the lean candidate store'
     assert (args.dev_backend == args.eval_backend == 'fake') or lean, 'the native evaluator reads the lean store'
@@ -160,7 +185,8 @@ def main():
                                transformers_calibration=prior['transformers_version']))
     args.out.mkdir(parents=True, exist_ok=False)
     report = dict(status='running', job_id=os.environ.get('SLURM_JOB_ID'), configuration=configuration,
-                  settings=dict(settings, pytorch_cuda_alloc_conf=os.environ.get('PYTORCH_CUDA_ALLOC_CONF'),
+                  settings=dict(settings, tile_grad_tc=args.tile_grad_tc,
+                                pytorch_cuda_alloc_conf=os.environ.get('PYTORCH_CUDA_ALLOC_CONF'),
                                 cublas_workspace_config=os.environ.get('CUBLAS_WORKSPACE_CONFIG')),
                   host=dict(hostname=socket.gethostname(),
                             gpus=[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())],
@@ -280,11 +306,12 @@ def main():
             # the weight of module n for a key: ('map', hard map) -> the store's decode, bitwise apply(n, True);
             # ('soft', theta, tau) -> apply(n, False)'s arithmetic on the store's decoded candidates
             def weight_for(key):
-                if key[0] == 'map':
-                    return store.decode(n, key[1])
-                b = store.decode(n, which='base')
-                m = expand(torch.sigmoid(key[1] / key[2]), rows, cols, b.shape[0])
-                return (b.float() + m * (store.decode(n, which='alt').float() - b.float())).to(b.dtype)
+                with region('lean weight decode'):
+                    if key[0] == 'map':
+                        return store.decode(n, key[1])
+                    b = store.decode(n, which='base')
+                    m = expand(torch.sigmoid(key[1] / key[2]), rows, cols, b.shape[0])
+                    return (b.float() + m * (store.decode(n, which='alt').float() - b.float())).to(b.dtype)
             return weight_for
 
         def lean_key(n):
@@ -390,15 +417,17 @@ def main():
 
     def act(module, inputs):
         x = inputs[0]
-        if args.fused_act_quant:
-            q = fourover6_rows(x.detach())
-            if row_checks[0] < 64:
-                assert torch.equal(q.view(torch.int16), quantize_rows(x.detach()).view(torch.int16)), \
-                    'fused per-token activation quantizer differs from quantize_rows'
-                row_checks[0] += 1
-        else:
-            q = quantize_rows(x.detach())
+        with region('act_quant_rows (training)'):
+            if args.fused_act_quant:
+                q = fourover6_rows(x.detach())
+                if row_checks[0] < 64:
+                    assert torch.equal(q.view(torch.int16), quantize_rows(x.detach()).view(torch.int16)), \
+                        'fused per-token activation quantizer differs from quantize_rows'
+                    row_checks[0] += 1
+            else:
+                q = quantize_rows(x.detach())
         return (q + (x - x.detach()), *inputs[1:])
+
 
     def make_hook(n):
         def forward(module, inputs, output):
@@ -408,13 +437,22 @@ def main():
                 dy = dy.detach().reshape(-1, dy.shape[-1])
                 if args.tile_grad_kernel:
                     # B1: the batch's tile sums of G * (A - B), straight from the packed store
-                    tile_sums(dy, x, store.cand[n], rows, cols, store._luts(dy.device), grads[n])
+                    with region('hook: B1 tile sums'):
+                        tile_sums(dy, x, store.cand[n], rows, cols, store._luts(dy.device), grads[n])
                     return
-                b = base(n)
-                d = alt(n).float() - b.float()
-                del b
-                # dLoss/dm_u = sum over tile u of G * (A - B), with G = dy^T x.
-                grads[n] += reduce((dy.float().T @ x.float()) * d, rows, cols)
+                with region('hook: candidate decode + D'):
+                    b = base(n)
+                    d = alt(n).float() - b.float()
+                    del b
+                # dLoss/dm_u = sum over tile u of G * (A - B), with G = dy^T x (the same operations as the one-line
+                # grads[n] += reduce((dy.float().T @ x.float()) * d, rows, cols), split for the profiler)
+                with region('hook: G = dy^T x (tile-gradient GEMM)'):
+                    g = tc_matmul(dy.T, x) if args.tile_grad_tc else dy.float().T @ x.float()
+                with region('hook: G*(A-B), tile reduction, accumulate'):
+                    gd = g * d
+                    del g
+                    grads[n] += reduce(gd, rows, cols)
+                    del gd
             output.register_hook(backward)
         return forward
 
@@ -447,6 +485,12 @@ def main():
             apply(n, False)
     step = 0
     previous = hard_map()
+    profiler = None
+    if args.profile is not None:
+        # one training epoch under torch.profiler; every GPU kernel is attributed to its phase and innermost region
+        profile_regions.ON[0] = True
+        profiler = torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA])
+        profiler.__enter__()
     for epoch in range(args.epochs):
         monitor.enter('training')
         t0 = time.time()
@@ -467,19 +511,27 @@ def main():
                     embeds = model.get_input_embeddings()(ids).detach().requires_grad_()
                     if args.chunked_loss:
                         # the loss's gradient into the logits two documents at a time, then the model's backward
-                        logits = model(inputs_embeds=embeds, use_cache=False).logits
-                        grad, kl = chunked_loss.train_kl_gradient(logits, [teacher[i] for i in idx], logits.device, n_seq)
-                        logits.backward(grad)
+                        with region('phase: forward'):
+                            logits = model(inputs_embeds=embeds, use_cache=False).logits
+                        with region('phase: loss'):
+                            grad, kl = chunked_loss.train_kl_gradient(logits, [teacher[i] for i in idx], logits.device, n_seq)
+                        with region('phase: backward'):
+                            logits.backward(grad)
                         losses.extend(kl.tolist())
                         del embeds, logits, grad, kl
                         continue
-                    lp = model(inputs_embeds=embeds, use_cache=False).logits[:, :-1].float().log_softmax(-1)
-                    t = torch.cat([teacher[i] for i in idx]).to(lp.device).float()
-                    kl = per_sequence_kl(lp, t)
+                    with region('phase: forward'):
+                        lp = model(inputs_embeds=embeds, use_cache=False).logits[:, :-1].float().log_softmax(-1)
+                    with region('phase: loss'):
+                        t = torch.cat([teacher[i] for i in idx]).to(lp.device).float()
+                        kl = per_sequence_kl(lp, t)
                     # Mean KL over the sequences of one optimizer step.
-                    (kl.sum() / n_seq).backward()
+                    with region('phase: backward'):
+                        (kl.sum() / n_seq).backward()
                     losses.extend(kl.tolist())
                     del embeds, lp, t, kl
+            optimizer_phase = region('phase: optimizer')
+            optimizer_phase.__enter__()
             if args.schedule == 'cosine':
                 for pg in opt.param_groups:
                     pg['lr'] = args.lr * 0.5 * (1 + math.cos(math.pi * step / total_steps))
@@ -507,6 +559,7 @@ def main():
                     previous[n] = now
                     if args.param == 'ste':
                         apply(n, True)
+            optimizer_phase.__exit__(None, None, None)
         for h in handles:
             h.remove()
         e0m3 = sum(int((t > 0).sum()) for t in theta.values())
@@ -517,6 +570,28 @@ def main():
         if args.param == 'sigmoid':
             soft = torch.cat([torch.sigmoid(t / tau[0]).reshape(-1) for t in theta.values()])
             entry['undecided_fraction'] = float(((soft > 0.05) & (soft < 0.95)).float().mean())
+        if profiler is not None:
+            torch.cuda.synchronize()
+            profiler.__exit__(None, None, None)
+            profile_regions.ON[0] = False
+            phases = ['phase: forward', 'phase: loss', 'phase: backward', 'phase: optimizer']
+            regions = ['lean weight decode', 'act_quant_rows (training)', 'hook: candidate decode + D',
+                       'hook: G = dy^T x (tile-gradient GEMM)', 'hook: G*(A-B), tile reduction, accumulate',
+                       'hook: B1 tile sums']
+            trace = args.profile.with_suffix('.trace.json')
+            profiler.export_chrome_trace(str(trace))
+            result, counted = profile_regions.breakdown_trace(trace, phases, regions)
+            result['kernels_counted'] = counted
+            result['epoch_wall_seconds_with_profiler'] = entry['epoch_seconds']
+            result['trace'] = str(trace)
+            args.profile.write_text(json.dumps(dict(model=args.model, unit=args.unit, configuration=configuration,
+                                                    settings=report['settings'], steps=step, breakdown=result), indent=1) + '\n')
+            print('PROFILE ' + json.dumps({ph: dict(gpu_s=result[ph]['gpu_ms_total'] / 1e3, wall_s=result[ph]['wall_ms'] / 1e3)
+                                           for ph in phases}), flush=True)
+            report['epochs'].append(entry)
+            report['status'] = 'profile_complete'
+            save(args.out, report)
+            return
         if (epoch + 1) % args.eval_every == 0 or epoch + 1 == args.epochs:
             monitor.enter('dev_evaluation')
             t1 = time.time()

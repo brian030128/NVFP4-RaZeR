@@ -1,0 +1,66 @@
+{
+ "model": "llama8b",
+ "unit": "8x64",
+ "configuration": "TM-OPT+TC",
+ "settings": {
+  "memory_mode": "lean",
+  "fused_act_quant": true,
+  "tile_grad_kernel": false,
+  "chunked_loss": true,
+  "deterministic": true,
+  "dev_backend": "native",
+  "eval_backend": "native",
+  "single_pass_epilogue": true,
+  "tile_grad_tc": true,
+  "pytorch_cuda_alloc_conf": "expandable_segments:True",
+  "cublas_workspace_config": ":4096:8"
+ },
+ "steps": 16,
+ "breakdown": {
+  "phase: forward": {
+   "gpu_ms": {
+    "GEMM (model Linear/lm_head, fwd+bwd)": 2970.6822569999886,
+    "act_quant_rows (training)": 1484.1387460000458,
+    "other kernels (norms, rotary, elementwise, ...)": 794.4011899999998,
+    "lean weight decode": 257.73422100000096,
+    "attention": 48.928873000000024,
+    "memcpy (outside named regions)": 5.435438999999942
+   },
+   "gpu_ms_total": 5561.3207260000345,
+   "wall_ms": 4620.236029296875
+  },
+  "phase: loss": {
+   "gpu_ms": {
+    "memcpy (outside named regions)": 1294.1074549999996,
+    "other kernels (norms, rotary, elementwise, ...)": 684.1113339999982
+   },
+   "gpu_ms_total": 1978.2187889999977,
+   "wall_ms": 5145.658766601562
+  },
+  "phase: backward": {
+   "gpu_ms": {
+    "GEMM (model Linear/lm_head, fwd+bwd)": 3058.8152990000035,
+    "hook: G = dy^T x (tile-gradient GEMM)": 2974.0135249999953,
+    "hook: candidate decode + D": 2690.744623999998,
+    "hook: G*(A-B), tile reduction, accumulate": 1805.183676999998,
+    "other kernels (norms, rotary, elementwise, ...)": 1249.8465559999952,
+    "lean weight decode": 213.23660000000393,
+    "attention": 205.50755899999996,
+    "memcpy (outside named regions)": 83.67795800000013
+   },
+   "gpu_ms_total": 12281.025797999993,
+   "wall_ms": 10691.170638671874
+  },
+  "phase: optimizer": {
+   "gpu_ms": {
+    "other kernels (norms, rotary, elementwise, ...)": 55.89222400000181,
+    "memcpy (outside named regions)": 5.735379000000339
+   },
+   "gpu_ms_total": 61.62760300000215,
+   "wall_ms": 683.749841796875
+  },
+  "kernels_counted": 233632,
+  "epoch_wall_seconds_with_profiler": 23.026828050613403,
+  "trace": "/home/dev/n16k64_campaign/tm_opt/runs/profile_tmopt_tc_llama8b_8x64.trace.json"
+ }
+}

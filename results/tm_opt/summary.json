@@ -472,5 +472,71 @@
     "source": "results/mixfp4_potential/train_map/llama_256x64_ste"
    }
   }
+ },
+ "bitwise tc-regression": {
+  "runs": [
+   "/home/dev/n16k64_campaign/tm_opt/runs/g1_ste_tmopt_nob1",
+   "/home/dev/n16k64_campaign/tm_opt/runs/tc_regression_g1_ste"
+  ],
+  "configurations": [
+   "custom",
+   "custom"
+  ],
+  "settings": [
+   {
+    "memory_mode": "lean",
+    "fused_act_quant": true,
+    "tile_grad_kernel": false,
+    "chunked_loss": true,
+    "deterministic": true,
+    "dev_backend": "fake",
+    "eval_backend": "fake",
+    "single_pass_epilogue": true,
+    "pytorch_cuda_alloc_conf": "expandable_segments:True",
+    "cublas_workspace_config": ":4096:8"
+   },
+   {
+    "memory_mode": "lean",
+    "fused_act_quant": true,
+    "tile_grad_kernel": false,
+    "chunked_loss": true,
+    "deterministic": true,
+    "dev_backend": "fake",
+    "eval_backend": "fake",
+    "single_pass_epilogue": true,
+    "tile_grad_tc": false,
+    "pytorch_cuda_alloc_conf": "expandable_segments:True",
+    "cublas_workspace_config": ":4096:8"
+   }
+  ],
+  "checks": {
+   "theta_after_every_step": true,
+   "steps_compared": 48,
+   "epochs.train_kl": true,
+   "epochs.e0m3_units": true,
+   "epochs.hard_flips": true,
+   "epochs.tau": true,
+   "epochs.dev_ce": true,
+   "epochs.dev_kl": true,
+   "epochs.dev_kl_values": true,
+   "epochs.dev_ce_values": true,
+   "initial_dev": true,
+   "final_dev": true,
+   "map": true,
+   "theta_file": true,
+   "epoch_maps": true,
+   "final_window_nll": true
+  },
+  "passed": true,
+  "final_e0m3_units": 980969,
+  "flips_per_epoch": [
+   141699,
+   672620,
+   518396
+  ],
+  "ppl": {
+   "wiki": 6.825902938842773,
+   "c4": 9.711836814880371
+  }
  }
 }

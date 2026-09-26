@@ -1,0 +1,183 @@
+{
+ "TM-OPT": {
+  "phase: forward": {
+   "gpu_ms": {
+    "GEMM (model Linear/lm_head, fwd+bwd)": 3032.9487610000015,
+    "act_quant_rows (training)": 1487.6307810000594,
+    "other kernels (norms, rotary, elementwise, ...)": 794.8256570000095,
+    "lean weight decode": 257.23486600000047,
+    "attention": 49.48967499999993,
+    "memcpy (outside named regions)": 5.472237999999956
+   },
+   "gpu_ms_total": 5627.601978000071,
+   "wall_ms": 4731.306646484375
+  },
+  "phase: loss": {
+   "gpu_ms": {
+    "memcpy (outside named regions)": 1302.5947810000005,
+    "other kernels (norms, rotary, elementwise, ...)": 684.1303889999997
+   },
+   "gpu_ms_total": 1986.7251700000002,
+   "wall_ms": 5287.69961328125
+  },
+  "phase: backward": {
+   "gpu_ms": {
+    "hook: G = dy^T x (tile-gradient GEMM)": 14704.39859900031,
+    "GEMM (model Linear/lm_head, fwd+bwd)": 3327.515808999999,
+    "hook: candidate decode + D": 2695.224398999999,
+    "hook: G*(A-B), tile reduction, accumulate": 1810.291452000002,
+    "other kernels (norms, rotary, elementwise, ...)": 1261.2798119999807,
+    "lean weight decode": 216.57741099999856,
+    "attention": 210.61605900000015,
+    "memcpy (outside named regions)": 82.38079499999995
+   },
+   "gpu_ms_total": 24308.284336000288,
+   "wall_ms": 21346.135189453125
+  },
+  "phase: optimizer": {
+   "gpu_ms": {
+    "other kernels (norms, rotary, elementwise, ...)": 55.96457900000194,
+    "memcpy (outside named regions)": 5.732865000000321
+   },
+   "gpu_ms_total": 61.697444000002264,
+   "wall_ms": 708.6644765625
+  },
+  "kernels_counted": 247456,
+  "epoch_wall_seconds_with_profiler": 35.292723655700684,
+  "trace": "/home/dev/n16k64_campaign/tm_opt/runs/profile_tmopt_llama8b_8x64.trace.json",
+  "epoch_gpu_seconds": 31.98430892800036
+ },
+ "TM-OPT+TC": {
+  "phase: forward": {
+   "gpu_ms": {
+    "GEMM (model Linear/lm_head, fwd+bwd)": 2970.6822569999886,
+    "act_quant_rows (training)": 1484.1387460000458,
+    "other kernels (norms, rotary, elementwise, ...)": 794.4011899999998,
+    "lean weight decode": 257.73422100000096,
+    "attention": 48.928873000000024,
+    "memcpy (outside named regions)": 5.435438999999942
+   },
+   "gpu_ms_total": 5561.3207260000345,
+   "wall_ms": 4620.236029296875
+  },
+  "phase: loss": {
+   "gpu_ms": {
+    "memcpy (outside named regions)": 1294.1074549999996,
+    "other kernels (norms, rotary, elementwise, ...)": 684.1113339999982
+   },
+   "gpu_ms_total": 1978.2187889999977,
+   "wall_ms": 5145.658766601562
+  },
+  "phase: backward": {
+   "gpu_ms": {
+    "GEMM (model Linear/lm_head, fwd+bwd)": 3058.8152990000035,
+    "hook: G = dy^T x (tile-gradient GEMM)": 2974.0135249999953,
+    "hook: candidate decode + D": 2690.744623999998,
+    "hook: G*(A-B), tile reduction, accumulate": 1805.183676999998,
+    "other kernels (norms, rotary, elementwise, ...)": 1249.8465559999952,
+    "lean weight decode": 213.23660000000393,
+    "attention": 205.50755899999996,
+    "memcpy (outside named regions)": 83.67795800000013
+   },
+   "gpu_ms_total": 12281.025797999993,
+   "wall_ms": 10691.170638671874
+  },
+  "phase: optimizer": {
+   "gpu_ms": {
+    "other kernels (norms, rotary, elementwise, ...)": 55.89222400000181,
+    "memcpy (outside named regions)": 5.735379000000339
+   },
+   "gpu_ms_total": 61.62760300000215,
+   "wall_ms": 683.749841796875
+  },
+  "kernels_counted": 233632,
+  "epoch_wall_seconds_with_profiler": 23.026828050613403,
+  "trace": "/home/dev/n16k64_campaign/tm_opt/runs/profile_tmopt_tc_llama8b_8x64.trace.json",
+  "epoch_gpu_seconds": 19.882192916000026
+ },
+ "unit_test": {
+  "cases": 72,
+  "passed": false,
+  "failures": [
+   "llama8b:model.layers.0.self_attn.q_proj:real:8x64",
+   "llama8b:model.layers.0.self_attn.q_proj:real:16x64",
+   "llama8b:model.layers.0.self_attn.q_proj:real:256x64",
+   "llama8b:model.layers.0.self_attn.q_proj:random:8x64",
+   "llama8b:model.layers.0.self_attn.q_proj:random:16x64",
+   "llama8b:model.layers.0.self_attn.q_proj:random:256x64",
+   "llama8b:model.layers.0.self_attn.k_proj:real:8x64",
+   "llama8b:model.layers.0.self_attn.k_proj:real:16x64",
+   "llama8b:model.layers.0.self_attn.k_proj:real:256x64",
+   "llama8b:model.layers.0.self_attn.k_proj:random:8x64",
+   "llama8b:model.layers.0.self_attn.k_proj:random:16x64",
+   "llama8b:model.layers.0.self_attn.k_proj:random:256x64",
+   "llama8b:model.layers.0.mlp.gate_proj:real:8x64",
+   "llama8b:model.layers.0.mlp.gate_proj:real:16x64",
+   "llama8b:model.layers.0.mlp.gate_proj:real:256x64",
+   "llama8b:model.layers.0.mlp.gate_proj:random:8x64",
+   "llama8b:model.layers.0.mlp.gate_proj:random:16x64",
+   "llama8b:model.layers.0.mlp.gate_proj:random:256x64",
+   "llama8b:model.layers.0.mlp.down_proj:real:8x64",
+   "llama8b:model.layers.0.mlp.down_proj:real:16x64",
+   "llama8b:model.layers.0.mlp.down_proj:real:256x64",
+   "llama8b:model.layers.0.mlp.down_proj:random:8x64",
+   "llama8b:model.layers.0.mlp.down_proj:random:16x64",
+   "llama8b:model.layers.0.mlp.down_proj:random:256x64",
+   "mistral7b:model.layers.0.self_attn.q_proj:real:8x64",
+   "mistral7b:model.layers.0.self_attn.q_proj:real:16x64",
+   "mistral7b:model.layers.0.self_attn.q_proj:real:256x64",
+   "mistral7b:model.layers.0.self_attn.q_proj:random:8x64",
+   "mistral7b:model.layers.0.self_attn.q_proj:random:16x64",
+   "mistral7b:model.layers.0.self_attn.q_proj:random:256x64",
+   "mistral7b:model.layers.0.self_attn.k_proj:real:8x64",
+   "mistral7b:model.layers.0.self_attn.k_proj:real:16x64",
+   "mistral7b:model.layers.0.self_attn.k_proj:real:256x64",
+   "mistral7b:model.layers.0.self_attn.k_proj:random:8x64",
+   "mistral7b:model.layers.0.self_attn.k_proj:random:16x64",
+   "mistral7b:model.layers.0.self_attn.k_proj:random:256x64",
+   "mistral7b:model.layers.0.mlp.gate_proj:real:8x64",
+   "mistral7b:model.layers.0.mlp.gate_proj:real:16x64",
+   "mistral7b:model.layers.0.mlp.gate_proj:real:256x64",
+   "mistral7b:model.layers.0.mlp.gate_proj:random:8x64",
+   "mistral7b:model.layers.0.mlp.gate_proj:random:16x64",
+   "mistral7b:model.layers.0.mlp.gate_proj:random:256x64",
+   "mistral7b:model.layers.0.mlp.down_proj:real:8x64",
+   "mistral7b:model.layers.0.mlp.down_proj:real:16x64",
+   "mistral7b:model.layers.0.mlp.down_proj:real:256x64",
+   "mistral7b:model.layers.0.mlp.down_proj:random:8x64",
+   "mistral7b:model.layers.0.mlp.down_proj:random:16x64",
+   "mistral7b:model.layers.0.mlp.down_proj:random:256x64",
+   "phi4:model.layers.0.self_attn.o_proj:real:8x64",
+   "phi4:model.layers.0.self_attn.o_proj:real:16x64",
+   "phi4:model.layers.0.self_attn.o_proj:real:256x64",
+   "phi4:model.layers.0.self_attn.o_proj:random:8x64",
+   "phi4:model.layers.0.self_attn.o_proj:random:16x64",
+   "phi4:model.layers.0.self_attn.o_proj:random:256x64",
+   "phi4:model.layers.0.self_attn.qkv_proj:real:8x64",
+   "phi4:model.layers.0.self_attn.qkv_proj:real:16x64",
+   "phi4:model.layers.0.self_attn.qkv_proj:real:256x64",
+   "phi4:model.layers.0.self_attn.qkv_proj:random:8x64",
+   "phi4:model.layers.0.self_attn.qkv_proj:random:16x64",
+   "phi4:model.layers.0.self_attn.qkv_proj:random:256x64",
+   "phi4:model.layers.0.mlp.gate_up_proj:real:8x64",
+   "phi4:model.layers.0.mlp.gate_up_proj:real:16x64",
+   "phi4:model.layers.0.mlp.gate_up_proj:real:256x64",
+   "phi4:model.layers.0.mlp.gate_up_proj:random:8x64",
+   "phi4:model.layers.0.mlp.gate_up_proj:random:16x64",
+   "phi4:model.layers.0.mlp.gate_up_proj:random:256x64",
+   "phi4:model.layers.0.mlp.down_proj:real:8x64",
+   "phi4:model.layers.0.mlp.down_proj:real:16x64",
+   "phi4:model.layers.0.mlp.down_proj:real:256x64",
+   "phi4:model.layers.0.mlp.down_proj:random:8x64",
+   "phi4:model.layers.0.mlp.down_proj:random:16x64",
+   "phi4:model.layers.0.mlp.down_proj:random:256x64"
+  ],
+  "max_error_fp32": 1.453894396047434e-06,
+  "max_error_tc": 6.488801345183227e-06,
+  "max_ratio_tc_over_fp32": 20.67295034967428,
+  "gemm_ms_total": {
+   "fp32": 123.2856016755104,
+   "tc": 28.82192026078701
+  }
+ }
+}
