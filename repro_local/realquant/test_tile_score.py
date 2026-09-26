@@ -8,8 +8,10 @@ Reported per layer and unit: max abs / normwise relative / elementwise relative 
 first batch), mu and SE; the agreement of the candidate sets {mu + 2 SE < 0}; and the time of one batch, legacy hook
 vs B1.
 
-python repro_local/realquant/test_tile_score.py OUT_JSON
+python repro_local/realquant/test_tile_score.py OUT_JSON                       # Phase 2: 8x64 and 256x64, four models
+python repro_local/realquant/test_tile_score.py OUT_JSON --rows 16 --models llama8b mistral7b phi4   # 16x64 addendum
 """
+import argparse
 import json
 import math
 import sys
@@ -92,10 +94,17 @@ def timed(fn, reps=3):
 
 @torch.no_grad()
 def main():
-    out = Path(sys.argv[1])
+    ap = argparse.ArgumentParser()
+    ap.add_argument('out', type=Path)
+    ap.add_argument('--rows', type=int, nargs='+', default=[8, 256], choices=(8, 16, 256), help='unit rows (x 64 columns)')
+    ap.add_argument('--models', nargs='+', default=list(RECORDS), choices=tuple(RECORDS))
+    args = ap.parse_args()
+    out = args.out
     g = torch.Generator(device='cuda').manual_seed(0)
-    result = dict(batches=BATCHES, batch=B, tokens=T, layers={})
+    result = dict(batches=BATCHES, batch=B, tokens=T, units=[f'{r}x64' for r in args.rows], models=args.models, layers={})
     for model, record in RECORDS.items():
+        if model not in args.models:
+            continue
         source, mats = layer0_matrices(record)
         for name, (n, k) in mats:
             for kind in ('real', 'random'):
@@ -103,7 +112,7 @@ def main():
                 b, a = quant_nvfp4_4over6(w, 4, 16), quant_mix_4_6(w, 4, 16, type_block=(8, 64), clip='a1', elect='always')
                 p = pack(w, b, a)
                 assert p is not None, name
-                for rows in (8, 256):
+                for rows in args.rows:
                     store = CandidateStore(rows, 64)
                     store.add(name, w, decode_base(p), decode_alt(p))
                     sel = torch.rand(-(-n // rows), k // 64, generator=g, device='cuda') < 0.3

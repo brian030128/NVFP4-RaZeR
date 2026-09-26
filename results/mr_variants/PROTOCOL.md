@@ -104,3 +104,11 @@ Its speed and memory settings:
    - **Reading (ii)** (mean + 2 SE ≤ 0) is still reported, as secondary.
    - **The recommendation** is the fastest configuration that is acceptable under reading (i) at
      both units on every tested model. If there is none, MR-OPT stays.
+3. **2026-09-26, after the queue stopped at the Qwen3.8-27B gate: a third unit, 16x64** (user
+   request, relayed by nvfp4-razer-c9).
+   - **Scope:** Llama-3.1-8B, Mistral-7B-v0.3 and Phi-4, all four configurations.
+   - **Registration:** registered separately, before any 16x64 test or run, in
+     [ADDENDUM_16x64.md](ADDENDUM_16x64.md) (hash and time in `registration_16x64.json`).
+   - **Unchanged:** the recommendation over 8x64 and 256x64 (MR-OPT). The 16x64 results are
+     additional information.
+   - **The Qwen3.8-27B gate stays closed.**

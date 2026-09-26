@@ -4,6 +4,10 @@
 stopped at the Qwen3.8-27B gate at 01:58:45 UTC. Nothing runs until the user confirms Qwen3.8-27B
 and its settings. The study so far took 8 h 29 min of wall time.
 
+**Addendum (2026-09-26 07:00 UTC): MR-OPT at 16x64** on the same three models; see
+[the addendum section](#addendum-mr-opt-at-16x64). The 16x64 variants were cut by the user. The gate
+is still closed.
+
 **Protocol.** [PROTOCOL.md](PROTOCOL.md), registered 2026-09-25 17:28:59 UTC (sha256 c6f29d27…),
 before any run. Two deviations have been appended since:
 1. A clarification of the decision rule, before any run.
@@ -392,11 +396,110 @@ The queue has stopped, and nothing runs until the user decides:
 - **All four configurations:** about 7–16 h.
 - **Evaluations:** roughly another hour.
 
+## Addendum: MR-OPT at 16x64
+
+**Scope.** Registered in [ADDENDUM_16x64.md](ADDENDUM_16x64.md) (sha256 0944c9e8…,
+2026-09-26 04:03:55 UTC), before any 16x64 test or run.
+- **Why:** user request; the SM120 deployment kernel's weight granule is 16x64.
+- **What ran:** only MR-OPT. The user cut the 16x64 variants (addendum deviation 1).
+- **Unaffected:** the recommendation over 8x64 and 256x64 (MR-OPT).
+
+**The development numerics are not the deployment path's.** A 16x64 map is evaluated on the b8x64
+build, as two 8x64 granules per tile; its native weight is exact. However:
+- The repro study's bit-identity of the `wt_as_A` and `b8x64` builds covered FourOverSix only (no
+  E0M3 tiles), in the repro's own evaluator.
+- The SM120 deployment kernel (`origin/SM120-kernel`, `sm120/NUMERICS.md`) uses per-token
+  activation scales and a one-rounding epilogue. It states that the repro harness's two-rounding
+  path is not bit-identical to it.
+- This study uses per-document or per-window activation scales (convention (a)) and rounds twice.
+
+The addendum gives the details.
+
+### Pre-run checks: all passed
+
+| check | result |
+|---|---|
+| B1 unit tests at 16x64 (24 cases, the three models' layer shapes) | max normwise relative error: g 2.2e-7, μ 2.4e-7, SE 6.9e-8 (tolerance 1e-6); 0 of 1,206,272 candidate tiles differ; B1 1.9× faster |
+| Round-0 candidates, legacy hook vs B1 | identical sets: Llama 196,733 of 6,815,744 tiles; Mistral 244,371 of 6,815,744; Phi-4 357,367 of 13,312,000 (max normwise μ / SE differences ≤ 8.4e-7) |
+| Native build of 16x64 maps | start, random-mixed and restored maps bitwise equal to `apply()` on all three models |
+| The 8x64 path is unchanged | a Llama 8x64 run reproduced Phase 2's round-0 score file (sha256) and MR-OPT 8x64's initial development values |
+
+Details: `checks_16x64.json`. B1's round-0 scoring pass takes 34.9 s, 31.9 s and 66.0 s,
+against the legacy hook's 48.4 s, 45.4 s and 94.4 s (Llama, Mistral, Phi-4).
+
+### Results (native evaluation, convention (a))
+
+"E0M3 share" is the fraction of weight elements in E0M3 tiles.
+
+| model | unit | E0M3 tiles (own unit) | E0M3 share | rounds / dev evaluations | optimization | WikiText-2 | C4 | ΔWiki vs FourOverSix | ΔC4 vs FourOverSix |
+|---|---|---:|---:|---:|---:|---:|---:|---|---|
+| Llama-3.1-8B | 8x64 | 3,801 | 0.03 % | 9 / 115 | 28.0 min | 6.8134 | 9.7644 | −0.00910 ± 0.00175 (better) | −0.00623 ± 0.00177 (better) |
+| | **16x64** | 4,995 | 0.07 % | 15 / 184 | **45.4 min** | **6.8259** | **9.7412** | −0.00727 ± 0.00163 (better) | −0.00861 ± 0.00219 (better) |
+| | 256x64 | 8,385 | 1.97 % | 8 / 64 | 17.5 min | 6.8369 | 9.7594 | −0.00566 ± 0.00171 (better) | −0.00673 ± 0.00169 (better) |
+| Mistral-7B-v0.3 | 8x64 | 123,180 | 0.90 % | 20 / 237 | 40.5 min | 5.4837 | 8.0334 | −0.00704 ± 0.00097 (better) | −0.00405 ± 0.00075 (better) |
+| | **16x64** | 127,060 | 1.86 % | 10 / 105 | **18.5 min** | **5.4992** | **8.0338** | −0.00423 ± 0.00098 (better) | −0.00400 ± 0.00081 (better) |
+| | 256x64 | 22,082 | 5.18 % | 14 / 132 | 22.4 min | 5.4950 | 8.0354 | −0.00498 ± 0.00098 (better) | −0.00380 ± 0.00074 (better) |
+| Phi-4 | 8x64 | 57,098 | 0.21 % | 10 / 108 | 36.0 min | 6.6373 | 10.5216 | −0.00415 ± 0.00131 (better) | −0.00228 ± 0.00080 (better) |
+| | **16x64** | 117,122 | 0.88 % | 13 / 126 | **43.5 min** | **6.6288** | **10.5113** | −0.00542 ± 0.00137 (better) | −0.00326 ± 0.00087 (better) |
+| | 256x64 | 59,953 | 7.21 % | 14 / 85 | 35.3 min | 6.6519 | 10.5237 | −0.00195 ± 0.00147 (better) | −0.00208 ± 0.00083 (better) |
+
+FourOverSix: 6.8757 / 9.8254 (Llama), 5.5225 / 8.0660 (Mistral), 6.6649 / 10.5456 (Phi-4).
+
+**MR-OPT 16x64 minus the other units** (paired ΔNLL, mean ± 2 SE):
+
+| model | vs 8x64: WikiText-2 | vs 8x64: C4 | vs 256x64: WikiText-2 | vs 256x64: C4 |
+|---|---|---|---|---|
+| Llama-3.1-8B | +0.00184 ± 0.00166 (worse) | −0.00238 ± 0.00248 | −0.00161 ± 0.00157 (better) | −0.00187 ± 0.00210 |
+| Mistral-7B-v0.3 | +0.00281 ± 0.00090 (worse) | +0.00005 ± 0.00071 | +0.00075 ± 0.00087 | −0.00020 ± 0.00076 |
+| Phi-4 | −0.00127 ± 0.00129 | −0.00098 ± 0.00076 (better) | −0.00347 ± 0.00137 (better) | −0.00118 ± 0.00085 (better) |
+
+**Fake evaluation of MR-OPT 16x64** (ΔNLL vs FourOverSix):
+
+| model | WikiText-2 | C4 |
+|---|---|---|
+| Llama-3.1-8B | 6.8166 (−0.01030 ± 0.00189) | 9.7446 (−0.00866 ± 0.00271) |
+| Mistral-7B-v0.3 | 5.5002 (−0.00468 ± 0.00098) | 8.0353 (−0.00388 ± 0.00152) |
+| Phi-4 | 6.6317 (−0.00526 ± 0.00134) | 10.5158 (−0.00264 ± 0.00089) |
+
+All of these are significant.
+
+**Checks.**
+- Every evaluation process of a model used identical windows.
+- In the new native processes, the FourOverSix, MR-OPT 8x64 and MR-OPT 256x64 window NLLs repeated
+  the earlier evaluation bitwise; so did FourOverSix in the new fake processes.
+- No map mismatches. The 16x64 maps expanded exactly to 8x64 tiles.
+
+**Observations.**
+- **MR-OPT 16x64 beats FourOverSix significantly** on both corpora on all three models, native and
+  fake.
+- **There is no consistent ranking of the three units:**
+  - **Llama:** 16x64 lies between the others on WikiText-2, worse than 8x64 and better than
+    256x64, both by small margins. C4 is inconclusive against both.
+  - **Mistral:** 16x64 is worse than 8x64 on WikiText-2 and equal to 256x64 within noise.
+  - **Phi-4:** 16x64 is the best of the three. It is better than 256x64 on both corpora and better
+    than 8x64 on C4.
+- **The search effort at 16x64 depends on the model:**
+  - Llama took its longest search: 15 rounds and 45.4 min, against 28.0 min at 8x64.
+  - Mistral took its shortest: 10 rounds and 18.5 min.
+  - Phi-4 took 13 rounds and 43.5 min.
+
+**Wall time:** 2 h 47 min in all (04:04 → 06:51 UTC):
+
+| part | wall time |
+|---|---:|
+| checks | 21 min |
+| MR-OPT Llama | 49 min |
+| MR-OPT Mistral | 22 min |
+| MR-OPT Phi-4 | 49 min |
+| evaluations | 27 min |
+
 ## Reproduction
 
 ```
 /home/dev/n16k64_campaign/mr_variants/queue.sh          # copy in runs/queue.sh, log in runs/commands.log
 python results/mr_variants/analyze_variants.py MODEL    # MODEL/summary.json, MODEL/tables.md (llama8b, mistral7b, phi4)
+/home/dev/n16k64_campaign/mr_variants/queue16.sh        # the 16x64 addendum (copy in runs/queue16.sh, log in runs/commands_16x64.log)
+python results/mr_variants/analyze_16x64.py mropt       # mropt_16x64.json, mropt_16x64.md
 ```
 
 The run records (`report.json`) are in `runs/<model>/`. The maps and per-document development

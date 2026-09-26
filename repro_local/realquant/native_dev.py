@@ -4,7 +4,7 @@ Weights (operand B, format granule 8 output rows x 64 K): both candidates, E2M1 
 (base) and E0M3 alpha=1 (alternative), are packed once from the source weight with rq.py's
 mirrors of the reference quantizers. decode(packed) is checked bitwise against the fake-quant
 candidates. For a map, every byte of codes and every scale byte is taken from the base or the
-alternative tile by tile (bit 7 of a scale byte = E0M3). A map unit (256x64 or 8x64) is a
+alternative tile by tile (bit 7 of a scale byte = E0M3). A map unit (256x64, 16x64 or 8x64) is a
 union of 8x64 granules.
 
 Activations: per-document tensor-wide FourOverSix, the rule of quant_per_document. One FP32
@@ -114,7 +114,7 @@ class NativeDev:
         # candidates are then read from it instead of packed again, and install() builds every
         # module's packed weight for the map while remove() frees them all: no native weight is
         # resident outside an evaluation.
-        if (rows, cols) not in ((256, 64), (8, 64)):
+        if (rows, cols) not in ((256, 64), (16, 64), (8, 64)):
             raise ValueError('a map unit must be a union of the kernel\'s 8x64 format granules')
         self.kern = rq.Kernel(CONFIG)
         assert self.kern.weight_operand == 1 and rq.TYPE_BLOCK[CONFIG] == (8, 64)

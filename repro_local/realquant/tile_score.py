@@ -91,7 +91,7 @@ def tile_scores(dy, x, cand, sel, rows, cols, luts, total, square, br=64, bt=32,
     b4, b0, sb4, sb0, gs, n, k = cand
     batch, tokens = x.shape[0], x.shape[1]
     assert dy.shape == (batch, tokens, n) and x.shape[2] == k and cols == 64 and k % cols == 0
-    assert rows in (8, 256) and total.dtype == square.dtype == torch.float64
+    assert rows in (8, 16, 256) and total.dtype == square.dtype == torch.float64
     dy, x = dy.contiguous(), x.contiguous()
     values, scales = luts
     pr = max(rows, br)

@@ -79,7 +79,7 @@ def load_development(directories):
     return records, provenance
 
 
-UNITS = {'256x64': (256, 64), '8x64': (8, 64), '1x16': (1, 16)}
+UNITS = {'256x64': (256, 64), '16x64': (16, 64), '8x64': (8, 64), '1x16': (1, 16)}
 
 
 def expand(mask, rows, cols, height=None):
@@ -732,15 +732,16 @@ def main():
                 for n in sel:
                     chosen = saved_map[n].to(sel[n].device)
                     if chosen.shape != sel[n].shape:
-                        # A 256x64 map in an 8x64 process: every 256-row tile is 32 whole 8-row tiles, so the
-                        # element mask, hence the weight, is unchanged (checked).
+                        # A 256x64 or 16x64 map in an 8x64 process: every coarse tile is whole 8-row tiles (32 or 2),
+                        # so the element mask, hence the weight, is unchanged (checked).
                         o = prior['matrices'][n]['shape'][0]
-                        big = UNITS['256x64'][0]
-                        assert args.unit == '8x64' and chosen.shape == (-(-o // big), sel[n].shape[1]), label
+                        coarse = [u for u in ('256x64', '16x64') if chosen.shape == (-(-o // UNITS[u][0]), sel[n].shape[1])]
+                        assert args.unit == '8x64' and len(coarse) == 1, label
+                        big = UNITS[coarse[0]][0]
                         fine = chosen.repeat_interleave(big // rows, 0)[:sel[n].shape[0]]
                         assert torch.equal(expand(fine, rows, cols, o), expand(chosen, big, cols, o)), (label, n)
-                        entry['converted_from'] = '256x64'
-                        entry['e0m3_units_256x64'] = entry.get('e0m3_units_256x64', 0) + int(chosen.sum())
+                        entry['converted_from'] = coarse[0]
+                        entry[f'e0m3_units_{coarse[0]}'] = entry.get(f'e0m3_units_{coarse[0]}', 0) + int(chosen.sum())
                         chosen = fine
                     sel[n].copy_(chosen)
                     apply(n)
