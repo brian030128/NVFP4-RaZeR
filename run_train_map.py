@@ -105,6 +105,36 @@ def extra_math_code(tok, previous_fit, per_source, model):
     return windows, dict(per_source=per_source, excluded_documents=len(excluded) - len(records), records=records)
 
 
+C4_TRAIN = 'en/c4-train.00000-of-01024.json.gz'
+
+
+def c4_train_windows(tok, count):
+    """`count` 512-token windows of general web text from one C4 TRAIN shard, one window per document,
+    in stream order; documents shorter than 513 tokens are skipped. The offset is derived from the document
+    hash. Evaluation uses only the C4 validation file and WikiText-2 test, so this never overlaps them."""
+    import hashlib
+    from datasets import load_dataset
+    from run_c4_frozen import REVISION
+    stream = load_dataset('allenai/c4', revision=REVISION, data_files={'train': C4_TRAIN}, split='train', streaming=True)
+    windows, records, seen = [], [], set()
+    for row in stream:
+        digest = hashlib.sha256(row['text'].encode()).hexdigest()
+        if digest in seen:
+            continue
+        seen.add(digest)
+        ids = tok(row['text'], return_tensors='pt').input_ids
+        if ids.shape[1] < 513:
+            continue
+        offset = int(digest[:12], 16) % (ids.shape[1] - 512 + 1)
+        window = ids[:, offset:offset + 512].clone()
+        windows.append(window)
+        records.append(dict(document_sha256=digest, offset=offset, token_sha256=sha(window)))
+        if len(windows) == count:
+            break
+    assert len(windows) == count, len(windows)
+    return windows, dict(repo='allenai/c4', revision=REVISION, path=C4_TRAIN, records=records)
+
+
 @torch.no_grad()
 def main():
     assert os.environ.get('SLURM_JOB_ID'), 'Run through Slurm'
@@ -134,6 +164,12 @@ def main():
                          'then let tiles flip on top')
     ap.add_argument('--stage2', choices=('joint', 'tiles'), default='joint',
                     help='After --scale-epochs: keep training the scale with the tiles (joint), or freeze it (tiles)')
+    ap.add_argument('--fit-source', choices=('mathcode', 'c4'), default='mathcode',
+                    help='Calibration text: the pinned math/code windows, or general web text from a C4 TRAIN shard')
+    ap.add_argument('--fit-count', type=int, default=512, help='--fit-source c4: number of 512-token windows')
+    ap.add_argument('--dev-source', choices=('mathcode', 'c4'), default='mathcode',
+                    help='Monitoring/epoch-selection set; with c4 the math/code set is also reported as dev2')
+    ap.add_argument('--dev-count', type=int, default=192, help='--dev-source c4: number of held-out 512-token windows')
     ap.add_argument('--no-epoch-maps', action='store_true', help='Save only the final hard maps (disk quota)')
     ap.add_argument('--no-logits', action='store_true', help='Do not save the FP32 latent logits (disk quota)')
     ap.add_argument('--extra-fit', type=int, default=0,
@@ -176,20 +212,42 @@ def main():
         model, modules = load_model(prior, False)
         model.set_attn_implementation('sdpa')
     tok = AutoTokenizer.from_pretrained(prior['source'], revision=prior['revision'])
-    fit, _ = math_code_data(tok, prior['fit'])
-    fit = [b for source in ('math', 'code') for b in fit[source]]
-    if args.extra_fit:
-        extra, report['extra_fit'] = extra_math_code(tok, prior['fit'], args.extra_fit, args.model)
-        fit += extra
-        save(args.out, report)
-    report['fit_sequences'] = len(fit)
-    print(f'FIT {len(fit)} calibration sequences', flush=True)
-    dev, report['development'] = load_development(args.model)
+    c4_needed = (args.fit_count if args.fit_source == 'c4' else 0) + (args.dev_count if args.dev_source == 'c4' else 0)
+    if c4_needed:
+        # Calibration windows first, then development windows: disjoint documents of the same C4 train shard.
+        c4, c4_meta = c4_train_windows(tok, c4_needed)
+    if args.fit_source == 'c4':
+        assert not args.extra_fit, '--extra-fit applies to --fit-source mathcode'
+        fit = c4[:args.fit_count]
+        report['fit_c4'] = dict(c4_meta, records=c4_meta['records'][:args.fit_count])
+    else:
+        fit, _ = math_code_data(tok, prior['fit'])
+        fit = [b for source in ('math', 'code') for b in fit[source]]
+        if args.extra_fit:
+            extra, report['extra_fit'] = extra_math_code(tok, prior['fit'], args.extra_fit, args.model)
+            fit += extra
+    report['fit_source'], report['fit_sequences'] = args.fit_source, len(fit)
+    save(args.out, report)
+    print(f'FIT {len(fit)} {args.fit_source} calibration sequences', flush=True)
+    mathcode_dev, report['development'] = load_development(args.model)
+    if args.dev_source == 'c4':
+        start = args.fit_count if args.fit_source == 'c4' else 0
+        dev = [dict(ids=w) for w in c4[start:start + args.dev_count]]
+        report['development_c4'] = dict(c4_meta, records=c4_meta['records'][start:start + args.dev_count])
+        second_dev = mathcode_dev  # also monitored, as dev2
+    else:
+        dev, second_dev = mathcode_dev, None
+    report['dev_source'] = args.dev_source
     device = model.get_input_embeddings().weight.device
-    dev_teacher = []
-    for r in dev:
-        logits = model(input_ids=r['ids'].to(device), use_cache=False).logits
-        dev_teacher.append(logits[:, :-1].float().log_softmax(-1).bfloat16().cpu())
+
+    def teacher_of(records):
+        out = []
+        for r in records:
+            logits = model(input_ids=r['ids'].to(device), use_cache=False).logits
+            out.append(logits[:, :-1].float().log_softmax(-1).bfloat16().cpu())
+        return out
+    dev_teacher = teacher_of(dev)
+    second_teacher = teacher_of(second_dev) if second_dev is not None else None
     teacher = []
     for ids in fit:
         logits = model(input_ids=ids.to(device), use_cache=False).logits
@@ -313,19 +371,21 @@ def main():
             h.remove()
         eval_handles = [m.register_forward_pre_hook(per_document_act) for m in modules.values()] if on else []
 
-    def dev_eval():
+    def dev_eval(records=None, teachers=None):
         """Development KL/CE of the HARD map (monitor only); leaves the training weights in place."""
+        records = dev if records is None else records
+        teachers = dev_teacher if teachers is None else teachers
         if args.param == 'sigmoid':
             for n in modules:
                 apply(n, True)
         eval_hooks(True)
         ce, kl = [], []
-        for start in range(0, len(dev), args.eval_batch):
-            chunk = dev[start:start + args.eval_batch]
+        for start in range(0, len(records), args.eval_batch):
+            chunk = records[start:start + args.eval_batch]
             ids = torch.cat([r['ids'] for r in chunk]).to(device)
             current_batch[0] = ids.shape[0]
             lp = model(input_ids=ids, use_cache=False).logits[:, :-1].float().log_softmax(-1)
-            t = torch.cat(dev_teacher[start:start + args.eval_batch]).to(lp.device).float()
+            t = torch.cat(teachers[start:start + args.eval_batch]).to(lp.device).float()
             ce.extend(F.nll_loss(lp.transpose(1, 2), ids[:, 1:].to(lp.device), reduction='none').mean(-1).tolist())
             kl.extend(per_sequence_kl(lp, t).tolist())
             del lp, t
@@ -377,6 +437,9 @@ def main():
 
     initial = dev_eval()
     report['initial_dev'] = initial
+    if second_dev is not None:
+        report['initial_dev2'] = dev_eval(second_dev, second_teacher)
+        print(f'START dev2 (math/code) KL {report["initial_dev2"]["kl"]:.6f}', flush=True)
     report['setup_seconds'] = time.time() - started
     save(args.out, report)
     print(f'START dev CE {initial["ce"]:.6f} KL {initial["kl"]:.6f} tiles={report["tiles"]} '
@@ -465,6 +528,9 @@ def main():
         if (epoch + 1) % args.eval_every == 0 or epoch + 1 == args.epochs:
             d = dev_eval()
             entry['dev_ce'], entry['dev_kl'] = d['ce'], d['kl']
+            if second_dev is not None:
+                d2 = dev_eval(second_dev, second_teacher)
+                entry['dev2_ce'], entry['dev2_kl'] = d2['ce'], d2['kl']
             entry['dev_kl_values'] = d['kl_values']
             if not args.no_epoch_maps:
                 torch.save({n: m.cpu() for n, m in hard_map().items()}, args.out / f'map_epoch{epoch + 1:03d}.pt')
@@ -485,6 +551,8 @@ def main():
         report['final_scale_flipped_active'] = report['epochs'][-1]['scale_flipped_active'] if report['epochs'] else 0
         report['scale_map_sha256'] = digest_file(args.out / 'scale_map.pt')
     report['final_dev'] = dev_eval()
+    if second_dev is not None:
+        report['final_dev2'] = dev_eval(second_dev, second_teacher)
     report['final_e0m3_units'] = sum(int(m.sum()) for m in final_map.values())
     report['map_sha256'] = digest_file(args.out / 'map.pt')
     report['optimization_seconds'] = time.time() - started - report['setup_seconds']

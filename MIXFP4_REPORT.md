@@ -758,6 +758,56 @@ dev KL is 0.1006–0.1019 versus 0.1009 (four_over_six) and 0.1072–0.1078 vers
   - A reviewer's "compare against KL-trained NVFP4 scale search" objection is
     therefore not answered on this model.
 
+#### General-text calibration (C4 train)
+
+This checks whether the dev-KL/test-PPL disagreement came from the math/code
+domain.
+- **Calibration:** 512 windows of 512 tokens from `en/c4-train.00000-of-01024`
+  at the evaluation's pinned C4 revision, one window per document, from documents
+  of at least 513 tokens.
+- **Dev:** the next 192 documents of that shard (disjoint), used for monitoring and
+  epoch selection. The math/code dev set is also reported as dev2.
+- **No overlap with the test sets:** evaluation uses only C4 *validation* and
+  WikiText-2 test. C4 is still the same domain as the C4 test set, while WikiText
+  is not.
+- Otherwise the recipe is unchanged (`--fit-source c4 --dev-source c4`), with 8 or
+  16 epochs. Jobs 442564–442575.
+
+8 epochs; ΔNLL is paired per window, ± 2 SE:
+
+| Init | Policy | E0M3 tiles | C4 dev KL | math/code dev KL | WikiText-2 | C4 | ΔNLL vs scale-only, same init (wiki / c4) |
+|---|---|---:|---:|---:|---:|---:|---|
+| four_over_six | scale search 1×16 | 0 | 0.09679 | 0.11941 | 14.351645 | **19.176367** | — |
+| four_over_six | joint 8×64 | 107,212 | 0.09910 | 0.12378 | **14.323127** | 19.191771 | −0.00199±0.00186 / +0.00080±0.00131 |
+| four_over_six | joint 256×64 | 11,609 | 0.10170 | 0.12412 | 14.419353 | 19.221638 | +0.00471±0.00193 / +0.00236±0.00140 |
+| nvfp4 | scale search 1×16 | 0 | 0.10268 | 0.12915 | 14.468984 | 19.262564 | — |
+| nvfp4 | joint 8×64 | 115,582 | 0.10505 | 0.13166 | 14.436497 | 19.255236 | −0.00225±0.00182 / −0.00038±0.00131 |
+| nvfp4 | joint 256×64 | 13,750 | 0.10731 | 0.12951 | 14.448666 | 19.333372 | −0.00141±0.00230 / +0.00367±0.00161 |
+
+16 epochs is worse for every arm. C4 dev KL is flat or rising after epochs 8–12;
+for example, four_over_six scale 1×16 scores 14.4746 / 19.2379 at 16 epochs.
+
+- **Dev KL and test PPL now agree.**
+  - Across the 12 C4-calibrated runs, Spearman(C4 dev KL, C4 test PPL) = 0.85,
+    compared with 0.64 for math/code dev versus C4 test over the 14 math/code runs.
+  - Math/code dev did rank WikiText well (0.90). The disagreement was mostly
+    math/code calibration failing to predict C4, i.e. a domain mismatch rather
+    than an optimization artifact.
+  - The C4 dev set ranks scale search alone best in both inits, and so does the
+    C4 test.
+- **General-text calibration helps a lot.** four_over_six scale 1×16 improves over
+  the same run calibrated on math/code by −0.00421±0.00239 (wiki) and
+  −0.01829±0.00216 (C4). It beats the original trained MixFP4 8×64 map by
+  −0.01070±0.00242 / −0.02456±0.00231.
+- **E0M3 still adds nothing.** Joint minus scale-only:
+  - 8×64: a tie in both inits (|Δ| ≤ 0.0023, within 2 SE).
+  - 256×64: worse on WikiText (four_over_six) or on C4 (nvfp4).
+  - Every joint run also has a higher C4 dev KL than its scale-only arm. The E0M3
+    tiles do not help even in-domain once the scale is trained.
+- **Best 1B configuration measured:** four_over_six-init 1×16 KL scale search,
+  C4-calibrated, 8 epochs: 14.3516 / 19.1764 (FourOverSix: 15.3567 / 21.5326).
+  It is plain NVFP4 with per-block scale choices and no E0M3.
+
 Implementation: `run_train_map.py`, `slurm/train_map.sbatch`,
 `summarize_train_map.py`. Details and per-epoch curves are in
 [results/mixfp4_potential/train_map/REPORT.md](results/mixfp4_potential/train_map/REPORT.md).
