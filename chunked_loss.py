@@ -65,3 +65,30 @@ def kl_logit_gradient(logits, teacher, device, per_chunk=2):
         grad[d0:d1].copy_(g)
         del leaf, lp, tt, loss, g
     return grad
+
+
+def train_kl_gradient(logits, teacher, device, divisor, per_chunk=2):
+    """run_train_map.py --chunked-loss (TM-OPT): d(kl.sum() / divisor)/d logits of one training step and the
+    per-sequence KL, bitwise the whole-batch expressions, one chunk of documents at a time.
+
+    run_train_map.py computes lp = logits[:, :-1].float().log_softmax(-1), kl = (t.exp() * (t - lp)).sum(-1).mean(-1)
+    and (kl.sum() / n_seq).backward(). Each chunk's loss here is kl_tok.mean(-1).sum() / divisor, so every token's
+    upstream gradient is produced by the same DivBackward and MeanBackward; the per-sequence means are taken on the
+    full [B, T-1] per-token tensor, as per_sequence_losses does. logits: (B, T, V) bf16 (requires grad; not
+    modified); teacher: B CPU bf16 (1, T-1, V) log-probability rows in batch order. Returns the (B, T, V) bf16
+    gradient buffer for logits.backward() and the (B,) FP32 per-sequence KL. Under torch.enable_grad()."""
+    b, t = logits.shape[0], logits.shape[1] - 1
+    grad = torch.zeros_like(logits, requires_grad=False)
+    kl_tok = torch.empty(b, t, dtype=torch.float32, device=logits.device)
+    source = logits.detach()
+    for d0, d1 in document_chunks(b, per_chunk):
+        leaf = source[d0:d1].requires_grad_()
+        lp = leaf[:, :-1].float().log_softmax(-1)
+        tt = torch.cat(teacher[d0:d1]).to(device).float()
+        tok = (tt.exp() * (tt - lp)).sum(-1)
+        loss = tok.mean(-1).sum() / divisor
+        g, = torch.autograd.grad(loss, leaf)
+        grad[d0:d1].copy_(g)
+        kl_tok[d0:d1] = tok.detach()
+        del leaf, lp, tt, tok, loss, g
+    return grad, kl_tok.mean(-1)

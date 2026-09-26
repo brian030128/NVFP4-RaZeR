@@ -99,3 +99,18 @@ def tile_scores(dy, x, cand, sel, rows, cols, luts, total, square, br=64, bt=32,
     _tile_score_kernel[grid](dy, x, b4, b0, sb4, sb0, sel.contiguous().view(torch.uint8), values, scales,
                              gs.reshape(1), total, square, batch, tokens, n, k, sel.shape[1],
                              R=rows, C=cols, BR=br, BT=bt, num_warps=num_warps)
+
+
+def tile_sums(dy, x, cand, rows, cols, luts, out):
+    """run_train_map.py --tile-grad-kernel (TM-OPT): add, per tile, the batch sum of G * (A - B) into out, in place.
+
+    G = dy^T x over every token of the batch; out: FP32 [ceil(N/rows), K/cols]. There is no SE and no flip sign. This
+    is the B1 kernel above with the batch as one sequence and an all-E2M1 map (sign +1, D = A - B): each tile's value
+    is formed and reduced in FP32 in the kernel, stored exactly in FP64 scratch and added to out in FP32, as the
+    legacy hook adds reduce((dy^T x) * (A - B)). Only the FP32 summation order differs. dy: (..., N) bf16;
+    x: (..., K) bf16; cand: the store's (b4, b0, sb4, sb0, gs, n, k)."""
+    n, k = cand[5], cand[6]
+    sel = torch.zeros(out.shape, dtype=torch.bool, device=out.device)
+    total = torch.zeros(out.shape, dtype=torch.float64, device=out.device)
+    tile_scores(dy.reshape(1, -1, n), x.reshape(1, -1, k), cand, sel, rows, cols, luts, total, torch.zeros_like(total))
+    out += total.float()
