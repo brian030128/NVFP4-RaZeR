@@ -13,7 +13,8 @@ FOUR_OVER_SIX = {'llama8b': MAIN / 'results/kse_paper/job_336566/llama8b/report.
                  'qwen27b': MAIN / 'results/kse_paper/job_336969/qwen27b/report.json',
                  # Instruct: a zero-epoch run_train_map.py job, i.e. the all-E2M1 map.
                  'llama8b_ins': TRAIN / 'ins_four_over_six/report.json',
-                 'llama1b_ins': TRAIN / 'ins1b_four_over_six/report.json'}
+                 'llama1b_ins': TRAIN / 'ins1b_four_over_six/report.json',
+                 'llama3b_ins': TRAIN / 'ins3b_four_over_six/report.json'}
 MULTIROUND = {'llama8b': {'256x64': OPT / 'multiround_256x64_kl_batched/report.json',
                           '8x64': OPT / 'opt_llama8b_8x64_kl/report.json'},
               'qwen27b': {'256x64': OPT / 'opt_qwen27b_256x64_kl/report.json',

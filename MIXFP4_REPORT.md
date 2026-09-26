@@ -51,7 +51,7 @@ realistic mixed map.
 
 ## 3. How tile selection works: multi-round KL-only election
 
-> **Newer alternative (Llama-3.1-8B and Llama-3.2-1B-Instruct so far):** training the map directly with Adam
+> **Newer alternative (Llama-3.1-8B and three Llama Instruct models so far):** training the map directly with Adam
 > on the same KL loss, with no filter and no backtracking, beats this method on
 > both datasets at both tile sizes. See §7.
 
@@ -422,8 +422,9 @@ directly, like training, instead of electing flips in rounds. Everything else
 is the same as §3: candidates $A$ and $B$, the 128 calibration sequences, the
 BF16 teacher, the scoring forward pass (per-token FourOverSix activations with
 a straight-through estimator), and the evaluation windows. So far it has been
-run on Llama-3.1-8B (jobs 441206–441208) and Llama-3.2-1B-Instruct
-(jobs 442046–442048).
+run on Llama-3.1-8B (jobs 441206–441208), Llama-3.1-8B-Instruct
+(442024, 442074, 442075), Llama-3.2-3B-Instruct (442077–442079) and
+Llama-3.2-1B-Instruct (442046–442048).
 
 **Parametrization.** Each tile $u$ gets a real latent logit $\theta_u$, and the
 weights are $\hat W(\theta) = B + \sum_u m_u(\theta_u)\, P_u \odot (A - B)$.
@@ -472,24 +473,46 @@ window, ± 2 SE, versus the §5 multi-round maps; the multi-round rows reproduce
 Every trained map beats multi-round significantly, on both datasets and at both
 tile sizes. At 8×64 the C4 gain over FourOverSix more than doubles.
 
-**Results, Llama-3.2-1B-Instruct.** STE only, with the same settings as
-Llama-3.1-8B. Llama-3.2 shares the Llama-3 tokenizer, so the same calibration
-windows, development documents and released evaluation windows apply; the
-calibration loader re-checks every window's token hash. The FourOverSix row is
-the all-E2M1 map from the same pipeline (a zero-epoch run), which gives matched
-per-window NLLs. There are no multi-round maps for this model. ΔNLL is paired
-per window versus FourOverSix, ± 2 SE.
+**Results, Llama Instruct models.** STE only, with the same settings as
+Llama-3.1-8B. All three models share the Llama-3 tokenizer, so the same
+calibration windows, development documents and released evaluation windows
+apply; the calibration loader re-checks every window's token hash. Each
+FourOverSix row is the all-E2M1 map from the same pipeline (a zero-epoch run),
+which gives matched per-window NLLs. ΔNLL is paired per window versus
+FourOverSix, ± 2 SE. Multi-round maps exist only for 8B-Instruct (jobs 431425
+and 431426); their rows are paired against the same FourOverSix run.
 
-| Policy | E0M3 tiles (of 1,900,544 at 8×64; 59,392 at 256×64) | final dev KL | WikiText-2 | C4 | ΔPPL vs FourOverSix (wiki / c4) | ΔNLL vs FourOverSix (wiki / c4) |
-|---|---:|---:|---:|---:|---|---|
-| NVFP4 FourOverSix | 0 | 0.16656 | 15.356671 | 21.532633 | — | — |
-| **Trained STE 256×64** | 17,064 (28.7%) | 0.12436 | **14.717933** | **20.049759** | **−0.6387 / −1.4829** | −0.04248±0.00298 / −0.07135±0.00392 |
-| **Trained STE 8×64** | 138,907 (7.3%) | 0.10905 | **14.505991** | **19.653187** | **−0.8507 / −1.8794** | −0.05699±0.00275 / −0.09133±0.00416 |
+| Model | Policy | E0M3 tiles | final dev KL | WikiText-2 | C4 | ΔPPL vs FourOverSix (wiki / c4) | ΔNLL vs FourOverSix (wiki / c4) |
+|---|---|---:|---:|---:|---:|---|---|
+| Llama-3.1-8B-Instruct | NVFP4 FourOverSix | 0 | 0.10870 | 7.814643 | 11.264191 | — | — |
+| | Multi-round 256×64 | 20,993 (4.9%) | 0.08763 | 7.794221 | 11.266143 | −0.0204 / +0.0020 | −0.00262±0.00147 / +0.00017±0.00164 |
+| | **Trained STE 256×64** | 44,763 (10.5%) | 0.08036 | **7.710097** | **11.174994** | **−0.1045 / −0.0892** | −0.01347±0.00173 / −0.00795±0.00164 |
+| | Multi-round 8×64 | 32,288 (0.24%) | 0.08303 | 7.706456 | 11.162905 | −0.1082 / −0.1013 | −0.01394±0.00174 / −0.00903±0.00239 |
+| | **Trained STE 8×64** | 365,992 (2.7%) | 0.07805 | **7.699191** | **11.107474** | **−0.1155 / −0.1567** | −0.01488±0.00178 / −0.01401±0.00274 |
+| Llama-3.2-3B-Instruct | NVFP4 FourOverSix | 0 | 0.09620 | 11.945266 | 15.507828 | — | — |
+| | **Trained STE 256×64** | 29,408 (17.1%) | 0.08081 | **11.543218** | **15.158546** | **−0.4020 / −0.3493** | −0.03424±0.00267 / −0.02278±0.00255 |
+| | **Trained STE 8×64** | 245,646 (4.5%) | 0.07677 | **11.401570** | **15.112609** | **−0.5437 / −0.3952** | −0.04658±0.00264 / −0.02582±0.00209 |
+| Llama-3.2-1B-Instruct | NVFP4 FourOverSix | 0 | 0.16656 | 15.356671 | 21.532633 | — | — |
+| | **Trained STE 256×64** | 17,064 (28.7%) | 0.12436 | **14.717933** | **20.049759** | **−0.6387 / −1.4829** | −0.04248±0.00298 / −0.07135±0.00392 |
+| | **Trained STE 8×64** | 138,907 (7.3%) | 0.10905 | **14.505991** | **19.653187** | **−0.8507 / −1.8794** | −0.05699±0.00275 / −0.09133±0.00416 |
 
-The gain on the 1B model is about ten times larger than on Llama-3.1-8B, and it
-is significant on both datasets at both tile sizes. Training takes 5.4 min
-(256×64) and 5.6 min (8×64) on one H200, at about 11.5 s per epoch. Dev KL
-bottomed at epoch 14 at 256×64 (0.12368) and ended at 0.12436.
+Tile totals: 8B 425,984 (256×64) / 13,631,488 (8×64); 3B 172,032 / 5,505,024;
+1B 59,392 / 1,900,544.
+
+- Every trained map beats FourOverSix significantly on both datasets. The gain
+  grows as the model shrinks: 8×64 WikiText ΔNLL is −0.015 (8B), −0.047 (3B)
+  and −0.057 (1B).
+- **Versus multi-round on 8B-Instruct**, paired directly:
+  - 256×64: trained is better by −0.01085±0.00155 on WikiText and
+    −0.00812±0.00121 on C4. Multi-round's 256×64 map gained almost nothing over
+    FourOverSix on this model.
+  - 8×64: a tie on WikiText (−0.00094±0.00143) and better on C4
+    (−0.00498±0.00137).
+- Training takes 18.4 / 21.8 min (8B-Instruct), 10.3 / 10.3 min (3B) and
+  5.4 / 5.6 min (1B) at 256×64 / 8×64 on one H200, including the monitor-only
+  dev evaluations.
+- Dev KL is roughly flat over the last 6 epochs for 3B and 1B, and on
+  8B-Instruct 8×64. It was still falling for 8B-Instruct 256×64.
 
 **Calibration time, Llama-3.1-8B.** One H200 per run; setup and final PPL
 evaluation are excluded, as in §4.
@@ -516,9 +539,8 @@ them, training takes about 15.5 min.
 - Trained maps elect many more E0M3 tiles: on Llama-3.1-8B, 4.5× (256×64) to
   90× (8×64) more than multi-round. The GEMM cost of heterogeneous maps is
   still unmeasured (§2).
-- Qwen3.8-27B and Llama-3.1-8B-Instruct runs were started and then stopped
-  before finishing, so they have no results. Zero-shot accuracy has not been
-  run on trained maps.
+- Qwen3.8-27B runs were started and then stopped before finishing, so they have
+  no results. Zero-shot accuracy has not been run on trained maps.
 
 Implementation: `run_train_map.py`, `slurm/train_map.sbatch`,
 `summarize_train_map.py`. Details and per-epoch curves are in

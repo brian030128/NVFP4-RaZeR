@@ -1,6 +1,6 @@
 """Calibration record for a Llama Instruct model, derived from the base Llama-3.1-8B record.
 
-Llama-3.1-8B-Instruct and Llama-3.2-1B-Instruct share the base Llama-3 tokenizer, so the
+Llama-3.1-8B-Instruct and Llama-3.2-1B/3B-Instruct share the base Llama-3 tokenizer, so the
 same 128 OpenWebMath/CodeParrot calibration windows (and 192 development documents)
 apply unchanged; math_code_data() re-checks every window's token hash on use. Only the
 weight hashes and model identity differ. Downloads the weights into HF_HOME as a side effect.
@@ -21,6 +21,8 @@ MODELS = {
                         out=Path('/work/u4320956/mixfp4_potential/llama8b_ins_calibration/report.json')),
     'llama1b_ins': dict(source='meta-llama/Llama-3.2-1B-Instruct', revision='9213176726f574b556790deb65791e0c5aa438b6',
                         out=Path('/work/u4320956/mixfp4_potential/llama1b_ins_calibration/report.json')),
+    'llama3b_ins': dict(source='meta-llama/Llama-3.2-3B-Instruct', revision='0cb88a4f764b7a12671c53f0838cd831a0843b95',
+                        out=Path('/work/u4320956/mixfp4_potential/llama3b_ins_calibration/report.json')),
 }
 
 

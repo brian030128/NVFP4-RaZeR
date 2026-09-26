@@ -47,11 +47,12 @@ from run_math_code_calibration import load_model, math_code_data
 from run_multiround import CALIBRATIONS, DEVELOPMENT, PUBLISHED, UNITS, expand, load_development, reduce
 from run_task_reorder_eval import validate_evaluation_data
 
-# Llama-3.2-1B-Instruct shares the Llama-3 tokenizer, so the base Llama development
+# Llama-3.2-1B/3B-Instruct share the Llama-3 tokenizer, so the base Llama development
 # documents and published evaluation windows apply unchanged (make_instruct_prior.py).
-CALIBRATIONS['llama1b_ins'] = Path('/work/u4320956/mixfp4_potential/llama1b_ins_calibration')
-DEVELOPMENT['llama1b_ins'] = DEVELOPMENT['llama8b']
-PUBLISHED['llama1b_ins'] = PUBLISHED['llama8b']
+for _name in ('llama1b_ins', 'llama3b_ins'):
+    CALIBRATIONS[_name] = Path(f'/work/u4320956/mixfp4_potential/{_name}_calibration')
+    DEVELOPMENT[_name] = DEVELOPMENT['llama8b']
+    PUBLISHED[_name] = PUBLISHED['llama8b']
 
 
 @torch.no_grad()
