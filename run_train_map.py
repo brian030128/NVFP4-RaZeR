@@ -44,8 +44,14 @@ from run_baseline_protocol_audit import data
 from run_c4_frozen import digest_file
 from run_conditional_format import save, sha
 from run_math_code_calibration import load_model, math_code_data
-from run_multiround import CALIBRATIONS, PUBLISHED, UNITS, expand, load_development, reduce
+from run_multiround import CALIBRATIONS, DEVELOPMENT, PUBLISHED, UNITS, expand, load_development, reduce
 from run_task_reorder_eval import validate_evaluation_data
+
+# Llama-3.2-1B-Instruct shares the Llama-3 tokenizer, so the base Llama development
+# documents and published evaluation windows apply unchanged (make_instruct_prior.py).
+CALIBRATIONS['llama1b_ins'] = Path('/work/u4320956/mixfp4_potential/llama1b_ins_calibration')
+DEVELOPMENT['llama1b_ins'] = DEVELOPMENT['llama8b']
+PUBLISHED['llama1b_ins'] = PUBLISHED['llama8b']
 
 
 @torch.no_grad()
