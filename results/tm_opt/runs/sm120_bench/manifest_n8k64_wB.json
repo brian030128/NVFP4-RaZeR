@@ -1,0 +1,189 @@
+{
+ "blob_gen": {
+  "A_ATOMS": 8,
+  "B_ATOMS": 1,
+  "MMA_M": 8,
+  "MMA_N": 2
+ },
+ "built_utc": "2026-09-26T08:59:53+00:00",
+ "compiled_description": {
+  "bias_on_n": 1,
+  "blobgen_mma_mn": [
+   8,
+   2
+  ],
+  "config": "n8k64_wB",
+  "cutlass_version": "4.6.1",
+  "d_colmajor": 0,
+  "epilogue": "bf16((s_m*s_n)*acc+bias)",
+  "granule_a": [
+   128,
+   128
+  ],
+  "granule_b": [
+   8,
+   64
+  ],
+  "mainloop_stages": 4,
+  "pinned_e2m1": [
+   1,
+   0
+  ],
+  "shared_storage_bytes": 100352,
+  "stock": 0,
+  "stream_k": 0,
+  "tile_mnk": [
+   128,
+   128,
+   128
+  ],
+  "warp_atoms_mn": [
+   1,
+   8
+  ]
+ },
+ "config": "n8k64_wB",
+ "defines": {
+  "MIXFP4_ATOM_M": 1,
+  "MIXFP4_A_ALL_E2M1": 1,
+  "MIXFP4_A_ATOMS_PER_GRANULE": 8,
+  "MIXFP4_BLOB": 1,
+  "MIXFP4_B_ATOMS_PER_GRANULE": 1,
+  "MIXFP4_JOINT_KB": 1,
+  "MIXFP4_PERM_N": 128,
+  "SM120_BIAS_ON_N": 1
+ },
+ "description": "Comparison. Weights on B, 8 columns x 64 K granule, 1x8 arrangement, activations pinned E2M1, row-major D.",
+ "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+ "kind": "mixed",
+ "library": "libmixfp4_sm120_n8k64_wB.so",
+ "library_sha256": "a7fdbfad02e5b1b0d604b43bb6117974c907acced6d4125d5b78cf18bbcffa98",
+ "nvcc_command": [
+  "/home/dev/.conda/envs/mixfp4-cuda131/bin/nvcc",
+  "-O3",
+  "-DNDEBUG",
+  "-std=c++17",
+  "--generate-code=arch=compute_120a,code=[sm_120a]",
+  "-DCUTLASS_ENABLE_TENSOR_CORE_MMA=1",
+  "-DCUTLASS_ENABLE_GDC_FOR_SM100=1",
+  "--expt-relaxed-constexpr",
+  "-ftemplate-backtrace-limit=0",
+  "-DCUTLASS_DEBUG_TRACE_LEVEL=0",
+  "-DCUTLASS_SM100_FAMILY_ARCHS_ENABLED",
+  "-Xcompiler=-fno-strict-aliasing",
+  "-DMIXFP4_ATOM_M=1",
+  "-DMIXFP4_A_ALL_E2M1=1",
+  "-DMIXFP4_A_ATOMS_PER_GRANULE=8",
+  "-DMIXFP4_BLOB=1",
+  "-DMIXFP4_B_ATOMS_PER_GRANULE=1",
+  "-DMIXFP4_JOINT_KB=1",
+  "-DMIXFP4_PERM_N=128",
+  "-DSM120_BIAS_ON_N=1",
+  "-DSM120_CONFIG_NAME=\"n8k64_wB\"",
+  "-Xcompiler=-fPIC",
+  "-shared",
+  "-ccbin",
+  "/usr/bin/g++",
+  "-I/home/dev/n16k64_campaign/sm120_bench/sm120/build/n8k64_wB/gen/src",
+  "-I/home/dev/n16k64_campaign/sm120_bench/sm120/kernel/src",
+  "-I/home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/include",
+  "-I/home/dev/n16k64_campaign/sm120_bench/sm120/build/n8k64_wB/gen/include",
+  "-I/home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/tools/util/include",
+  "-I/home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/examples/common",
+  "/home/dev/n16k64_campaign/sm120_bench/sm120/csrc/mixfp4_sm120.cu",
+  "-o",
+  "/home/dev/n16k64_campaign/sm120_bench/sm120/build/n8k64_wB/libmixfp4_sm120_n8k64_wB.so.unpatched",
+  "-lcudart_static",
+  "-lrt",
+  "-lpthread",
+  "-ldl"
+ ],
+ "nvcc_warnings": "home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function(\"StaticPersistentTileScheduler100\") that is explicitly defaulted on its first declaration\n    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))\n                                                             ^\n\nRemark: The warnings can be suppressed with \"-diag-suppress <warning-number>\"\n\n/home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function(\"StaticPersistentTileScheduler100\") that is explicitly defaulted on its first declaration\n    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))\n                                                                                     ^\n\n/home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function(\"StaticPersistentTileScheduler100\") that is explicitly defaulted on its first declaration\n    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))\n                                                             ^\n\nRemark: The warnings can be suppressed with \"-diag-suppress <warning-number>\"\n\n/home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function(\"StaticPersistentTileScheduler100\") that is explicitly defaulted on its first declaration\n    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))\n                                                                                     ^\n\n/home/dev/n16k64_campaign/sm120_bench/sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp(1090): warning #177-D: variable \"kBitsPerKBlock\" was declared but never referenced\n      constexpr int kBitsPerKBlock = kADisp + kBDisp;\n                    ^\n          detected during:\n            instantiation of \"void cutlass::gemm::kernel::GemmUniversal<ProblemShape_, CollectiveMainloop_, CollectiveEpilogue_, TileSchedulerTag_, std::enable_if_t<std::is_base_of_v<cutlass::gemm::KernelTmaWarpSpecializedCooperative, CollectiveMainloop_::DispatchPolicy::Schedule>, void>>::operator()(const cutlass::gemm::kernel::GemmUniversal<ProblemShape_, CollectiveMainloop_, CollectiveEpilogue_, TileSchedulerTag_, std::enable_if_t<std::is_base_of_v<cutlass::gemm::KernelTmaWarpSpecializedCooperative, CollectiveMainloop_::DispatchPolicy::Schedule>, void>>::Params &, char *) [with ProblemShape_=cute::tuple<int, int, int, int>, CollectiveMainloop_=CollectiveMainloop, CollectiveEpilogue_=CollectiveEpilogue, TileSchedulerTag_=void]\" at line 123 of /home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/include/cutlass/device_kernel.h\n            instantiation of \"void cutlass::device_kernel<Operator>(Operator::Params) [with Operator=GemmKernel]\" at line 347 of /home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/include/cutlass/gemm/device/gemm_universal_adapter.h\n            instantiation of \"cutlass::Status cutlass::gemm::device::GemmUniversalAdapter<GemmKernel_, std::enable_if_t<cutlass::gemm::detail::IsCutlass3GemmKernel<cutlass::GetUnderlyingKernel_t<GemmKernel_>, void>::value, void>>::initialize(const cutlass::gemm::device::GemmUniversalAdapter<GemmKernel_, std::enable_if_t<cutlass::gemm::detail::IsCutlass3GemmKernel<cutlass::GetUnderlyingKernel_t<GemmKernel_>, void>::value, void>>::Arguments &, void *, cudaStream_t, cutlass::CudaHostAdapter *) [with GemmKernel_=GemmKernel]\" at line 424 of /home/dev/n16k64_campaign/sm120_bench/sm120/csrc/mixfp4_sm120.cu",
+ "patch": {
+  "census_patched": {
+   "formats": {
+    "E2M1xE0M3": 512,
+    "E2M1xE2M1": 512
+   },
+   "predicated": 0,
+   "total": 1024
+  },
+  "census_unpatched": {
+   "formats": {
+    "E2M1xE2M1": 1024
+   },
+   "predicated": 0,
+   "total": 1024
+  },
+  "patched": true,
+  "patcher_log": "found 1024 OMMAs; per-site counts: site 0=512, site 2=512\nnote: only sites [0, 2] are present (--allow-missing-sites)\nkernel text base offset = 0xc1328\npatched 512 OMMAs (site 0 left native), output=/home/dev/n16k64_campaign/sm120_bench/sm120/build/n8k64_wB/libmixfp4_sm120_n8k64_wB.so\npost-patch opcode census: {('E2M1', 'E2M1'): 512, ('E2M1', 'E0M3'): 512}\nverify OK: every site disassembles to its intended format\n",
+  "sites": {
+   "0": 512,
+   "2": 512
+  }
+ },
+ "patcher_sha256": "507d8c336a8d569625eb0a2b09f70866917e34613d5a72d6866542f1b8d9ce55",
+ "repo_dirty": false,
+ "repo_head": "",
+ "resource_usage": [
+  {
+   "function": "_ZN11sm120_quant17quant_rows_kernelILi0EEEvPK13__nv_bfloat16lPhS4_Pfiiiff",
+   "local": 0,
+   "reg": 40,
+   "shared": 1040,
+   "stack": 0
+  },
+  {
+   "function": "_ZN11sm120_quant17quant_rows_kernelILi1EEEvPK13__nv_bfloat16lPhS4_Pfiiiff",
+   "local": 0,
+   "reg": 96,
+   "shared": 1040,
+   "stack": 0
+  },
+  {
+   "function": "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10collective13CollectiveMmaINS1_47Mai",
+   "local": 0,
+   "reg": 168,
+   "shared": 1024,
+   "stack": 0
+  }
+ ],
+ "sass_sha256": "846c8878c38e380fb27c2b2b0503a8b0cac2130d1ee586a82752695305db5d0c",
+ "sources": {
+  "<generated>/mixed_mma_blob_generated.hpp": "3336eb8925aa2f64d11b1378c3b76f411dbab041634ad84997850eae494173dc",
+  "sm120/build.py": "c081c7ce2cfd6def06ecf73bfa93d1550b5d9f135b21cfb3e186585945d8bbfb",
+  "sm120/csrc/mixfp4_sm120.cu": "0e0e1d2c5e61463826182e36a54065348b670169509668ad338732e1078c9749",
+  "sm120/csrc/quant_act.cuh": "df79dcabcddbf2bdb7b90820e05805a4bc01aa08fc4a9da7ca48f748571a8034",
+  "sm120/kernel/scripts/gen_mixed_mma_blob.py": "eaa5e1eddafc7617ee71c09e0c8f9a68358591eacd07132d116b265ac38fa407",
+  "sm120/kernel/scripts/patch_mixed_nvfp4_gemm.py": "507d8c336a8d569625eb0a2b09f70866917e34613d5a72d6866542f1b8d9ce55",
+  "sm120/kernel/src/collective/dispatch_policy_mixed.hpp": "e947df23b86e56f36e7233ef08db3144ce237d8c2c1eca50da18181b75f63f70",
+  "sm120/kernel/src/collective/mixed_mma_blob_generated.hpp": "79c623565464d6640ce9246584c5ecc02630fddb7130d7c877f8b8f71db96ee8",
+  "sm120/kernel/src/collective/mixed_mma_generated.hpp": "2aa1316815ab6db4789ace044ddea173b37b14b2b5988b10fc9cac7902796881",
+  "sm120/kernel/src/collective/mma_sm120_mixed.hpp": "6aa2a3560f8cbe8f0fa9ed6e35175f947bb9e8aab2f573b4801a110ad219832f",
+  "sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp": "1e77a72743de651edfc407e54f9421b3b303296421d1b0ce28bb780f7bc6d5c0",
+  "sm120/kernel/src/cublas_bench.cu": "df1b1b35cbe18dc56756e43889bae4b2d8345af68bd403b07535bd4dd1f3f4f2",
+  "sm120/kernel/src/fp8_gemm.cu": "5dc9c21292588f60ee916f6a562500f55aefabf5934c93dc715e0ea62dfeae2a",
+  "sm120/kernel/src/int8_gemm.cu": "9958692e3e49aaf1fb7053cd4335751913128e9b566fea510ddbfc991950d344",
+  "sm120/kernel/src/mixed_nvfp4_gemm.cu": "de8309d0ac0a6f8bddad7d7526659581a0bf9b0902531f45186273dd611c7b6d",
+  "sm120/kernel/src/nvfp4_gemm.cu": "3ff4c6736349e123ddfd4b4128f93df16734191086705fdae9afcd70a0c34ea0",
+  "sm120/kernel/src/nvfp4_gemm_cute.cu": "758df97ce8a1404e30a08c82a9d51fc87437a619b7b5a5b5a73f74f41a514b4e",
+  "sm120/mixfp4_sm120/configs.py": "fe87496b4961e82991fe5a2ab775ebf8c45605c86483df709cf7242fbccb2093"
+ },
+ "toolchain": {
+  "cuda_release": "13.1",
+  "cuobjdump": "/home/dev/.conda/envs/mixfp4-cuda131/bin/cuobjdump",
+  "cutlass_commit": "e64a9136dd929639e5f7c969fe5af3bf7415cd4f",
+  "cutlass_describe": "",
+  "host_compiler": "/usr/bin/g++",
+  "host_compiler_version": "g++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "nvcc": "/home/dev/.conda/envs/mixfp4-cuda131/bin/nvcc",
+  "nvcc_version": "13.1.115"
+ },
+ "type_block": [
+  8,
+  64
+ ],
+ "unpatched_sass_sha256": "0080baf79ce0c602f452cc0cc8fc350945a85490943019cb79010809e86f868b",
+ "unpatched_sha256": "12f5450ef5e60d8906f1890f758b2d90f1cb8b0d9dc4a9f3b16fedf7544442fb",
+ "weight_operand": 1
+}

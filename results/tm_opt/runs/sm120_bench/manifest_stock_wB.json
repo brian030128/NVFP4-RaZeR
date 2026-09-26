@@ -1,0 +1,162 @@
+{
+ "blob_gen": {},
+ "built_utc": "2026-09-26T09:02:19+00:00",
+ "compiled_description": {
+  "bias_on_n": 1,
+  "blobgen_mma_mn": [
+   0,
+   0
+  ],
+  "config": "stock_wB",
+  "cutlass_version": "4.6.1",
+  "d_colmajor": 0,
+  "epilogue": "bf16((s_m*s_n)*acc+bias)",
+  "granule_a": [
+   0,
+   0
+  ],
+  "granule_b": [
+   0,
+   0
+  ],
+  "mainloop_stages": 4,
+  "pinned_e2m1": [
+   1,
+   1
+  ],
+  "shared_storage_bytes": 88064,
+  "stock": 1,
+  "stream_k": 0,
+  "tile_mnk": [
+   128,
+   128,
+   128
+  ],
+  "warp_atoms_mn": [
+   4,
+   2
+  ]
+ },
+ "config": "stock_wB",
+ "defines": {
+  "SM120_BIAS_ON_N": 1
+ },
+ "description": "Baseline. Stock CUTLASS SM120 NVFP4 mainloop, weights on B, row-major D.",
+ "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+ "kind": "stock",
+ "library": "libmixfp4_sm120_stock_wB.so",
+ "library_sha256": "0116049548f7c18b22fa9944567f68653d3db624cb51aa4488a1cff5a09b8771",
+ "nvcc_command": [
+  "/home/dev/.conda/envs/mixfp4-cuda131/bin/nvcc",
+  "-O3",
+  "-DNDEBUG",
+  "-std=c++17",
+  "--generate-code=arch=compute_120a,code=[sm_120a]",
+  "-DCUTLASS_ENABLE_TENSOR_CORE_MMA=1",
+  "-DCUTLASS_ENABLE_GDC_FOR_SM100=1",
+  "--expt-relaxed-constexpr",
+  "-ftemplate-backtrace-limit=0",
+  "-DCUTLASS_DEBUG_TRACE_LEVEL=0",
+  "-DCUTLASS_SM100_FAMILY_ARCHS_ENABLED",
+  "-Xcompiler=-fno-strict-aliasing",
+  "-DSM120_BIAS_ON_N=1",
+  "-DSM120_CONFIG_NAME=\"stock_wB\"",
+  "-DSM120_STOCK=1",
+  "-Xcompiler=-fPIC",
+  "-shared",
+  "-ccbin",
+  "/usr/bin/g++",
+  "-I/home/dev/n16k64_campaign/sm120_bench/sm120/build/stock_wB/gen/src",
+  "-I/home/dev/n16k64_campaign/sm120_bench/sm120/kernel/src",
+  "-I/home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/include",
+  "-I/home/dev/n16k64_campaign/sm120_bench/sm120/build/stock_wB/gen/include",
+  "-I/home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/tools/util/include",
+  "-I/home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/examples/common",
+  "/home/dev/n16k64_campaign/sm120_bench/sm120/csrc/mixfp4_sm120.cu",
+  "-o",
+  "/home/dev/n16k64_campaign/sm120_bench/sm120/build/stock_wB/libmixfp4_sm120_stock_wB.so.unpatched",
+  "-lcudart_static",
+  "-lrt",
+  "-lpthread",
+  "-ldl"
+ ],
+ "nvcc_warnings": "/home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function(\"StaticPersistentTileScheduler100\") that is explicitly defaulted on its first declaration\n    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))\n                                                             ^\n\nRemark: The warnings can be suppressed with \"-diag-suppress <warning-number>\"\n\n/home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function(\"StaticPersistentTileScheduler100\") that is explicitly defaulted on its first declaration\n    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))\n                                                                                     ^\n\n/home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function(\"StaticPersistentTileScheduler100\") that is explicitly defaulted on its first declaration\n    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))\n                                                             ^\n\nRemark: The warnings can be suppressed with \"-diag-suppress <warning-number>\"\n\n/home/dev/n16k64_campaign/sm120_bench/sm120/third_party/cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function(\"StaticPersistentTileScheduler100\") that is explicitly defaulted on its first declaration\n    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))\n                                                                                     ^",
+ "patch": {
+  "census_patched": {
+   "formats": {
+    "E2M1xE2M1": 64
+   },
+   "predicated": 0,
+   "total": 64
+  },
+  "census_unpatched": {
+   "formats": {
+    "E2M1xE2M1": 64
+   },
+   "predicated": 0,
+   "total": 64
+  },
+  "patched": false,
+  "patcher_log": ""
+ },
+ "patcher_sha256": "507d8c336a8d569625eb0a2b09f70866917e34613d5a72d6866542f1b8d9ce55",
+ "repo_dirty": false,
+ "repo_head": "",
+ "resource_usage": [
+  {
+   "function": "_ZN11sm120_quant17quant_rows_kernelILi0EEEvPK13__nv_bfloat16lPhS4_Pfiiiff",
+   "local": 0,
+   "reg": 40,
+   "shared": 1040,
+   "stack": 0
+  },
+  {
+   "function": "_ZN11sm120_quant17quant_rows_kernelILi1EEEvPK13__nv_bfloat16lPhS4_Pfiiiff",
+   "local": 0,
+   "reg": 96,
+   "shared": 1040,
+   "stack": 0
+  },
+  {
+   "function": "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10collective13CollectiveMmaINS1_42Mai",
+   "local": 0,
+   "reg": 168,
+   "shared": 1024,
+   "stack": 0
+  }
+ ],
+ "sass_sha256": "aa9845946447449f0b6ce5689413a2eebba93551f793839f26da32d918db3faa",
+ "sources": {
+  "sm120/build.py": "c081c7ce2cfd6def06ecf73bfa93d1550b5d9f135b21cfb3e186585945d8bbfb",
+  "sm120/csrc/mixfp4_sm120.cu": "0e0e1d2c5e61463826182e36a54065348b670169509668ad338732e1078c9749",
+  "sm120/csrc/quant_act.cuh": "df79dcabcddbf2bdb7b90820e05805a4bc01aa08fc4a9da7ca48f748571a8034",
+  "sm120/kernel/scripts/gen_mixed_mma_blob.py": "eaa5e1eddafc7617ee71c09e0c8f9a68358591eacd07132d116b265ac38fa407",
+  "sm120/kernel/scripts/patch_mixed_nvfp4_gemm.py": "507d8c336a8d569625eb0a2b09f70866917e34613d5a72d6866542f1b8d9ce55",
+  "sm120/kernel/src/collective/dispatch_policy_mixed.hpp": "e947df23b86e56f36e7233ef08db3144ce237d8c2c1eca50da18181b75f63f70",
+  "sm120/kernel/src/collective/mixed_mma_blob_generated.hpp": "79c623565464d6640ce9246584c5ecc02630fddb7130d7c877f8b8f71db96ee8",
+  "sm120/kernel/src/collective/mixed_mma_generated.hpp": "2aa1316815ab6db4789ace044ddea173b37b14b2b5988b10fc9cac7902796881",
+  "sm120/kernel/src/collective/mma_sm120_mixed.hpp": "6aa2a3560f8cbe8f0fa9ed6e35175f947bb9e8aab2f573b4801a110ad219832f",
+  "sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp": "1e77a72743de651edfc407e54f9421b3b303296421d1b0ce28bb780f7bc6d5c0",
+  "sm120/kernel/src/cublas_bench.cu": "df1b1b35cbe18dc56756e43889bae4b2d8345af68bd403b07535bd4dd1f3f4f2",
+  "sm120/kernel/src/fp8_gemm.cu": "5dc9c21292588f60ee916f6a562500f55aefabf5934c93dc715e0ea62dfeae2a",
+  "sm120/kernel/src/int8_gemm.cu": "9958692e3e49aaf1fb7053cd4335751913128e9b566fea510ddbfc991950d344",
+  "sm120/kernel/src/mixed_nvfp4_gemm.cu": "de8309d0ac0a6f8bddad7d7526659581a0bf9b0902531f45186273dd611c7b6d",
+  "sm120/kernel/src/nvfp4_gemm.cu": "3ff4c6736349e123ddfd4b4128f93df16734191086705fdae9afcd70a0c34ea0",
+  "sm120/kernel/src/nvfp4_gemm_cute.cu": "758df97ce8a1404e30a08c82a9d51fc87437a619b7b5a5b5a73f74f41a514b4e",
+  "sm120/mixfp4_sm120/configs.py": "fe87496b4961e82991fe5a2ab775ebf8c45605c86483df709cf7242fbccb2093"
+ },
+ "toolchain": {
+  "cuda_release": "13.1",
+  "cuobjdump": "/home/dev/.conda/envs/mixfp4-cuda131/bin/cuobjdump",
+  "cutlass_commit": "e64a9136dd929639e5f7c969fe5af3bf7415cd4f",
+  "cutlass_describe": "",
+  "host_compiler": "/usr/bin/g++",
+  "host_compiler_version": "g++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "nvcc": "/home/dev/.conda/envs/mixfp4-cuda131/bin/nvcc",
+  "nvcc_version": "13.1.115"
+ },
+ "type_block": null,
+ "unpatched_sass_sha256": "aa9845946447449f0b6ce5689413a2eebba93551f793839f26da32d918db3faa",
+ "unpatched_sha256": "0116049548f7c18b22fa9944567f68653d3db624cb51aa4488a1cff5a09b8771",
+ "weight_operand": 1
+}
