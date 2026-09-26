@@ -1,9 +1,6 @@
 # TM-OPT: seed variance, three models, and the GEMM cost of E0M3-dense maps — report
 
-**Status (2026-09-26 13:15 UTC).**
-- **#2 (seed variance):** done.
-- **#1 (three models):** done.
-- **#3 (GEMM and prefill cost):** running on the idle GPU since 13:03 UTC.
+**Status (2026-09-26 13:40 UTC): #2, #1 and #3 are done. Stopped, as instructed.**
 
 **Protocol.** [PROTOCOL_ITEMS.md](PROTOCOL_ITEMS.md), registered 2026-09-26 08:57:46 UTC (sha256
 97cacaf8…), before any run.
@@ -170,9 +167,143 @@ methods are significantly better than FourOverSix in every cell.
 
 Tables: `items_models.md`; everything: `items_models.json`.
 
-## #3 GEMM and latency cost of E0M3-dense maps
+## #3 GEMM and latency cost of E0M3-dense maps (speed only)
 
-Waiting for #1. The kernels are built (see the #3 section when done).
+**Verdict: E0M3 density costs almost nothing.** At full-model prefill (1×2048 and 4×2048), TM-OPT's
+maps are within +0.7 % of MR-OPT's on Llama and Phi-4, at both units. That holds although TM-OPT
+has up to 81× more E0M3 tiles (2.3–2.9 % of Llama's tiles).
+
+The cost that remains belongs to the mixed kernel itself and does not depend on the map:
+- +4.2–5.0 % over the stock NVFP4 kernel at 8x64 (weights on B);
+- +1.3–3.0 % at 16x64 (weights on A, the deployment configuration).
+
+**Numerics caveat.** The deployment kernel uses per-token activation scales and a one-rounding
+epilogue. This study's development and evaluation convention differs (per-document or per-window
+scales, two roundings). #3 measures speed only.
+
+**Kernel and checks.**
+- **Source:** the SM120 subtree of `origin/SM120-kernel` (f91c109), exported with `git archive` to
+  `/home/dev/n16k64_campaign/sm120_bench` (the working tree was not touched). CUTLASS was cloned
+  there at the pinned commit e64a913 from the local mixfp4 copy; CUDA 13.1.115 (the `mixfp4-cuda131`
+  env), host g++ 11.4.
+- **Built configurations:** `n16k64_wA`, `n8k64_wB`, `stock_wA`, `stock_wB`. Every build passed
+  `build.py`'s patch verification:
+  - OMMA census 512 + 512;
+  - no predicated OMMA;
+  - 168 registers, no stack.
+
+  The manifests are in `runs/sm120_bench/`.
+- **Self-tests** (`--selftest`) of both mixed kernels on this GPU: **PASS** (the patched kernel
+  passes, the unpatched one fails as it must).
+- **`sm120/tests/test_gemm.py`:** 83 passed, 194 skipped (only the configurations that were not
+  built).
+- **Maps:** our maps were converted to `MIXFP4MAP/1` files with the tiles unchanged (round-trip
+  checked), and the artifacts were exported by `sm120/eval/export_artifact.py`, which checks every
+  packed weight against the fake-quant weight.
+- **Coverage:** in every prefill policy, all 224 (Llama) or 160 (Phi-4) Linears ran natively.
+- **Environment:** RTX PRO 6000 Blackwell, idle (`require_idle`). There is no per-GPU tile table
+  for this GPU, so explicit kernel configurations were used (128-wide token tiles). No small-T
+  (decode) kernels were built; the smallest T measured is 128.
+
+### Full-model prefill (ms; registered: one process per policy, median of 5 after 2 warm-ups)
+
+| model | unit | prefill | stock NVFP4 | mixed, FourOverSix | MR-OPT | TM-OPT | TM-OPT vs MR-OPT |
+|---|---|---|---:|---:|---:|---:|---:|
+| Llama-3.1-8B | 8x64 | 1×2048 | 59.65 | 62.42 (+4.6 %) | 62.39 (+4.6 %) | 62.39 (+4.6 %) | +0.0 % |
+| | | 4×2048 | 265.81 | 277.14 (+4.3 %) | 276.86 (+4.2 %) | 277.20 (+4.3 %) | +0.1 % |
+| | 16x64 | 1×2048 | 58.58 | 60.34 (+3.0 %) | 59.65 (+1.8 %) | 59.88 (+2.2 %) | +0.4 % |
+| | | 4×2048 | 264.06 | 267.70 (+1.4 %) | 267.81 (+1.4 %) | 267.99 (+1.5 %) | +0.1 % |
+| Phi-4 | 8x64 | 1×2048 | 107.27 | 112.65 (+5.0 %) | 112.33 (+4.7 %) | 112.37 (+4.7 %) | +0.0 % |
+| | | 4×2048 | 469.97 | 490.68 (+4.4 %) | 489.65 (+4.2 %) | 489.79 (+4.2 %) | +0.0 % |
+| | 16x64 | 1×2048 | 105.79 | 107.79 (+1.9 %) | 107.56 (+1.7 %) | 107.71 (+1.8 %) | +0.1 % |
+| | | 4×2048 | 463.78 | 471.17 (+1.6 %) | 470.69 (+1.5 %) | 470.90 (+1.5 %) | +0.0 % |
+
+**The registered 1×512 prefill cannot resolve map effects.** Its results jump between processes,
+about 30 ms or about 36 ms whatever the policy (for example, Llama stock 16x64: 35.9 ms; mixed
+FourOverSix 16x64: 30.1 ms). The tables in `gemm/tables.md` include them for completeness; the
+diagnostic below confirms that this is process-to-process, not map-dependent.
+
+### GEMM only (registered: CUPTI kernel time, median; `gemm/tables.md` has every shape and T)
+
+Summed over one module per projection. For MR-OPT and TM-OPT this is each map's densest module per
+projection, their worst case. Shares of stock NVFP4 time:
+
+| model | unit | T | mixed, all E2M1 | MR-OPT | TM-OPT | all E0M3 | TM-OPT vs MR-OPT |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Llama-3.1-8B | 8x64 | 512 | +9.3 % | +9.5 % | +10.6 % | +12.5 % | +1.0 % |
+| | | 2048 | +10.6 % | +11.7 % | +20.2 % | +21.7 % | +7.6 % |
+| | | 8192 | +42.8 % | +41.9 % | +44.9 % | +45.0 % | +2.1 % |
+| | 16x64 | 512 | +2.7 % | +3.2 % | +3.7 % | +10.7 % | +0.5 % |
+| | | 2048 | +4.3 % | +4.8 % | +12.5 % | +16.4 % | +7.4 % |
+| | | 8192 | +33.9 % | +33.5 % | +35.0 % | +40.1 % | +1.1 % |
+| Phi-4 | 8x64 | 512 | +10.5 % | +11.9 % | +14.9 % | +17.6 % | +2.7 % |
+| | | 2048 | +26.9 % | +35.2 % | +36.4 % | +39.2 % | +0.9 % |
+| | | 8192 | +40.9 % | +43.4 % | +44.4 % | +47.2 % | +0.7 % |
+| | 16x64 | 512 | +3.4 % | +3.4 % | +5.4 % | +9.5 % | +1.9 % |
+| | | 2048 | +18.4 % | +26.9 % | +28.2 % | +33.7 % | +1.1 % |
+| | | 8192 | +31.1 % | +34.6 % | +34.5 % | +40.4 % | −0.1 % |
+
+**These registered GEMM overheads at T ≥ 2048 are inflated by the measurement order** (diagnostic
+below). The benchmark always measured the stock kernel first and then the mixed kernels, back to
+back, while the GPU was running into its 500 W software power cap.
+
+### Diagnostic (protocol deviation 1; not a replacement of the registered numbers)
+
+**GEMM:** three timing methods on the same operands, in shuffled order over 5 rounds, with GPU
+telemetry. Llama shapes; overhead vs stock:
+
+| unit | shape | T | isolated call: all E2M1 / TM-OPT | chained calls: all E2M1 / TM-OPT | CUPTI: all E2M1 / TM-OPT |
+|---|---|---:|---|---|---|
+| 8x64 | q_proj | 2048 | +9.2 / +10.1 % | +9.3 / +10.3 % | +9.8 / +10.8 % |
+| | | 8192 | +9.1 / +10.1 % | +11.4 / +12.1 % | +11.6 / +12.6 % |
+| | gate_proj | 2048 | +6.9 / +7.9 % | +9.4 / +10.4 % | +9.6 / +10.7 % |
+| | | 8192 | +9.4 / +10.7 % | +18.7 / +20.5 % | +4.3 / +5.5 % |
+| | down_proj | 2048 | +6.6 / +7.7 % | +10.0 / +11.8 % | +10.8 / +12.2 % |
+| | | 8192 | +9.2 / +11.1 % | +20.4 / +24.3 % | +7.3 / +9.2 % |
+| 16x64 | q_proj | 2048 | +4.2 / +4.9 % | +3.5 / +3.9 % | +3.3 / +3.7 % |
+| | | 8192 | +2.9 / +3.5 % | +3.7 / +4.0 % | +3.2 / +3.7 % |
+| | gate_proj | 2048 | +2.6 / +3.2 % | +3.7 / +4.3 % | +3.7 / +4.4 % |
+| | | 8192 | +3.5 / +4.1 % | +6.0 / +6.9 % | +3.7 / +2.1 % |
+| | down_proj | 2048 | +1.7 / +2.4 % | +3.1 / +4.2 % | +3.5 / +4.5 % |
+| | | 8192 | +2.9 / +3.7 % | +4.8 / +7.1 % | +2.8 / +3.7 % |
+
+- **The TM-OPT pattern on the densest module** costs only 0.6–1.9 percentage points more than all
+  E2M1 (isolated calls).
+- **The mixed kernel itself (all E2M1) costs:**
+  - at 8x64: +6.6–9.4 % (isolated);
+  - at 16x64: +1.7–4.2 %.
+- **The registered +31–45 % at T = 8192 does not reproduce once the order is shuffled.**
+- **The power cap is active often:** the GPU reported it after 84 of 180 measurements. The SM clock
+  ranged from 1,890 to 2,790 MHz, and the power reached 406 W.
+- **Consequences for the timing methods:**
+  - **Chained timing and CUPTI depend on that state at large T.** CUPTI's duration of chained
+    launches also includes time spent at the dependent-launch barrier: for example, stock
+    gate_proj at T = 8192 measures 985 µs by CUPTI against 790 µs isolated.
+  - **Isolated calls are the most stable measure;** they agree with the full-model prefill
+    overheads.
+
+**Prefill:** the eight Llama processes, run twice more in alternating orders. Median of the three
+processes:
+
+| unit | prefill | stock NVFP4 | mixed, FourOverSix | MR-OPT | TM-OPT | TM-OPT vs MR-OPT |
+|---|---|---:|---:|---:|---:|---:|
+| 8x64 | 1×2048 | 59.65 | 62.43 (+4.7 %) | 62.39 (+4.6 %) | 62.57 (+4.9 %) | +0.3 % |
+| | 4×2048 | 265.81 | 277.14 (+4.3 %) | 276.86 (+4.2 %) | 277.20 (+4.3 %) | +0.1 % |
+| 16x64 | 1×2048 | 58.89 | 59.95 (+1.8 %) | 59.66 (+1.3 %) | 60.06 (+2.0 %) | +0.7 % |
+| | 4×2048 | 264.06 | 268.01 (+1.5 %) | 267.81 (+1.4 %) | 268.02 (+1.5 %) | +0.1 % |
+
+- **At 1×2048 and 4×2048** the three processes agree within about 1 %.
+- **At 1×512** each process lands at about 30 or about 36 ms regardless of the policy. For example,
+  TM-OPT 16x64 measured 30.8 / 30.5 / 30.7 ms, while MR-OPT 16x64 measured 30.4 / 36.0 / 36.4 ms.
+  The short prefill is host-bound, and its level varies from process to process. **No map effect can
+  be read at 1×512 with this method.**
+
+**Not measured:**
+- decode and small T (below 128), because the narrow-tile builds were not made;
+- Phi-4 in the diagnostic, where only the registered numbers exist;
+- the stock-vs-mixed overhead on the SM120 branch's RTX 5090 tile table.
+
+Records: `gemm/summary.json`, `gemm/tables.md`, `runs/sm120_bench/`.
 
 ## Reproduction
 
@@ -180,4 +311,8 @@ Waiting for #1. The kernels are built (see the #3 section when done).
 /home/dev/n16k64_campaign/tm_opt/queue_items.sh            # #2, #1 (copy in runs/queue_items.sh; log runs/commands_items.log)
 python results/tm_opt/analyze_items.py seeds               # items_seeds.{json,md}
 python results/tm_opt/analyze_items.py models              # items_models.{json,md}
+/home/dev/n16k64_campaign/sm120_bench/build_all.sh         # #3 kernels (copies in runs/sm120_bench/)
+/home/dev/n16k64_campaign/sm120_bench/queue_bench.sh       # #3 registered benchmarks
+/home/dev/n16k64_campaign/sm120_bench/queue_diag.sh        # #3 diagnostic (deviation 1)
+python results/tm_opt/gemm/analyze_gemm.py llama8b phi4    # gemm/summary.json, gemm/tables.md
 ```

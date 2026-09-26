@@ -129,4 +129,26 @@ place. The study is **descriptive**: nothing is selected on WikiText-2, C4 or ze
 
 ## Deviations (append-only)
 
-(none yet)
+1. **2026-09-26 13:16 UTC, after the registered #3 measurements of Llama: a timing
+   diagnostic is added.** It does not replace the registered numbers; those are reported as
+   measured.
+   - **Why:** four readings conflict.
+     - **CUPTI above event time:** on this GPU, the registered GEMM benchmark gives mixed-kernel
+       CUPTI kernel durations *above* the per-call event time on the large MLP shapes at T = 8192
+       (for example gate_proj, 8x64: 1,089 µs CUPTI vs 968 µs events).
+     - **Large overhead:** the mixed kernel's overhead there (+41–51 % CUPTI, +26–31 % events)
+       is far above both the SM120 branch's RTX 5090 reference (about 0–9 %) and what full-model
+       prefill shows (4×2048: +4.2 % at 8x64, +1.4 % at 16x64).
+     - **Prefill at 1×512** differs between processes by up to ~6 ms, more than any map effect,
+       while each process is internally stable.
+   - **What is added, on the idle GPU after the registered #3 runs:**
+     - `diagnose_timing.py`: three timing methods on the same operands, in alternating shuffled
+       order over 5 rounds, with the SM clock, power and temperature recorded:
+       - one isolated call between two events;
+       - 20 chained calls per event pair, as registered;
+       - CUPTI, as registered.
+       The cases are Llama's q_proj, gate_proj and down_proj at T = 2048 and 8192; stock vs mixed
+       (all E2M1 and the TM-OPT pattern), at both units.
+     - Two more rounds of the eight Llama prefill processes, in alternating orders, to measure the
+       process-to-process spread.
+   - **Hashes:** `diagnose_timing.py` 1489179c0e1d…, `queue_diag.sh` 90eb168ede4e….

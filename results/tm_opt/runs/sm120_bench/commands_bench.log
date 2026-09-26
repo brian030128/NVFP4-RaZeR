@@ -1,0 +1,106 @@
+2026-09-26T09:03:18Z WAIT for items #2 and #1 and the kernel builds
+2026-09-26T13:03:19Z GPU idle: #3 starts
+2026-09-26T13:03:19Z START selftest_n16k64_wA /home/dev/.conda/envs/n16k64/bin/python sm120/build.py --config n16k64_wA --selftest
+2026-09-26T13:06:03Z END selftest_n16k64_wA rc=0
+2026-09-26T13:06:03Z START selftest_n8k64_wB /home/dev/.conda/envs/n16k64/bin/python sm120/build.py --config n8k64_wB --selftest
+2026-09-26T13:08:40Z END selftest_n8k64_wB rc=0
+2026-09-26T13:08:40Z START pytest_gemm /home/dev/.conda/envs/n16k64/bin/python -m pytest sm120/tests/test_gemm.py -q -p no:cacheprovider
+2026-09-26T13:08:50Z END pytest_gemm rc=0
+2026-09-26T13:08:50Z START convert_llama8b /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/convert_maps.py llama8b /home/dev/n16k64_campaign/sm120_bench/results/maps
+2026-09-26T13:08:52Z END convert_llama8b rc=0
+2026-09-26T13:08:52Z START export_llama8b_fo6 /home/dev/.conda/envs/n16k64/bin/python sm120/eval/export_artifact.py --model llama8b --kind four_over_six --out /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_fo6
+2026-09-26T13:09:15Z END export_llama8b_fo6 rc=0
+2026-09-26T13:09:15Z START export_llama8b_mropt-8x64 /home/dev/.conda/envs/n16k64/bin/python sm120/eval/export_artifact.py --model llama8b --map /home/dev/n16k64_campaign/sm120_bench/results/maps/llama8b_mropt_8x64.mixfp4map --out /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_mropt-8x64
+2026-09-26T13:09:42Z END export_llama8b_mropt-8x64 rc=0
+2026-09-26T13:09:42Z START export_llama8b_tmopt-8x64 /home/dev/.conda/envs/n16k64/bin/python sm120/eval/export_artifact.py --model llama8b --map /home/dev/n16k64_campaign/sm120_bench/results/maps/llama8b_tmopt_8x64.mixfp4map --out /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_tmopt-8x64
+2026-09-26T13:10:08Z END export_llama8b_tmopt-8x64 rc=0
+2026-09-26T13:10:08Z START export_llama8b_mropt-16x64 /home/dev/.conda/envs/n16k64/bin/python sm120/eval/export_artifact.py --model llama8b --map /home/dev/n16k64_campaign/sm120_bench/results/maps/llama8b_mropt_16x64.mixfp4map --out /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_mropt-16x64
+2026-09-26T13:10:33Z END export_llama8b_mropt-16x64 rc=0
+2026-09-26T13:10:33Z START export_llama8b_tmopt-16x64 /home/dev/.conda/envs/n16k64/bin/python sm120/eval/export_artifact.py --model llama8b --map /home/dev/n16k64_campaign/sm120_bench/results/maps/llama8b_tmopt_16x64.mixfp4map --out /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_tmopt-16x64
+2026-09-26T13:11:00Z END export_llama8b_tmopt-16x64 rc=0
+2026-09-26T13:11:00Z START gemm_llama8b /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_gemm.py --model llama8b --out /home/dev/n16k64_campaign/sm120_bench/results/gemm_llama8b.json
+2026-09-26T13:11:36Z END gemm_llama8b rc=0
+2026-09-26T13:11:36Z START prefill_llama8b_stock-8x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_fo6 --kernel stock_wB --label stock-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_stock-8x64.json
+2026-09-26T13:11:51Z END prefill_llama8b_stock-8x64 rc=0
+2026-09-26T13:11:51Z START prefill_llama8b_fo6-8x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_fo6 --kernel n8k64_wB --label fo6-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_fo6-8x64.json
+2026-09-26T13:12:06Z END prefill_llama8b_fo6-8x64 rc=0
+2026-09-26T13:12:06Z START prefill_llama8b_mropt-8x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_mropt-8x64 --kernel n8k64_wB --label mropt-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_mropt-8x64.json
+2026-09-26T13:12:21Z END prefill_llama8b_mropt-8x64 rc=0
+2026-09-26T13:12:21Z START prefill_llama8b_tmopt-8x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_tmopt-8x64 --kernel n8k64_wB --label tmopt-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_tmopt-8x64.json
+2026-09-26T13:12:36Z END prefill_llama8b_tmopt-8x64 rc=0
+2026-09-26T13:12:36Z START prefill_llama8b_stock-16x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_fo6 --kernel stock_wA --label stock-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_stock-16x64.json
+2026-09-26T13:12:51Z END prefill_llama8b_stock-16x64 rc=0
+2026-09-26T13:12:51Z START prefill_llama8b_fo6-16x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_fo6 --kernel n16k64_wA --label fo6-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_fo6-16x64.json
+2026-09-26T13:13:06Z END prefill_llama8b_fo6-16x64 rc=0
+2026-09-26T13:13:06Z START prefill_llama8b_mropt-16x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_mropt-16x64 --kernel n16k64_wA --label mropt-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_mropt-16x64.json
+2026-09-26T13:13:21Z END prefill_llama8b_mropt-16x64 rc=0
+2026-09-26T13:13:21Z START prefill_llama8b_tmopt-16x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_tmopt-16x64 --kernel n16k64_wA --label tmopt-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_tmopt-16x64.json
+2026-09-26T13:13:37Z END prefill_llama8b_tmopt-16x64 rc=0
+2026-09-26T13:13:37Z BENCH MODEL DONE llama8b
+2026-09-26T13:13:37Z START convert_phi4 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/convert_maps.py phi4 /home/dev/n16k64_campaign/sm120_bench/results/maps
+2026-09-26T13:13:39Z END convert_phi4 rc=0
+2026-09-26T13:13:39Z START export_phi4_fo6 /home/dev/.conda/envs/n16k64/bin/python sm120/eval/export_artifact.py --model phi4 --kind four_over_six --out /home/dev/n16k64_campaign/sm120_bench/results/artifacts/phi4_fo6
+2026-09-26T13:14:24Z END export_phi4_fo6 rc=0
+2026-09-26T13:14:24Z START export_phi4_mropt-8x64 /home/dev/.conda/envs/n16k64/bin/python sm120/eval/export_artifact.py --model phi4 --map /home/dev/n16k64_campaign/sm120_bench/results/maps/phi4_mropt_8x64.mixfp4map --out /home/dev/n16k64_campaign/sm120_bench/results/artifacts/phi4_mropt-8x64
+2026-09-26T13:15:15Z END export_phi4_mropt-8x64 rc=0
+2026-09-26T13:15:15Z START export_phi4_tmopt-8x64 /home/dev/.conda/envs/n16k64/bin/python sm120/eval/export_artifact.py --model phi4 --map /home/dev/n16k64_campaign/sm120_bench/results/maps/phi4_tmopt_8x64.mixfp4map --out /home/dev/n16k64_campaign/sm120_bench/results/artifacts/phi4_tmopt-8x64
+2026-09-26T13:16:05Z END export_phi4_tmopt-8x64 rc=0
+2026-09-26T13:16:05Z START export_phi4_mropt-16x64 /home/dev/.conda/envs/n16k64/bin/python sm120/eval/export_artifact.py --model phi4 --map /home/dev/n16k64_campaign/sm120_bench/results/maps/phi4_mropt_16x64.mixfp4map --out /home/dev/n16k64_campaign/sm120_bench/results/artifacts/phi4_mropt-16x64
+2026-09-26T13:16:57Z END export_phi4_mropt-16x64 rc=0
+2026-09-26T13:16:57Z START export_phi4_tmopt-16x64 /home/dev/.conda/envs/n16k64/bin/python sm120/eval/export_artifact.py --model phi4 --map /home/dev/n16k64_campaign/sm120_bench/results/maps/phi4_tmopt_16x64.mixfp4map --out /home/dev/n16k64_campaign/sm120_bench/results/artifacts/phi4_tmopt-16x64
+2026-09-26T13:17:46Z END export_phi4_tmopt-16x64 rc=0
+2026-09-26T13:17:46Z START gemm_phi4 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_gemm.py --model phi4 --out /home/dev/n16k64_campaign/sm120_bench/results/gemm_phi4.json
+2026-09-26T13:18:32Z END gemm_phi4 rc=0
+2026-09-26T13:18:32Z START prefill_phi4_stock-8x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model phi4 --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/phi4_fo6 --kernel stock_wB --label stock-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_phi4_stock-8x64.json
+2026-09-26T13:18:57Z END prefill_phi4_stock-8x64 rc=0
+2026-09-26T13:18:57Z START prefill_phi4_fo6-8x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model phi4 --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/phi4_fo6 --kernel n8k64_wB --label fo6-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_phi4_fo6-8x64.json
+2026-09-26T13:19:23Z END prefill_phi4_fo6-8x64 rc=0
+2026-09-26T13:19:23Z START prefill_phi4_mropt-8x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model phi4 --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/phi4_mropt-8x64 --kernel n8k64_wB --label mropt-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_phi4_mropt-8x64.json
+2026-09-26T13:19:49Z END prefill_phi4_mropt-8x64 rc=0
+2026-09-26T13:19:49Z START prefill_phi4_tmopt-8x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model phi4 --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/phi4_tmopt-8x64 --kernel n8k64_wB --label tmopt-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_phi4_tmopt-8x64.json
+2026-09-26T13:20:16Z END prefill_phi4_tmopt-8x64 rc=0
+2026-09-26T13:20:16Z START prefill_phi4_stock-16x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model phi4 --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/phi4_fo6 --kernel stock_wA --label stock-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_phi4_stock-16x64.json
+2026-09-26T13:20:42Z END prefill_phi4_stock-16x64 rc=0
+2026-09-26T13:20:42Z START prefill_phi4_fo6-16x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model phi4 --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/phi4_fo6 --kernel n16k64_wA --label fo6-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_phi4_fo6-16x64.json
+2026-09-26T13:21:08Z END prefill_phi4_fo6-16x64 rc=0
+2026-09-26T13:21:08Z START prefill_phi4_mropt-16x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model phi4 --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/phi4_mropt-16x64 --kernel n16k64_wA --label mropt-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_phi4_mropt-16x64.json
+2026-09-26T13:21:35Z END prefill_phi4_mropt-16x64 rc=0
+2026-09-26T13:21:35Z START prefill_phi4_tmopt-16x64 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model phi4 --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/phi4_tmopt-16x64 --kernel n16k64_wA --label tmopt-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_phi4_tmopt-16x64.json
+2026-09-26T13:22:00Z END prefill_phi4_tmopt-16x64 rc=0
+2026-09-26T13:22:00Z BENCH MODEL DONE phi4
+2026-09-26T13:22:00Z ITEM3 DONE
+2026-09-26T13:22:03Z START diag_timing_llama8b /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/diagnose_timing.py --model llama8b --out /home/dev/n16k64_campaign/sm120_bench/results/diagnose_timing_llama8b.json
+2026-09-26T13:22:55Z END diag_timing_llama8b rc=0
+2026-09-26T13:22:55Z START prefill_llama8b_tmopt-8x64_r2 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_tmopt-8x64 --kernel n8k64_wB --label tmopt-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_tmopt-8x64_r2.json
+2026-09-26T13:23:10Z END prefill_llama8b_tmopt-8x64_r2 rc=0
+2026-09-26T13:23:10Z START prefill_llama8b_stock-8x64_r2 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_fo6 --kernel stock_wB --label stock-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_stock-8x64_r2.json
+2026-09-26T13:23:25Z END prefill_llama8b_stock-8x64_r2 rc=0
+2026-09-26T13:23:25Z START prefill_llama8b_mropt-8x64_r2 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_mropt-8x64 --kernel n8k64_wB --label mropt-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_mropt-8x64_r2.json
+2026-09-26T13:23:40Z END prefill_llama8b_mropt-8x64_r2 rc=0
+2026-09-26T13:23:40Z START prefill_llama8b_fo6-8x64_r2 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_fo6 --kernel n8k64_wB --label fo6-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_fo6-8x64_r2.json
+2026-09-26T13:23:56Z END prefill_llama8b_fo6-8x64_r2 rc=0
+2026-09-26T13:23:56Z START prefill_llama8b_tmopt-16x64_r2 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_tmopt-16x64 --kernel n16k64_wA --label tmopt-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_tmopt-16x64_r2.json
+2026-09-26T13:24:11Z END prefill_llama8b_tmopt-16x64_r2 rc=0
+2026-09-26T13:24:11Z START prefill_llama8b_stock-16x64_r2 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_fo6 --kernel stock_wA --label stock-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_stock-16x64_r2.json
+2026-09-26T13:24:26Z END prefill_llama8b_stock-16x64_r2 rc=0
+2026-09-26T13:24:26Z START prefill_llama8b_mropt-16x64_r2 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_mropt-16x64 --kernel n16k64_wA --label mropt-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_mropt-16x64_r2.json
+2026-09-26T13:24:41Z END prefill_llama8b_mropt-16x64_r2 rc=0
+2026-09-26T13:24:41Z START prefill_llama8b_fo6-16x64_r2 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_fo6 --kernel n16k64_wA --label fo6-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_fo6-16x64_r2.json
+2026-09-26T13:24:56Z END prefill_llama8b_fo6-16x64_r2 rc=0
+2026-09-26T13:24:56Z START prefill_llama8b_fo6-16x64_r3 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_fo6 --kernel n16k64_wA --label fo6-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_fo6-16x64_r3.json
+2026-09-26T13:25:12Z END prefill_llama8b_fo6-16x64_r3 rc=0
+2026-09-26T13:25:12Z START prefill_llama8b_mropt-16x64_r3 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_mropt-16x64 --kernel n16k64_wA --label mropt-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_mropt-16x64_r3.json
+2026-09-26T13:25:27Z END prefill_llama8b_mropt-16x64_r3 rc=0
+2026-09-26T13:25:27Z START prefill_llama8b_stock-16x64_r3 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_fo6 --kernel stock_wA --label stock-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_stock-16x64_r3.json
+2026-09-26T13:25:42Z END prefill_llama8b_stock-16x64_r3 rc=0
+2026-09-26T13:25:42Z START prefill_llama8b_tmopt-16x64_r3 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_tmopt-16x64 --kernel n16k64_wA --label tmopt-16x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_tmopt-16x64_r3.json
+2026-09-26T13:25:57Z END prefill_llama8b_tmopt-16x64_r3 rc=0
+2026-09-26T13:25:57Z START prefill_llama8b_fo6-8x64_r3 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_fo6 --kernel n8k64_wB --label fo6-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_fo6-8x64_r3.json
+2026-09-26T13:26:13Z END prefill_llama8b_fo6-8x64_r3 rc=0
+2026-09-26T13:26:13Z START prefill_llama8b_mropt-8x64_r3 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_mropt-8x64 --kernel n8k64_wB --label mropt-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_mropt-8x64_r3.json
+2026-09-26T13:26:28Z END prefill_llama8b_mropt-8x64_r3 rc=0
+2026-09-26T13:26:28Z START prefill_llama8b_stock-8x64_r3 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_fo6 --kernel stock_wB --label stock-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_stock-8x64_r3.json
+2026-09-26T13:26:43Z END prefill_llama8b_stock-8x64_r3 rc=0
+2026-09-26T13:26:43Z START prefill_llama8b_tmopt-8x64_r3 /home/dev/.conda/envs/n16k64/bin/python /home/dev/NVFP4-RaZeR/results/tm_opt/gemm/bench_prefill.py --model llama8b --artifact /home/dev/n16k64_campaign/sm120_bench/results/artifacts/llama8b_tmopt-8x64 --kernel n8k64_wB --label tmopt-8x64 --out /home/dev/n16k64_campaign/sm120_bench/results/prefill_llama8b_tmopt-8x64_r3.json
+2026-09-26T13:26:57Z END prefill_llama8b_tmopt-8x64_r3 rc=0
+2026-09-26T13:26:57Z DIAGNOSTIC DONE
