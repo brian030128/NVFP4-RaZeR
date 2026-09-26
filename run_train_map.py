@@ -129,6 +129,11 @@ def main():
     ap.add_argument('--tau-start', type=float, default=1.0)
     ap.add_argument('--tau-end', type=float, default=0.1)
     ap.add_argument('--epochs', type=int, default=20)
+    ap.add_argument('--scale-epochs', type=int, default=0,
+                    help='--alt joint: train only the per-block scale logits for the first N epochs (tiles stay E2M1), '
+                         'then let tiles flip on top')
+    ap.add_argument('--stage2', choices=('joint', 'tiles'), default='joint',
+                    help='After --scale-epochs: keep training the scale with the tiles (joint), or freeze it (tiles)')
     ap.add_argument('--no-epoch-maps', action='store_true', help='Save only the final hard maps (disk quota)')
     ap.add_argument('--no-logits', action='store_true', help='Do not save the FP32 latent logits (disk quota)')
     ap.add_argument('--extra-fit', type=int, default=0,
@@ -194,6 +199,7 @@ def main():
     # verified bitwise by pack(), dense BF16 fallback otherwise.
     joint = args.alt == 'joint'
     assert not joint or args.param == 'ste', '--alt joint supports only --param ste'
+    assert joint or (args.scale_epochs == 0 and args.stage2 == 'joint'), '--scale-epochs/--stage2 need --alt joint'
     assert args.scale_init == 'four_over_six' or args.alt != 'e0m3', '--scale-init applies to --alt scale/joint'
 
     def scale_pair(w):
@@ -408,14 +414,19 @@ def main():
             if args.schedule == 'cosine':
                 for pg in opt.param_groups:
                     pg['lr'] = args.lr * 0.5 * (1 + math.cos(math.pi * step / total_steps))
+            # Staged joint training: grad None (not zero) keeps Adam from stepping, and from
+            # advancing the bias-correction count of, the logits that are frozen this stage.
+            scale_stage = epoch < args.scale_epochs
+            train_tiles = not scale_stage
+            train_scale = scale_stage or args.stage2 == 'joint'
             for n, p in theta.items():
                 g = grads[n]
                 if args.param == 'sigmoid':
                     s = torch.sigmoid(p / tau[0])
                     g = g * s * (1 - s) / tau[0]
-                p.grad = g.clone()
+                p.grad = g.clone() if train_tiles else None
             for n, p in psi.items():
-                p.grad = psi_grads[n].clone()
+                p.grad = psi_grads[n].clone() if train_scale else None
             opt.step()
             step += 1
             if args.param == 'sigmoid':

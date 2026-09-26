@@ -716,6 +716,48 @@ four_over_six 8×64 −0.00108±0.00201 / −0.00402±0.00127; 256×64
   with the FourOverSix init at 8×64 (−0.004). Across all runs so far, the most
   robust single configuration is four_over_six joint 8×64.
 
+#### Staged: train the scale first, then flip tiles on top
+
+The same 512 sequences are used. Epochs 1–8 train only the per-block scale logits
+(`--scale-epochs 8`), with every tile E2M1. Epochs 9–16 then start the tile logits
+from −1, and the scale logits are either frozen (`--stage2 tiles`) or keep
+training (`--stage2 joint`). Frozen logits get no gradient, so Adam does not step
+them. Jobs 442467 and 442470–442476.
+
+Stage 1 reproduces the 8-epoch scale-only runs up to GPU nondeterminism: epoch-8
+dev KL is 0.1006–0.1019 versus 0.1009 (four_over_six) and 0.1072–0.1078 versus
+0.1075 (nvfp4). The reference below is therefore the 8-epoch scale-only run.
+
+| Init | Tile | Stage 2 | E0M3 tiles | dev KL ep 8 → 16 | WikiText-2 | C4 | ΔNLL vs scale-only ± 2 SE (wiki / c4) |
+|---|---|---|---:|---|---:|---:|---|
+| four_over_six | 8×64 | frozen scale | 109,599 | 0.1013 → 0.1001 | 14.423974 | 19.600073 | +0.00082±0.00193 / +0.00357±0.00137 |
+| four_over_six | 8×64 | joint | 31,647 | 0.1019 → 0.1051 | 14.528759 | 19.552301 | +0.00806±0.00186 / +0.00113±0.00149 |
+| four_over_six | 256×64 | frozen scale | 9,064 | 0.1019 → 0.1038 | 14.448849 | 19.633364 | +0.00254±0.00228 / +0.00526±0.00149 |
+| four_over_six | 256×64 | joint | 6,394 | 0.1006 → 0.1066 | 14.475388 | 19.514267 | +0.00438±0.00198 / −0.00082±0.00153 |
+| nvfp4 | 8×64 | frozen scale | 116,346 | 0.1072 → 0.1056 | 14.545326 | 19.669998 | +0.00364±0.00188 / +0.00270±0.00140 |
+| nvfp4 | 8×64 | joint | 35,289 | 0.1074 → 0.1102 | 14.624975 | 19.680918 | +0.00910±0.00198 / +0.00326±0.00147 |
+| nvfp4 | 256×64 | frozen scale | 10,587 | 0.1073 → 0.1101 | 14.561533 | 19.676781 | +0.00476±0.00210 / +0.00305±0.00135 |
+| nvfp4 | 256×64 | joint | 7,856 | 0.1078 → 0.1133 | 14.637138 | 19.673571 | +0.00994±0.00206 / +0.00288±0.00145 |
+
+- **No staged run beats scale search alone on WikiText or C4.** Every difference
+  is positive or within noise, and most are significant. Adding E0M3 tiles on top
+  of a trained 1×16 scale makes the model worse on the evaluation domains.
+- **With the scale frozen, 8×64 tile flips still lower the math/code dev KL**
+  (0.1013 → 0.1001 and 0.1072 → 0.1056), but the WikiText/C4 NLL goes up.
+  - The tiles fit the calibration domain, and the same-domain dev set does not
+    detect that.
+  - At 256×64, dev KL rises as soon as tiles start flipping, so the large-tile
+    moves hurt even in-domain.
+- **Continuing to train the scale in stage 2 (`joint`)** overfits it past its
+  epoch-8 optimum; dev KL rises in every such run.
+- **Conclusion on 1B:** once the NVFP4 per-block scale is trained on the same KL
+  loss, E0M3 tiles add no robust out-of-domain gain.
+  - The only significant E0M3 gains over a matched scale search are C4 results of
+    the 128-sequence 20-epoch joint runs at 8×64 (−0.0067 nvfp4, −0.0057
+    four_over_six), and they did not survive more data or staging.
+  - A reviewer's "compare against KL-trained NVFP4 scale search" objection is
+    therefore not answered on this model.
+
 Implementation: `run_train_map.py`, `slurm/train_map.sbatch`,
 `summarize_train_map.py`. Details and per-epoch curves are in
 [results/mixfp4_potential/train_map/REPORT.md](results/mixfp4_potential/train_map/REPORT.md).
