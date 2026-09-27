@@ -1,0 +1,291 @@
+{
+ "model": "qwen4b",
+ "spec": {
+  "model_id": "Qwen/Qwen3-4B",
+  "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+  "loader": "causal_lm"
+ },
+ "policies": [
+  {
+   "name": "native_n16_k3",
+   "kind": "native",
+   "artifact": "sm120/artifacts/qwen4b_n16_k3",
+   "kernel": "auto",
+   "artifact_map_sha256": "d8e3e0fae552b135341aa80fc09cea0f1abc5de8837f4c39d1fb4d15a5cd1ff2",
+   "artifact_weight_kind": "map"
+  },
+  {
+   "name": "native_n8_k3",
+   "kind": "native",
+   "artifact": "sm120/artifacts/qwen4b_n8_k3",
+   "kernel": "n8k64_wB",
+   "artifact_map_sha256": "1ce7a7d7accaf6ec3df8bf690753ce941bb86c4b4684bf6dbe4c53c43cf71bb3",
+   "artifact_weight_kind": "map"
+  }
+ ],
+ "domains": [
+  "wiki",
+  "c4"
+ ],
+ "limit_windows": 16,
+ "attn": "sdpa",
+ "started_utc": "2026-09-25T09:04:49+00:00",
+ "host": "cadlabPC",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "torch": "2.9.0+cu128",
+ "results": {
+  "native_n16_k3": {
+   "wiki": {
+    "ppl": 11.683624159281257,
+    "mean_nll": 2.458188216880533,
+    "tokens": 32752,
+    "window_nll_sum": [
+     4550.014240743654,
+     5493.873852381239,
+     5856.427903592584,
+     5525.174932000242,
+     5090.622130876274,
+     4005.585054955862,
+     3365.698501330476,
+     4633.991197114787,
+     5110.161027273714,
+     5496.160199059127,
+     5157.96864618343,
+     5229.107942972703,
+     5055.765471282455,
+     5309.54648823423,
+     5114.524148405141,
+     5515.958742865298
+    ]
+   },
+   "c4": {
+    "ppl": 10.378309033804511,
+    "mean_nll": 2.3397179582825522,
+    "tokens": 32752,
+    "window_nll_sum": [
+     3840.480040549277,
+     4895.863372015455,
+     6366.145874144568,
+     6299.853921994557,
+     2365.609024211223,
+     1493.5498496655102,
+     4863.22942479857,
+     5113.754687294131,
+     6922.502124717846,
+     6029.461839117301,
+     2515.4181217933115,
+     5513.435225550573,
+     4648.573201550493,
+     4492.223567202358,
+     4255.772973483429,
+     7014.569321581545
+    ]
+   },
+   "seconds": 6.055729627609253
+  },
+  "native_n8_k3": {
+   "wiki": {
+    "ppl": 11.311793133132847,
+    "mean_nll": 2.4258458216048266,
+    "tokens": 32752,
+    "window_nll_sum": [
+     4480.561532101123,
+     5397.533483998999,
+     5770.286067906627,
+     5495.818987719806,
+     4922.399664490027,
+     3976.9304955095076,
+     3289.1967480792255,
+     4594.565556631078,
+     5044.148972344718,
+     5371.639483412362,
+     5111.4372111071825,
+     5172.74287120119,
+     5022.438541424038,
+     5274.191122169351,
+     5065.556092284583,
+     5461.855518821463
+    ]
+   },
+   "c4": {
+    "ppl": 10.216665077686873,
+    "mean_nll": 2.324020218185897,
+    "tokens": 32752,
+    "window_nll_sum": [
+     3824.1192433162955,
+     4838.288150359865,
+     6341.607210692613,
+     6257.415955113571,
+     2354.483500397592,
+     1492.9482012020842,
+     4808.857054255544,
+     5047.419542273839,
+     6906.780849557197,
+     5992.977354986028,
+     2506.6740383927377,
+     5459.162413926646,
+     4618.025051054587,
+     4493.435326096094,
+     4223.911364001127,
+     6950.204930398671
+    ]
+   },
+   "seconds": 6.575549125671387
+  }
+ },
+ "native": {
+  "native_n16_k3": {
+   "install": {
+    "kernel": "KernelSet(mixed)",
+    "kernel_sha256": {
+     "n16k64_wA_n16": "64d0e3a9e3889a26a1dc89b683830c331c7dfca2c0493675d540138c05f9b821",
+     "n16k64_wA_n32": "4929a5b2d5d74aed7a73da0b2dc58587da4fd4a1236404b3c3eabb58e7a04f39",
+     "n16k64_wA_n64": "415e98c8c9fca705efbcd3ae71d062fe7cc3c9c038ea89f5692c7c2b2750518a",
+     "n16k64_wA": "233957a432eb1544ce0489aba156726f0087241e68e78183c67dce4c3f36dc7b"
+    },
+    "artifact_weights_sha256": "bd4594977aceb6cd5702b35aaaab1df472bf646225bf8e3eebdaf4a5e2d8dafd",
+    "map_sha256": "d8e3e0fae552b135341aa80fc09cea0f1abc5de8837f4c39d1fb4d15a5cd1ff2",
+    "native_modules": 252,
+    "fallback": [],
+    "bf16_by_design": [
+     "lm_head (output head)"
+    ],
+    "e0m3_tiles": 4399,
+    "device_bytes": {
+     "packed": 1816657920,
+     "scales_placed": 227082240,
+     "scales_padding": 0,
+     "bias": 0
+    },
+    "kernel_set": {
+     "family": "mixed",
+     "kernels": {
+      "n16k64_wA_n16": "64d0e3a9e3889a26a1dc89b683830c331c7dfca2c0493675d540138c05f9b821",
+      "n16k64_wA_n32": "4929a5b2d5d74aed7a73da0b2dc58587da4fd4a1236404b3c3eabb58e7a04f39",
+      "n16k64_wA_n64": "415e98c8c9fca705efbcd3ae71d062fe7cc3c9c038ea89f5692c7c2b2750518a",
+      "n16k64_wA": "233957a432eb1544ce0489aba156726f0087241e68e78183c67dce4c3f36dc7b"
+     },
+     "table": "/home/JAAAAAA/NVFP4-RaZeR/sm120/configs/nvidia_geforce_rtx_5090.json",
+     "table_shapes": 9,
+     "calls_by_width": {}
+    }
+   },
+   "artifact_weights_sha256": "bd4594977aceb6cd5702b35aaaab1df472bf646225bf8e3eebdaf4a5e2d8dafd",
+   "artifact_sizes": {
+    "bf16_weights": 7266631680,
+    "bias": 0,
+    "global_scales": 1008,
+    "packed": 1816657920,
+    "safetensors_file": 2043822920,
+    "scales": 227082240,
+    "total": 2043741168
+   },
+   "coverage_first_forward": {
+    "wiki": {
+     "native": 252,
+     "native_called": 252,
+     "native_not_called": [],
+     "calls": 252,
+     "tokens": 516096,
+     "remaining_bf16_linears": []
+    },
+    "c4": {
+     "native": 252,
+     "native_called": 252,
+     "native_not_called": [],
+     "calls": 252,
+     "tokens": 516096,
+     "remaining_bf16_linears": []
+    }
+   },
+   "gemm_audit": {
+    "aten::matmul [[1, 64, 1], [1, 1, 2048]]": 1,
+    "aten::bmm [[1, 64, 1], [1, 1, 2048]]": 1,
+    "aten::linear [[1, 2048, 2560], [151936, 2560], []]": 1,
+    "aten::matmul [[1, 2048, 2560], [2560, 151936]]": 1,
+    "aten::mm [[2048, 2560], [2560, 151936]]": 1
+   },
+   "coverage_total": {
+    "calls": 8316,
+    "tokens": 17031168,
+    "expected_calls": 8316,
+    "remaining_bf16_linears": []
+   }
+  },
+  "native_n8_k3": {
+   "install": {
+    "kernel": "n8k64_wB",
+    "kernel_sha256": "9eebaf4bbd9210d1664e303312495fa950270cc98264a506f8037c2f22872178",
+    "artifact_weights_sha256": "a6a5019cebbf367fe74b506588858d68289aa0e16f7603d67d9da1ab96041dfc",
+    "map_sha256": "1ce7a7d7accaf6ec3df8bf690753ce941bb86c4b4684bf6dbe4c53c43cf71bb3",
+    "native_modules": 252,
+    "fallback": [],
+    "bf16_by_design": [
+     "lm_head (output head)"
+    ],
+    "e0m3_tiles": 8149,
+    "device_bytes": {
+     "packed": 1816657920,
+     "scales_placed": 227082240,
+     "scales_padding": 0,
+     "bias": 0
+    },
+    "kernel_set": null
+   },
+   "artifact_weights_sha256": "a6a5019cebbf367fe74b506588858d68289aa0e16f7603d67d9da1ab96041dfc",
+   "artifact_sizes": {
+    "bf16_weights": 7266631680,
+    "bias": 0,
+    "global_scales": 1008,
+    "packed": 1816657920,
+    "safetensors_file": 2043822920,
+    "scales": 227082240,
+    "total": 2043741168
+   },
+   "coverage_first_forward": {
+    "wiki": {
+     "native": 252,
+     "native_called": 252,
+     "native_not_called": [],
+     "calls": 252,
+     "tokens": 516096,
+     "remaining_bf16_linears": []
+    },
+    "c4": {
+     "native": 252,
+     "native_called": 252,
+     "native_not_called": [],
+     "calls": 252,
+     "tokens": 516096,
+     "remaining_bf16_linears": []
+    }
+   },
+   "gemm_audit": {
+    "aten::matmul [[1, 64, 1], [1, 1, 2048]]": 1,
+    "aten::bmm [[1, 64, 1], [1, 1, 2048]]": 1,
+    "aten::linear [[1, 2048, 2560], [151936, 2560], []]": 1,
+    "aten::matmul [[1, 2048, 2560], [2560, 151936]]": 1,
+    "aten::mm [[2048, 2560], [2560, 151936]]": 1
+   },
+   "coverage_total": {
+    "calls": 8316,
+    "tokens": 17031168,
+    "expected_calls": 8316,
+    "remaining_bf16_linears": []
+   }
+  }
+ },
+ "transformers": "5.16.1",
+ "windows": {
+  "wiki": {
+   "count": 16,
+   "check": "identical to campaign reference"
+  },
+  "c4": {
+   "count": 16,
+   "check": "identical to campaign reference"
+  }
+ },
+ "native_vs_fake": {},
+ "finished_utc": "2026-09-25T09:05:14+00:00"
+}
