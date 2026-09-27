@@ -6,9 +6,13 @@
 #   repro_local/realquant/build.sh wt_as_A exe|lib    # N16K64: weights on A, 16 rows x 64 K
 #   repro_local/realquant/build.sh b8x64   exe|lib    # N8K64:  weights on B,  8 cols x 64 K
 #
-# Mirrors /home/dev/mixfp4/scripts/build_mixed.sh (flags, SASS-only sm_120a) with the conda
-# CUDA 13.1 toolchain in place of /usr/local/cuda-13.1, and builds from a per-config snapshot of
-# the mixfp4 sources so the generated blob header never touches the mixfp4 checkout.
+# Mirrors the vendored mixfp4 scripts/build_mixed.sh (flags, SASS-only sm_120a) and builds from a
+# per-config snapshot of the vendored sources (sm120/kernel: brian030128/mixfp4@7b3ab34, see
+# sm120/kernel/VENDORED.json; its local changes are compile-time hooks that are off here), so the generated
+# blob header never touches the source tree. Everything comes from this repository:
+#   CUDA 13.1       $CUDA_HOME (default /usr/local/cuda-13.1), host compiler $CXX (default g++)
+#   CUTLASS         the sm120/third_party/cutlass submodule at e64a913 (git submodule update --init ...)
+#   outputs         $RQ_BUILD_DIR (default repro_local/realquant/build): bin/lib<cfg>.so, read by rq.LIB_DIR
 #
 # Latency-study builds (library only, never patched -- they contain no E0M3 site):
 #   stock           src/nvfp4_gemm.cu, the stock CUTLASS SM120 NVFP4 GEMM (no format dispatch)
@@ -21,15 +25,22 @@
 #                   the row-major [tokens, out] tensor, so the weights-on-A output needs no transpose.
 set -euo pipefail
 CFG="$1"; TARGET="$2"
-E=/home/dev/.conda/envs/mixfp4-cuda131
-RQ=/home/dev/n16k64_campaign/realquant
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$HERE/../.." && pwd)"
+CUDA_HOME="${CUDA_HOME:-/usr/local/cuda-13.1}"
+CXX="$(command -v "${CXX:-g++}")"
+RQ="${RQ_BUILD_DIR:-$HERE/build}"
+MIXFP4="$REPO/sm120/kernel"
+CUTLASS="$REPO/sm120/third_party/cutlass"
+"$CUDA_HOME/bin/nvcc" --version | grep -q "release 13.1," || { echo "need CUDA 13.1 at \$CUDA_HOME ($CUDA_HOME)" >&2; exit 1; }
+[ "$(git -C "$CUTLASS" rev-parse HEAD 2>/dev/null)" = e64a9136dd929639e5f7c969fe5af3bf7415cd4f ] || {
+  echo "CUTLASS submodule missing or not at e64a913: git submodule update --init sm120/third_party/cutlass" >&2; exit 1; }
 BASE="${CFG%_nodisp}"
 SNAP="$RQ/$BASE"
 [ "$CFG" = stock ] && SNAP="$RQ/wt_as_A"
 COLD=0
 if [ "$CFG" = wt_as_A_colD ]; then BASE=wt_as_A; SNAP="$RQ/wt_as_A_colD"; COLD=1; fi
-export PATH="$E/bin:$PATH"
+export PATH="$CUDA_HOME/bin:$PATH"
 PATCH=1
 SOURCE_DEF=""
 
@@ -46,16 +57,18 @@ case "$BASE" in
 esac
 [ "$COLD" = 1 ] && EXTRA="$EXTRA -DMIXFP4_D_COLMAJOR=1"
 
-# One-time setup, so a fresh machine can rebuild from /home/dev/mixfp4 alone:
-#  * a per-config source snapshot (the blob generator writes into it, never into the checkout);
-#  * the column-major-D guard, a two-line patch applied only to the wt_as_A_colD snapshot;
-#  * CUTLASS's generated version header (cmake configure only, no build).
-MIXFP4=/home/dev/mixfp4
+# One-time setup:
+#  * a per-config source snapshot (the blob generator writes into it, never into the source tree);
+#  * the column-major-D guard, a two-line patch applied only to the wt_as_A_colD snapshot (the vendored
+#    source already carries an equivalent MIXFP4_D_COLMAJOR hook, so it is normally skipped);
+#  * CUTLASS's generated version header. The historical builds took it from a cmake configure, which leaves
+#    CUTLASS_BUILD and CUTLASS_REVISION empty; the same substitution is made here (version macros only).
 if [ ! -d "$SNAP" ]; then
-  mkdir -p "$SNAP"
-  cp -r "$MIXFP4/src" "$MIXFP4/scripts" "$MIXFP4/CMakeLists.txt" "$SNAP/"
-  ln -s "$MIXFP4/3rdparty" "$SNAP/3rdparty"
-  git -C "$MIXFP4" rev-parse HEAD > "$RQ/MIXFP4_COMMIT"
+  mkdir -p "$SNAP/3rdparty"
+  cp -r "$MIXFP4/src" "$MIXFP4/scripts" "$SNAP/"
+  ln -s "$CUTLASS" "$SNAP/3rdparty/cutlass"
+  python3 -c "import json, sys; print(json.load(open(sys.argv[1]))['upstream_commit'], '(vendored: sm120/kernel)')" \
+    "$MIXFP4/VENDORED.json" > "$RQ/MIXFP4_COMMIT"
 fi
 if [ "$COLD" = 1 ] && ! grep -q MIXFP4_D_COLMAJOR "$SNAP/src/mixed_nvfp4_gemm.cu"; then
   python3 - "$SNAP/src/mixed_nvfp4_gemm.cu" <<'PY'
@@ -73,10 +86,10 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, new))
 PY
 fi
-if [ ! -f "$RQ/cmake_cfg/3rdparty/cutlass/include/cutlass/version_extended.h" ]; then
-  "$E/bin/cmake" -S "$SNAP" -B "$RQ/cmake_cfg" -DCMAKE_CUDA_COMPILER="$E/bin/nvcc" \
-    -DCMAKE_CXX_COMPILER="$E/bin/x86_64-conda-linux-gnu-g++" -DCMAKE_C_COMPILER="$E/bin/x86_64-conda-linux-gnu-gcc" \
-    -DCUTLASS_NVCC_ARCHS=120a -DCMAKE_CUDA_ARCHITECTURES=120a > "$RQ/cmake_cfg.log" 2>&1
+if [ ! -f "$RQ/gen/include/cutlass/version_extended.h" ]; then
+  mkdir -p "$RQ/gen/include/cutlass"
+  sed -e 's/@CUTLASS_VERSION_BUILD@//' -e 's/@CUTLASS_REVISION@//' "$CUTLASS/cmake/version_extended.h.in" \
+    > "$RQ/gen/include/cutlass/version_extended.h"
 fi
 if [[ "$CFG" == *_nodisp ]]; then
   # JOINT_KA defaults MIXFP4_PIPE_FLAGS=1, whose pipelined loop calls dispatch_pattern directly
@@ -92,9 +105,9 @@ COMMON=(-O3 -DNDEBUG -std=c++17 "--generate-code=arch=compute_120a,code=[sm_120a
   --expt-relaxed-constexpr -ftemplate-backtrace-limit=0
   -DCUTLASS_DEBUG_TRACE_LEVEL=0 -DCUTLASS_SM100_FAMILY_ARCHS_ENABLED
   -Xcompiler=-fno-strict-aliasing
-  -ccbin "$E/bin/x86_64-conda-linux-gnu-g++"
+  -ccbin "$CXX"
   -I"$SNAP/3rdparty/cutlass/examples/common" -I"$SNAP/src"
-  -I"$SNAP/3rdparty/cutlass/include" -I"$RQ/cmake_cfg/3rdparty/cutlass/include"
+  -I"$SNAP/3rdparty/cutlass/include" -I"$RQ/gen/include"
   -I"$SNAP/3rdparty/cutlass/tools/util/include")
 mkdir -p "$RQ/bin"
 if [ "$TARGET" = exe ]; then
@@ -107,7 +120,7 @@ else
     -I"$SNAP/src" "$HERE/realquant_gemm.cu" -o "$OUT.unpatched" -lcudart_static -lrt -lpthread -ldl -lgomp
 fi
 if [ "$PATCH" = 1 ]; then
-  python3 "$SNAP/scripts/patch_mixed_nvfp4_gemm.py" --cuobjdump "$E/bin/cuobjdump" --allow-missing-sites \
+  python3 "$SNAP/scripts/patch_mixed_nvfp4_gemm.py" --cuobjdump "$CUDA_HOME/bin/cuobjdump" --allow-missing-sites \
     "$OUT.unpatched" "$OUT"
 else
   cp "$OUT.unpatched" "$OUT"   # no E0M3 site to install

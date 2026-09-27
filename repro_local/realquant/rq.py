@@ -20,6 +20,7 @@ Both pin the activation operand to E2M1.
 """
 import contextlib
 import ctypes
+import os
 import types
 from pathlib import Path
 
@@ -28,7 +29,8 @@ import torch
 from quantize.causal_four_over_six import quantize_rows
 from quantize.quantizer import _quant_e2m1, quant_nvfp4, quant_nvfp4_4over6
 
-LIB_DIR = Path('/home/dev/n16k64_campaign/realquant/bin')
+# build.sh's output: $RQ_BUILD_DIR/bin, by default repro_local/realquant/build/bin (built from the vendored kernel)
+LIB_DIR = Path(os.environ.get('RQ_BUILD_DIR') or Path(__file__).resolve().parent / 'build') / 'bin'
 WEIGHT_OPERAND = {'wt_as_A': 0, 'b8x64': 1, 'wt_as_A_colD': 0}
 TYPE_BLOCK = {'wt_as_A': (16, 64), 'b8x64': (8, 64), 'wt_as_A_colD': (16, 64)}
 # Builds whose D is stored column-major: D = W X^T (out x tokens) lands in memory as row-major

@@ -17,6 +17,13 @@ full-output equivalence or native model quality.
 [Software entry points](research/n16k64/software/README.md) ·
 [Next experiments](research/n16k64/TODO_EXPERIMENTS.md)
 
+## Build and use
+
+To build the native MixFP4 kernel for SM120 GPUs, calibrate a tile map with **TM-OPT+TC** (the final method),
+export it as a deployment artifact and evaluate it through the kernel's `NativeLinear`, follow
+**[docs/BUILD_AND_USE.md](docs/BUILD_AND_USE.md)**. The kernel, its build and its tests are in `sm120/`
+(`sm120/README.md`). The final four-model results are in `results/tm_opt/REPORT_QR.md`.
+
 ## In one minute
 
 - **Quality:** N16 has lower PPL point estimates than FourOverSix in all 12
