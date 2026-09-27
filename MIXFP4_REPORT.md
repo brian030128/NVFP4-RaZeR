@@ -65,100 +65,112 @@ gradient descent with a backtracking line search, over a discrete set of moves.
 - 192 separate held-out math/code **development** documents of 512 tokens.
 - No WikiText or C4 is used anywhere in selection.
 
-**Weights as a function of the map.** For each weight matrix $W$, two quantized
+**Weights as a function of the map.** For each weight matrix $`W`$, two quantized
 candidates are computed once from the BF16 weights and never change:
-- $B$, the FourOverSix E2M1 quantization;
-- $A$, the E0M3 quantization with $\alpha = 1$.
+- $`B`$, the FourOverSix E2M1 quantization;
+- $`A`$, the E0M3 quantization with $`\alpha = 1`$.
 
 Both share the tensor's FP32 global scale, and each 16-element scale block keeps
-its own E4M3 scale. A map $m \in \{0,1\}^{\text{tiles}}$ gives the weights
+its own E4M3 scale. A map $`m \in \{0,1\}^{\text{tiles}}`$ gives the weights
 
-$$\hat W(m) = B + \sum_{u:\,m_u = 1} P_u \odot (A - B),$$
+```math
+\hat W(m) = B + \sum_{u:\,m_u = 1} P_u \odot (A - B),
+```
 
-where $P_u$ is the 0/1 mask of tile $u$ (256×64 or 8×64 elements). Flipping tile
-$u$ changes only the entries of that tile, by
+where $`P_u`$ is the 0/1 mask of tile $`u`$ (256×64 or 8×64 elements). Flipping tile
+$`u`$ changes only the entries of that tile, by
 
-$$\Delta W_u = \sigma_u\, P_u \odot (A - B), \qquad
-\sigma_u = \begin{cases} +1 & u \text{ is currently E2M1} \\ -1 & u \text{ is currently E0M3 (an undo)} \end{cases}$$
+```math
+\Delta W_u = \sigma_u\, P_u \odot (A - B), \qquad
+\sigma_u = \begin{cases} +1 & u \text{ is currently E2M1} \\ -1 & u \text{ is currently E0M3 (an undo)} \end{cases}
+```
 
-**Objective.** Let $p_t$ be the BF16 teacher's next-token distribution at position
-$t$, and $q_{m,t}$ that of the W4A4 model with map $m$. For a sequence $s$ of $T$
+**Objective.** Let $`p_t`$ be the BF16 teacher's next-token distribution at position
+$`t`$, and $`q_{m,t}`$ that of the W4A4 model with map $`m`$. For a sequence $`s`$ of $`T`$
 tokens,
 
-$$\mathrm{KL}_s(m) = \frac{1}{T-1} \sum_{t=1}^{T-1} \sum_{v \in \text{vocab}}
-p_t(v)\, \big[\log p_t(v) - \log q_{m,t}(v)\big].$$
+```math
+\mathrm{KL}_s(m) = \frac{1}{T-1} \sum_{t=1}^{T-1} \sum_{v \in \text{vocab}}
+p_t(v)\, \big[\log p_t(v) - \log q_{m,t}(v)\big].
+```
 
 The development objective is the mean over the 192 development documents:
-$L_{\text{dev}}(m) = \frac{1}{192} \sum_d \mathrm{KL}_d(m)$. It is measured with
+$`L_{\text{dev}}(m) = \frac{1}{192} \sum_d \mathrm{KL}_d(m)`$. It is measured with
 the evaluation protocol: a forward pass only, with one tensor-wide FourOverSix
 activation scale per document.
 
-**Step 1: score every flip with one backward pass.** The score of flipping tile $u$
+**Step 1: score every flip with one backward pass.** The score of flipping tile $`u`$
 is its first-order effect on each calibration sequence's KL. A first-order Taylor
-expansion at the current weights $\hat W$ gives
+expansion at the current weights $`\hat W`$ gives
 
-$$\mathrm{KL}_s\big(\hat W + \Delta W_u\big) \approx \mathrm{KL}_s(\hat W) + g_{u,s},
-\qquad g_{u,s} = \langle G_s, \Delta W_u \rangle = \sum_{(i,j) \in u} (G_s)_{ij}\, (\Delta W_u)_{ij},$$
+```math
+\mathrm{KL}_s\big(\hat W + \Delta W_u\big) \approx \mathrm{KL}_s(\hat W) + g_{u,s},
+\qquad g_{u,s} = \langle G_s, \Delta W_u \rangle = \sum_{(i,j) \in u} (G_s)_{ij}\, (\Delta W_u)_{ij},
+```
 
-where $G_s = \partial\, \mathrm{KL}_s / \partial \hat W$ is sequence $s$'s gradient
-with respect to that layer's weights. The scoring pass computes every $g_{u,s}$
+where $`G_s = \partial\, \mathrm{KL}_s / \partial \hat W`$ is sequence $`s`$'s gradient
+with respect to that layer's weights. The scoring pass computes every $`g_{u,s}`$
 without storing a single weight gradient.
 
-*Forward pass, for each batch of calibration sequences at the current map $m$:*
+*Forward pass, for each batch of calibration sequences at the current map $`m`$:*
 
-1. **Teacher.** The BF16 teacher's log-probabilities $\log p_t$ were computed once,
+1. **Teacher.** The BF16 teacher's log-probabilities $`\log p_t`$ were computed once,
    before any quantization, and are reused in every round.
-2. **Weights.** Every text linear layer holds $\hat W(m)$, decoded from the packed
+2. **Weights.** Every text linear layer holds $`\hat W(m)`$, decoded from the packed
    candidates. The weights are frozen (`requires_grad=False`), so autograd never
    builds or stores a weight gradient.
 3. **Graph.** The token embeddings are detached and marked `requires_grad`. The
    backward pass then flows through the activations of every layer, even though no
    parameter requires a gradient.
 4. **Activation quantization with a straight-through estimator.** A pre-hook on each
-   linear layer replaces its input $x$ with
+   linear layer replaces its input $`x`$ with
 
-   $$\tilde x = Q(x) + \big(x - \operatorname{sg}(x)\big),$$
+   ```math
+   \tilde x = Q(x) + \big(x - \mathrm{sg}(x)\big),
+   ```
 
-   where $\operatorname{sg}$ is stop-gradient (`detach`). The value is $Q(x)$, but
-   the Jacobian is the identity: $\partial \tilde x / \partial x = I$. Here $Q$ is
+   where $`\mathrm{sg}`$ is stop-gradient (`detach`). The value is $`Q(x)`$, but
+   the Jacobian is the identity: $`\partial \tilde x / \partial x = I`$. Here $`Q`$ is
    FourOverSix with one FP32 factor per token (`quantize_rows`). Each token gets
-   its own global scale $\max|x_t| / (6 \cdot 448)$. Each 16-element block then
+   its own global scale $`\max|x_t| / (6 \cdot 448)`$. Each 16-element block then
    picks the E4M3 block scale that maps its maximum to 6 or to 4, whichever has the
    smaller block squared error. Every token is quantized from its own values only.
    This keeps the scoring forward causal.
 5. **Save the layer input.** A forward hook on each linear layer keeps its quantized
-   input $\tilde x_s \in \mathbb R^{T \times K}$ for each sequence. It also
-   registers a hook on the layer's output $y$, which fires during the backward pass.
-6. **Loss.** For each sequence, $\mathrm{KL}_s$ is its token-mean KL against the
-   teacher, as defined above. The batch loss is $\sum_s \mathrm{KL}_s$.
+   input $`\tilde x_s \in \mathbb R^{T \times K}`$ for each sequence. It also
+   registers a hook on the layer's output $`y`$, which fires during the backward pass.
+6. **Loss.** For each sequence, $`\mathrm{KL}_s`$ is its token-mean KL against the
+   teacher, as defined above. The batch loss is $`\sum_s \mathrm{KL}_s`$.
 
 *Backward pass: one `backward()` per batch.* When it reaches a linear layer, the
-output hook receives $\delta = \partial \big(\sum_s \mathrm{KL}_s\big) / \partial y$.
+output hook receives $`\delta = \partial \big(\sum_s \mathrm{KL}_s\big) / \partial y`$.
 Sequences in a batch never interact: attention is within a sequence and activation
-scales are per token. Sequence $s$'s loss therefore reaches only its own slice
-$\delta_s \in \mathbb R^{T \times N}$. The hook then does four things, entirely in
+scales are per token. Sequence $`s`$'s loss therefore reaches only its own slice
+$`\delta_s \in \mathbb R^{T \times N}`$. The hook then does four things, entirely in
 FP32:
 
-1. **Per-sequence weight gradient.** Because $y_{s,t} = \hat W \tilde x_{s,t}$, the
+1. **Per-sequence weight gradient.** Because $`y_{s,t} = \hat W \tilde x_{s,t}`$, the
    gradient sums outer products over the sequence's tokens, i.e. one matmul:
 
-   $$G_s = \sum_{t} \delta_{s,t}\, \tilde x_{s,t}^{\top} = \delta_s^{\top} \tilde x_s \in \mathbb R^{N \times K}.$$
+   ```math
+   G_s = \sum_{t} \delta_{s,t}\, \tilde x_{s,t}^{\top} = \delta_s^{\top} \tilde x_s \in \mathbb R^{N \times K}.
+   ```
 
-   $\delta_s$ already contains the effect of this layer's output on every later
+   $`\delta_s`$ already contains the effect of this layer's output on every later
    layer and on the logits. The score therefore measures a weight change's effect
    on the model's output distribution, not the local reconstruction error of the
    layer.
 2. **Flip direction for the whole matrix.** For every element,
-   $D = (A - B) \odot \Sigma$, where $\Sigma$ is $-1$ on currently-E0M3 tiles and
-   $+1$ elsewhere. $D$ restricted to tile $u$ is exactly $\Delta W_u$, so a single
+   $`D = (A - B) \odot \Sigma`$, where $`\Sigma`$ is $`-1`$ on currently-E0M3 tiles and
+   $`+1`$ elsewhere. $`D`$ restricted to tile $`u`$ is exactly $`\Delta W_u`$, so a single
    elementwise product serves every tile.
-3. **Tile sums.** $E_s = G_s \odot D$ is summed within each tile. For $r \times c$
-   tiles, pad the rows up to a multiple of $r$, reshape to
-   $(\lceil N/r \rceil, r, K/c, c)$, and sum over the two within-tile axes
-   (`reduce`). The result is a $\lceil N/r \rceil \times K/c$ array holding
-   $g_{u,s} = \sum_{(i,j) \in u} (E_s)_{ij}$ for every tile of the layer.
-4. **Accumulate.** Add $g_{u,s}$ and $g_{u,s}^2$ into FP64 running sums, one pair
-   per tile. $G_s$ and $E_s$ are discarded immediately.
+3. **Tile sums.** $`E_s = G_s \odot D`$ is summed within each tile. For $`r \times c`$
+   tiles, pad the rows up to a multiple of $`r`$, reshape to
+   $`(\lceil N/r \rceil, r, K/c, c)`$, and sum over the two within-tile axes
+   (`reduce`). The result is a $`\lceil N/r \rceil \times K/c`$ array holding
+   $`g_{u,s} = \sum_{(i,j) \in u} (E_s)_{ij}`$ for every tile of the layer.
+4. **Accumulate.** Add $`g_{u,s}`$ and $`g_{u,s}^2`$ into FP64 running sums, one pair
+   per tile. $`G_s`$ and $`E_s`$ are discarded immediately.
 
 Every linear layer's hook fires within the same backward pass, so one forward and
 one backward per batch score every tile of every layer. In total that's 128
@@ -192,47 +204,53 @@ model differs from the one that is deployed and evaluated in two ways:
 Both gaps, and the finite size of each flip, are why a score only *proposes* a flip.
 Step 3 decides with the measured development KL under the evaluation protocol.
 
-**Step 2: keep flips predicted to help, with confidence.** Over the $S = 128$
+**Step 2: keep flips predicted to help, with confidence.** Over the $`S = 128`$
 calibration sequences, take each tile's mean score and its standard error:
 
-$$\mu_u = \frac{1}{S} \sum_s g_{u,s}, \qquad
-\mathrm{SE}_u = \frac{1}{\sqrt S} \sqrt{\frac{1}{S-1} \sum_s \big(g_{u,s} - \mu_u\big)^2}.$$
+```math
+\mu_u = \frac{1}{S} \sum_s g_{u,s}, \qquad
+\mathrm{SE}_u = \frac{1}{\sqrt S} \sqrt{\frac{1}{S-1} \sum_s \big(g_{u,s} - \mu_u\big)^2}.
+```
 
-Tile $u$ is a candidate only if
+Tile $`u`$ is a candidate only if
 
-$$b_u = \mu_u + 2\, \mathrm{SE}_u < 0.$$
+```math
+b_u = \mu_u + 2\, \mathrm{SE}_u < 0.
+```
 
-$b_u$ is an approximate one-sided 97.7% upper confidence bound on the expected
+$`b_u`$ is an approximate one-sided 97.7% upper confidence bound on the expected
 first-order change in KL per sequence. The filter therefore keeps flips that lower
 KL across the calibration sequences, not ones driven by a few sequences. This is
 the "decisive margin" principle from earlier rounds of this work. Candidates are
-ranked by $b_u$, most negative first: $c_1, c_2, \dots, c_M$.
+ranked by $`b_u`$, most negative first: $`c_1, c_2, \dots, c_M`$.
 
 **Step 3: choose the step size by backtracking on measured loss.** Try
-$n = M, \lfloor M/2 \rfloor, \lfloor M/4 \rfloor, \dots, 1$, with at most 22 tries:
-1. Flip the top $n$ candidates together, giving map $m'$.
-2. Measure $L_{\text{dev}}(m')$.
-3. If $L_{\text{dev}}(m') < L_{\text{dev}}(m)$, accept $m'$ and end the round.
-   Otherwise undo the flips and halve $n$.
+$`n = M, \lfloor M/2 \rfloor, \lfloor M/4 \rfloor, \dots, 1`$, with at most 22 tries:
+1. Flip the top $`n`$ candidates together, giving map $`m'`$.
+2. Measure $`L_{\text{dev}}(m')`$.
+3. If $`L_{\text{dev}}(m') < L_{\text{dev}}(m)`$, accept $`m'`$ and end the round.
+   Otherwise undo the flips and halve $`n`$.
 
-Each try logs the predicted change $\sum_{i \le n} \mu_{c_i}$ next to the measured
+Each try logs the predicted change $`\sum_{i \le n} \mu_{c_i}`$ next to the measured
 change.
 
 **Step 4: re-score at the new point and stop when nothing helps.** The next round
 repeats steps 1–3 at the accepted map, with fresh gradients. The loop stops when no
-tile passes the filter, or when even $n = 1$ fails to lower $L_{\text{dev}}$. An
-accepted step always lowers $L_{\text{dev}}$, so development KL decreases strictly
+tile passes the filter, or when even $`n = 1`$ fails to lower $`L_{\text{dev}}`$. An
+accepted step always lowers $`L_{\text{dev}}`$, so development KL decreases strictly
 from round to round.
 
 **Why multiple rounds: the linear prediction overstates a combined step.** For a
-step $\Delta = \sum_{u \in C} \Delta W_u$, the second-order expansion is
+step $`\Delta = \sum_{u \in C} \Delta W_u`$, the second-order expansion is
 
-$$\mathrm{KL}(\hat W + \Delta) \approx \mathrm{KL}(\hat W)
+```math
+\mathrm{KL}(\hat W + \Delta) \approx \mathrm{KL}(\hat W)
 + \underbrace{\sum_{u \in C} \langle G, \Delta W_u \rangle}_{\text{what the scores add up}}
-+ \tfrac12 \sum_{u \in C} \sum_{v \in C} \mathrm{vec}(\Delta W_u)^{\top} H\, \mathrm{vec}(\Delta W_v),$$
++ \tfrac12 \sum_{u \in C} \sum_{v \in C} \mathrm{vec}(\Delta W_u)^{\top} H\, \mathrm{vec}(\Delta W_v),
+```
 
-where $H$ is the Hessian of KL with respect to all weights. The scores capture only
-the linear term, which grows like $n$. The quadratic term has $n^2$ pairwise terms:
+where $`H`$ is the Hessian of KL with respect to all weights. The scores capture only
+the linear term, which grows like $`n`$. The quadratic term has $`n^2`$ pairwise terms:
 - tiles in the same layer interact through shared inputs;
 - tiles in different layers interact because each layer's error changes what later
   layers see.
@@ -254,7 +272,7 @@ steps cross over to a net loss, because the quadratic term grows faster than the
 linear one.
 
 Electing every candidate in one step (one-shot election) overshoots. Once a step is
-taken, the gradients $G_s$ change, and so do the right flips. Re-scoring at every
+taken, the gradients $`G_s`$ change, and so do the right flips. Re-scoring at every
 accepted map, with the step size set by measured loss, avoids both problems. Each
 round's candidate count and accepted flips are in the run reports; for example,
 Llama 8×64 accepted 3,220, 1,208, 826, 423, 199, 91, 5 and 5 flips before stopping.
@@ -419,34 +437,34 @@ computed per document within each task and averaged over the six tasks, ± 2 SE.
 
 This treats the map as trainable parameters and optimizes the §3 KL objective
 directly, like training, instead of electing flips in rounds. Everything else
-is the same as §3: candidates $A$ and $B$, the 128 calibration sequences, the
+is the same as §3: candidates $`A`$ and $`B`$, the 128 calibration sequences, the
 BF16 teacher, the scoring forward pass (per-token FourOverSix activations with
 a straight-through estimator), and the evaluation windows. So far it has been
 run on Llama-3.1-8B (jobs 441206–441208), Llama-3.1-8B-Instruct
 (442024, 442074, 442075), Llama-3.2-3B-Instruct (442077–442079) and
 Llama-3.2-1B-Instruct (442046–442048).
 
-**Parametrization.** Each tile $u$ gets a real latent logit $\theta_u$, and the
-weights are $\hat W(\theta) = B + \sum_u m_u(\theta_u)\, P_u \odot (A - B)$.
-- **STE (the method):** $m_u = \mathbb 1[\theta_u > 0]$ in the forward pass, so
+**Parametrization.** Each tile $`u`$ gets a real latent logit $`\theta_u`$, and the
+weights are $`\hat W(\theta) = B + \sum_u m_u(\theta_u)\, P_u \odot (A - B)`$.
+- **STE (the method):** $`m_u = \mathbb 1[\theta_u > 0]`$ in the forward pass, so
   training always runs the deployable hard map. The backward pass uses
-  $\partial m_u / \partial \theta_u = 1$ (BinaryConnect-style latent weights).
-  Init $\theta = -1$, lr 0.02.
+  $`\partial m_u / \partial \theta_u = 1`$ (BinaryConnect-style latent weights).
+  Init $`\theta = -1`$, lr 0.02.
 - **Sigmoid (ablation, Llama-3.1-8B 8×64 only):**
-  $m_u = \sigma(\theta_u / \tau)$, with $\tau$ annealed geometrically from 1 to
-  0.1, and the map rounded at $\theta > 0$ for evaluation. Init $\theta = -3$,
+  $`m_u = \sigma(\theta_u / \tau)`$, with $`\tau`$ annealed geometrically from 1 to
+  0.1, and the map rounded at $`\theta > 0`$ for evaluation. Init $`\theta = -3`$,
   lr 0.05. It tied STE within noise and adds a temperature schedule, so it was
   dropped.
 
-**Gradient.** A backward hook on each linear layer forms $G = \delta^\top \tilde x$
+**Gradient.** A backward hook on each linear layer forms $`G = \delta^\top \tilde x`$
 for the minibatch. It hands the optimizer
-$\partial \mathrm{KL} / \partial m_u = \sum_{(i,j) \in u} G_{ij} (A - B)_{ij}$,
+$`\partial \mathrm{KL} / \partial m_u = \sum_{(i,j) \in u} G_{ij} (A - B)_{ij}`$,
 which is the §3 tile score without the flip sign, computed on a minibatch.
 No weight gradient is stored.
 
 **Optimizer.**
-- Adam with $\beta = (0.9, 0.999)$ and $\epsilon = 10^{-12}$. Tile gradients
-  are about $10^{-6}$, so the default $10^{-8}$ would dominate the update.
+- Adam with $`\beta = (0.9, 0.999)`$ and $`\epsilon = 10^{-12}`$. Tile gradients
+  are about $`10^{-6}`$, so the default $`10^{-8}`$ would dominate the update.
 - Constant learning rate, no weight decay.
 - Batch 8, 16 steps per epoch, 20 epochs (320 steps).
 - **No candidate filter, no backtracking, no acceptance test.** The development
