@@ -871,6 +871,28 @@ the per-block gain kept (E[x²]-weighted / weight MSE):
 - Against the ~21% that the per-block scale search removes, the best realizable
   reordering raises E0M3's 256×64 contribution from 0.07% to under 1%.
 
+**Stronger row search (job 444527,
+`results/mixfp4_potential/train_map/e0m3_headroom_search_1b.json`).** The search
+starts from the sorted order and runs 400 rounds of exact improving swaps (8,192
+sampled pairs per round, best non-conflicting improvements applied), on the
+E[x²]-weighted proxy, one permutation per matrix.
+- **8×64:** 7.0% extra reduction, 33% of the per-block gain kept. By quarter of
+  the run: 31 → 32 → 32 → 33%, converged.
+- **256×64:** 2.2% extra reduction, 10.5% kept. By quarter: 7.8 → 9.4 → 10.1 →
+  10.5%, still rising slowly.
+- **Only 7% of the variance of the per-(row, K strip) gain is a row-wide effect.**
+  - An 8-row tile can be filled with rows whose strip-specific preferences happen
+    to agree.
+  - A 256-row tile averages the strip-specific part away, so no single
+    permutation approaches the per-strip oracle there.
+- **Caveats:**
+  - These are in-sample proxy numbers. Earlier permutation searches in this repo
+    overfit, and their proxy gains inverted sign under real loss.
+  - Zero-overhead permutations couple matrices: `gate_proj`/`up_proj` must share
+    an order with `down_proj`'s columns, and `v_proj` with `o_proj`'s columns per
+    head.
+  - A KL/PPL test of a zero-overhead 8×64 variant has not been run.
+
 Implementation: `run_train_map.py`, `slurm/train_map.sbatch`,
 `summarize_train_map.py`. Details and per-epoch curves are in
 [results/mixfp4_potential/train_map/REPORT.md](results/mixfp4_potential/train_map/REPORT.md).

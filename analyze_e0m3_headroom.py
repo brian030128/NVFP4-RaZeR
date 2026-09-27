@@ -58,12 +58,66 @@ def row_reorder_gain(block_gain, shape, rows, cols):
     return out
 
 
+def swap_search(block_gain, shape, rows, cols, iters, batch, top, seed=0):
+    """A single row permutation found by exact improving swaps, starting from the gain sort.
+
+    Objective: sum over tiles and K strips of max(0, tile gain). Each round samples `batch`
+    random row pairs in different tiles, computes every swap's exact objective change, and
+    applies the best non-conflicting improving swaps (each tile touched at most once)."""
+    o, k = shape
+    g = block_gain.reshape(o, k // cols, cols // 16).sum(-1).float()
+    g = torch.nn.functional.pad(g, (0, 0, 0, (-o) % rows))
+    g = g[torch.argsort(g.sum(1), descending=True)].clone()
+    n, strips = g.shape
+    ntile = n // rows
+    if ntile < 2:
+        return float(g.sum(0).clamp_min(0).sum()), []
+    tsum = g.view(ntile, rows, strips).sum(1)
+    gen = torch.Generator(device=g.device).manual_seed(seed)
+    curve = []
+    for it in range(iters):
+        a = torch.randint(n, (batch,), device=g.device, generator=gen)
+        b = torch.randint(n, (batch,), device=g.device, generator=gen)
+        ta, tb = a // rows, b // rows
+        d = g[b] - g[a]
+        delta = ((tsum[ta] + d).clamp_min(0).sum(1) + (tsum[tb] - d).clamp_min(0).sum(1)
+                 - tsum[ta].clamp_min(0).sum(1) - tsum[tb].clamp_min(0).sum(1))
+        delta[ta == tb] = -1
+        order = torch.argsort(delta, descending=True)[:top]
+        order = order[delta[order] > 0].tolist()
+        used = set()
+        ta_l, tb_l, a_l, b_l = ta.tolist(), tb.tolist(), a.tolist(), b.tolist()
+        for i in order:
+            if ta_l[i] in used or tb_l[i] in used:
+                continue
+            used.update((ta_l[i], tb_l[i]))
+            ra, rb = a_l[i], b_l[i]
+            diff = g[rb] - g[ra]
+            tsum[ta_l[i]] += diff
+            tsum[tb_l[i]] -= diff
+            g[[ra, rb]] = g[[rb, ra]]
+        if (it + 1) % max(iters // 4, 1) == 0:
+            curve.append(float(tsum.clamp_min(0).sum()))
+    return float(tsum.clamp_min(0).sum()), curve
+
+
+def row_effect_share(block_gain, shape, cols):
+    """Fraction of the variance of per-(row, K strip) E0M3 gain that is a row-wide effect."""
+    o, k = shape
+    g = block_gain.reshape(o, k // cols, cols // 16).sum(-1).double()
+    g = g - g.mean()
+    row = g.mean(1, keepdim=True)
+    return float((row.square().sum() * g.shape[1]) / g.square().sum().clamp_min(1e-300))
+
+
 @torch.no_grad()
 def main():
     assert os.environ.get('SLURM_JOB_ID'), 'Run through Slurm'
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--model', default='llama1b_ins', choices=tuple(CALIBRATIONS))
     ap.add_argument('--windows', type=int, default=64)
+    ap.add_argument('--search-iters', type=int, default=0,
+                    help='Also run an exact improving-swap row-permutation search (E[x^2]-weighted metric only)')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     prior = json.loads((CALIBRATIONS[args.model] / 'report.json').read_text())
@@ -127,6 +181,14 @@ def main():
                 tt['gain'] += float(g.clamp_min(0).sum())
                 for order, v in row_reorder_gain(best2 - a0, w.shape, rows, cols).items():
                     tt[f'rows_{order}'] = tt.get(f'rows_{order}', 0.) + v
+                if args.search_iters and metric == 'hess':
+                    v, curve = swap_search(best2 - a0, w.shape, rows, cols, args.search_iters, 8192, 256)
+                    tt['rows_swap_search'] = tt.get('rows_swap_search', 0.) + v
+                    tt.setdefault('swap_curves', {})[n] = curve
+            if metric == 'hess':
+                w_var = float((best2 - a0).reshape(w.shape[0], -1).var())
+                r.setdefault('row_effect', []).append(
+                    (row_effect_share(best2 - a0, w.shape, 64), w_var))
         del chosen, other, s6, s4, e0
     summary = {}
     for metric in ('mse', 'hess'):
@@ -154,9 +216,18 @@ def main():
                                     row_reordering={
                                         order: dict(extra_reduction_over_best_e2m1=v / tot['best2'],
                                                     share_of_per_block_e0_gain_kept=v / per_block_gain)
-                                        for order in ('identity', 'global_sort', 'per_strip_oracle')
+                                        for order in ('identity', 'global_sort', 'per_strip_oracle', 'swap_search')
+                                        if all(f'rows_{order}' in k[metric][f'tile_{t}'] for k in kinds.values())
                                         for v in [sum(k[metric][f'tile_{t}'][f'rows_{order}']
                                                       for k in kinds.values())]})
+            if metric == 'hess' and args.search_iters:
+                # Relative progress of the swap search per matrix (objective at 1/4, 2/4, 3/4, 4/4 of iters).
+                curves = [c for k in kinds.values() for c in k[metric][f'tile_{t}'].get('swap_curves', {}).values() if c]
+                total = [sum(c[i] for c in curves) for i in range(4)] if curves else []
+                out[f'tile_{t}']['swap_search_progress_share'] = [x / per_block_gain for x in total]
+        if metric == 'hess':
+            pairs = [p for k in kinds.values() for p in k[metric].get('row_effect', [])]
+            out['row_effect_variance_share_mean'] = sum(p[0] for p in pairs) / len(pairs)
         out['per_kind_extra_reduction_per_block'] = {
             kind: 1 - k[metric]['best3'] / k[metric]['best2'] for kind, k in kinds.items()}
         out['per_kind_e0_beats_best_e2m1_fraction'] = {
