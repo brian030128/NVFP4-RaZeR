@@ -841,25 +841,35 @@ relative to plain NVFP4 (max → 6):
   64-wide K block into per-type MMAs. Tile maps and row reordering cannot provide
   it; earlier study: the disagreement runs along K.
 
-**With a learned per-block scale (FOCUS-style), E0M3's room shrinks further.**
-FOCUS (arXiv 2608.01847) learns each block's stored E4M3 scale, plus a decoupled
-rounding coefficient, on a KL loss. As a proxy, `--scale-search grid` (job 442705,
-`e0m3_headroom_1b_gridscale.json`) gives each block its best E4M3 scale for each
-type, over 42 multipliers of max/6 (E2M1) or max/7 (E0M3) from 0.7× to 3×,
-clipping included. E[x²]-weighted error, relative to plain NVFP4:
+**Row-reordering ceiling (job 444517,
+`results/mixfp4_potential/train_map/e0m3_headroom_rows_1b.json`).** E0M3 gain
+over the best per-block E2M1 scale, as the extra error reduction and the share of
+the per-block gain kept (E[x²]-weighted / weight MSE):
 
-| | {6, 4} scale (above) | best per-block scale |
-|---|---:|---:|
-| best E2M1 per block | 0.792 | 0.636 |
-| E0M3 alone | 0.919 | 0.719 |
-| E0M3 extra over best E2M1, per block | −21.4% | −15.3% |
-| E0M3 extra, per 8×64 tile | −2.5% | −1.4% |
-| E0M3 extra, per 256×64 tile | −0.07% | −0.03% |
-| 8×64 / 256×64 tiles electing E0M3 | 26% / 3.4% | 19.5% / 0.4% |
+| Tile | Row order | Extra reduction | Share kept |
+|---|---|---:|---:|
+| 8×64 | identity | 2.6% / 3.5% | 12% / 18% |
+| 8×64 | one permutation per matrix, rows sorted by total E0M3 gain | 3.1% / 3.9% | 15% / 20% |
+| 8×64 | oracle: rows re-sorted in every 64-wide K strip (not a single permutation) | 10.7% / 10.2% | 50% / 52% |
+| 256×64 | identity | 0.07% / 0.37% | 0.3% / 2% |
+| 256×64 | one permutation per matrix, sorted | 0.85% / 1.6% | 4% / 8% |
+| 256×64 | oracle (not a single permutation) | 10.5% / 10.2% | 49% / 52% |
 
-A better per-block scale helps E2M1 more than it helps E0M3. What a tile-level
-E0M3 choice can still add roughly halves at 8×64, and it stays negligible at
-256×64. FOCUS's learned rounding is not modelled here.
+- **A single row permutation keeps almost none of the gain the per-strip oracle
+  shows.** A row's E0M3 preference changes from one K strip to the next, so no
+  single row order clusters it.
+- **Zero-overhead permutations are more constrained still:**
+  - `gate_proj`/`up_proj` must share an order with `down_proj`'s input columns;
+  - `v_proj` must share an order with `o_proj`'s columns within each head;
+  - `o_proj`/`down_proj` rows can only move through one model-wide residual
+    permutation;
+  - q/k cannot move within a head because of RoPE.
+
+  The per-matrix sort above is therefore an optimistic bound for them. The
+  earlier Qwen shared-MLP permutation (`SHARED_MLP_REORDER.md`) also gave no PPL
+  gain.
+- Against the ~21% that the per-block scale search removes, the best realizable
+  reordering raises E0M3's 256×64 contribution from 0.07% to under 1%.
 
 Implementation: `run_train_map.py`, `slurm/train_map.sbatch`,
 `summarize_train_map.py`. Details and per-epoch curves are in

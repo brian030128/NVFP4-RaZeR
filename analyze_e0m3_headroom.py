@@ -23,9 +23,6 @@ from run_math_code_calibration import load_model
 from run_train_map import CALIBRATIONS, c4_train_windows
 
 TILES = {'8x64': (8, 64), '256x64': (256, 64)}
-# Scale multipliers for --scale-search grid: 40 geometric points in [0.7, 3], plus 1 and 1.5 exactly
-# (so the grid contains max->6, max->4 and the original E0M3 max->7 scale).
-MULTS = sorted({round(0.7 * (3 / 0.7) ** (i / 39), 6) for i in range(40)} | {1.0, 1.5})
 
 
 def block_sse(q, w, imp):
@@ -35,38 +32,30 @@ def block_sse(q, w, imp):
     return d.reshape(-1, 16).sum(-1)
 
 
-E2M1_LEVELS = (0., .5, 1., 1.5, 2., 3., 4., 6.)
-
-
-def grid_best_sse(w, imp, e2m1, mults):
-    """Per-block minimum squared error over stored E4M3 block scales peak * m / grid_max, m in `mults`
-    (a proxy for a learned per-block scale, FOCUS-style). Values beyond the grid saturate (clipping)."""
-    o, k = w.shape
-    x = w.float().reshape(o, k // 16, 16)
-    gs = x.abs().amax() / (6 * 448)
-    xs = x / gs
-    peak = xs.abs().amax(-1, keepdim=True)
-    wt = imp.reshape(1, k // 16, 16) if imp is not None else 1.
-    levels = torch.tensor(E2M1_LEVELS, device=w.device)
-    mids = (levels[:-1] + levels[1:]) / 2
-    best = None
-    for m in mults:
-        s = (peak * m / (6. if e2m1 else 7.)).clamp(2 ** -9, 448).to(torch.float8_e4m3fn).float()
-        v = xs / s
-        if e2m1:
-            q = levels[torch.bucketize(v.abs().contiguous(), mids)] * v.sign()
-        else:
-            q = v.round().clamp(-7, 7)
-        e = ((q * s - xs).square() * wt).sum(-1)
-        best = e if best is None else torch.minimum(best, e)
-    return (best * gs.square()).reshape(-1)
-
-
 def tile_sum(x, shape, rows, cols):
     o, k = shape
     x = x.reshape(o, k // 16)
     x = torch.nn.functional.pad(x, (0, 0, 0, (-o) % rows))
     return x.reshape(-1, rows, k // cols, cols // 16).sum((1, 3))
+
+
+def row_reorder_gain(block_gain, shape, rows, cols):
+    """Positive tile gain of E0M3 over the best E2M1 scale under three row orders.
+
+    identity: rows as stored. global_sort: ONE permutation per matrix (realizable), rows sorted
+    by their total E0M3 gain over all K strips. per_strip_oracle: rows re-sorted independently
+    inside every cols-wide K strip -- no single row permutation can beat this (upper bound)."""
+    o, k = shape
+    strip = block_gain.reshape(o, k // cols, cols // 16).sum(-1)          # (rows, K strips)
+    pad = (-o) % rows
+
+    def tiles_positive(g):
+        g = torch.nn.functional.pad(g, (0, 0, 0, pad))
+        return float(g.reshape(-1, rows, g.shape[1]).sum(1).clamp_min(0).sum())
+    out = dict(identity=tiles_positive(strip))
+    out['global_sort'] = tiles_positive(strip[torch.argsort(strip.sum(1), descending=True)])
+    out['per_strip_oracle'] = tiles_positive(strip.sort(0, descending=True).values)
+    return out
 
 
 @torch.no_grad()
@@ -75,9 +64,6 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--model', default='llama1b_ins', choices=tuple(CALIBRATIONS))
     ap.add_argument('--windows', type=int, default=64)
-    ap.add_argument('--scale-search', choices=('four_over_six', 'grid'), default='four_over_six',
-                    help='E2M1 per-block scale in {max->6, max->4} and E0M3 at max->7, or each type\'s best '
-                         'per-block E4M3 scale over a multiplier grid (FOCUS-style learned-scale proxy)')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     prior = json.loads((CALIBRATIONS[args.model] / 'report.json').read_text())
@@ -117,10 +103,6 @@ def main():
         k = kinds.setdefault(kind, {})
         for metric, weight in (('mse', None), ('hess', imp)):
             a6, a4, a0 = (block_sse(q, w, weight).double() for q in (s6, s4, e0))
-            if args.scale_search == 'grid':
-                # Both types get their per-block best stored scale; "s4" then reports the E2M1 grid best.
-                a4 = grid_best_sse(w, weight, True, MULTS).double()
-                a0 = grid_best_sse(w, weight, False, MULTS).double()
             best2 = torch.minimum(a6, a4)
             best3 = torch.minimum(best2, a0)
             r = k.setdefault(metric, dict(blocks=0, s6=0., s4=0., e0=0., best2=0., best3=0.,
@@ -143,6 +125,8 @@ def main():
                 tt['tiles'] += g.numel()
                 tt['e0_tiles'] += int((g > 0).sum())
                 tt['gain'] += float(g.clamp_min(0).sum())
+                for order, v in row_reorder_gain(best2 - a0, w.shape, rows, cols).items():
+                    tt[f'rows_{order}'] = tt.get(f'rows_{order}', 0.) + v
         del chosen, other, s6, s4, e0
     summary = {}
     for metric in ('mse', 'hess'):
@@ -163,9 +147,16 @@ def main():
             tiles = sum(k[metric][f'tile_{t}']['tiles'] for k in kinds.values())
             e0t = sum(k[metric][f'tile_{t}']['e0_tiles'] for k in kinds.values())
             gain = sum(k[metric][f'tile_{t}']['gain'] for k in kinds.values())
+            per_block_gain = max(tot['best2'] - tot['best3'], 1e-30)
             out[f'tile_{t}'] = dict(e0_tile_fraction=e0t / tiles,
                                     extra_reduction_over_best_e2m1=gain / tot['best2'],
-                                    share_of_per_block_e0_gain_kept=gain / max(tot['best2'] - tot['best3'], 1e-30))
+                                    share_of_per_block_e0_gain_kept=gain / per_block_gain,
+                                    row_reordering={
+                                        order: dict(extra_reduction_over_best_e2m1=v / tot['best2'],
+                                                    share_of_per_block_e0_gain_kept=v / per_block_gain)
+                                        for order in ('identity', 'global_sort', 'per_strip_oracle')
+                                        for v in [sum(k[metric][f'tile_{t}'][f'rows_{order}']
+                                                      for k in kinds.values())]})
         out['per_kind_extra_reduction_per_block'] = {
             kind: 1 - k[metric]['best3'] / k[metric]['best2'] for kind, k in kinds.items()}
         out['per_kind_e0_beats_best_e2m1_fraction'] = {
@@ -173,7 +164,7 @@ def main():
         summary[metric] = out
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(dict(model=args.model, job_id=os.environ['SLURM_JOB_ID'],
-                                        c4_windows=args.windows, scale_search=args.scale_search, summary=summary), indent=2) + '\n')
+                                        c4_windows=args.windows, summary=summary), indent=2) + '\n')
     print(json.dumps(summary, indent=2))
 
 
