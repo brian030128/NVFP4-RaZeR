@@ -893,6 +893,34 @@ E[x²]-weighted proxy, one permutation per matrix.
     head.
   - A KL/PPL test of a zero-overhead 8×64 variant has not been run.
 
+**Activations: a static per-K-strip type map (job 444558,
+`analyze_act_e0m3_headroom.py`, `results/mixfp4_potential/train_map/act_e0m3_headroom_1b.json`).**
+- **Setup:**
+  - Every text linear layer's input, on 64 C4-train windows with one tensor-wide
+    global scale per window.
+  - FourOverSix E2M1 compared with E0M3 per 16-channel block.
+  - The error is weighted by the weight column energy ‖W[:, j]‖², with plain MSE
+    also reported.
+  - The static map is fit on 32 windows and scored on 32 others.
+
+| | weighted | MSE |
+|---|---:|---:|
+| E0M3 per block beyond FourOverSix (1×16 ceiling) | −12.1% | −9.4% |
+| run-time decision per 16×64 tile (oracle, not free) | −0.23% (1.9% of the ceiling) | −0.11% (1.2%) |
+| static per-K-strip map, held out | ≈0 (−0.0002%) | ≈0 |
+| static map chosen on the test windows | ≈0 (+0.0002%) | ≈0 |
+| K strips electing E0M3 | 0.27% | 0.29% |
+
+- **The activation channel structure favours E2M1.** Blocks holding an outlier
+  channel are peaked and prefer E2M1 for every token. The E0M3-preferring blocks
+  are flat, outlier-free blocks, and which ones are flat varies from token to
+  token.
+- Summed over tokens, nearly every strip prefers E2M1, so a static map elects
+  almost nothing.
+- This agrees with the earlier Llama-3.1-8B run-time measurement (commit
+  `5c8f641`, 4.7% kept at 16×64). Neither operand gives a tile-coherent E0M3
+  preference.
+
 Implementation: `run_train_map.py`, `slurm/train_map.sbatch`,
 `summarize_train_map.py`. Details and per-epoch curves are in
 [results/mixfp4_potential/train_map/REPORT.md](results/mixfp4_potential/train_map/REPORT.md).

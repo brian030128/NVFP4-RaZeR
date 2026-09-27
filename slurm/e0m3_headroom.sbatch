@@ -10,7 +10,7 @@
 #SBATCH --time=01:00:00
 #SBATCH --output=slurm/logs/%x_%j.out
 #SBATCH --error=slurm/logs/%x_%j.err
-# Usage: sbatch slurm/e0m3_headroom.sbatch OUT_JSON [analyze_e0m3_headroom.py args...]
+# Usage: sbatch [--export=ALL,SCRIPT=analyze_act_e0m3_headroom.py] slurm/e0m3_headroom.sbatch OUT_JSON [args...]
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?}"
 MAIN=/home/u4320956/NVFP4-RaZeR
@@ -18,4 +18,4 @@ export REORDER_HF_HOME=$MAIN/.joblib/huggingface PYTHON=$MAIN/.joblib/llama8b/bi
 source slurm/task_reorder_env.sh
 
 OUT="${1:?out}"; shift
-"$PYTHON" analyze_e0m3_headroom.py --out "$OUT" "$@"
+"$PYTHON" "${SCRIPT:-analyze_e0m3_headroom.py}" --out "$OUT" "$@"
