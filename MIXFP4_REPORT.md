@@ -272,6 +272,15 @@ candidates) and the final PPL evaluation.
 | Llama-3.2-3B-Instruct | 8×64 | 1.2 min | **10.3 min** | 24 s | 35.3 GiB | 43.0 GiB |
 | Llama-3.2-1B-Instruct | 256×64 | 1.0 min | **5.4 min** | 12 s | 22.9 GiB | 42.9 GiB |
 | Llama-3.2-1B-Instruct | 8×64 | 1.0 min | **5.6 min** | 12 s | 23.0 GiB | 42.9 GiB |
+| Qwen3.8-27B | 256×64 | 7.0 min | **3 h 5 min** | 490 s | 105.8 GiB | 78.2 GiB |
+| Qwen3.8-27B | 8×64 | 7.0 min | **3 h 6 min** | 495 s | 106.7 GiB | 78.4 GiB |
+| Qwen3.8-27B from nvidia NVFP4 (§5) | 256×64 | 7.8 min | **2 h 6 min** | 335 s | 96.6 GiB | 98.1 GiB |
+| Qwen3.8-27B from nvidia NVFP4 (§5) | 8×64 | 7.9 min | **2 h 3 min** | 327 s | 97.2 GiB | 98.2 GiB |
+
+Qwen runs one sequence per forward pass and accumulates 8 passes per optimizer
+step (its batched forward is not identical to batch 1), so a step costs 8
+single-sequence passes. The nvidia-start runs are cheaper because the gradient
+hook fires only on the 192 MLP matrices that carry tiles.
 
 - **Cost does not depend on tile size.** Each step is one forward and one backward
   over 8 × 512 tokens, and the tile reduction is a reshape-and-sum. 8×64 has 32×
@@ -343,6 +352,103 @@ Tile totals: 8B 425,984 (256×64) / 13,631,488 (8×64); 3B 172,032 / 5,505,024;
   −0.015 (8B-Instruct), −0.047 (3B) and −0.057 (1B). Smaller models also elect a
   larger share of E0M3 tiles.
 
+### Qwen3.8-27B
+
+Same method and hyperparameters: 20 epochs, lr 0.02, init −1, 16 steps per epoch.
+Each step accumulates 8 batch-1 passes. The 496 text linear layers carry tiles.
+Recurrent, conv, norm, vision and the head are not quantized, as in all Qwen work
+here. Jobs 445055 (256×64) and 445056 (8×64). The BF16, NVFP4 and FourOverSix
+rows and the FourOverSix per-window NLLs are from job 336969. The multi-round
+reference maps are the ones in
+[MIXFP4_MULTIROUND_REPORT.md](MIXFP4_MULTIROUND_REPORT.md) §3.
+
+| Policy | E0M3 tiles | WikiText-2 | C4 | ΔPPL vs FourOverSix (wiki / c4) | paired ΔNLL vs FourOverSix (wiki / c4) | paired ΔNLL vs multi-round (wiki / c4) |
+|---|---:|---:|---:|---|---|---|
+| BF16 (reference) | — | 7.050375 | 9.893323 | — | — | — |
+| NVFP4 | 0 | 7.579994 | 10.230958 | — | — | — |
+| NVFP4 FourOverSix | 0 | 7.287076 | 10.188365 | — | — | — |
+| multi-round 256×64 (deprecated) | 39,095 | 7.223045 | 10.152189 | −0.0640 / −0.0362 | −0.00883±0.00361 / −0.00356±0.00089 | — |
+| multi-round 8×64 (deprecated) | 17,571 | 7.205417 | 10.148049 | −0.0817 / −0.0403 | −0.01127±0.00442 / −0.00396±0.00089 | — |
+| **MixFP4 256×64** (SM100) | 70,267 (4.7%) | **7.131810** | **10.145408** | **−0.1553 / −0.0430** | −0.02154±0.00389 / −0.00423±0.00101 | −0.01271±0.00331 / −0.00067±0.00084 |
+| **MixFP4 8×64** (SM120) | 610,431 (1.3%) | **7.096120** | **10.125233** | **−0.1910 / −0.0631** | −0.02655±0.00438 / −0.00622±0.00101 | −0.01528±0.00449 / −0.00225±0.00082 |
+
+Tile totals: 1,492,480 (256×64) / 47,559,680 (8×64).
+
+- Both trained maps beat FourOverSix significantly on both datasets.
+- They close **66% (256×64) and 81% (8×64) of the WikiText gap** between
+  FourOverSix and BF16, but only 15% / 21% of the C4 gap. The WikiText gain is
+  much larger than on any Llama model, and the C4 gain is smaller.
+- Against the deprecated multi-round maps, the trained maps are significantly
+  better on WikiText at both tile sizes. On C4, 8×64 is better and 256×64 ties.
+- The multi-round Qwen maps varied by up to ±0.04 WikiText PPL between runs. This
+  trained-map result is also one seed.
+
+### Starting from nvidia/Qwen3.8-27B-NVFP4
+
+Can the trained map improve an already-optimized production checkpoint?
+[nvidia/Qwen3.8-27B-NVFP4](https://huggingface.co/nvidia/Qwen3.8-27B-NVFP4)
+(revision `482ca0f`, Model Optimizer 0.47/0.48) is a **mixed** checkpoint:
+- **NVFP4 on the MLP projections (192 matrices) and `lm_head`.** Its block
+  scales come from Model Optimizer's Local-Hessian calibration (a
+  Hessian-weighted per-block scale search on 2,048 samples; the model card does
+  not mention GPTQ). Activations use a static calibrated global scale and dynamic
+  E4M3 scales per 16 elements.
+- **FP8 W8A8 on every attention projection**, full and linear attention (208
+  matrices), with static per-tensor scales.
+
+**Setup** (`run_train_map.py --modelopt`, `quantize/modelopt_ckpt.py`,
+`slurm/train_map_modelopt.sbatch`):
+- **The checkpoint is emulated exactly.** Its NVFP4 weights are dequantized from
+  the packed codes, E4M3 block scales and FP32 global scale. The decode is
+  checked bitwise against an independent table lookup, and against the BF16
+  originals: mean NMSE 0.0075. FP8 weights are loaded with NMSE ≤ 7e-4.
+- **All 783 unquantized tensors** (norms, embeddings, recurrent/conv, vision) are
+  bit-identical to our pinned BF16 Qwen3.8-27B.
+- **Activations follow nvidia's recipe** on all 401 quantized layers, including
+  `lm_head`. The quantizer is per-token independent, so training and evaluation
+  use the same one.
+- **Tiles exist only on the 192 NVFP4 MLP matrices.** The FP8 attention layers
+  and `lm_head` stay exactly as shipped.
+  - The E2M1 candidate is **nvidia's own codes and scales, bitwise**.
+  - The E0M3 candidate is `block_max/7` on the BF16 weight, under nvidia's global
+    scale, so a tile never changes its tensor's scale. nvidia's global scales are
+    1.0–2.6× the `amax/(6·448)` rule.
+- **Training is unchanged:** 128 math/code sequences, KL to the BF16 teacher,
+  STE, Adam, 20 epochs.
+- **The baseline** is the zero-epoch run, i.e. nvidia's model as shipped, with
+  matched per-window NLLs.
+
+Jobs: 445063 (baseline), 445064 (256×64) and 445065 (8×64).
+
+| Policy | E0M3 tiles | WikiText-2 | C4 | ΔPPL vs nvidia (wiki / c4) | paired ΔNLL vs nvidia (wiki / c4) |
+|---|---:|---:|---:|---|---|
+| BF16 (reference) | — | 7.050375 | 9.893323 | — | — |
+| nvidia NVFP4 (MLP) + FP8 (attention), as shipped | 0 | 7.185603 | 10.179512 | — | — |
+| **+ MixFP4 256×64** | 47,724 (4.6%) | **7.159577** | **10.173418** | **−0.0260 / −0.0061** | −0.00363±0.00263 / −0.00060±0.00079 |
+| **+ MixFP4 8×64** | 438,750 (1.3%) | **7.147312** | **10.161573** | **−0.0383 / −0.0179** | −0.00534±0.00262 / −0.00176±0.00075 |
+
+Tile totals (MLP only): 1,044,480 (256×64) / 33,423,360 (8×64). Development KL
+0.03540 → 0.03448 (256×64) / 0.03388 (8×64).
+
+- **8×64 improves nvidia's checkpoint significantly on both datasets.** It closes
+  28% of its WikiText gap to BF16 and 6% of its C4 gap.
+- **256×64 is significant on WikiText (−0.026 PPL) but within noise on C4.**
+- The gains are much smaller than when starting from our own FourOverSix. Three
+  reasons:
+  1. Only the MLP carries tiles.
+  2. The Local-Hessian E2M1 scales are already a stronger baseline.
+  3. The FP8 attention leaves less total error to remove: nvidia's start is dev
+     KL 0.0354 against 0.0462 for our W4A4 FourOverSix.
+- **For comparison,** nvidia's shipped model scores 7.1856 / 10.1795, against
+  7.2871 / 10.1884 for our all-W4A4 FourOverSix. Our all-4-bit trained MixFP4
+  maps, with attention also at 4-bit, beat nvidia's FP8-attention model
+  significantly. Paired ΔNLL (wiki / c4):
+  - 256×64 vs nvidia as shipped: −0.00751±0.00355 / −0.00336±0.00131;
+  - 8×64 vs nvidia as shipped: −0.01253±0.00376 / −0.00535±0.00133;
+  - 8×64 vs nvidia + MixFP4 8×64: −0.00719±0.00430 / −0.00358±0.00144.
+- **Fidelity caveat:** these are fake-quant numbers of an emulation. They were
+  not cross-checked against a real vLLM run of the checkpoint.
+
 ## 6. Training dynamics
 
 Development KL of the hard map under the evaluation protocol (monitor only), with
@@ -359,6 +465,12 @@ the E0M3 tile count in parentheses. Llama-3.1-8B; the all-E2M1 start is 0.10845.
 Final development KL on the Instruct models (FourOverSix → 256×64 / 8×64):
 8B-Instruct 0.10870 → 0.08036 / 0.07805; 3B-Instruct 0.09620 → 0.08081 / 0.07677;
 1B-Instruct 0.16656 → 0.12436 / 0.10905.
+
+Qwen3.8-27B (all-E2M1 start 0.04625): 256×64 bottomed at 0.04234 (epoch 14) and
+ended at 0.04262; 8×64 fell to 0.04164 at epoch 20, roughly flat after epoch 8.
+Starting from nvidia's checkpoint (0.03540), both runs fluctuate. 256×64 ends at
+0.03448 (minimum 0.03401 at epoch 18) and 8×64 at 0.03388 (minimum 0.03377 at
+epoch 12).
 
 - **Held-out KL falls well below the start** on every run, even though the
   development set never enters an update. The training-time approximations of §3.4 do not stop the gradient from
@@ -381,10 +493,15 @@ Per-epoch curves: [results/mixfp4_potential/train_map/REPORT.md](results/mixfp4_
 - **GEMM cost of trained maps is unmeasured.** The maps are heterogeneous and
   elect up to 29% E0M3 tiles (1B, 256×64). §2 shows only that a uniform type
   switch is free on SM100.
-- **Not yet run with trained maps:** Qwen3.8-27B (runs were started and stopped
-  before finishing), and zero-shot accuracy on any model. Both exist only for the
-  deprecated multi-round maps, in
-  [MIXFP4_MULTIROUND_REPORT.md](MIXFP4_MULTIROUND_REPORT.md) §3-§4.
+- **Not yet run with trained maps:** zero-shot accuracy on any model. It exists
+  only for the deprecated multi-round maps, in
+  [MIXFP4_MULTIROUND_REPORT.md](MIXFP4_MULTIROUND_REPORT.md) §4.
+- **Qwen3.8-27B is one seed per arm.** Its multi-round selections were
+  path-sensitive (±0.04 WikiText), so repeat seeds before quoting its trained-map
+  gain as a stable number.
+- **The nvidia-start numbers are an emulation** of the modelopt checkpoint in fake
+  quantization and are not validated against vLLM. The E0M3 candidate there
+  uses the plain `block_max/7` scale, not a Local-Hessian search.
 
 ---
 
