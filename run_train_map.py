@@ -164,14 +164,24 @@ def main():
                          'then let tiles flip on top')
     ap.add_argument('--stage2', choices=('joint', 'tiles'), default='joint',
                     help='After --scale-epochs: keep training the scale with the tiles (joint), or freeze it (tiles)')
-    ap.add_argument('--fit-source', choices=('mathcode', 'c4'), default='mathcode',
-                    help='Calibration text: the pinned math/code windows, or general web text from a C4 TRAIN shard')
+    ap.add_argument('--fit-source', choices=('mathcode', 'c4', 'mix'), default='mathcode',
+                    help='Calibration text: the pinned math/code windows, general web text from a C4 TRAIN shard, '
+                         'or mix = --fit-count C4 windows plus the pinned math/code windows')
+    ap.add_argument('--keep-best', action='store_true',
+                    help='Early stopping: restore the hard maps of the development evaluation with the lowest '
+                         'primary dev KL (epoch 0 included) before the final evaluation')
+    ap.add_argument('--tile-init', type=float, default=None,
+                    help='--alt joint: initial type-tile logit (default --init-logit); more negative = fewer, '
+                         'more consistent tile flips')
     ap.add_argument('--fit-count', type=int, default=512, help='--fit-source c4: number of 512-token windows')
     ap.add_argument('--dev-source', choices=('mathcode', 'c4'), default='mathcode',
                     help='Monitoring/epoch-selection set; with c4 the math/code set is also reported as dev2')
     ap.add_argument('--dev-count', type=int, default=192, help='--dev-source c4: number of held-out 512-token windows')
     ap.add_argument('--no-epoch-maps', action='store_true', help='Save only the final hard maps (disk quota)')
     ap.add_argument('--no-logits', action='store_true', help='Do not save the FP32 latent logits (disk quota)')
+    ap.add_argument('--packed-maps', action='store_true', help='Save final hard maps bit-packed (disk quota)')
+    ap.add_argument('--no-dev2', action='store_true',
+                    help='--dev-source c4: skip the secondary math/code dev monitor (saves ~25 GB of teacher logits)')
     ap.add_argument('--extra-fit', type=int, default=0,
                     help='Additional calibration windows PER SOURCE (math, code) beyond the pinned 64+64, '
                          'excluding the pinned and development documents')
@@ -212,17 +222,19 @@ def main():
         model, modules = load_model(prior, False)
         model.set_attn_implementation('sdpa')
     tok = AutoTokenizer.from_pretrained(prior['source'], revision=prior['revision'])
-    c4_needed = (args.fit_count if args.fit_source == 'c4' else 0) + (args.dev_count if args.dev_source == 'c4' else 0)
+    c4_fit = args.fit_count if args.fit_source in ('c4', 'mix') else 0
+    c4_needed = c4_fit + (args.dev_count if args.dev_source == 'c4' else 0)
     if c4_needed:
         # Calibration windows first, then development windows: disjoint documents of the same C4 train shard.
         c4, c4_meta = c4_train_windows(tok, c4_needed)
-    if args.fit_source == 'c4':
-        assert not args.extra_fit, '--extra-fit applies to --fit-source mathcode'
-        fit = c4[:args.fit_count]
-        report['fit_c4'] = dict(c4_meta, records=c4_meta['records'][:args.fit_count])
-    else:
-        fit, _ = math_code_data(tok, prior['fit'])
-        fit = [b for source in ('math', 'code') for b in fit[source]]
+    fit = []
+    if c4_fit:
+        assert not args.extra_fit or args.fit_source == 'mix', '--extra-fit applies to math/code calibration'
+        fit += c4[:c4_fit]
+        report['fit_c4'] = dict(c4_meta, records=c4_meta['records'][:c4_fit])
+    if args.fit_source in ('mathcode', 'mix'):
+        mc, _ = math_code_data(tok, prior['fit'])
+        fit += [b for source in ('math', 'code') for b in mc[source]]
         if args.extra_fit:
             extra, report['extra_fit'] = extra_math_code(tok, prior['fit'], args.extra_fit, args.model)
             fit += extra
@@ -231,10 +243,10 @@ def main():
     print(f'FIT {len(fit)} {args.fit_source} calibration sequences', flush=True)
     mathcode_dev, report['development'] = load_development(args.model)
     if args.dev_source == 'c4':
-        start = args.fit_count if args.fit_source == 'c4' else 0
+        start = c4_fit
         dev = [dict(ids=w) for w in c4[start:start + args.dev_count]]
         report['development_c4'] = dict(c4_meta, records=c4_meta['records'][start:start + args.dev_count])
-        second_dev = mathcode_dev  # also monitored, as dev2
+        second_dev = None if args.no_dev2 else mathcode_dev  # also monitored, as dev2
     else:
         dev, second_dev = mathcode_dev, None
     report['dev_source'] = args.dev_source
@@ -301,7 +313,8 @@ def main():
             packed[n] = p
         o, k = m.weight.shape
         assert k % cols == 0
-        theta[n] = torch.full((-(-o // rows), k // cols), args.init_logit, dtype=torch.float32, device=m.weight.device)
+        tile_init = args.init_logit if args.tile_init is None else args.tile_init
+        theta[n] = torch.full((-(-o // rows), k // cols), tile_init, dtype=torch.float32, device=m.weight.device)
         m.weight.copy_(scale_cands[n][0] if joint else b)
         del a, b
     if nvfp4_equal:
@@ -437,6 +450,13 @@ def main():
 
     initial = dev_eval()
     report['initial_dev'] = initial
+    best = dict(kl=initial['kl'], epoch=0)
+
+    def snapshot():
+        best['theta'] = {n: (t > 0).cpu() for n, t in theta.items()}
+        best['psi'] = {n: (t > 0).cpu() for n, t in psi.items()}
+    if args.keep_best:
+        snapshot()
     if second_dev is not None:
         report['initial_dev2'] = dev_eval(second_dev, second_teacher)
         print(f'START dev2 (math/code) KL {report["initial_dev2"]["kl"]:.6f}', flush=True)
@@ -528,6 +548,9 @@ def main():
         if (epoch + 1) % args.eval_every == 0 or epoch + 1 == args.epochs:
             d = dev_eval()
             entry['dev_ce'], entry['dev_kl'] = d['ce'], d['kl']
+            if args.keep_best and d['kl'] < best['kl']:
+                best.update(kl=d['kl'], epoch=epoch + 1)
+                snapshot()
             if second_dev is not None:
                 d2 = dev_eval(second_dev, second_teacher)
                 entry['dev2_ce'], entry['dev2_kl'] = d2['ce'], d2['kl']
@@ -539,16 +562,38 @@ def main():
         report['epochs'].append(entry)
         save(args.out, report)
         print('EPOCH ' + json.dumps({k: v for k, v in entry.items() if k != 'dev_kl_values'}), flush=True)
+    if args.keep_best:
+        # Early stopping: the final hard maps are those of the lowest primary dev KL. Logits are
+        # replaced by +/-1 with the same signs, so hard_map()/apply() reproduce that map exactly.
+        for n in theta:
+            theta[n].copy_(torch.where(best['theta'][n].to(theta[n].device), 1., -1.))
+        for n in psi:
+            psi[n].copy_(torch.where(best['psi'][n].to(psi[n].device), 1., -1.))
+        for n in modules:
+            apply(n, True)
+        report['best_epoch'], report['best_dev_kl'] = best['epoch'], best['kl']
+        print(f'KEEP_BEST epoch {best["epoch"]} dev KL {best["kl"]:.6f}', flush=True)
     final_map = hard_map()
-    torch.save({n: m.cpu() for n, m in final_map.items()}, args.out / 'map.pt')
+    def save_map(maps, path):
+        # --packed-maps: bit-packed (8x smaller) as {name: (uint8 bits, shape)}; unpack with
+        # np.unpackbits(bits)[:prod(shape)].reshape(shape).astype(bool).
+        if args.packed_maps:
+            import numpy as np
+            maps = {n: (torch.from_numpy(np.packbits(m.cpu().numpy().reshape(-1))), tuple(m.shape))
+                    for n, m in maps.items()}
+        else:
+            maps = {n: m.cpu() for n, m in maps.items()}
+        torch.save(maps, path)
+    save_map(final_map, args.out / 'map.pt')
     if not args.no_logits:
         torch.save({n: t.cpu() for n, t in theta.items()}, args.out / 'theta.pt')
     if joint:
         # True = the block uses its `hi` scale candidate (see scale_pair; only matters inside E2M1 tiles).
-        torch.save({n: (t > 0).cpu() for n, t in psi.items()}, args.out / 'scale_map.pt')
+        save_map({n: t > 0 for n, t in psi.items()}, args.out / 'scale_map.pt')
         if not args.no_logits:
             torch.save({n: t.cpu() for n, t in psi.items()}, args.out / 'psi.pt')
-        report['final_scale_flipped_active'] = report['epochs'][-1]['scale_flipped_active'] if report['epochs'] else 0
+        report['final_scale_flipped_active'] = sum(
+            int(((psi[n] > 0) & ~expand(theta[n] > 0, rows, cols // 16, psi[n].shape[0])).sum()) for n in psi)
         report['scale_map_sha256'] = digest_file(args.out / 'scale_map.pt')
     report['final_dev'] = dev_eval()
     if second_dev is not None:

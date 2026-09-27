@@ -893,6 +893,57 @@ E[x²]-weighted proxy, one permutation per matrix.
     head.
   - A KL/PPL test of a zero-overhead 8×64 variant has not been run.
 
+#### Model panel: joint 8×64 vs scale search, fixed protocol (jobs 444620–444634)
+
+The protocol was declared before any results:
+- **Calibration:** 512 C4-train windows plus the 128 pinned math/code windows
+  (`--fit-source mix`).
+- **Early stopping:** the maps with the lowest KL on 192 held-out C4-train windows
+  are kept, epoch 0 included (`--keep-best`, up to 16 epochs, dev every 2).
+- **Start:** plain NVFP4 scales (`--scale-init nvfp4`).
+- **Arms:** scale search 1×16; joint 8×64; joint 8×64 with tile logits starting
+  at −3 ("conservative", chosen by dev only).
+- **Seeds:** a second seed for the first two arms on 1B and 3B.
+
+| Model | Policy | E0M3 tiles | best epoch | best dev KL | WikiText-2 | C4 |
+|---|---|---:|---:|---:|---:|---:|
+| 1B | FourOverSix | 0 | — | 0.16656 | 15.356671 | 21.532633 |
+| | scale 1×16, s0 / s1 | 0 | 10 / 10 | 0.10002 / 0.09981 | 14.521424 / 14.499687 | 19.285959 / 19.263115 |
+| | joint 8×64, s0 / s1 | 121,239 / 154,872 | 8 / 10 | 0.10124 / 0.10246 | 14.442522 / 14.454830 | 19.273027 / 19.314077 |
+| | joint 8×64 conservative | 49 | 10 | 0.09925 | 14.517689 | 19.298998 |
+| 3B | FourOverSix | 0 | — | 0.09620 | 11.945266 | 15.507828 |
+| | scale 1×16, s0 / s1 | 0 | 6 / 6 | 0.06886 / 0.06824 | 11.428092 / 11.414133 | 15.011342 / 14.996850 |
+| | joint 8×64, s0 / s1 | 113,657 / 65,364 | 6 / 4 | 0.06949 / 0.06883 | 11.459064 / 11.472497 | 14.998642 / 15.017073 |
+| | joint 8×64 conservative | 3 | 4 | 0.06899 | 11.481193 | 15.044384 |
+| 8B | FourOverSix | 0 | — | 0.10870 | 7.814643 | 11.264191 |
+| | scale 1×16 | 0 | 4 | 0.08324 | 7.664011 | 11.055114 |
+| | joint 8×64 | 89,284 | 4 | 0.08244 | 7.670876 | 11.054080 |
+| | joint 8×64 conservative | 9 | 4 | 0.08193 | 7.662622 | 11.054905 |
+
+Joint 8×64 − scale 1×16, same model and seed (ΔNLL ± 2 SE, wiki / c4):
+
+| Model | seed 0 | seed 1 | seed noise (scale s1 − s0) |
+|---|---|---|---|
+| 1B | −0.00545±0.00190 / −0.00067±0.00128 | −0.00310±0.00177 / +0.00264±0.00143 | −0.00150±0.00158 / −0.00118±0.00134 |
+| 3B | +0.00271±0.00175 / −0.00085±0.00146 | +0.00510±0.00195 / +0.00135±0.00131 | −0.00122±0.00173 / −0.00097±0.00150 |
+| 8B | +0.00090±0.00140 / −0.00009±0.00116 | — | — |
+
+- **On average across models, joint 8×64 ties scale search.** The mean over the
+  five pairs is +0.00003 on WikiText and +0.0005 on C4.
+  - 1B: joint is better on WikiText (both seeds) and ties or is worse on C4.
+  - 3B: joint is worse on WikiText (both seeds) and ties on C4.
+  - 8B: a tie on both.
+- **The conservative arm elected only 3–49 tiles.** Once the scale is trained, the
+  gradient rarely supports a sustained tile flip. Its differences from scale-only
+  (e.g. 3B +0.0046 WikiText) come from early stopping picking a different epoch.
+  The stopping epoch alone moves results by about as much as any E0M3 effect.
+- **Scale search alone beats the earlier E0M3-only trained MixFP4 8×64 maps
+  (math/code calibration) on C4 for every model:** −0.0189 (1B), −0.0067 (3B),
+  −0.0047 (8B) ΔNLL. On WikiText it ties on 1B/3B and is better on 8B (−0.0046).
+  Part of this is the general-text calibration.
+- **Conclusion:** with a better calibration and early stopping, joint 8×64 is not
+  worse than scale search on average, but it is not better either.
+
 **Activations: a static per-K-strip type map (job 444558,
 `analyze_act_e0m3_headroom.py`, `results/mixfp4_potential/train_map/act_e0m3_headroom_1b.json`).**
 - **Setup:**
