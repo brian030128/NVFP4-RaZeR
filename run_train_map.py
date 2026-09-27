@@ -36,6 +36,7 @@ import torch.nn.functional as F
 import transformers
 from transformers import AutoTokenizer
 
+from quantize import modelopt_ckpt
 from quantize.causal_four_over_six import quantize_rows
 from quantize.fast_act import check as check_act, quant_per_document
 from quantize.packed_candidates import decode_alt, decode_base, nbytes, pack
@@ -79,12 +80,16 @@ def main():
     ap.add_argument('--eval-batch', type=int, default=16)
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--gpus', type=int, default=None, help='Qwen: 1 loads on one device, else balanced')
+    ap.add_argument('--modelopt', action='store_true',
+                    help='Start from nvidia/Qwen3.8-27B-NVFP4 (quantize/modelopt_ckpt.py): its NVFP4 MLP '
+                         'weights are the E2M1 candidate, tiles only on those layers, its activation recipe')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     started = time.time()
     torch.backends.cuda.matmul.allow_tf32 = False
     rows, cols = UNITS[args.unit]
     qwen = args.model == 'qwen27b'
+    assert not args.modelopt or qwen, '--modelopt is the nvidia Qwen3.8-27B checkpoint'
     if qwen:
         assert args.batch == 1 and args.eval_batch == 1, 'Qwen batched forward is not identical to batch 1'
     prior = json.loads((CALIBRATIONS[args.model] / 'report.json').read_text())
@@ -93,7 +98,8 @@ def main():
     report = dict(status='running', job_id=os.environ['SLURM_JOB_ID'],
                   args={k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
                   source_sha256={p: digest_file(p) for p in ('run_train_map.py', 'run_multiround.py', 'quantize/quantizer.py',
-                                                             'quantize/causal_four_over_six.py')},
+                                                             'quantize/causal_four_over_six.py',
+                                                             'quantize/modelopt_ckpt.py')},
                   epochs=[])
     save(args.out, report)
     if qwen:
@@ -123,11 +129,25 @@ def main():
         logits = model(input_ids=ids.to(device), use_cache=False).logits
         teacher.append(logits[:, :-1].float().log_softmax(-1).bfloat16().cpu())
     del logits
+    if args.modelopt:
+        ckpt = modelopt_ckpt.Checkpoint(modelopt_ckpt.download())
+        report['modelopt'] = dict(repo=modelopt_ckpt.REPO, revision=modelopt_ckpt.REVISION,
+                                  producer=json.loads((ckpt.path / 'hf_quant_config.json').read_text())['producer'])
+        candidate_stats = {}
     # Candidates exactly as run_multiround.py: packed 4-bit codes + FP8 scales,
     # verified bitwise by pack(), dense BF16 fallback otherwise.
     packed, dense, theta = {}, {}, {}
     for n, m in modules.items():
         assert sha(m.weight) == prior['matrices'][n]['source_sha256'], n
+        if args.modelopt:
+            if ckpt.kind(n) != 'NVFP4':
+                continue  # FP8 attention layers: loaded by ckpt.apply below, no tiles
+            packed[n], candidate_stats[n] = ckpt.nvfp4_candidate(n, m.weight)
+            o, k = m.weight.shape
+            theta[n] = torch.full((-(-o // rows), k // cols), args.init_logit, dtype=torch.float32,
+                                  device=m.weight.device)
+            m.weight.copy_(decode_base(packed[n]))
+            continue
         b = quant_nvfp4_4over6(m.weight, 4, 16)
         a = quant_mix_4_6(m.weight, 4, 16, type_block=(8, 64), clip='a1', elect='always')
         p = pack(m.weight, b, a)
@@ -140,6 +160,23 @@ def main():
         theta[n] = torch.full((-(-o // rows), k // cols), args.init_logit, dtype=torch.float32, device=m.weight.device)
         m.weight.copy_(b)
         del a, b
+    act_modules = {}
+    if args.modelopt:
+        # lm_head is NVFP4 in the checkpoint but carries no tiles; FP8 layers and all
+        # unquantized tensors are loaded from the checkpoint as well.
+        head = model.lm_head
+        p, report['lm_head_stats'] = ckpt.nvfp4_candidate('lm_head', head.weight)
+        head.weight.copy_(decode_base(p))
+        del p
+        acts, report['modelopt_load_audit'] = ckpt.apply(model, None)
+        named = dict(model.named_modules())
+        act_modules = {n: (named[n], kind, scale) for n, (kind, scale) in acts.items()}
+        modules = {n: m for n, m in modules.items() if n in theta}
+        report['candidate_stats'] = candidate_stats
+        report['modelopt_layers'] = dict(tiled=len(modules), fp8=sum(k == 'fp8' for _, k, _ in act_modules.values()),
+                                         nvfp4=sum(k == 'nvfp4' for _, k, _ in act_modules.values()))
+        print('MODELOPT ' + json.dumps(report['modelopt_layers']) + ' audit '
+              + json.dumps({k: v for k, v in report['modelopt_load_audit'].items() if k != 'skipped'}), flush=True)
     torch.cuda.empty_cache()
     report['candidate_storage'] = dict(packed_modules=len(packed), dense_fallback_modules=sorted(dense),
                                        packed_gib=sum(nbytes(p) for p in packed.values()) / 2 ** 30)
@@ -188,10 +225,29 @@ def main():
     def per_sequence_kl(lp, t):
         return (t.exp() * (t - lp)).sum(-1).mean(-1)
 
+    def modelopt_act(kind, scale):
+        # The checkpoint's static-scale recipe; per-token independent, so the same
+        # quantizer serves training (straight-through) and evaluation.
+        fn = modelopt_ckpt.act_nvfp4 if kind == 'nvfp4' else modelopt_ckpt.act_fp8
+
+        def hook(module, inputs):
+            x = inputs[0]
+            q = fn(x.detach(), scale)
+            return ((q + (x - x.detach())) if torch.is_grad_enabled() and x.requires_grad else q, *inputs[1:])
+        return hook
+
+    def act_hooks():
+        if args.modelopt:
+            return [m.register_forward_pre_hook(modelopt_act(kind, scale)) for m, kind, scale in act_modules.values()]
+        return None
+
     def eval_hooks(on):
         nonlocal eval_handles
         for h in eval_handles:
             h.remove()
+        if on and args.modelopt:
+            eval_handles = act_hooks()
+            return
         eval_handles = [m.register_forward_pre_hook(per_document_act) for m in modules.values()] if on else []
 
     def dev_eval():
@@ -266,7 +322,7 @@ def main():
         rng.shuffle(order)
         batches = [order[i:i + args.batch] for i in range(0, len(order), args.batch)]
         losses, flips_epoch = [], 0
-        handles = [m.register_forward_pre_hook(act) for m in modules.values()]
+        handles = act_hooks() or [m.register_forward_pre_hook(act) for m in modules.values()]
         handles += [m.register_forward_hook(make_hook(n)) for n, m in modules.items()]
         for g0 in range(0, len(batches), args.accum):
             group = batches[g0:g0 + args.accum]
