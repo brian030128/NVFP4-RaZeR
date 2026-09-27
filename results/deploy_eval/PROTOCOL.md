@@ -93,4 +93,13 @@ Nothing is selected or tuned on WikiText-2, C4 or zero-shot. Zero-shot is not pa
 
 ## Deviations (append-only)
 
-(none yet)
+1. **2026-09-27 18:10 UTC: `analyze.py` extended after the runs.** The registered analyses and the criterion are
+   unchanged. Added:
+   - a check that the evaluator's BF16 window NLLs equal the committed BF16 evaluations bitwise;
+   - for every significant cell of (i), as the protocol requires, the window-level diagnostics (z, median, the
+     largest windows, the mean without the largest) and the `sm120/eval/layerwise.py` summaries. The layerwise runs
+     are listed in `diagnostics/run_layerwise.sh`: the window with the largest |ΔNLL| and window 0, for the two map
+     cells. The NVFP4 cell has no map, so `layerwise.py` does not apply to it.
+
+   The records were copied into `results/deploy_eval/` (`runs/`, `artifacts/` without the weights, `diagnostics/`),
+   which the script now reads by default.

@@ -147,6 +147,11 @@ python run_ppl_deploy.py --model mistral7b --data-root $DATA \
 - **Kernel defaults:** `auto` for 16x64 artifacts, `n8k64_wB` for 8x64, `auto_stock` for FourOverSix/NVFP4.
 - **Output:** `report.json` holds the per-window NLLs, the PPLs, native coverage and wall time.
 
+**How close the deployment path is:** `results/deploy_eval/REPORT.md` compares NativeLinear (c) with fake (c) and
+with the (a) evaluator on all four models. Every TM-OPT+TC map stays significantly better than FourOverSix and
+NVFP4 under NativeLinear. The kernel-vs-fake differences are |ΔPPL| ≤ 0.021: 37 of 40 cells are not
+significant, and 3 exceed 2 SE by 3–5 %, with diagnostics given there.
+
 The older evaluators stay available:
 - `run_multiround.py --evaluate-map ... --eval-backend native|fake`, convention (a): one activation scale per window;
 - `sm120/eval/ppl.py`, the SM120 campaign's evaluator.
@@ -170,6 +175,12 @@ python sm120/bench/model.py --model mistral7b --policy native:artifacts/mistral7
 - **What it measures:** prefill latency, and decode tokens/s in eager and CUDA-graph modes. The GPU must be idle.
 - **The report's figures:** R2 in `results/tm_opt/REPORT_QR.md`, with 5 shuffled rounds and a profiler
   decomposition.
+
+## License status of the vendored kernel
+
+The mixfp4 kernel in `sm120/kernel` (brian030128/mixfp4@7b3ab34) is vendored with the author's permission (same
+research team). Upstream has no license file. An explicit license must be added before any public release; the
+team decides which. See `sm120/kernel/NOTICE.md`. CUTLASS (the submodule) is BSD-3-Clause.
 
 ## Where things are
 

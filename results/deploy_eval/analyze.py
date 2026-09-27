@@ -21,7 +21,11 @@ from analyze_final import evaluations  # noqa: E402  (the committed native (a) e
 from analyze_items import R, load, paired  # noqa: E402
 
 RUNS = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / 'runs'
-ARTIFACTS = Path(sys.argv[2]) if len(sys.argv) > 2 else Path('/home/dev/n16k64_campaign/deploy_eval/artifacts')
+ARTIFACTS = Path(sys.argv[2]) if len(sys.argv) > 2 else HERE / 'artifacts'
+DIAGNOSTICS = HERE / 'diagnostics'
+M = R.parent.parent / 'mr_variants' / 'runs'
+BF16 = {'llama8b': M / 'llama8b' / 'eval_bf16', 'mistral7b': M / 'mistral7b' / 'eval_bf16', 'phi4': M / 'phi4' / 'eval_bf16',
+        'qwen27b': R / 'q_eval_bf16'}
 MODELS = (('llama8b', 'Llama-3.1-8B'), ('mistral7b', 'Mistral-7B-v0.3'), ('phi4', 'Phi-4'), ('qwen27b', 'Qwen3.8-27B'))
 D = ('wiki', 'c4')
 MAPS = ('tc-8x64', 'tc-16x64', 'tc-256x64')
@@ -103,6 +107,26 @@ def main():
         res['checks']['windows_equal_native_a'] = {d: a_data[k]['token_sha256'] == rep['data'][k]['token_sha256']
                                                    for d, k in (('wiki', 'wiki'), ('c4', 'c4_paper'))}
         res['timing_meta'] = dict(load_seconds=rep.get('load_seconds'), data_seconds=rep.get('data_seconds'), total_seconds=rep.get('seconds'))
+        # the evaluator reproduces the committed BF16 evaluation window by window (same windows, loading and NLL)
+        old = load(BF16[model] / 'report.json')['evaluations']['BF16']['evaluation']
+        res['checks']['bf16_window_nll_equal_committed'] = {d: ev['BF16']['evaluation'][d]['nll'] == old[d]['nll'] for d in D}
+        # diagnostics of any significant (i) cell: its largest windows, the mean without the largest, layerwise runs
+        res['diagnostics'] = {}
+        for p, row in res['kernel'].items():
+            for d in D:
+                if row[d]['negligible']:
+                    continue
+                a, b = nll(ev, p)[d], nll(ev, f'{p}-fake')[d]
+                diff = [x - y for x, y in zip(a, b)]
+                order = sorted(range(len(diff)), key=lambda i: -abs(diff[i]))
+                rest = [diff[i] for i in order[1:]]
+                lw = {}
+                for f in sorted(DIAGNOSTICS.glob(f"layerwise_{model}_{ARTIFACT_OF[p]}_{d}_w*.json")):
+                    lw[f.stem] = {k: v for k, v in load(f)['summary'].items() if k != 'worst_native'}
+                res['diagnostics'][f'{p} {d}'] = dict(
+                    z=row[d]['mean'] / (row[d]['two_se'] / 2), median=sorted(diff)[len(diff) // 2],
+                    positive=sum(x > 0 for x in diff), windows=len(diff), largest=[(i, diff[i]) for i in order[:3]],
+                    without_largest=paired(rest, [0.0] * len(rest)), layerwise=lw)
         # B3 ownership and the exporter's checks
         for p in POLICIES:
             adir = ARTIFACTS / f'{model}_{ARTIFACT_OF[p]}'
@@ -139,6 +163,14 @@ def main():
             for d in D:
                 x = row[d]
                 md.append(f"| {NAMES.get(p, p)} | {d} | {x['ppl_c']:.4f} | {x['ppl_a']:.4f} | {x['mean']:+.5f} ± {x['two_se']:.5f} |")
+        for k, g in res['diagnostics'].items():
+            p, d = k.split()
+            lws = '; '.join(f"{name.split('_')[-1]}: native vs exact {v['native_vs_ref_mean']:.5f} (max {v['native_vs_ref_max']:.5f}), fake vs exact "
+                            f"{v['fake_vs_ref_mean']:.5f} (max {v['fake_vs_ref_max']:.5f}), layers where native is worse {v['layers_native_worse_than_fake']}/"
+                            f"{v['layers']}, activation codes bitwise {v['all_act_codes_bitwise']}" for name, v in g['layerwise'].items())
+            md += ['', f"Diagnostics, {NAMES.get(p, p)} {d} (significant): z = {g['z']:+.2f}; median ΔNLL {g['median']:+.6f}; {g['positive']}/{g['windows']} "
+                   f"windows positive; largest windows {[(i, round(x, 4)) for i, x in g['largest']]}; without the largest window "
+                   f"{g['without_largest']['mean']:+.6f} ± {g['without_largest']['two_se']:.6f}." + (f' Layerwise ({lws}).' if lws else '')]
         tn = [v['evaluation_seconds'] for k, v in res['timing'].items() if v['backend'] == 'NativeLinear (c)' and v['evaluation_seconds']]
         tf = [v['evaluation_seconds'] for k, v in res['timing'].items() if v['backend'] == 'fake (c)' and v['evaluation_seconds']]
         ta = res['timing_native_a'][0]
