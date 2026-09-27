@@ -2,7 +2,8 @@
 
 Llama-3.1-8B, W4A4, same candidates, calibration data, teacher, activation
 conventions and evaluation windows as the multi-round KL election of the root
-`MIXFP4_REPORT.md` §3. Jobs 441206 (256×64 STE), 441207 (8×64 STE),
+`MIXFP4_MULTIROUND_REPORT.md` §1 (deprecated; this method is now
+`MIXFP4_REPORT.md` §3). Jobs 441206 (256×64 STE), 441207 (8×64 STE),
 441208 (8×64 sigmoid), `run_train_map.py`. Maps and logits:
 `/work/u4320956/mixfp4_potential/train_map/<run>/{map.pt,theta.pt,map_epochNNN.pt}`.
 
@@ -29,7 +30,7 @@ evaluated every 2 epochs as a monitor only; the reported map is the last epoch.
 
 Paired per window over the released WikiText-2 (2048-token) / C4 windows.
 FourOverSix per-window NLLs from `results/kse_paper/job_336566`; multi-round
-rows are the optimized maps of `MIXFP4_REPORT.md` §5 and reproduce its paired
+rows are the optimized maps of `MIXFP4_MULTIROUND_REPORT.md` §3 and reproduce its paired
 numbers. Produced by `summarize_train_map.py`.
 
 | Run | E0M3 tiles | final dev KL | WikiText | C4 | ΔPPL vs FourOverSix (wiki / c4) | ΔNLL vs FourOverSix ±2SE (wiki / c4) | ΔNLL vs multi-round ±2SE (wiki / c4) |
@@ -69,7 +70,7 @@ double the C4 gain over FourOverSix.
 ## Calibration time
 
 One H200 each. Selection time excludes setup (~1.5-1.8 min, both methods) and
-the final PPL evaluation, as in `MIXFP4_REPORT.md` §4.
+the final PPL evaluation, as in `MIXFP4_MULTIROUND_REPORT.md` §2.
 
 | Run | Selection time | Work | Peak GPU |
 |---|---:|---|---:|
