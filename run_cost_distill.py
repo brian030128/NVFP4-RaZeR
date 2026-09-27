@@ -18,6 +18,11 @@ the unquantized model and held on the CPU in BF16 (run_multiround.py convention)
 a second BF16 model on the GPU. Development and WikiText/C4 evaluation replicate
 run_multiround.py exactly (eval_batch documents per development forward, per-document
 activation scales, reference quantizers for the deployed weights).
+--no-dev (the real calibration scenario, results/nodev_cost/PROTOCOL.md): no development data, teacher or
+evaluation and no quantizer-verification phase. The fixed learning rate trains the budget, then the trained state is
+written ('save_state', forced). The student's construction is timed as 'preparation'.
+--deterministic: torch.use_deterministic_algorithms(True) (CUBLAS_WORKSPACE_CONFIG must be set) and a seeded global
+RNG (the QAT optimizer's stochastic rounding draws from it). Off by default, as in the recorded runs.
 """
 import argparse
 import json
@@ -284,10 +289,19 @@ def main():
                                                                 'development and WikiText/C4 evaluation')
     ap.add_argument('--data-root', type=Path, required=True)
     ap.add_argument('--transformers-deviation', action='store_true')
+    ap.add_argument('--no-dev', action='store_true', help='no development data, teacher, evaluation or verification')
+    ap.add_argument('--deterministic', action=argparse.BooleanOptionalAction, default=False)
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     started = time.time()
     torch.backends.cuda.matmul.allow_tf32 = False
+    if args.deterministic:
+        assert os.environ.get('CUBLAS_WORKSPACE_CONFIG') in (':4096:8', ':16:8'), 'set CUBLAS_WORKSPACE_CONFIG=:4096:8'
+        torch.use_deterministic_algorithms(True)
+        torch.manual_seed(args.seed)
+    if args.no_dev:
+        assert args.budget in ('c1', 'c2', 'pool') and args.evaluate is None, '--no-dev is for training runs'
+        args.save_state = True
     if args.evaluate is not None:
         trained = json.loads((args.evaluate / 'report.json').read_text())
         assert trained['status'] == 'complete' and trained['state_sha256'], args.evaluate
@@ -322,7 +336,7 @@ def main():
 
     monitor.enter('data_load')
     tok = AutoTokenizer.from_pretrained(prior['source'], revision=prior['revision'])
-    dev, report['development'] = load_development(development)
+    dev, report['development'] = ([], None) if args.no_dev else load_development(development)
     if args.budget == 'pool':
         pool = torch.load(args.pool, map_location='cpu', weights_only=True)
         per = args.pool_per_source
@@ -364,10 +378,13 @@ def main():
     teacher_bytes = sum(t.numel() * t.element_size() for t in list(teacher.values()) + dev_teacher)
     report['teacher_cpu_bytes'] = teacher_bytes
 
-    monitor.enter('quantizer_verification')
-    bad = verify_weights({n: m.weight for n, m in modules.items()})
-    report['fused_quantizer_bitwise_on_source_weights'] = not bad
-    assert not bad, bad
+    if args.no_dev:
+        monitor.enter('preparation')
+    else:
+        monitor.enter('quantizer_verification')
+        bad = verify_weights({n: m.weight for n, m in modules.items()})
+        report['fused_quantizer_bitwise_on_source_weights'] = not bad
+        assert not bad, bad
     pristine = {n: m.weight.detach().to('cpu', copy=True).pin_memory() for n, m in modules.items()}
     student = Student(args.arm, modules, lora_rank=args.lora_rank)
     if args.evaluate is not None:
@@ -397,7 +414,7 @@ def main():
             m.weight.copy_(backup[name])
         return result
 
-    if not probe and args.evaluate is None:
+    if not probe and args.evaluate is None and not args.no_dev:
         monitor.enter('initial_dev_eval')
         report['initial_dev'] = evaluate_deployed(lambda: dev_eval(dev, dev_teacher))
         counts['development_forward_sequences'] += len(dev)
@@ -542,19 +559,20 @@ def main():
     if args.checkpointing:
         model.gradient_checkpointing_disable()
     torch.cuda.empty_cache()
-    monitor.enter('final_dev_eval')
-    with torch.no_grad():
-        report['fused_quantizer_bitwise_on_final_weights'] = not student.verify_fused()
-        assert report['fused_quantizer_bitwise_on_final_weights']
-    final_dev = evaluate_deployed(lambda: dev_eval(dev, dev_teacher))
-    counts['development_forward_sequences'] += len(dev)
-    if args.evaluate is not None:
-        report['final_dev'] = final_dev
-        report['final_dev_matches_training_run'] = (final_dev['ce_nll'] == trained['final_dev']['ce_nll']
-                                                    and final_dev['kl_values'] == trained['final_dev']['kl_values'])
-    else:
-        report['final_dev'] = final_dev
-    print(f'END dev CE {final_dev["ce"]:.6f} KL {final_dev["kl"]:.6f}', flush=True)
+    if not args.no_dev:
+        monitor.enter('final_dev_eval')
+        with torch.no_grad():
+            report['fused_quantizer_bitwise_on_final_weights'] = not student.verify_fused()
+            assert report['fused_quantizer_bitwise_on_final_weights']
+        final_dev = evaluate_deployed(lambda: dev_eval(dev, dev_teacher))
+        counts['development_forward_sequences'] += len(dev)
+        if args.evaluate is not None:
+            report['final_dev'] = final_dev
+            report['final_dev_matches_training_run'] = (final_dev['ce_nll'] == trained['final_dev']['ce_nll']
+                                                        and final_dev['kl_values'] == trained['final_dev']['kl_values'])
+        else:
+            report['final_dev'] = final_dev
+        print(f'END dev CE {final_dev["ce"]:.6f} KL {final_dev["kl"]:.6f}', flush=True)
     report['final_dev_seconds'] = time.time() - started - report['setup_seconds'] - report['training_seconds']
     if args.save_state:
         monitor.enter('save_state')

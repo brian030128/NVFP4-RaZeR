@@ -50,6 +50,11 @@ legacy hook, and its FP32 error is at the noise level of 4,096-token sums (resul
                          rounded to bf16. The model's GEMMs are unchanged. Opt-in, not part of TM-OPT.
   --profile JSON         profile one training epoch after the setup (torch.profiler; GPU time by phase and region), write
                          JSON and stop.
+  --no-dev               the real calibration scenario (results/nodev_cost/PROTOCOL.md): no development data, no
+                         development teacher, no development evaluation (initial, monitor, final) and no per-epoch map
+                         checkpoints. The map is written in a 'write_output' phase. The development monitor never
+                         touches training, so the map is unchanged (checked bitwise against the committed maps).
+  --no-eval              skip the final WikiText-2 / C4 evaluation (evaluate separately, e.g. run_ppl_deploy.py).
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True is set by the caller; the report records it. Locally (no Slurm),
 --data-root points at the data layout of run_multiround.data_paths.
 """
@@ -153,6 +158,9 @@ def main():
                     help='Batch probe: stop after N optimizer steps and record the per-phase peak memory')
     ap.add_argument('--record-theta-hashes', action='store_true',
                     help='Record the sha256 of every logit after every optimizer step (bitwise comparisons)')
+    ap.add_argument('--no-dev', action='store_true',
+                    help='No development data, teacher or evaluation (the real calibration scenario); see the docstring')
+    ap.add_argument('--no-eval', action='store_true', help='Skip the final WikiText-2 / C4 evaluation')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     for key, value in (TM_OPT if args.tm_opt else LEGACY).items():
@@ -229,7 +237,7 @@ def main():
     tok = AutoTokenizer.from_pretrained(prior['source'], revision=prior['revision'])
     fit, _ = math_code_data(tok, prior['fit'])
     fit = [b for source in ('math', 'code') for b in fit[source]]
-    dev, report['development'] = load_development(development)
+    dev, report['development'] = ([], None) if args.no_dev else load_development(development)
     device = model.get_input_embeddings().weight.device
     monitor.enter('teacher_precompute')
     dev_teacher = []
@@ -250,10 +258,10 @@ def main():
         # ONE candidate store, in the native packed format; the training and fake paths decode from it
         from candidate_store import CandidateStore, lean_forward
         store = CandidateStore(rows, cols)
-    if 'native' in (args.dev_backend, args.eval_backend):
+    if (args.dev_backend == 'native' and not args.no_dev) or (args.eval_backend == 'native' and not args.no_eval):
         assert len(dev) % args.eval_batch == 0
         from native_dev import NativeDev
-        native = NativeDev(modules, rows, cols, tokens=args.eval_batch * dev[0]['ids'].shape[1], store=store)
+        native = NativeDev(modules, rows, cols, tokens=args.eval_batch * dev[0]['ids'].shape[1] if dev else 2048, store=store)
         native.single_pass_epilogue = args.single_pass_epilogue
     if args.tile_grad_kernel:
         from tile_score import tile_sums
@@ -488,15 +496,18 @@ def main():
     total_steps = steps_per_epoch * args.epochs
     rng = random.Random(args.seed)
 
-    monitor.enter('initial_dev_eval')
-    initial = dev_eval()
-    report['initial_dev'] = initial
+    if args.no_dev:
+        initial = report['initial_dev'] = None
+    else:
+        monitor.enter('initial_dev_eval')
+        initial = dev_eval()
+        report['initial_dev'] = initial
     report['setup_seconds'] = time.time() - started
     if args.record_theta_hashes:
         report['theta_sha256'] = [theta_digest()]
     save(args.out, report)
-    print(f'START dev CE {initial["ce"]:.6f} KL {initial["kl"]:.6f} tiles={report["tiles"]} '
-          f'steps/epoch={steps_per_epoch} total={total_steps}', flush=True)
+    print((f'START dev CE {initial["ce"]:.6f} KL {initial["kl"]:.6f} ' if initial else 'START (no development set) ')
+          + f'tiles={report["tiles"]} steps/epoch={steps_per_epoch} total={total_steps}', flush=True)
     if args.param == 'sigmoid':
         for n in modules:
             apply(n, False)
@@ -627,7 +638,7 @@ def main():
             report['status'] = 'profile_complete'
             save(args.out, report)
             return
-        if (epoch + 1) % args.eval_every == 0 or epoch + 1 == args.epochs:
+        if not args.no_dev and ((epoch + 1) % args.eval_every == 0 or epoch + 1 == args.epochs):
             monitor.enter('dev_evaluation')
             t1 = time.time()
             d = dev_eval()
@@ -640,20 +651,32 @@ def main():
         save(args.out, report)
         print('EPOCH ' + json.dumps({k: v for k, v in entry.items() if k not in ('dev_kl_values', 'dev_ce_values')}),
               flush=True)
-    monitor.enter('final_dev_eval')
+    monitor.enter('write_output' if args.no_dev else 'final_dev_eval')
     final_map = hard_map()
     torch.save({n: m.cpu() for n, m in final_map.items()}, args.out / 'map.pt')
-    torch.save({n: t.cpu() for n, t in theta.items()}, args.out / 'theta.pt')
-    report['final_dev'] = dev_eval()
+    if not args.no_dev:
+        torch.save({n: t.cpu() for n, t in theta.items()}, args.out / 'theta.pt')
+    report['final_dev'] = None if args.no_dev else dev_eval()
     report['final_e0m3_units'] = sum(int(m.sum()) for m in final_map.values())
     report['map_sha256'] = digest_file(args.out / 'map.pt')
-    report['theta_file_sha256'] = digest_file(args.out / 'theta.pt')
+    report['theta_file_sha256'] = None if args.no_dev else digest_file(args.out / 'theta.pt')
     report['optimization_seconds'] = time.time() - started - report['setup_seconds']
     report['training_seconds'] = sum(e['epoch_seconds'] for e in report['epochs'])
     report['monitor_seconds'] = sum(e.get('dev_seconds', 0.0) for e in report['epochs'])
     save(args.out, report)
-    print(f'FINAL dev CE {report["final_dev"]["ce"]:.6f} KL {report["final_dev"]["kl"]:.6f} '
-          f'e0m3={report["final_e0m3_units"]}', flush=True)
+    print((f'FINAL dev CE {report["final_dev"]["ce"]:.6f} KL {report["final_dev"]["kl"]:.6f} ' if report['final_dev'] else 'FINAL ')
+          + f'e0m3={report["final_e0m3_units"]}', flush=True)
+    if args.no_eval:
+        monitor.close()
+        phases = monitor.summary()
+        report['resources'] = dict(
+            total_seconds=time.time() - started,
+            gpus=[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())],
+            gpu_peak_allocated_gib=phases['gpu_peak_allocated_gib'], gpu_peak_reserved_gib=phases['gpu_peak_reserved_gib'],
+            cpu_peak_rss_gib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2 ** 20, phases=phases)
+        report['status'] = 'complete'
+        save(args.out, report)
+        return
     # Released PPL windows on the final HARD map.
     monitor.enter('final_evaluation')
     hard_mode[0] = True
