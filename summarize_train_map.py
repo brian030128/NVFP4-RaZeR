@@ -41,10 +41,20 @@ def paired(a, b):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--model', choices=tuple(FOUR_OVER_SIX), default='llama8b')
+    ap.add_argument('--baseline', type=Path, default=None,
+                    help='Zero-epoch run dir to pair against instead of FourOverSix (e.g. the nvidia '
+                         'modelopt checkpoint as shipped); multi-round columns are then omitted')
     ap.add_argument('runs', nargs='+', type=Path)
     args = ap.parse_args()
-    fo = four_over_six(args.model)
-    multi = {u: json.loads(p.read_text()) for u, p in MULTIROUND.get(args.model, {}).items()}
+    if args.baseline:
+        r = json.loads((args.baseline / 'report.json').read_text())
+        assert r['status'] == 'complete' and r['final_e0m3_units'] == 0 and r['args']['epochs'] == 0
+        fo, multi = r['evaluation'], {}
+        print(f'Baseline: {args.baseline.name}  WikiText {fo["wiki"]["ppl"]:.6f}  C4 {fo["c4"]["ppl"]:.6f}  '
+              '(the "FourOverSix" columns below are relative to this baseline)')
+    else:
+        fo = four_over_six(args.model)
+        multi = {u: json.loads(p.read_text()) for u, p in MULTIROUND.get(args.model, {}).items()}
     print('| Run | E0M3 tiles | final dev KL | WikiText | C4 | ΔPPL vs FourOverSix (wiki / c4) | '
           'ΔNLL vs FourOverSix ±2SE (wiki / c4) | ΔNLL vs multi-round ±2SE (wiki / c4) |')
     print('|---|---:|---:|---:|---:|---|---|---|')
