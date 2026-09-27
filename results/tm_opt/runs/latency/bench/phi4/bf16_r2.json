@@ -1,0 +1,215 @@
+{
+ "gpu": {
+  "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "driver_version": "595.71.05",
+  "power.limit": "500.00 W",
+  "power.default_limit": "600.00 W",
+  "clocks.max.sm": "3090 MHz",
+  "clocks.max.mem": "14001 MHz",
+  "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+  "persistence_mode": "Enabled",
+  "temperature.gpu": "60",
+  "utilization.gpu": "0 %",
+  "memory.used": "2 MiB",
+  "torch": "2.9.0+cu128",
+  "torch_cuda": "12.8",
+  "triton": "3.5.0",
+  "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+  "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "capability": [
+   12,
+   0
+  ],
+  "sm_count": 188,
+  "utc": "2026-09-27T08:35:30+00:00"
+ },
+ "model": "phi4",
+ "label": "bf16",
+ "artifact": null,
+ "kernel": null,
+ "round": 2,
+ "pid": 352517,
+ "prefill": {
+  "1x512": {
+   "ms": 63.96691131591797,
+   "min_ms": 62.4317741394043,
+   "max_ms": 64.35337829589844,
+   "tokens_per_s": 8004.13822501682
+  },
+  "1x2048": {
+   "ms": 232.58131408691406,
+   "min_ms": 232.13031005859375,
+   "max_ms": 233.30239868164062,
+   "tokens_per_s": 8805.522524628424
+  },
+  "4x2048": {
+   "ms": 988.1868286132812,
+   "min_ms": 983.7308349609375,
+   "max_ms": 991.4375,
+   "tokens_per_s": 8289.930368223793
+  }
+ },
+ "decomposition": {
+  "1x512": {
+   "gpu_ms": {
+    "BF16 linear GEMM": 47.77935533333338,
+    "other (norms, MLP activation, embeddings, residual)": 4.781517999999999,
+    "attention (SDPA, rotary, KV write)": 3.4977673333333437,
+    "lm_head (BF16)": 1.8350546666666667
+   },
+   "gpu_ms_total": 57.89369533333338,
+   "device_span_ms": {
+    "median": 58.433658203125,
+    "all": [
+     57.9792705078125,
+     58.433658203125,
+     66.4163544921875
+    ]
+   },
+   "gaps_ms": 0.5399628697916157,
+   "kernels_per_forward": 1661.0,
+   "top_kernels": {
+    "other (norms, MLP activation, embeddings, residual)": {
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native": 1.0612603333333326,
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::silu_kernel(at::TensorIteratorBase&)::{lambda(": 0.9314633333333329,
+     "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::MeanOps<float, float, float, float>, unsigned int, float, 4, 4> >(at::native::Red": 0.6874823333333325,
+     "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::opera": 0.5051376666666669
+    },
+    "BF16 linear GEMM": {
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8": 23.813993,
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_32x3_tn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_32x3_tn_align8": 12.99330666666667,
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_tn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_tn_align8::": 10.945517333333331,
+     "Memset (Device)": 0.026538333333333324
+    },
+    "attention (SDPA, rotary, KV write)": {
+     "void at::native::(anonymous namespace)::CatArrayBatchedCopy<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 4, 64, 64>(at::native::(anonymous n": 1.369166666666668,
+     "void pytorch_flash::flash_fwd_kernel<Flash_fwd_kernel_traits<128, 128, 64, 4, false, false, cutlass::bfloat16_t, Flash_kernel_traits<128, 128, 64, 4, cutlass::b": 0.8814396666666666,
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native": 0.5875986666666659,
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<c10::BFloat16> >(at::TensorIteratorBase&, at::native:": 0.29002899999999987
+    },
+    "lm_head (BF16)": {
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8": 1.8350546666666667
+    }
+   }
+  },
+  "1x2048": {
+   "gpu_ms": {
+    "BF16 linear GEMM": 191.4334806666666,
+    "other (norms, MLP activation, embeddings, residual)": 18.206615666666657,
+    "attention (SDPA, rotary, KV write)": 17.123077999999996,
+    "lm_head (BF16)": 7.196723333333333
+   },
+   "gpu_ms_total": 233.9598976666666,
+   "device_span_ms": {
+    "median": 236.3873837890625,
+    "all": [
+     232.2219287109375,
+     236.3873837890625,
+     236.8829228515625
+    ]
+   },
+   "gaps_ms": 2.427486122395919,
+   "kernels_per_forward": 1621.0,
+   "top_kernels": {
+    "other (norms, MLP activation, embeddings, residual)": {
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native": 6.514439333333338,
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::silu_kernel(at::TensorIteratorBase&)::{lambda(": 4.112796,
+     "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, float, at::native::binary_internal::MulFu": 1.789082666666665,
+     "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFl": 1.5133986666666668
+    },
+    "BF16 linear GEMM": {
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8": 137.5027323333332,
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_32x3_tn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x256_32x3_tn_align8": 53.93074833333332
+    },
+    "attention (SDPA, rotary, KV write)": {
+     "void pytorch_flash::flash_fwd_kernel<Flash_fwd_kernel_traits<128, 128, 64, 4, false, false, cutlass::bfloat16_t, Flash_kernel_traits<128, 128, 64, 4, cutlass::b": 7.983517666666662,
+     "void at::native::(anonymous namespace)::CatArrayBatchedCopy<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 4, 64, 64>(at::native::(anonymous n": 4.986135333333331,
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native": 2.113713000000001,
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<c10::BFloat16> >(at::TensorIteratorBase&, at::native:": 0.9916676666666663
+    },
+    "lm_head (BF16)": {
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8": 7.196723333333333
+    }
+   }
+  },
+  "4x2048": {
+   "gpu_ms": {
+    "BF16 linear GEMM": 770.5007353333338,
+    "other (norms, MLP activation, embeddings, residual)": 122.67473066666705,
+    "attention (SDPA, rotary, KV write)": 72.75566399999991,
+    "lm_head (BF16)": 29.030705000000005
+   },
+   "gpu_ms_total": 994.9618350000007,
+   "device_span_ms": {
+    "median": 997.2182568359375,
+    "all": [
+     993.535572265625,
+     997.2182568359375,
+     997.8126728515625
+    ]
+   },
+   "gaps_ms": 2.2564218359367487,
+   "kernels_per_forward": 1621.0,
+   "top_kernels": {
+    "other (norms, MLP activation, embeddings, residual)": {
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native": 30.275518333333327,
+     "void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::pow_tensor_scalar_kernel_impl<float, float>(at::TensorIteratorBase&, float)": 18.301850999999996,
+     "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, float, at::native::binary_internal::MulFu": 17.497064,
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::silu_kernel(at::TensorIteratorBase&)::{lambda(": 16.081986333333333
+    },
+    "BF16 linear GEMM": {
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8": 770.5007353333338
+    },
+    "attention (SDPA, rotary, KV write)": {
+     "void pytorch_flash::flash_fwd_kernel<Flash_fwd_kernel_traits<128, 128, 64, 4, false, false, cutlass::bfloat16_t, Flash_kernel_traits<128, 128, 64, 4, cutlass::b": 28.736729333333336,
+     "void at::native::(anonymous namespace)::CatArrayBatchedCopy<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 4, 64, 64>(at::native::(anonymous n": 20.575734333333344,
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native": 10.158527333333339,
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<c10::BFloat16> >(at::TensorIteratorBase&, at::native:": 7.224612999999997
+    },
+    "lm_head (BF16)": {
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8": 29.030705000000005
+    }
+   }
+  }
+ },
+ "decode": {
+  "eager_b1": {
+   "ms_per_token": 34.60868203183054,
+   "tokens_per_s": 28.89448373330926
+  },
+  "graph_b1": {
+   "ms_per_token": 21.55126971865684,
+   "tokens_per_s": 46.40097836714949,
+   "tokens_compared": 33,
+   "token_match": 1.0
+  }
+ },
+ "load_seconds": 4.8492937088012695,
+ "weights_gib": 27.305460929870605,
+ "peak_prefill_gib": 30.485331535339355,
+ "peak_total_gib": 30.485331535339355,
+ "gpu_end": {
+  "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "driver_version": "595.71.05",
+  "power.limit": "500.00 W",
+  "power.default_limit": "600.00 W",
+  "clocks.max.sm": "3090 MHz",
+  "clocks.max.mem": "14001 MHz",
+  "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+  "persistence_mode": "Enabled",
+  "temperature.gpu": "72",
+  "utilization.gpu": "60 %",
+  "memory.used": "29078 MiB",
+  "torch": "2.9.0+cu128",
+  "torch_cuda": "12.8",
+  "triton": "3.5.0",
+  "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+  "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "capability": [
+   12,
+   0
+  ],
+  "sm_count": 188,
+  "utc": "2026-09-27T08:35:59+00:00"
+ }
+}

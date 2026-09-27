@@ -197,6 +197,7 @@ def main():
     C = load('sm120_eval_common', SM120 / 'eval' / 'common.py')
     BM = load('sm120_bench_model', SM120 / 'bench' / 'model.py')
     out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
     res = dict(gpu=B.gpu_info(), model=args.model, label=args.label, artifact=args.artifact, kernel=args.kernel,
                round=args.round, pid=os.getpid(), prefill={}, decomposition={}, decode={})
     t0 = time.time()

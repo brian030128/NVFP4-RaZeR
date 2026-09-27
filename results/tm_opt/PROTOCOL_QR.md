@@ -143,3 +143,35 @@ task only.
      `results/tm_opt/latency/`) was started at 18:04 UTC. It waits, and runs no GPU work before
      "PART Q DONE", so Part Q's timings are not perturbed. The map conversion (CPU) runs after the
      Qwen runs.
+2. **2026-09-27 07:14 UTC: the user's decision (relayed by nvfp4-razer-c9): the paper's final method is
+   TM-OPT+TC.**
+   - **Settings:** identical for all models. The only allowed per-model difference is the batch size:
+     Qwen3.8-27B uses micro-batch 2 × accumulation 4, so its optimizer batch is still 8.
+   - **Qwen:** the user accepts TC on Qwen despite the mixed WikiText differences vs TM-OPT (Part Q).
+   - **Disclosures that stay:** the TC unit-test FAIL (`PROTOCOL_TC.md` deviation 1) and the Qwen
+     result.
+   - **Part R:** the measurements and analyses continue unchanged. Only the presentation changes: the
+     summary presents TM-OPT+TC as the final method, with TM-OPT, MR-OPT, FourOverSix, NVFP4 and BF16
+     as comparisons.
+   - **After Part R:** stop; the user specifies the paper experiments next.
+3. **2026-09-27 07:40 UTC: R2's benchmark stage restarted after a script bug; Qwen3.8-27B decode not
+   measured.**
+   - **The bug.** `queue_latency.sh` completed its preparation steps:
+     - the narrow-tile builds: all six built; the three mixed ones pass their self-tests;
+       `tests/test_select.py` 12 passed, 0 skipped; so DECODE=1;
+     - the exports: 32 artifacts, every packed weight checked against the fake-quant weight.
+
+     Its first benchmark process then failed after the prefill timing: `bench_latency.py` exported the
+     profiler trace before creating the output directory.
+   - **The fix and restart:** one line (`mkdir` of the output directory; `bench_latency.py` sha256
+     195648edbbf1…). The benchmark stage restarts from its first process with the same policies, seed
+     and orders (`queue_latency_bench.sh`, 18783f90da99…). Builds, checks and exports are not repeated.
+     The failed process's log is kept (`*.failed_mkdir.log`); no result of it is used.
+   - **Smoke tests before the restart** (scratch, not results): Llama TM-OPT+TC 16x64 with decode, and
+     Qwen TM-OPT+TC 16x64.
+   - **Qwen decode is not measured.** `sm120/bench/model.py`'s decode functions do not support the
+     Qwen3.5 hybrid (linear-attention) cache. The eager decode raises IndexError, and the CUDA-graph
+     decode's tokens match its eager reference in only 1 of 33 positions. Qwen therefore runs prefill
+     only; Llama, Mistral and Phi-4 run decode.
+   - **The analysis uses a decode result only if** its CUDA-graph tokens match the eager reference
+     exactly.

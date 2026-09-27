@@ -1,10 +1,15 @@
 # Part Q (Qwen3.8-27B) and Part R (final four-model analysis) — report
 
 Protocol: `PROTOCOL_QR.md`, registered 2026-09-26T17:52:02Z (sha256 05d84fd17661…, `registration_qr.json`),
-before any Part Q or R run. Deviation 1 records the batch probe. Nothing was selected or tuned on WikiText-2, C4 or
-zero-shot. The Qwen3.8-27B gate was open for this task only.
+before any Part Q or R run. Nothing was selected or tuned on WikiText-2, C4 or zero-shot. The Qwen3.8-27B gate was
+open for this task only.
 
-This file holds Part Q; Part R is added when it is complete.
+Deviations:
+1. The Qwen batch probe.
+2. The user's decision that **TM-OPT+TC is the paper's final method**, with identical settings for all models except the
+   batch (Qwen micro-batch 2 × accumulation 4, optimizer batch 8). This decision came after Part Q, so Part Q's
+   summary compares the two methods neutrally; Part R presents TM-OPT+TC first.
+3. R2's benchmark stage was restarted after a script bug, and Qwen decode was not measured.
 
 ## Part Q: Qwen3.8-27B, TM-OPT and TM-OPT+TC at 8x64, 16x64 and 256x64
 
@@ -129,7 +134,259 @@ TM-OPT+TC minus TM-OPT (paired within each process):
 Tables: `final_qwen.{json,md}` and the Qwen section of `final_ppl.{json,md}` (`analyze_final.py qwen|ppl`).
 Records: `runs/qwen/` (the reports, `queue_q.sh`, `commands_q.log`).
 
-## Part R
+## Part R: final four-model analysis — TM-OPT+TC is the final method
 
-In progress. The R2 latency queue (`sm120_bench/queue_latency.sh`, scripts in `latency/`) started at
-2026-09-27 07:01 UTC, after Part Q.
+**Final method:** TM-OPT+TC (`run_train_map.py --tm-opt --tile-grad-tc`, deviation 2).
+- **Settings:** seed 0, deterministic, STE, lr 0.02, θ init −1, Adam ε 1e-12, 20 epochs of 16 steps, and an
+  optimizer batch of 8 sequences on every model.
+- **Only per-model difference:** the batch. Qwen3.8-27B runs micro-batch 2 × accumulation 4.
+
+**Comparisons:** TM-OPT, MR-OPT (Llama, Mistral and Phi-4 only), FourOverSix, pure NVFP4 and BF16.
+**Models and units:** Llama-3.1-8B, Mistral-7B-v0.3, Phi-4 and Qwen3.8-27B, at 8x64, 16x64 and 256x64.
+
+### Summary
+
+- **Accuracy (R3, native evaluation):**
+  - **Vs FourOverSix and vs pure NVFP4:** TM-OPT+TC is significantly better in all 24 model × unit × corpus
+    cells.
+  - **Vs MR-OPT:** 13 better, 5 not significantly different, 0 worse (18 cells).
+  - **Vs TM-OPT:** 20 not significantly different, 2 better, 2 worse. The 2 worse are Qwen WikiText-2 at 8x64
+    and 256x64 (disclosed below).
+  - **Share of FourOverSix's gap to BF16 closed by the 8x64 map** (WikiText-2 / C4): Llama 14 / 16 %,
+    Mistral 17 / 17 %, Phi-4 25 / 21 %, Qwen 78 / 20 %.
+- **Calibration cost (R1):**
+  - **Selection time:** 7.9–9.8 min on the 7–8B models, 15.8 min on Phi-4 and 80 min on Qwen3.8-27B.
+  - **Setup:** 1.2–2.1 min, 6.5 min on Qwen.
+  - **Vs TM-OPT:** 30–35 % less selection time (11–12 % on Qwen).
+  - **Vs MR-OPT:** 44–80 % less.
+  - **Peak GPU memory:** the same as TM-OPT: 36–60 GiB, 90 GiB on Qwen.
+- **Latency on the SM120 deployment kernels (R2, speed only):**
+  - **16x64 and 256x64 maps** (weights on A, `n16k64_wA`; 256x64 as 16x64 granules):
+    - prefill: +1.6–2.1 % at 4×2048 vs FourOverSix and NVFP4 (+0.9–1.0 % on Qwen);
+    - decode: −0.3 to −0.6 % tokens/s vs FourOverSix.
+  - **8x64 maps** (weights on B, `n8k64_wB`):
+    - prefill: +4.5–5.7 % at 4×2048 (+2.5–2.8 % on Qwen);
+    - decode: −2.0 to −3.1 % vs FourOverSix on the same placement.
+    - Weights-on-B has no narrow-tile decode kernels, so its decode is 20–28 % slower than the weights-on-A path.
+  - **Mixed FP4 GEMM kernel vs the stock GEMM** on the same placement: +10–11 % (8x64) and +3.6–4.3 %
+    (16x64/256x64).
+  - **FourOverSix's activation quantizer** (two candidates) costs 6.5–7.2 % more than NVFP4's, at most 0.2 % of the
+    prefill.
+  - **BF16:** prefill is 2.0–2.1× slower than NVFP4 on the 7–14B models (1.6× on Qwen); decode is 1.7–2.0× slower.
+- **Disclosures:**
+  - **The TC unit test failed:** 3.9–6.5e-6 error vs FP64, against 0.24–1.45e-6 for the FP32 path
+    (`PROTOCOL_TC.md` deviation 1).
+  - **Qwen WikiText-2:** TC's maps differ from TM-OPT's by ±0.0046 with mixed signs (Part Q).
+  - **Qwen speed-up:** TC is only 12.7 % faster per epoch on Qwen.
+  - **R2 is speed only:** the deployment kernel's per-token activation scales and one-rounding epilogue differ
+    from the PPL convention (convention (a)).
+
+### R1. Calibration cost
+
+Sources: the committed run records; nothing was re-measured (`final_cost.{json,md}`, `analyze_final.py cost`).
+- **Selection:** the 20 epochs plus the monitor evaluations (TM-OPT and TM-OPT+TC), or every round with its
+  development evaluations (MR-OPT).
+- **Setup:** model load, data load, teacher logits, candidate packing and the initial development evaluation.
+
+| model | unit | TM-OPT+TC per epoch | TM-OPT+TC selection | vs TM-OPT | vs MR-OPT | setup | peak GPU allocated | host RSS |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Llama-3.1-8B | 8x64 | 22.8 s | 9.8 min | −30 % | −65 % | 1.4 min | 40.8 GiB | 42.3 GiB |
+| Llama-3.1-8B | 16x64 | 22.9 s | 9.8 min | −30 % | −78 % | 1.3 min | 40.6 GiB | 42.3 GiB |
+| Llama-3.1-8B | 256x64 | 22.8 s | 9.8 min | −30 % | −44 % | 1.4 min | 40.5 GiB | 42.2 GiB |
+| Mistral-7B-v0.3 | 8x64 | 19.6 s | 7.9 min | −34 % | −80 % | 1.2 min | 36.2 GiB | 14.7 GiB |
+| Mistral-7B-v0.3 | 16x64 | 19.7 s | 8.0 min | −34 % | −57 % | 1.2 min | 36.0 GiB | 14.7 GiB |
+| Mistral-7B-v0.3 | 256x64 | 19.6 s | 7.9 min | −35 % | −65 % | 1.2 min | 36.0 GiB | 14.7 GiB |
+| Phi-4 | 8x64 | 39.8 s | 15.8 min | −33 % | −56 % | 2.1 min | 59.7 GiB | 33.7 GiB |
+| Phi-4 | 16x64 | 39.8 s | 15.8 min | −33 % | −64 % | 2.1 min | 59.4 GiB | 33.7 GiB |
+| Phi-4 | 256x64 | 39.8 s | 15.9 min | −33 % | −55 % | 2.1 min | 59.2 GiB | 33.7 GiB |
+| Qwen3.8-27B | 8x64 | 216.6 s | 79.8 min | −12 % | — | 6.5 min | 90.4 GiB | 79.5 GiB |
+| Qwen3.8-27B | 16x64 | 217.0 s | 79.9 min | −12 % | — | 6.6 min | 89.9 GiB | 79.3 GiB |
+| Qwen3.8-27B | 256x64 | 216.5 s | 79.7 min | −11 % | — | 6.6 min | 89.6 GiB | 79.4 GiB |
+
+- **MR-OPT's time grows with its number of rounds** (8–20 scoring passes of 32–67 s each, plus the
+  development evaluations). TM-OPT+TC's time is fixed by its 20 epochs.
+- **Memory:** TM-OPT+TC's peak equals TM-OPT's. MR-OPT's is within 1.6 GiB of both.
+- **Context: QAT C1 on Llama** (`results/cost_comparison`):
+  - one epoch of full-weight QAT over 128 calibration sequences, non-deterministic;
+  - 26.9 s of training, about one TM-OPT+TC epoch;
+  - 85.3 GiB of GPU memory (2.1× TM-OPT+TC's) and 71.5 GiB of host RSS (1.7×).
+- **Non-deterministic TM-OPT+TC** (3-epoch probe, Llama 8x64): 20.9 s per epoch against 22.8 s deterministic.
+- **The full table**, every method with its setup split, is in `final_cost.md`.
+
+### R2. Evaluation-time latency on the SM120 deployment kernels (speed only)
+
+**Method**
+
+- **Kernels:** the SM120 kernel of `origin/SM120-kernel` f91c109, exported to
+  `/home/dev/n16k64_campaign/sm120_bench` (the repository working tree was not touched).
+- **Policies** (one process per model, policy and round):
+  - BF16;
+  - NVFP4 and FourOverSix on `stock_wA` (the deployment placement) and on `stock_wB` (placement-matched to
+    8x64), with NVFP4 and FourOverSix activation quantization respectively;
+  - the TM-OPT+TC and TM-OPT maps: 8x64 on `n8k64_wB`, 16x64 on `n16k64_wA`, and 256x64 on `n16k64_wA`.
+    Each 256-row tile becomes its 16x64 granules; the E0M3 area is checked unchanged, and the exporter checks
+    every packed weight against the fake-quant weight.
+  - The weights-on-A policies use the kernel sets that choose the tile width per token count: 128-wide
+    tiles for every prefill, 16-wide for decode. The call counts are recorded.
+- **Rounds:** 5 rounds; the order of the 11 policies is shuffled in every round (seed 20260926, orders in
+  `runs/latency/bench/order_*.json`).
+- **Prefill:** one forward over random tokens with the KV cache written; 2 warm-ups, then 7 forwards timed
+  with CUDA events. Reported: the median of the per-round medians, and overheads paired within rounds.
+- **Profiler decomposition:** 3 more forwards (1 on Qwen) under torch.profiler. Every kernel is attributed to the
+  innermost module region open at its launch:
+  - the FP4 GEMM, whose epilogue fuses the per-token scale, global scale, bias and bf16 rounding;
+  - the activation quantizer;
+  - the BF16 lm_head;
+  - attention;
+  - Qwen's linear attention;
+  - everything else.
+- **Decode:** batch 1, a 512-token prompt, 64 tokens, eager and CUDA-graph. A CUDA-graph result counts only if its
+  tokens equal the eager reference (deviation 3).
+- **GPU:** RTX PRO 6000 Blackwell, idle (checked before every process), 500 W power cap.
+
+**TM-OPT+TC**
+
+Prefill overheads are paired within rounds (median over 5 rounds). "Same placement" is `stock_wB` for 8x64 and
+`stock_wA` otherwise. The FP4 GEMM column is the mixed kernel's GEMM time vs FourOverSix's stock GEMM at 4×2048.
+
+| model | map | 1×2048 vs NVFP4 / FourOverSix | 4×2048 vs NVFP4 / FourOverSix | 4×2048 vs FourOverSix, same placement | FP4 GEMM, same placement | decode tok/s (vs FourOverSix, same placement) |
+|---|---|---|---|---|---|---|
+| Llama-3.1-8B | 8x64 (`n8k64_wB`) | +5.9 % / +5.7 % | +5.1 % / +5.1 % | +4.6 % | +11.1 % | 101.3 (−2.9 %) |
+| Llama-3.1-8B | 16x64 (`n16k64_wA`) | +2.3 % / +1.7 % | +1.9 % / +1.6 % | +1.6 % | +4.1 % | 136.9 (−0.5 %) |
+| Llama-3.1-8B | 256x64 (`n16k64_wA`) | +2.3 % / +1.8 % | +1.9 % / +1.6 % | +1.6 % | +4.3 % | 137.0 (−0.5 %) |
+| Mistral-7B-v0.3 | 8x64 (`n8k64_wB`) | +7.2 % / +6.9 % | +5.6 % / +5.4 % | +5.0 % | +11.3 % | 106.5 (−3.1 %) |
+| Mistral-7B-v0.3 | 16x64 (`n16k64_wA`) | +2.6 % / +2.5 % | +1.8 % / +1.8 % | +1.8 % | +4.2 % | 147.1 (−0.5 %) |
+| Mistral-7B-v0.3 | 256x64 (`n16k64_wA`) | +2.7 % / +2.7 % | +2.0 % / +2.0 % | +2.0 % | +4.3 % | 147.0 (−0.6 %) |
+| Phi-4 | 8x64 (`n8k64_wB`) | +6.5 % / +6.1 % | +5.7 % / +5.4 % | +4.5 % | +10.4 % | 76.0 (−2.0 %) |
+| Phi-4 | 16x64 (`n16k64_wA`) | +2.2 % / +1.9 % | +1.8 % / +1.6 % | +1.6 % | +3.7 % | 95.0 (−0.3 %) |
+| Phi-4 | 256x64 (`n16k64_wA`) | +2.6 % / +2.1 % | +2.1 % / +1.8 % | +1.8 % | +4.0 % | 95.1 (−0.3 %) |
+| Qwen3.8-27B | 8x64 (`n8k64_wB`) | (host-bound) | +2.8 % / +2.6 % | +2.5 % | +11.1 % | not measured |
+| Qwen3.8-27B | 16x64 (`n16k64_wA`) | (host-bound) | +1.0 % / +0.9 % | +0.9 % | +3.6 % | not measured |
+| Qwen3.8-27B | 256x64 (`n16k64_wA`) | (host-bound) | +0.9 % / +0.9 % | +0.9 % | +3.8 % | not measured |
+
+**Absolute numbers** (prefill in ms at 1×2048 / 4×2048; decode is CUDA-graph tokens/s at batch 1):
+
+| model | BF16 | NVFP4 (`stock_wA`) | FourOverSix (`stock_wA`) | TM-OPT+TC 8x64 | TM-OPT+TC 16x64 | TM-OPT+TC 256x64 |
+|---|---|---|---|---|---|---|
+| Llama-3.1-8B | 126.1 / 527.7; 80.5 tok/s | 59.7 / 265.2; 136.0 | 59.8 / 265.9; 137.6 | 63.0 / 278.7; 101.3 | 60.9 / 270.0; 136.9 | 61.0 / 270.6; 137.0 |
+| Mistral-7B-v0.3 | 120.3 / 504.4; 83.8 | 53.4 / 242.8; 145.9 | 53.6 / 243.3; 147.9 | 57.3 / 256.3; 106.5 | 54.9 / 247.5; 147.1 | 54.9 / 247.7; 147.0 |
+| Phi-4 | 232.1 / 985.6; 46.4 | 105.8 / 464.6; 94.4 | 106.2 / 465.5; 95.3 | 112.8 / 490.9; 76.0 | 108.3 / 473.2; 95.0 | 108.5 / 474.0; 95.1 |
+| Qwen3.8-27B | 767.1 / 2616.5 | 763.5 / 1640.7 | 754.6 / 1641.4 | 754.6 / 1684.1 | 767.7 / 1655.5 | 757.2 / 1656.3 |
+
+**Decomposition** (NVFP4, 4×2048, share of GPU kernel time):
+- **FP4 GEMM:** 40–45 % on the three smaller models; 23 % on Qwen, where the torch implementation of the
+  linear attention takes 54 %.
+- **Activation quantizer:** 6.6–7.7 % (3 % on Qwen).
+- **lm_head:** 3–11 %, depending on the vocabulary.
+- **Attention:** 14–16 %.
+- **Other:** 27–30 %, mostly the fp32 RMSNorm and the SiLU/multiply kernels.
+
+What changes between policies:
+- **The mixed-kernel overhead:** only the FP4 GEMM class changes between a map and FourOverSix on the same
+  placement: +10–11 % (8x64) and +3.6–4.3 % (16x64/256x64). On Llama, Mistral and Phi-4, every other class moves
+  by less than 0.4 ms (paired medians). Qwen's single-forward profiles scatter by up to 5.5 ms per class.
+- **The activation quantization:** FourOverSix's quantizer takes 6.5–7.2 % longer than NVFP4's (Llama at 4×2048: +1.2
+  ms on 18.7 ms). That is +0.05–0.2 % of the prefill at 4×2048.
+- **TM-OPT and TM-OPT+TC have the same latency** within 0.6 ms at 4×2048 on every model (Llama: 279.1 vs 278.7 ms
+  at 8x64, 269.9 vs 270.0 ms at 16x64). Their E0M3 counts differ by 0.1–9 %, and item #3 found the E0M3 density
+  worth at most 0.7 % of the prefill.
+
+**Caveats**
+- **1×512 cannot resolve map effects:** each process lands at about 30 or 36 ms (Llama), whatever the policy,
+  as in item #3. That prefill is host-bound; the numbers are in `latency.md`.
+- **Qwen3.8-27B:**
+  - **Host-bound at 1×512 and 1×2048:** BF16 is as fast as NVFP4 there, because the Python loops of the torch
+    linear-attention fallback dominate. Only 4×2048 is GPU-bound.
+  - **Its per-class times are less precise:** they come from one profiled forward per round, and they depend on
+    the power state of that round (kernels speed up by up to 9 % in rounds with host stalls). The paired medians
+    in the summary table are used, and the end-to-end 4×2048 timings stay tight (NVFP4 1638–1642 ms).
+  - **Decode is not measured:** the SM120 decode functions do not support the Qwen3.5 hybrid cache
+    (deviation 3).
+- **Decode placement:** 8x64 decode runs on 128-wide token tiles (no narrow weights-on-B builds exist).
+  Its −2 to −3 % is relative to `stock_wB`, which has the same limitation.
+- **Numerics:** the deployment kernel uses per-token activation scales and one rounding in the epilogue. R2
+  measures speed only; the accuracy numbers come from R3's convention.
+
+Checks:
+- **Narrow-tile builds:** all six built. The three mixed ones match their expected SASS census and pass their
+  self-tests (the stock ones have no format granule to test). `tests/test_select.py` passes 12/12 with none
+  skipped.
+- **Exports:** 32 exports, every packed weight equal to its fake-quant weight.
+- **Coverage:** in every process, all 224 / 224 / 160 / 496 scoped Linears ran natively, with no fallback and
+  E0M3 counts equal to the maps'.
+- **Tile widths:** 128-wide for every prefill, 16-wide for every decode.
+- **Decode tokens:** every Llama, Mistral and Phi-4 CUDA-graph decode matches its eager reference.
+
+### R3. PPL
+
+WikiText-2 and C4 under convention (a). Native evaluation is primary; paired ΔNLL per window, mean ± 2 SE.
+- **Sources:** the committed evaluations and Part Q's.
+- **Pairing across processes:** only where FourOverSix's window NLLs repeat bitwise (true for every merged
+  process).
+- **The full tables** (native and fake, every method, BF16) are in `final_ppl.md` (`analyze_final.py ppl`).
+
+TM-OPT+TC minus each comparison, native (WikiText-2; C4):
+
+| model | unit | TM-OPT+TC PPL | vs FourOverSix | vs NVFP4 | vs TM-OPT | vs MR-OPT |
+|---|---|---|---|---|---|---|
+| Llama-3.1-8B | 8x64 | 6.7827 / 9.6795 | −0.01362 ± 0.00177; −0.01496 ± 0.00284 | −0.02237 ± 0.00226; −0.02534 ± 0.00411 | +0.00007 ± 0.00143 (n.s.); +0.00043 ± 0.00103 (n.s.) | −0.00451 ± 0.00158; −0.00873 ± 0.00323 |
+| Llama-3.1-8B | 16x64 | 6.7865 / 9.6863 | −0.01305 ± 0.00178; −0.01426 ± 0.00280 | −0.02180 ± 0.00229; −0.02464 ± 0.00407 | −0.00062 ± 0.00144 (n.s.); +0.00051 ± 0.00103 (n.s.) | −0.00578 ± 0.00171; −0.00565 ± 0.00194 |
+| Llama-3.1-8B | 256x64 | 6.8012 / 9.7228 | −0.01090 ± 0.00176; −0.01050 ± 0.00263 | −0.01965 ± 0.00221; −0.02088 ± 0.00381 | +0.00081 ± 0.00152 (n.s.); −0.00027 ± 0.00124 (n.s.) | −0.00524 ± 0.00171; −0.00376 ± 0.00210 |
+| Mistral-7B-v0.3 | 8x64 | 5.4862 / 8.0261 | −0.00659 ± 0.00108; −0.00495 ± 0.00079 | −0.01250 ± 0.00114; −0.00862 ± 0.00094 | +0.00003 ± 0.00085 (n.s.); −0.00015 ± 0.00066 (n.s.) | +0.00045 ± 0.00091 (n.s.); −0.00091 ± 0.00065 |
+| Mistral-7B-v0.3 | 16x64 | 5.4951 / 8.0264 | −0.00497 ± 0.00225; −0.00492 ± 0.00122 | −0.01088 ± 0.00232; −0.00860 ± 0.00109 | +0.00066 ± 0.00229 (n.s.); −0.00026 ± 0.00142 (n.s.) | −0.00074 ± 0.00236 (n.s.); −0.00093 ± 0.00121 (n.s.) |
+| Mistral-7B-v0.3 | 256x64 | 5.4899 / 8.0326 | −0.00591 ± 0.00110; −0.00415 ± 0.00082 | −0.01182 ± 0.00121; −0.00782 ± 0.00097 | −0.00104 ± 0.00096 (better); +0.00010 ± 0.00071 (n.s.) | −0.00093 ± 0.00092; −0.00036 ± 0.00078 (n.s.) |
+| Phi-4 | 8x64 | 6.6128 / 10.4954 | −0.00784 ± 0.00155; −0.00477 ± 0.00086 | −0.01378 ± 0.00196; −0.00865 ± 0.00111 | +0.00059 ± 0.00120 (n.s.); −0.00043 ± 0.00071 (n.s.) | −0.00369 ± 0.00143; −0.00249 ± 0.00078 |
+| Phi-4 | 16x64 | 6.6161 / 10.5034 | −0.00735 ± 0.00152; −0.00402 ± 0.00083 | −0.01329 ± 0.00196; −0.00790 ± 0.00107 | +0.00080 ± 0.00116 (n.s.); +0.00009 ± 0.00073 (n.s.) | −0.00193 ± 0.00145; −0.00076 ± 0.00078 (n.s.) |
+| Phi-4 | 256x64 | 6.6308 / 10.5137 | −0.00512 ± 0.00141; −0.00303 ± 0.00083 | −0.01106 ± 0.00182; −0.00691 ± 0.00107 | +0.00039 ± 0.00124 (n.s.); +0.00006 ± 0.00076 (n.s.) | −0.00317 ± 0.00140; −0.00095 ± 0.00078 |
+| Qwen3.8-27B | 8x64 | 7.1062 / 10.1261 | −0.02816 ± 0.00476; −0.00570 ± 0.00095 | −0.06412 ± 0.00859; −0.00928 ± 0.00131 | **+0.00456 ± 0.00244 (worse)**; +0.00004 ± 0.00081 (n.s.) | — |
+| Qwen3.8-27B | 16x64 | 7.1144 / 10.1335 | −0.02701 ± 0.00498; −0.00497 ± 0.00091 | −0.06297 ± 0.00934; −0.00856 ± 0.00130 | −0.00446 ± 0.00264 (better); −0.00007 ± 0.00079 (n.s.) | — |
+| Qwen3.8-27B | 256x64 | 7.1951 / 10.1482 | −0.01573 ± 0.00366; −0.00352 ± 0.00076 | −0.05169 ± 0.00772; −0.00711 ± 0.00111 | **+0.00455 ± 0.00290 (worse)**; −0.00006 ± 0.00088 (n.s.) | — |
+
+Unmarked differences are significantly better (mean + 2 SE < 0).
+
+**Verdict counts** (native, models × units × corpora):
+
+| TM-OPT+TC vs | better | not significant | worse |
+|---|---:|---:|---:|
+| FourOverSix | 24 | 0 | 0 |
+| NVFP4 | 24 | 0 | 0 |
+| MR-OPT | 13 | 5 | 0 |
+| TM-OPT | 2 | 20 | 2 |
+
+Reference PPLs (WikiText-2 / C4):
+
+| model | BF16 | FourOverSix (native) | NVFP4 (native) |
+|---|---|---|---|
+| Llama-3.1-8B | 6.2403 / 8.9579 | 6.8757 / 9.8254 | 6.9361 / 9.9279 |
+| Mistral-7B-v0.3 | 5.3182 / 7.8306 | 5.5225 / 8.0660 | 5.5552 / 8.0957 |
+| Phi-4 | 6.4615 / 10.3098 | 6.6649 / 10.5456 | 6.7046 / 10.5866 |
+| Qwen3.8-27B | 7.0509 / 9.8935 | 7.3092 / 10.1840 | 7.5768 / 10.2206 |
+
+- **Unit ordering:** 8x64 has the lowest PPL on every model and corpus. 256x64 has the highest, except Mistral
+  WikiText-2 (256x64 5.4899, 16x64 5.4951). Units were not tested against each other.
+- **Share of FourOverSix's gap to BF16 closed** by TM-OPT+TC (WikiText-2 / C4):
+
+  | model | 8x64 | 16x64 | 256x64 |
+  |---|---|---|---|
+  | Llama | 14 / 16 % | 13 / 15 % | 11 / 11 % |
+  | Mistral | 17 / 17 % | 13 / 17 % | 16 / 14 % |
+  | Phi-4 | 25 / 21 % | 24 / 18 % | 17 / 13 % |
+  | Qwen | 78 / 20 % | 75 / 17 % | 44 / 12 % |
+
+  Qwen's WikiText-2 gap is small to begin with (0.036 NLL, against 0.097 on Llama).
+- **Fake evaluation** gives the same picture (`final_ppl.md`).
+
+### Records
+
+- **Part R tables:**
+  - `final_cost.{json,md}`, `final_ppl.{json,md}` (`analyze_final.py`);
+  - `latency/latency.{json,md}` (`latency/analyze_latency.py`).
+- **R2 scripts:**
+  - `latency/convert_maps.py`, `latency/bench_latency.py`;
+  - the queues `runs/latency/queue_latency.sh` and `queue_latency_bench.sh`.
+- **R2 records:** `runs/latency/`:
+  - every per-process result and the policy orders;
+  - map provenance and artifact metadata (no weights);
+  - the narrow-build manifests;
+  - logs and `commands_r2.log`.
+- **Part Q records:** `runs/qwen/`.

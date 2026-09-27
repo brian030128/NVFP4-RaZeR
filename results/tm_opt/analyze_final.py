@@ -58,7 +58,7 @@ def cost():
                       '|---|---|---|---:|---:|---|---:|---:|---|']
     for model, title in MODELS:
         for unit in UNITS:
-            for method, name in (('tmopt', 'TM-OPT'), ('tc', 'TM-OPT+TC')):
+            for method, name in (('tc', 'TM-OPT+TC'), ('tmopt', 'TM-OPT')):
                 p = tm_dir(model, method, unit) / 'report.json'
                 if not p.exists() or 'resources' not in load(p):
                     continue
@@ -87,9 +87,21 @@ def cost():
         e = [x['epoch_seconds'] for x in load(probe)['epochs']]
         out['llama8b 8x64 TM-OPT+TC non-deterministic'] = dict(epoch_seconds=e)
         lines.append(f"| Llama-3.1-8B | 8x64 | TM-OPT+TC, non-deterministic (3-epoch probe) | {sum(e) / len(e):.1f} s | — | — | — | — | 8 × 1 |")
+    head = ['## Summary: TM-OPT+TC selection time and memory', '',
+            '| model | unit | TM-OPT+TC per epoch | TM-OPT+TC selection | vs TM-OPT (selection) | vs MR-OPT (selection) | setup | peak GPU allocated | host RSS |',
+            '|---|---|---:|---:|---:|---:|---:|---:|---:|']
+    for model, title in MODELS:
+        for unit in UNITS:
+            tc, tm, mr = (out.get(f'{model} {unit} {n}') for n in ('TM-OPT+TC', 'TM-OPT', 'MR-OPT'))
+            if tc is None:
+                continue
+            rel = lambda o: f"{100 * (tc['selection_seconds'] / o['selection_seconds'] - 1):+.0f} %" if o else '—'  # noqa: E731
+            head.append(f"| {title} | {unit} | {tc['epoch_seconds']:.1f} s | {tc['selection_seconds'] / 60:.1f} min | {rel(tm)} | {rel(mr)} | "
+                        f"{tc['setup_seconds'] / 60:.1f} min | {tc['gpu_peak_allocated_gib']:.1f} GiB | {tc['host_peak_rss_gib']:.1f} GiB |")
+    head += ['', '## All rows', '']
     (HERE / 'final_cost.json').write_text(json.dumps(out, indent=1) + '\n')
-    (HERE / 'final_cost.md').write_text('\n'.join(lines) + '\n')
-    print('\n'.join(lines))
+    (HERE / 'final_cost.md').write_text('\n'.join(head + lines) + '\n')
+    print('\n'.join(head + lines))
 
 
 def evaluations(model):
@@ -100,7 +112,8 @@ def evaluations(model):
         out['fake']['BF16'] = bf16['BF16']
         return out, dict(single_process=True)
     sources = {'native': [R / f'items_{model}_eval_native', R / f'tc_{model}_eval_native', M / model / 'eval_native'],
-               'fake': [R / f'items_{model}_eval_fake', R / f'tc_{model}_eval_fake', M / model / 'eval_fake', M / model / 'eval_bf16']}
+               'fake': [R / f'items_{model}_eval_fake', R / f'tc_{model}_eval_fake', M / model / 'eval_fake', M / model / 'eval16_fake',
+                        M / model / 'eval_bf16']}
     out, checks = {}, {}
     for backend, dirs in sources.items():
         merged, ref = {}, None
@@ -116,17 +129,30 @@ def evaluations(model):
     return out, checks
 
 
+LABEL_NAMES = {'tc': 'TM-OPT+TC', 'tmopt': 'TM-OPT', 'mropt': 'MR-OPT'}
+SHORT = {'significantly better': 'better', 'significantly worse': 'worse', 'not significantly different': 'n.s.'}
+
+
+def label_name(lab):
+    if '-' not in lab:
+        return lab
+    m, u = lab.split('-')
+    return f'{LABEL_NAMES[m]} {u}'
+
+
 def ppl():
-    out, lines = {}, []
+    """R3. TM-OPT+TC (the final method, deviation 2) first; TM-OPT, MR-OPT, FourOverSix, NVFP4 and BF16 as comparisons."""
+    out, lines, summary = {}, [], []
+    counts = {c: {'better': 0, 'n.s.': 0, 'worse': 0} for c in ('FourOverSix', 'NVFP4', 'TM-OPT', 'MR-OPT')}
     for model, title in MODELS:
         try:
             ev, checks = evaluations(model)
         except FileNotFoundError:
             continue
-        rows = {}
+        rows, comps = {}, {}
         for backend in ('native', 'fake'):
             e = ev[backend]
-            labels = ['FourOverSix', 'NVFP4'] + [f'{m}-{u}' for m in ('tmopt', 'tc', 'mropt') for u in UNITS] + (['BF16'] if backend == 'fake' else [])
+            labels = ['FourOverSix', 'NVFP4'] + [f'{m}-{u}' for m in ('tc', 'tmopt', 'mropt') for u in UNITS] + (['BF16'] if backend == 'fake' else [])
             for lab in labels:
                 if lab not in e:
                     continue
@@ -136,27 +162,44 @@ def ppl():
                     row['vs_nvfp4'] = {d: paired(nll(e, lab)[d], nll(e, 'NVFP4')[d]) for d in D} if lab != 'NVFP4' else None
                 rows[f'{backend} {lab}'] = row
             for u in UNITS:
-                if f'tmopt-{u}' in e and f'tc-{u}' in e:
-                    rows[f'{backend} tc-{u} minus tmopt-{u}'] = {d: paired(nll(e, f'tc-{u}')[d], nll(e, f'tmopt-{u}')[d]) for d in D}
-        out[model] = dict(rows=rows, checks=checks)
+                for other in ('tmopt', 'mropt'):
+                    if f'tc-{u}' in e and f'{other}-{u}' in e:
+                        comps[f'{backend} tc-{u} minus {other}-{u}'] = {d: paired(nll(e, f'tc-{u}')[d], nll(e, f'{other}-{u}')[d]) for d in D}
+        out[model] = dict(rows=rows, comparisons=comps, checks=checks)
+        for u in UNITS:
+            r = rows.get(f'native tc-{u}')
+            if r is None:
+                continue
+            vs = dict(FourOverSix=r['vs_fourover6'], NVFP4=r['vs_nvfp4'], **{'TM-OPT': comps.get(f'native tc-{u} minus tmopt-{u}'),
+                                                                            'MR-OPT': comps.get(f'native tc-{u} minus mropt-{u}')})
+            for c, v in vs.items():
+                if v is not None:
+                    for d in D:
+                        counts[c][SHORT[v[d]['verdict']]] += 1
+            cell = lambda v: f"{fmt(v['wiki'])}; {fmt(v['c4'])}" if v else '—'  # noqa: E731
+            summary.append(f"| {title} | {u} | {r['ppl']['wiki']:.4f} / {r['ppl']['c4']:.4f} | {cell(vs['FourOverSix'])} | {cell(vs['NVFP4'])} | "
+                           f"{cell(vs['TM-OPT'])} | {cell(vs['MR-OPT'])} |")
         lines += [f'### {title}', '', '| backend | map | WikiText-2 | C4 | ΔWiki vs FourOverSix | ΔC4 vs FourOverSix | ΔWiki vs NVFP4 | ΔC4 vs NVFP4 |',
                   '|---|---|---:|---:|---|---|---|---|']
         for key, row in rows.items():
-            if 'minus' in key:
-                continue
             backend, lab = key.split(' ', 1)
             vf, vn = row.get('vs_fourover6'), row.get('vs_nvfp4')
-            lines.append(f"| {backend} | {lab} | {row['ppl']['wiki']:.4f} | {row['ppl']['c4']:.4f} | "
+            lines.append(f"| {backend} | {label_name(lab)} | {row['ppl']['wiki']:.4f} | {row['ppl']['c4']:.4f} | "
                          f"{fmt(vf['wiki']) if vf else '—'} | {fmt(vf['c4']) if vf else '—'} | {fmt(vn['wiki']) if vn else '—'} | {fmt(vn['c4']) if vn else '—'} |")
-        lines += ['', '| backend | TM-OPT+TC minus TM-OPT | ΔWiki | ΔC4 |', '|---|---|---|---|']
-        for key, row in rows.items():
-            if 'minus' in key:
-                backend, rest = key.split(' ', 1)
-                lines.append(f"| {backend} | {rest.split(' minus')[0].replace('tc-', '')} | {fmt(row['wiki'])} | {fmt(row['c4'])} |")
+        lines += ['', '| backend | TM-OPT+TC minus | ΔWiki | ΔC4 |', '|---|---|---|---|']
+        for key, row in comps.items():
+            backend, rest = key.split(' ', 1)
+            lines.append(f"| {backend} | {label_name(rest.split(' minus ')[1])} | {fmt(row['wiki'])} | {fmt(row['c4'])} |")
         lines += ['', f'Checks (FourOverSix window NLLs repeat across the merged processes): {json.dumps(checks)}', '']
+    head = ['## Summary: TM-OPT+TC (native evaluation)', '',
+            'PPL WikiText-2 / C4, then paired ΔNLL ± 2 SE of TM-OPT+TC minus each comparison (WikiText-2; C4).', '',
+            '| model | unit | TM-OPT+TC PPL | vs FourOverSix | vs NVFP4 | vs TM-OPT | vs MR-OPT |', '|---|---|---|---|---|---|---|'] + summary
+    head += ['', 'Verdict counts over models × units × corpora (native): ' +
+             '; '.join(f"vs {c}: {v['better']} better, {v['n.s.']} n.s., {v['worse']} worse" for c, v in counts.items()), '']
+    out['summary_counts_native'] = counts
     (HERE / 'final_ppl.json').write_text(json.dumps(out, indent=1, default=str) + '\n')
-    (HERE / 'final_ppl.md').write_text('\n'.join(lines) + '\n')
-    print('\n'.join(lines))
+    (HERE / 'final_ppl.md').write_text('\n'.join(head + lines) + '\n')
+    print('\n'.join(head + lines))
 
 
 def qwen_checks():
