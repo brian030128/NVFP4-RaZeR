@@ -73,12 +73,13 @@ def decode_packed(packed, sbytes, gs, n, k):
 
 
 @torch.no_grad()
-def pack_candidates(name, w, base, alt, alt_signed_zero=False):
+def pack_candidates(name, w, base, alt, alt_signed_zero=False, base_given=None):
     """Both candidates of the source weight w in the native format: (E2M1 codes, E0M3 codes, E2M1
     scale bytes, E0M3 scale bytes with bit 7 set, FP32 global scale, n, k). Their decode must equal
-    base and alt bitwise (signed zeros included), else AssertionError."""
+    base and alt bitwise (signed zeros included), else AssertionError. base_given = (E2M1 codes [n, k], block scales
+    [blocks], global scale) replaces FourOverSix's codes and scales (a learned-scale E2M1 base, results/scale_additivity)."""
     n, k = w.shape
-    c4, s4, g4 = rq.weight_four_over_six(w)
+    c4, s4, g4 = rq.weight_four_over_six(w) if base_given is None else (base_given[0], base_given[1].reshape(n, k // 16), base_given[2])
     c0, s0, g0 = rq.weight_e0m3(w)
     if not torch.equal(g4, g0):
         raise AssertionError(f'{name}: E0M3 and FourOverSix global scales differ')

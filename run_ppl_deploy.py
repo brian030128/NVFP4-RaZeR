@@ -102,6 +102,55 @@ def evaluate(model, batches, device, label, first_forward=None):
     return out
 
 
+def load_for_evaluation(key, prior, C):
+    """(model, {name: quantized Linear}) as run_multiround.py loads it, checked against sm120's scope and the record."""
+    if C.MODELS[key]['loader'] == 'qwen3_5_conditional':
+        from transformers import Qwen3_5ForConditionalGeneration
+        model, loading = Qwen3_5ForConditionalGeneration.from_pretrained(
+            prior['source'], revision=prior['revision'], dtype=torch.bfloat16, attn_implementation='sdpa',
+            device_map='cuda', output_loading_info=True)
+        assert not loading['missing_keys'] and not loading.get('mismatched_keys') and not loading.get('error_msgs')
+        model.eval().requires_grad_(False)
+        modules = {n: m for n, m in model.named_modules() if isinstance(m, torch.nn.Linear)
+                   and 'language_model' in n and 'head' not in n}
+        assert list(modules) == list(prior['matrices'])
+    else:
+        model, modules = load_model(prior, False)
+        model.set_attn_implementation('sdpa')
+    assert list(modules) == list(C.scope(model, key)), 'our scope differs from sm120 model.scope'
+    wrong = [n for n, m in modules.items() if sha(m.weight) != prior['matrices'][n]['source_sha256']]
+    assert not wrong, f'weights differ from the calibration record: {wrong[:3]}'
+    return model, modules
+
+
+def install_fake(fq, pol, key, modules, C):
+    """bf16 or fake (c) through sm120/eval/common.FakeQuant; returns the record fields."""
+    if pol['kind'] == 'bf16':
+        fq.install('bf16')
+        return dict(backend='bf16')
+    out = dict(backend='fake (c)')
+    masks = type_block = None
+    if pol['weight'] == 'map':
+        header, masks, digest = C.read_map_for(key, pol['map'], modules)
+        type_block = tuple(header['type_block'])
+        out.update(map_sha256=digest, type_block=list(type_block), e0m3_tiles=header['totals']['selected_tiles'])
+    out['installed_weight_sha256'] = fq.install(pol['weight'], masks, type_block)
+    return out
+
+
+def install_native(model, pol, key, C):
+    """NativeLinear (c) from an artifact; the kernel by its type block unless given. Returns the record fields."""
+    meta = json.loads(Path(pol['artifact'], 'artifact.json').read_text())
+    out = {}
+    if pol['kernel'] is None:
+        pol['kernel'] = out['kernel'] = {None: 'auto_stock', (16, 64): 'auto', (8, 64): 'n8k64_wB'}[
+            tuple(meta['type_block']) if meta.get('type_block') else None]
+    rep = NM.install(model, pol['artifact'], kernel=pol['kernel'], loader=C.MODELS[key]['loader'])
+    out.update(backend='NativeLinear (c)', install=rep.as_dict(), artifact_weights_sha256=meta['weights_sha256'],
+               artifact_map_sha256=(meta.get('map') or {}).get('sha256'), artifact_weight_kind=meta['weight_kind'])
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--model', required=True)
@@ -131,23 +180,7 @@ def main():
                   sm120_model=C.MODELS[args.model], evaluations={})
     save = lambda: (args.out / 'report.json').write_text(json.dumps(report, indent=1) + '\n')  # noqa: E731
     t0 = time.time()
-    qwen = C.MODELS[args.model]['loader'] == 'qwen3_5_conditional'
-    if qwen:
-        from transformers import Qwen3_5ForConditionalGeneration
-        model, loading = Qwen3_5ForConditionalGeneration.from_pretrained(
-            prior['source'], revision=prior['revision'], dtype=torch.bfloat16, attn_implementation='sdpa',
-            device_map='cuda', output_loading_info=True)
-        assert not loading['missing_keys'] and not loading.get('mismatched_keys') and not loading.get('error_msgs')
-        model.eval().requires_grad_(False)
-        modules = {n: m for n, m in model.named_modules() if isinstance(m, torch.nn.Linear)
-                   and 'language_model' in n and 'head' not in n}
-        assert list(modules) == list(prior['matrices'])
-    else:
-        model, modules = load_model(prior, False)
-        model.set_attn_implementation('sdpa')
-    assert list(modules) == list(C.scope(model, args.model)), 'our scope differs from sm120 model.scope'
-    wrong = [n for n, m in modules.items() if sha(m.weight) != prior['matrices'][n]['source_sha256']]
-    assert not wrong, f'weights differ from the calibration record: {wrong[:3]}'
+    model, modules = load_for_evaluation(args.model, prior, C)
     report['load_seconds'] = time.time() - t0
     tok = AutoTokenizer.from_pretrained(prior['source'], revision=prior['revision'])
     batches, report['data'] = data(tok, prior, 2048)
@@ -172,31 +205,15 @@ def main():
     for pol in policies:
         entry = report['evaluations'][pol['label']] = dict(pol)
         t1 = time.time()
-        if pol['kind'] == 'bf16':
-            fq.install('bf16')
-            entry['backend'] = 'bf16'
-            first = None
-        elif pol['kind'] == 'fake':
-            masks = type_block = None
-            if pol['weight'] == 'map':
-                header, masks, digest = C.read_map_for(args.model, pol['map'], modules)
-                type_block = tuple(header['type_block'])
-                entry.update(map_sha256=digest, type_block=list(type_block), e0m3_tiles=header['totals']['selected_tiles'])
-            entry['installed_weight_sha256'] = fq.install(pol['weight'], masks, type_block)
-            entry['backend'] = 'fake (c)'
+        if pol['kind'] in ('bf16', 'fake'):
+            entry.update(install_fake(fq, pol, args.model, modules, C))
             first = None
         else:
             if fq.modules:                  # the first native policy: the BF16 Linears and their CPU copies go
                 fq.release()
                 modules = None
                 torch.cuda.empty_cache()
-            meta = json.loads(Path(pol['artifact'], 'artifact.json').read_text())
-            if pol['kernel'] is None:
-                pol['kernel'] = entry['kernel'] = {None: 'auto_stock', (16, 64): 'auto', (8, 64): 'n8k64_wB'}[
-                    tuple(meta['type_block']) if meta.get('type_block') else None]
-            rep = NM.install(model, pol['artifact'], kernel=pol['kernel'], loader=C.MODELS[args.model]['loader'])
-            entry.update(backend='NativeLinear (c)', install=rep.as_dict(), artifact_weights_sha256=meta['weights_sha256'],
-                         artifact_map_sha256=(meta.get('map') or {}).get('sha256'), artifact_weight_kind=meta['weight_kind'])
+            entry.update(install_native(model, pol, args.model, C))
             NM.reset_counters(model)
             entry['coverage_first_forward'] = {}
 

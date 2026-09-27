@@ -23,6 +23,13 @@ evaluation and no quantizer-verification phase. The fixed learning rate trains t
 written ('save_state', forced). The student's construction is timed as 'preparation'.
 --deterministic: torch.use_deterministic_algorithms(True) (CUBLAS_WORKSPACE_CONFIG must be set) and a seeded global
 RNG (the QAT optimizer's stochastic rounding draws from it). Off by default, as in the recorded runs.
+Task 2 (results/scale_additivity/PROTOCOL.md), all opt-in:
+  --epochs N     the c1 budget repeated N times (seeded per-epoch permutations, as for the first epoch).
+  --act-rows     per-token FourOverSix activations (quantize_rows; the fused fourover6_rows with a straight-through
+                 gradient) in training and in the development evaluation, the deployment convention (c), instead of
+                 per-document.
+  --map / --unit (scale arm) a fixed MixFP4 tile map (run_train_map.py map.pt): the flagged blocks are E0M3 with a
+                 learned scale, the others E2M1 with a learned scale (quantize/learned_scale.LearnedScaleMixed).
 """
 import argparse
 import json
@@ -39,8 +46,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from cost_monitor import GIB, PhaseMonitor
 from quantize.fast_act import check as check_act, quant_per_document
-from quantize.fused_fourover6 import (LearnedScaleE2M1, STEFourOverSix, fourover6, fourover6_block_scales,
+from quantize.causal_four_over_six import quantize_rows
+from quantize.fused_fourover6 import (LearnedScaleE2M1, STEFourOverSix, fourover6, fourover6_block_scales, fourover6_rows,
                                       scaled_e2m1, verify_weights, E4M3_MAX, E4M3_MIN)
+from quantize import learned_scale as LS
 from quantize.quantizer import quant_nvfp4_4over6
 from run_baseline_protocol_audit import data
 from run_c4_frozen import digest_file
@@ -109,11 +118,33 @@ def make_optimizer(kind, params, lr):
     raise ValueError(kind)
 
 
-def make_evaluator(model, modules, device, eval_batch):
-    """run_multiround.py's per_document_act, dev_eval and final evaluation, unchanged."""
+def map_weight_reference(w, mask, rows, cols):
+    # The MixFP4 weight of a tile map: E0M3 alpha=1 (quant_mix_4_6 clip a1, elect always) on its tiles, else FourOverSix.
+    from quantize.quantizer import quant_mix_4_6
+    per = mask.to(w.device).repeat_interleave(rows, 0)[:w.shape[0]].repeat_interleave(cols, 1)
+    return torch.where(per, quant_mix_4_6(w, 4, 16, type_block=(8, 64), clip='a1', elect='always'), quant_nvfp4_4over6(w, 4, 16))
+
+
+class STERows(torch.autograd.Function):
+    """Per-token FourOverSix fake quantization (fourover6_rows) with a straight-through gradient."""
+
+    @staticmethod
+    def forward(ctx, x):
+        return fourover6_rows(x)
+
+    @staticmethod
+    def backward(ctx, grad):
+        return grad
+
+
+def make_evaluator(model, modules, device, eval_batch, act_rows=False):
+    """run_multiround.py's per_document_act, dev_eval and final evaluation, unchanged; act_rows: per-token rows."""
     eval_handles = []
     act_checks = [0]
     current_batch = [1]
+
+    def per_token_act(module, inputs):
+        return (quantize_rows(inputs[0]), *inputs[1:])
 
     def per_document_act(module, inputs):
         x = inputs[0]
@@ -138,7 +169,8 @@ def make_evaluator(model, modules, device, eval_batch):
         nonlocal eval_handles
         for h in eval_handles:
             h.remove()
-        eval_handles = [m.register_forward_pre_hook(per_document_act) for m in modules.values()] if on else []
+        hook = per_token_act if act_rows else per_document_act
+        eval_handles = [m.register_forward_pre_hook(hook) for m in modules.values()] if on else []
 
     def dev_eval(dev, dev_teacher):
         eval_hooks(True)
@@ -181,14 +213,19 @@ class Student:
     """Patched Linear forwards: fake-quantized training forward when `quantize` is on,
     the original BF16 forward otherwise (teacher passes and hook-based evaluation)."""
 
-    def __init__(self, arm, modules, lora_rank=16, lora_alpha=16):
+    def __init__(self, arm, modules, lora_rank=16, lora_alpha=16, act_rows=False, flags=None):
         self.arm, self.modules, self.quantize = arm, modules, False
         self.act_checks, self.micro_batch = 0, None
         self.factors, self.lora, self.meta = {}, {}, {}
         self.lora_scale = lora_alpha / lora_rank
+        self.act_rows, self.flags = act_rows, flags          # flags: {name: per-block E0M3 flag} (scale arm, --map)
         for name, m in modules.items():
             if arm == 'qat':
                 m.weight.requires_grad_(True)
+            elif arm == 'scale' and flags is not None:
+                gs, pre = LS.block_pre(m.weight, flags[name])
+                self.meta[name] = (gs, pre)
+                self.factors[name] = torch.nn.Parameter(torch.ones_like(pre))
             elif arm == 'scale':
                 gs, pre, _ = fourover6_block_scales(m.weight)
                 self.meta[name] = (gs, pre)
@@ -215,6 +252,9 @@ class Student:
     def weight(self, name, m):
         if self.arm == 'qat':
             return STEFourOverSix.apply(m.weight, 1)
+        if self.arm == 'scale' and self.flags is not None:
+            gs, pre = self.meta[name]
+            return LS.LearnedScaleMixed.apply(self.factors[name], m.weight, gs, pre, self.flags[name])
         if self.arm == 'scale':
             gs, pre = self.meta[name]
             return LearnedScaleE2M1.apply(self.factors[name], m.weight, gs, pre).reshape(m.weight.shape)
@@ -225,6 +265,12 @@ class Student:
             if not self.quantize:
                 return original(x)
             assert x.dim() == 3 and x.shape[0] == self.micro_batch, tuple(x.shape)
+            if self.act_rows:
+                if self.act_checks < 64:
+                    assert torch.equal(fourover6_rows(x.detach()).view(torch.int16),
+                                       quantize_rows(x.detach()).view(torch.int16)), 'fused per-token activation quantizer'
+                    self.act_checks += 1
+                return F.linear(STERows.apply(x), self.weight(name, m), m.bias)
             if self.act_checks < 64:
                 assert torch.equal(fourover6(x.detach(), x.shape[0]).view(torch.int16),
                                    quant_per_document(x.detach()).view(torch.int16)), 'fused activation quantizer'
@@ -237,6 +283,9 @@ class Student:
         """Deployed BF16 weight from the reference quantizers."""
         if self.arm == 'qat':
             return quant_nvfp4_4over6(m.weight, 4, 16)
+        if self.arm == 'scale' and self.flags is not None:
+            gs, pre = self.meta[name]
+            return LS.deployed(m.weight, self.factors[name].detach(), pre, gs, self.flags[name])[0]
         if self.arm == 'scale':
             gs, pre = self.meta[name]
             scales = (self.factors[name] * pre).clamp(min=E4M3_MIN, max=E4M3_MAX).to(torch.float8_e4m3fn).float()
@@ -248,7 +297,10 @@ class Student:
         """The fused training quantizer equals the reference on the current parameters."""
         bad = []
         for name, m in self.modules.items():
-            if self.arm == 'scale':
+            if self.arm == 'scale' and self.flags is not None:
+                gs, pre = self.meta[name]
+                fused = LS.LearnedScaleMixed.apply(self.factors[name].detach(), m.weight, gs, pre, self.flags[name])
+            elif self.arm == 'scale':
                 gs, pre = self.meta[name]
                 scales = (self.factors[name] * pre).clamp(min=E4M3_MIN, max=E4M3_MAX).to(torch.float8_e4m3fn).float()
                 fused = scaled_e2m1(m.weight, scales, gs)
@@ -290,6 +342,10 @@ def main():
     ap.add_argument('--data-root', type=Path, required=True)
     ap.add_argument('--transformers-deviation', action='store_true')
     ap.add_argument('--no-dev', action='store_true', help='no development data, teacher, evaluation or verification')
+    ap.add_argument('--epochs', type=int, default=1, help='c1: epochs over the calibration set')
+    ap.add_argument('--act-rows', action='store_true', help='per-token FourOverSix activations (convention (c))')
+    ap.add_argument('--map', type=Path, default=None, help='scale arm: a fixed tile map (map.pt); its tiles are E0M3')
+    ap.add_argument('--unit', choices=('8x64', '16x64', '256x64'), default=None)
     ap.add_argument('--deterministic', action=argparse.BooleanOptionalAction, default=False)
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
@@ -386,7 +442,26 @@ def main():
         report['fused_quantizer_bitwise_on_source_weights'] = not bad
         assert not bad, bad
     pristine = {n: m.weight.detach().to('cpu', copy=True).pin_memory() for n, m in modules.items()}
-    student = Student(args.arm, modules, lora_rank=args.lora_rank)
+    flags = None
+    if args.map is not None:
+        assert args.arm == 'scale' and args.unit, '--map goes with --arm scale and --unit'
+        rows_u, cols_u = (int(v) for v in args.unit.split('x'))
+        masks = torch.load(args.map, map_location='cpu', weights_only=True)
+        assert list(masks) == list(modules), 'map modules differ from the model scope'
+        flags = {n: LS.tile_flags(masks[n].to(m.weight.device), rows_u, cols_u, m.weight.shape) for n, m in modules.items()}
+        report['map'] = dict(path=str(args.map), sha256=digest_file(args.map), unit=args.unit,
+                             e0m3_tiles=sum(int(v.sum()) for v in masks.values()))
+    student = Student(args.arm, modules, lora_rank=args.lora_rank, act_rows=args.act_rows, flags=flags)
+    if flags is not None:
+        # the learned parametrization at f = 1 is the map's MixFP4 weight (FourOverSix + E0M3 alpha=1 on its tiles);
+        # a verification, so its own phase, outside the calibration cost
+        monitor.enter('map_init_check')
+        with torch.no_grad():
+            bad = [n for n, m in modules.items()
+                   if not torch.equal(student.deployed(n, m), map_weight_reference(m.weight, masks[n], rows_u, cols_u))]
+        report['init_equals_map_weight'] = not bad
+        assert not bad, bad[:3]
+        monitor.enter('preparation' if args.no_dev else 'quantizer_verification')
     if args.evaluate is not None:
         state = torch.load(args.evaluate / 'state.pt', map_location='cpu', weights_only=True)
         assert digest_file(args.evaluate / 'state.pt') == trained['state_sha256']
@@ -399,7 +474,7 @@ def main():
                 else:
                     student.lora[name][0].copy_(state[name][0]); student.lora[name][1].copy_(state[name][1])
         del state
-    dev_eval, final_eval = make_evaluator(model, modules, device, args.eval_batch)
+    dev_eval, final_eval = make_evaluator(model, modules, device, args.eval_batch, act_rows=args.act_rows)
 
     @torch.no_grad()
     def evaluate_deployed(fn):
@@ -442,7 +517,7 @@ def main():
     if args.budget == 'pool':
         steps_total = len(train) // args.batch
     elif args.budget == 'c1':
-        steps_total = len(train) // args.batch
+        steps_total = len(train) // args.batch * args.epochs
     elif args.budget == 'probe':
         steps_total = args.probe_steps
     elif args.budget == 'c2':

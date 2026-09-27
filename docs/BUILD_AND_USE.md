@@ -188,7 +188,8 @@ team decides which. See `sm120/kernel/NOTICE.md`. CUTLASS (the submodule) is BSD
 |---|---|
 | `sm120/` | the vendored mixfp4 kernel (`kernel/`, provenance in `VENDORED.json` / `LOCAL_CHANGES.md`), `build.py`, the `mixfp4_sm120` package (`NativeLinear`, `model.install`, activation quantizer, kernel selection), eval / bench / tests |
 | `run_train_map.py` | TM-OPT and TM-OPT+TC calibration |
-| `export_map_artifact.py`, `run_ppl_deploy.py` | map → artifact, and PPL through NativeLinear / fake (c) |
+| `export_map_artifact.py`, `run_ppl_deploy.py` | map → artifact, and PPL through NativeLinear / fake (c); `--scales` exports learned block scales |
+| `run_cost_distill.py`, `quantize/learned_scale.py` | the QAT and scale-only baselines, and learned scales on a fixed map (`results/scale_additivity`) |
 | `run_multiround.py` | MR-OPT, and the convention (a) evaluators (native (a), fake (a)) |
 | `repro_local/realquant/` | the native (a) evaluator's kernel library (built from the vendored kernel), candidate store, research benches |
 | `prepare_multiround_data.py`, `prepare_model_data.py` | calibration and development data |

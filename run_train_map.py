@@ -55,6 +55,9 @@ legacy hook, and its FP32 error is at the noise level of 4,096-token sums (resul
                          checkpoints. The map is written in a 'write_output' phase. The development monitor never
                          touches training, so the map is unchanged (checked bitwise against the committed maps).
   --no-eval              skip the final WikiText-2 / C4 evaluation (evaluate separately, e.g. run_ppl_deploy.py).
+  --base-scales STATE    SCALE->OURS (results/scale_additivity/PROTOCOL.md): candidate B is the E2M1 weight with the learned
+                         block scales of run_cost_distill.py --arm scale (quantize/learned_scale.deployed) instead of
+                         FourOverSix; candidate A (E0M3 alpha=1) is unchanged. Lean store only.
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True is set by the caller; the report records it. Locally (no Slurm),
 --data-root points at the data layout of run_multiround.data_paths.
 """
@@ -161,6 +164,7 @@ def main():
     ap.add_argument('--no-dev', action='store_true',
                     help='No development data, teacher or evaluation (the real calibration scenario); see the docstring')
     ap.add_argument('--no-eval', action='store_true', help='Skip the final WikiText-2 / C4 evaluation')
+    ap.add_argument('--base-scales', type=Path, default=None, help='learned E2M1 block-scale factors for candidate B')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     for key, value in (TM_OPT if args.tm_opt else LEGACY).items():
@@ -266,10 +270,28 @@ def main():
     if args.tile_grad_kernel:
         from tile_score import tile_sums
     packed, dense, theta = {}, {}, {}
+    base_state = None
+    if args.base_scales is not None:
+        assert lean, '--base-scales needs the lean candidate store'
+        from quantize import learned_scale
+        base_state = torch.load(args.base_scales, map_location='cpu', weights_only=True)
+        assert list(base_state) == list(modules), 'scale state modules differ from the model scope'
+        report['base_scales'] = dict(path=str(args.base_scales), sha256=digest_file(args.base_scales))
     for n, m in modules.items():
         assert sha(m.weight) == prior['matrices'][n]['source_sha256'], n
         b = quant_nvfp4_4over6(m.weight, 4, 16)
         a = quant_mix_4_6(m.weight, 4, 16, type_block=(8, 64), clip='a1', elect='always')
+        if base_state is not None:
+            gs_b, pre_b = learned_scale.block_pre(m.weight)
+            b, codes_b, scales_b = learned_scale.deployed(m.weight, base_state[n].to(m.weight.device).reshape(-1).float(),
+                                                          pre_b, gs_b)
+            # the store keeps E0M3 zeros as +0 (decode_alt's offset binary); quant_mix_4_6 returns -0 for negative inputs
+            store.add(n, m.weight, b, torch.where(a == 0, torch.zeros_like(a), a), base_given=(codes_b, scales_b, gs_b))
+            o, k = m.weight.shape
+            theta[n] = torch.full((-(-o // rows), k // cols), args.init_logit, dtype=torch.float32, device=m.weight.device)
+            m.weight = torch.nn.Parameter(torch.empty(0, dtype=m.weight.dtype, device=m.weight.device), requires_grad=False)
+            del a, b
+            continue
         p = pack(m.weight, b, a)
         if p is None:
             dense[n] = (b, a)

@@ -22,6 +22,18 @@ Steps, each checked:
 5. --ownership (B3): sm120/eval/ownership_check.py on the artifact (map artifacts), or its per-module check with an
    all-E2M1 map on the stock kernel (baseline artifacts): every weight element's hardware-decoded value and executed
    format are compared with the stored codes and the map. Written to ARTIFACT/ownership.json.
+
+--scales STATE (results/scale_additivity/PROTOCOL.md): learned per-block scale factors, the state.pt of
+run_cost_distill.py --arm scale ({module: factor per 16-element block}).
+- The weight is quantize/learned_scale.deployed: scale = e4m3(clamp(f * pre)) and round to nearest, E2M1 on the E2M1
+  blocks and E0M3 on the map's tiles.
+- --scales-apply e2m1 (default): the factors apply to the E2M1 blocks; E0M3 tiles keep the E0M3 alpha=1 candidate
+  (f = 1). This is SCALE→OURS, and SCALE itself without --map.
+- --scales-apply all: every block's factor is used (OURS→SCALE).
+- The packing is mixfp4_sm120.artifact.export's, with its pack_module replaced. The codes and UE4M3 bytes (bit 7 =
+  E0M3 flag) come from the learned scales, and numerics.decode_fake_order must equal the learned fake-quant weight
+  (value-equal, as the exporter's own check: -0 packs as +0).
+- Step 3 then also checks that the learned parametrization at f = 1 equals the standard candidates on every module.
 """
 import argparse
 import dataclasses
@@ -40,6 +52,8 @@ SM120 = REPO / 'sm120'
 sys.path.insert(0, str(SM120))
 from mixfp4_sm120 import artifact as A  # noqa: E402
 from mixfp4_sm120 import mapio  # noqa: E402
+from mixfp4_sm120 import numerics as N  # noqa: E402
+from quantize import learned_scale as L  # noqa: E402
 from quantize.quantizer import quant_mix_4_6, quant_nvfp4, quant_nvfp4_4over6  # noqa: E402
 from run_conditional_format import sha  # noqa: E402
 from run_multiround import data_paths  # noqa: E402
@@ -134,6 +148,62 @@ def ownership(out, map_file):
     return summary
 
 
+@torch.no_grad()
+def learned_export(args, mods, record, map_file):
+    """Replace artifact.pack_module by a packing of the learned scales; check the parametrization at f = 1."""
+    state = torch.load(args.scales, map_location='cpu', weights_only=True)
+    assert list(state) == list(mods), 'scale state modules differ from the model scope'
+    masks, type_block = {}, None
+    if map_file is not None:
+        header, masks, _ = mapio.read_map(map_file)
+        type_block = tuple(header['type_block'])
+    learned, init_mismatch = {}, []
+    counts = dict(blocks=0, blocks_scale_moved=0, e0m3_blocks=0, e0m3_blocks_scale_moved=0)
+    for n, lin in mods.items():
+        w = lin.weight
+        flags = L.tile_flags(masks[n].to(w.device), *type_block, w.shape) if masks else None
+        gs, pre = L.block_pre(w, flags)
+        f = state[n].to(w.device).reshape(-1).float()
+        if args.scales_apply == 'e2m1' and flags is not None:
+            f = torch.where(flags.reshape(-1), 1.0, f)
+        one = L.deployed(w, torch.ones_like(pre), pre, gs, flags)[0]
+        standard = A.fake_quant_weight(w, 'map' if flags is not None else 'four_over_six', masks.get(n), type_block)
+        if not torch.equal(one, standard):
+            init_mismatch.append(n)
+        weight, codes, scales = L.deployed(w, f, pre, gs, flags)
+        moved = scales != L.e4m3_scales(torch.ones_like(pre), pre)
+        counts['blocks'] += moved.numel()
+        counts['blocks_scale_moved'] += int(moved.sum())
+        if flags is not None:
+            counts['e0m3_blocks'] += int(flags.sum())
+            counts['e0m3_blocks_scale_moved'] += int((moved & flags.reshape(-1)).sum())
+        if flags is None:
+            nib, sbytes = N.e2m1_nibbles(codes), N.scale_bytes(scales.reshape(w.shape[0], -1))
+        else:
+            per_elem = flags.repeat_interleave(16, 1)
+            nib = torch.where(per_elem, N.e0m3_nibbles(torch.where(per_elem, codes, 0.)),
+                              N.e2m1_nibbles(torch.where(per_elem, 0., codes)))
+            sbytes = N.scale_bytes(scales.reshape(w.shape[0], -1), flags)
+        learned[n] = (nib, sbytes, gs.float(), weight)
+    assert not init_mismatch, f'the learned parametrization at f = 1 differs from the standard candidates: {init_mismatch[:3]}'
+    record['learned_scales'] = dict(state=str(args.scales), state_sha256=file_sha(args.scales), apply=args.scales_apply,
+                                    init_equals_standard_candidates=True,
+                                    factors_changed=int(sum(int((state[n].reshape(-1) != 1).sum()) for n in state)), **counts)
+
+    def pack_module(name, weight, bias, kind, mask=None, type_block=None, expected=None):
+        nib, sbytes, gs, want = learned[name]
+        pw = A.PackedWeight(name, N.pack_nibbles(nib), sbytes, float(gs),
+                            None if bias is None else bias.detach().to(torch.bfloat16).contiguous(),
+                            tuple(type_block) if type_block else None, int(mask.sum()) if mask is not None else 0)
+        got = N.decode_fake_order(nib, sbytes, gs)
+        if not torch.equal(got, want):
+            raise A.ArtifactError(f'{name}: packed learned-scale weight differs from its fake-quant weight in '
+                                  f'{int((got != want).sum())} elements')
+        return pw
+
+    A.pack_module = pack_module
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--model', required=True)
@@ -143,8 +213,13 @@ def main():
     ap.add_argument('--kind', choices=('map', 'four_over_six', 'nvfp4'), default='map')
     ap.add_argument('--policy-name', default='TM-OPT+TC', help='recorded in the MIXFP4MAP header')
     ap.add_argument('--ownership', action='store_true', help='B3: run the ownership check on the artifact')
+    ap.add_argument('--scales', type=Path, default=None, help='learned block-scale factors (run_cost_distill.py state.pt)')
+    ap.add_argument('--scales-apply', choices=('e2m1', 'all'), default='e2m1',
+                    help='e2m1: factors on the E2M1 blocks only (E0M3 tiles at alpha=1); all: on every block')
     ap.add_argument('--out', type=Path, required=True, help='artifact directory (must not exist or be empty)')
     args = ap.parse_args()
+    if args.scales is not None and args.kind == 'nvfp4':
+        raise SystemExit('--scales starts from FourOverSix scales: use --kind four_over_six (E2M1 only) or --kind map')
     assert (args.kind == 'map') == (args.map is not None and args.unit is not None), '--map and --unit go with --kind map'
     t0 = time.time()
     C = load_path('sm120_eval_common', SM120 / 'eval' / 'common.py')
@@ -180,8 +255,16 @@ def main():
     assert not record['candidates']['mismatching_modules'], record['candidates']
     print('CANDIDATES equal sm120 fake-quant candidates on all', record['candidates']['modules'], 'modules', flush=True)
     info = dict(model_id=spec['model_id'], revision=spec['revision'], model_class=type(model).__name__, key=args.model)
-    meta = A.export(args.out, mods, kind=args.kind, map_path=map_file, model_info=info, verify_fake=True,
-                    note=dict(exporter='export_map_artifact.py (B2)', record=record))
+    if args.scales is not None:
+        learned_export(args, mods, record, map_file)
+        meta = A.export(args.out, mods, kind=args.kind, map_path=map_file, model_info=info, verify_fake=False,
+                        note=dict(exporter='export_map_artifact.py (B2) --scales', record=record))
+        meta['numerics'].update(weight_baseline=f'learned per-block scales ({args.scales.name}, apply={args.scales_apply}; '
+                                                'quantize/learned_scale.deployed)',
+                                verified_against_fake_quant='learned-scale fake-quant weight, value-equal, per module')
+    else:
+        meta = A.export(args.out, mods, kind=args.kind, map_path=map_file, model_info=info, verify_fake=True,
+                        note=dict(exporter='export_map_artifact.py (B2)', record=record))
     meta['note']['export_seconds'] = round(time.time() - t0, 1)
     Path(args.out, 'artifact.json').write_text(json.dumps(meta, indent=1, sort_keys=True) + '\n')
     del model, mods

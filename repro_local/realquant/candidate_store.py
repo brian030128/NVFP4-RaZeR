@@ -79,9 +79,10 @@ class CandidateStore:
         return hit
 
     @torch.no_grad()
-    def add(self, name, w, base, alt):
-        """Pack both candidates of the source weight w; their decode must equal base and alt bitwise."""
-        self.cand[name] = native_dev.pack_candidates(name, w, base, alt, self.alt_signed_zero)
+    def add(self, name, w, base, alt, base_given=None):
+        """Pack both candidates of the source weight w; their decode must equal base and alt bitwise.
+        base_given: (codes, scales, global scale) of a learned-scale E2M1 base (native_dev.pack_candidates)."""
+        self.cand[name] = native_dev.pack_candidates(name, w, base, alt, self.alt_signed_zero, base_given)
 
     @torch.no_grad()
     def add_nvfp4(self, name, w, reference):
