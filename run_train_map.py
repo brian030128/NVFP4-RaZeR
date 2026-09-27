@@ -149,6 +149,8 @@ def main():
                     help='TM-OPT+TC: the tile-gradient GEMM on BF16 tensor cores with FP32 accumulation and output')
     ap.add_argument('--profile', type=Path, default=None, metavar='JSON',
                     help='Profile one training epoch after the setup, write the GPU-time breakdown to JSON, and stop')
+    ap.add_argument('--probe-steps', type=int, default=None, metavar='N',
+                    help='Batch probe: stop after N optimizer steps and record the per-phase peak memory')
     ap.add_argument('--record-theta-hashes', action='store_true',
                     help='Record the sha256 of every logit after every optimizer step (bitwise comparisons)')
     ap.add_argument('--out', type=Path, required=True)
@@ -174,8 +176,9 @@ def main():
     torch.backends.cuda.matmul.allow_tf32 = False
     rows, cols = UNITS[args.unit]
     qwen = args.model == 'qwen27b'
-    if qwen:
-        assert args.batch == 1 and args.eval_batch == 1, 'Qwen batched forward is not identical to batch 1'
+    # main's run_train_map.py required batch 1 for Qwen (its batched forward is not bitwise the batch-1 one). The user
+    # accepted batched numerics for all models (results/tm_opt/PROTOCOL_QR.md); micro-batches with --accum keep the
+    # optimizer batch at 8 sequences.
     calibration, development = data_paths(args.model, args.data_root)
     prior = json.loads((calibration / 'report.json').read_text())
     deviations = []
@@ -195,6 +198,20 @@ def main():
                   args={k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
                   source_sha256={p: digest_file(p) for p in SOURCES}, epochs=[])
     save(args.out, report)
+
+    def record_out_of_memory(kind, error, trace):
+        # on a CUDA out-of-memory exit, keep the per-phase memory peaks in the report (as run_multiround.py does)
+        if issubclass(kind, torch.OutOfMemoryError):
+            try:
+                monitor.close()
+                report['out_of_memory'] = dict(message=str(error).split('\n')[0], phases=monitor.summary(),
+                                               allocator_summary=torch.cuda.memory_summary(abbreviated=True))
+                report['status'] = 'out_of_memory'
+                save(args.out, report)
+            except Exception:
+                pass
+        sys.__excepthook__(kind, error, trace)
+    sys.excepthook = record_out_of_memory
     if qwen:
         from transformers import Qwen3_5ForConditionalGeneration
         model, loading = Qwen3_5ForConditionalGeneration.from_pretrained(
@@ -543,6 +560,24 @@ def main():
                 p.grad = g.clone()
             opt.step()
             step += 1
+            if args.probe_steps is not None and step >= args.probe_steps:
+                # batch probe: the memory of full optimizer steps is known; stop here
+                optimizer_phase.__exit__(None, None, None)
+                for h in handles:
+                    h.remove()
+                monitor.close()
+                report['probe'] = dict(steps=step, micro_batch=args.batch, accum=args.accum,
+                                       step_seconds=(time.time() - t0) / step, train_kl=losses)
+                summary = monitor.summary()
+                report['resources'] = dict(phases=summary, gpu_peak_allocated_gib=summary['gpu_peak_allocated_gib'],
+                                           gpu_peak_reserved_gib=summary['gpu_peak_reserved_gib'],
+                                           cpu_peak_rss_gib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2 ** 20)
+                report['status'] = 'probe_complete'
+                save(args.out, report)
+                print('PROBE ' + json.dumps(dict(steps=step, micro_batch=args.batch, accum=args.accum,
+                                                 phases={k: v['gpu_peak_allocated_gib'] for k, v in
+                                                         report['resources']['phases']['by_phase'].items()})), flush=True)
+                return
             if args.record_theta_hashes:
                 t_hash = time.time()
                 report['theta_sha256'].append(theta_digest())
