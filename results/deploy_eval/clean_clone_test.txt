@@ -1,0 +1,51 @@
++ T=/home/dev/n16k64_campaign/clean_clone_test
++ rm -rf /home/dev/n16k64_campaign/clean_clone_test
++ mkdir -p /home/dev/n16k64_campaign/clean_clone_test
++ cd /home/dev/n16k64_campaign/clean_clone_test
++ date -u +%FT%TZ
+2026-09-27T13:07:51Z
++ git clone https://github.com/brian030128/NVFP4-RaZeR.git
+Cloning into 'NVFP4-RaZeR'...
++ cd NVFP4-RaZeR
++ git checkout tm-opt
+Switched to a new branch 'tm-opt'
+Branch 'tm-opt' set up to track remote branch 'tm-opt' from 'origin'.
++ git log --oneline -1
+35ed746 Self-contained build and use: realquant from the vendored kernel, docs, B2 tools
++ git submodule update --init sm120/third_party/cutlass
+Submodule 'sm120/third_party/cutlass' (https://github.com/NVIDIA/cutlass.git) registered for path 'sm120/third_party/cutlass'
+Cloning into '/home/dev/n16k64_campaign/clean_clone_test/NVFP4-RaZeR/sm120/third_party/cutlass'...
+Submodule path 'sm120/third_party/cutlass': checked out 'e64a9136dd929639e5f7c969fe5af3bf7415cd4f'
++ git -C sm120/third_party/cutlass rev-parse HEAD
+e64a9136dd929639e5f7c969fe5af3bf7415cd4f
++ python sm120/build.py --config n16k64_wA --selftest
+[ok] n16k64_wA: libmixfp4_sm120_n16k64_wA.so sass_sha256=d34b36a112d245fc census={'E2M1xE2M1': 512, 'E0M3xE2M1': 512} predicated=0 regs=[40, 96, 168] stages=4 selftest=PASS
++ echo 'RC build n16k64_wA 0'
+RC build n16k64_wA 0
++ python sm120/build.py --config n8k64_wB --selftest
+[ok] n8k64_wB: libmixfp4_sm120_n8k64_wB.so sass_sha256=846c8878c38e380f census={'E2M1xE2M1': 512, 'E2M1xE0M3': 512} predicated=0 regs=[40, 96, 168] stages=4 selftest=PASS
++ echo 'RC build n8k64_wB 0'
+RC build n8k64_wB 0
++ python -m pytest sm120/tests -q -rs -p no:cacheprovider
++ tail -8
+SKIPPED [41] sm120/tests/test_gemm.py:36: n16k64_wA_8x1 not built: no build manifest at /home/dev/n16k64_campaign/clean_clone_test/NVFP4-RaZeR/sm120/build/n16k64_wA_8x1/manifest.json; run: python sm120/build.py --config n16k64_wA_8x1
+SKIPPED [41] sm120/tests/test_gemm.py:36: n16k64_wA_n64 not built: no build manifest at /home/dev/n16k64_campaign/clean_clone_test/NVFP4-RaZeR/sm120/build/n16k64_wA_n64/manifest.json; run: python sm120/build.py --config n16k64_wA_n64
+SKIPPED [41] sm120/tests/test_gemm.py:36: n16k64_wA_n32 not built: no build manifest at /home/dev/n16k64_campaign/clean_clone_test/NVFP4-RaZeR/sm120/build/n16k64_wA_n32/manifest.json; run: python sm120/build.py --config n16k64_wA_n32
+SKIPPED [41] sm120/tests/test_gemm.py:36: n16k64_wA_n16 not built: no build manifest at /home/dev/n16k64_campaign/clean_clone_test/NVFP4-RaZeR/sm120/build/n16k64_wA_n16/manifest.json; run: python sm120/build.py --config n16k64_wA_n16
+SKIPPED [30] sm120/tests/test_gemm.py:36: n16k64_wA_sk not built: no build manifest at /home/dev/n16k64_campaign/clean_clone_test/NVFP4-RaZeR/sm120/build/n16k64_wA_sk/manifest.json; run: python sm120/build.py --config n16k64_wA_sk
+SKIPPED [6] sm120/tests/test_select.py:18: mixed family not built: no build manifest at /home/dev/n16k64_campaign/clean_clone_test/NVFP4-RaZeR/sm120/build/n16k64_wA_n16/manifest.json; run: python sm120/build.py --config n16k64_wA_n16
+SKIPPED [5] sm120/tests/test_select.py:18: stock family not built: no build manifest at /home/dev/n16k64_campaign/clean_clone_test/NVFP4-RaZeR/sm120/build/stock_wA_n16/manifest.json; run: python sm120/build.py --config stock_wA_n16
+189 passed, 205 skipped, 1 warning in 17.22s
++ echo 'RC pytest 0'
+RC pytest 0
++ bash repro_local/realquant/build.sh b8x64 lib
++ tail -3
+post-patch opcode census: {('E2M1', 'E2M1'): 512, ('E2M1', 'E0M3'): 512}
+verify OK: every site disassembles to its intended format
+built /home/dev/n16k64_campaign/clean_clone_test/NVFP4-RaZeR/repro_local/realquant/build/bin/libb8x64.so
++ echo 'RC realquant 0'
+RC realquant 0
++ git status --short
++ head
++ date -u +%FT%TZ
+2026-09-27T13:14:54Z
