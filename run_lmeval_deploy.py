@@ -33,6 +33,8 @@
   every subject keyed `<subject>:<doc_id>`.
 - **Per-choice log-likelihoods** of every multiple-choice example are recorded under `loglikelihoods`
   ({key: {target, ll: [per choice]}}), next to the per-example correctness in `examples`.
+- **What was evaluated:** per task, `sample_digest` hashes lm-eval's doc / prompt / target hashes of every example, and
+  `prompt_hash` keeps a 12-character prefix per example. Paired comparisons require equal digests.
 - **--resume** keeps the (policy, task) entries an earlier run of the same --out already finished. Every task entry
   records the batch size it ran with.
 - **--no-bos** passes add_bos_token=False to HFLM: contexts without BOS, lm-eval 0.4.5 / 0.4.9.1's behaviour. 0.4.11's
@@ -42,6 +44,7 @@
 """
 import argparse
 import datetime
+import hashlib
 import importlib.metadata as md
 import json
 import platform
@@ -72,6 +75,21 @@ def mc_record(s, key):
     return float(s[key]), dict(target=s.get('target'), ll=lls)
 
 
+def sample_hashes(entry, keyed_rows):
+    """What each example was evaluated on: lm-eval's per-sample doc / prompt / target hashes (sha256).
+    `sample_digest` hashes them all, sorted by example key, so two policies saw the same samples iff their digests are
+    equal; `prompt_hash` keeps a 12-character prefix per example to locate a difference."""
+    lines, prefix = [], {}
+    for k, s in keyed_rows:
+        if k in prefix or 'prompt_hash' not in s:
+            continue
+        prefix[k] = s['prompt_hash'][:12]
+        lines.append(f"{k} {s.get('doc_hash')} {s['prompt_hash']} {s.get('target_hash')}")
+    if lines:
+        entry['sample_digest'] = hashlib.sha256('\n'.join(sorted(lines)).encode()).hexdigest()
+        entry['prompt_hash'] = prefix
+
+
 def summarize(results, samples):
     out = {}
     for task, metrics in results['results'].items():
@@ -95,6 +113,7 @@ def summarize(results, samples):
             for s in rows:
                 if key in s:
                     entry['examples'][str(s['doc_id'])], entry['loglikelihoods'][str(s['doc_id'])] = mc_record(s, key)
+        sample_hashes(entry, [(str(s['doc_id']), s) for s in rows])
         out[task] = entry
     return out
 
@@ -114,6 +133,7 @@ def summarize_group(res, task):
             if 'acc' in s:
                 k = f'{sub}:{s["doc_id"]}'
                 entry['examples'][k], entry['loglikelihoods'][k] = mc_record(s, 'acc')
+    sample_hashes(entry, [(f'{sub}:{s["doc_id"]}', s) for sub, rows in res.get('samples', {}).items() for s in rows])
     return entry
 
 

@@ -15,6 +15,8 @@ Policies (paper_common.LATENCY_POLICIES; artifacts from step 02):
                         configuration: the maps were calibrated with FourOverSix activations.
 Prompt shapes (batch x prompt): 1x128 ... 1x8192 and 4x2048 (--shapes).
 
+**Registered check:** every shape is captured, and the graph's logits equal eager's bitwise; a failure stops the step.
+
 **Protocol (Part R's):**
 - one process per (model, policy, round), into <out>/latency/<model>/<policy>/round<r>.json;
 - --rounds rounds, the policy order shuffled per round (seed 20260928 + round, recorded in commands.log);
@@ -23,6 +25,7 @@ Prompt shapes (batch x prompt): 1x128 ... 1x8192 and 4x2048 (--shapes).
 
 **--smoke:** Llama-3.1-8B, every policy but 256x64, one round, 1x128 and 1x2048, 3 repetitions.
 """
+import json
 import random
 import sys
 from pathlib import Path
@@ -31,6 +34,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paper_common as P  # noqa: E402
 
 SEED = 20260928
+
+
+def graph_check(path):
+    """The registered check: every shape was captured, and the graph's logits equal eager's bitwise. Returns the
+    failures (empty when it passed)."""
+    r = json.loads(Path(path).read_text())
+    bad = [f"{s}: {g.get('error') or 'logits differ from eager (max |diff| %s)' % g.get('max_abs_diff_eager')}"
+           for s, g in r['graph'].items() if g.get('error') or not g.get('logits_equal_eager')]
+    bad += [f'{s}: not captured' for s in r['eager'] if s not in r['graph'] and 'error' not in r['eager'][s]]
+    return bad
 
 
 def policies(args):
@@ -61,6 +74,9 @@ def main():
             for pol in order:
                 out = args.out / 'latency' / model / pol / f'round{r}.json'
                 if P.complete(out) and not args.force:
+                    bad = [] if args.no_graph else graph_check(out)
+                    if bad:                              # a recorded failure stays a failure
+                        P.die(f'registered check failed (CUDA graph = eager logits): {model} {pol} round {r}: {bad}')
                     print(f'{model} {pol} round {r}: done')
                     continue
                 cmd = [P.PY, Path(__file__).resolve().parent / 'bench_prefill.py', '--model', model, '--label', pol,
@@ -76,6 +92,10 @@ def main():
                 rc = P.run(args.out, f'05_prefill_{model}_{pol}_r{r}', cmd)
                 if rc != 0 or not P.complete(out):
                     P.die(f'prefill latency failed: {model} {pol} round {r} (log: {args.out}/logs)')
+                bad = [] if args.no_graph else graph_check(out)
+                if bad:
+                    P.log(args.out, f'CHECK FAILED graph = eager: {model} {pol} round {r}: {bad}')
+                    P.die(f'registered check failed (CUDA graph = eager logits): {model} {pol} round {r}: {bad}')
 
 
 if __name__ == '__main__':

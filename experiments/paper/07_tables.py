@@ -13,10 +13,13 @@ Writes <out>/tables/main.md (8x64 and 16x64), appendix.md (256x64, and the per-s
   accuracy is recomputed from the per-example correctness and must equal lm-eval's value.
 - **Paired accuracy differences:** over the same examples, in percentage points, ± 2 SE. The mean over the five tasks
   has SE sqrt(sum of the tasks' SE²) / 5 (tasks independent).
+- **Same samples:** every policy of a (model, task) must have the same `sample_digest` (lm-eval's doc / prompt /
+  target hashes); a difference stops the step.
 
 **Latency.**
-- **Prefill:** the median over rounds of each process's median, eager and CUDA graph. `†` marks a host-bound point
-  (bench_prefill.py's flag in any round).
+- **Prefill:** the median over rounds of each process's median. The CUDA-graph numbers are the primary ones (main
+  tables); eager is supplementary (appendix), where `†` marks a host-bound point (bench_prefill.py's flag in any
+  round).
 - **Ratios:** Ours / reference − 1 with the same activation quantizer, paired within rounds (the median over rounds of
   the per-round ratio, with its range), as Part R reported them:
   - `ours-<u>` against FourOverSix;
@@ -44,6 +47,7 @@ for _u in P.UNITS:
 GEMM_TITLES = dict(stock_wA='stock wA (NVFP4, FourOverSix)', stock_wB='stock wB', mixed_16x64='Ours 16x64 (n16k64_wA)',
                    mixed_256x64='Ours 256x64 (n16k64_wA)', n8k64_wB='Ours 8x64 (n8k64_wB)')
 DASH = '—'
+STRICT = True          # the registered checks must run; --smoke relaxes this for reports older than a check
 
 
 def read(path):
@@ -147,6 +151,16 @@ def lmeval_section(out, models, units):
         data[model] = dict(accuracy={}, paired={})
         diffs = {}
         for task in TASKS:
+            # registered check: every policy evaluated the same samples (lm-eval's doc / prompt / target hashes)
+            digests = {p: res[p]['tasks'][task].get('sample_digest') for p in pols if p in res and task in res[p]['tasks']}
+            if digests and all(digests.values()):
+                if len(set(digests.values())) != 1:
+                    raise SystemExit(f'{model} {task}: the policies evaluated different samples: {digests}')
+                data[model].setdefault('samples_checked', {})[task] = 'equal sample_digest across ' + ', '.join(digests)
+            elif STRICT and digests:
+                raise SystemExit(f'{model} {task}: a report has no sample_digest (the same-samples check cannot run)')
+            else:
+                data[model].setdefault('samples_checked', {})[task] = 'NOT CHECKED: a report has no sample_digest'
             accs = {p: accuracy(res[p]['tasks'][task], task) for p in pols if p in res and task in res[p]['tasks']}
             data[model]['accuracy'][task] = accs
             rows.append([P.TITLES[model], TASK_TITLES[task]] + [f'{100 * accs[p]:.2f}' if p in accs else DASH for p in pols])
@@ -229,7 +243,9 @@ def prefill_results(out, model):
     return res
 
 
-def latency_section(out, models, units):
+def latency_section(out, models, units, modes):
+    """Prefill tables for `modes`: 'graph' (the primary numbers, main tables) and / or 'eager' (supplementary,
+    appendix, with the host-bound mark)."""
     pols = ['bf16', 'nvfp4', 'fo6'] + (['nvfp4-wB', 'fo6-wB'] if '8x64' in units else [])
     for u in units:
         pols += [f'ours-{u}-nvfp4act', f'ours-{u}']
@@ -244,7 +260,7 @@ def latency_section(out, models, units):
         data[model] = res
         if not res:
             continue
-        for mode in ('eager', 'graph'):
+        for mode in modes:
             shapes = [s for s in P.PREFILL_SHAPES if any(s in res[p].get(mode, {}) for p in res)]
             if not shapes:
                 continue
@@ -256,7 +272,7 @@ def latency_section(out, models, units):
                     if e is None or e['ms'] is None:
                         row.append(DASH if e is None or not e['errors'] else 'failed')
                     else:
-                        row.append(f"{e['ms']:.2f}{' †' if res[p]['host_bound'].get(s) else ''}")
+                        row.append(f"{e['ms']:.2f}{' †' if mode == 'eager' and res[p]['host_bound'].get(s) else ''}")
                 rows.append(row)
                 rrow = [s]
                 for a, b in ratios:
@@ -271,7 +287,9 @@ def latency_section(out, models, units):
                     rrow.append(f'{statistics.median(per):+.1f} %' + (f' [{min(per):+.1f}, {max(per):+.1f}]' if len(per) > 1 else ''))
                 rrows.append(rrow)
             rounds = sorted({res[p]['rounds'] for p in res})
-            parts.append(f'#### {P.TITLES[model]}, {mode} prefill (ms, median of {rounds} round(s); † host-bound)\n\n' +
+            what = ('CUDA-graph prefill' if mode == 'graph' else
+                    'eager prefill (supplementary; † host-bound: the graph is more than 5 % faster)')
+            parts.append(f'#### {P.TITLES[model]}, {what}, ms, median of {rounds} round(s)\n\n' +
                          table(['batch x prompt'] + [POLICY_TITLES.get(p, p) for p in pols], rows) +
                          '\n\nOurs / reference − 1, same activation quantizer; paired within rounds: median [min, max] over rounds:\n\n' +
                          table(['batch x prompt'] + [f'{POLICY_TITLES[a]} vs {POLICY_TITLES[b]}' for a, b in ratios], rrows))
@@ -280,7 +298,9 @@ def latency_section(out, models, units):
             parts.append(f'CUDA-graph capture errors on {P.TITLES[model]}: ' + '; '.join(errs))
         if not all(p['graph_equal_eager'] for p in res.values()):
             parts.append(f'**{P.TITLES[model]}: a captured forward\'s logits differ from eager** (see tables.json)')
-    return '### Prefill latency\n\n' + ('\n\n'.join(parts) if parts else DASH), data
+    title = ('### Prefill latency, CUDA graph (primary)' if modes == ('graph',) else
+             '### Prefill latency, eager (supplementary)' if modes == ('eager',) else '### Prefill latency')
+    return title + '\n\n' + ('\n\n'.join(parts) if parts else DASH), data
 
 
 def gemm_section(out, models, units, prefill):
@@ -343,6 +363,8 @@ def gemm_section(out, models, units, prefill):
 
 def main():
     args = P.setup(P.parser(__doc__).parse_args())
+    global STRICT
+    STRICT = not args.smoke
     if args.smoke:
         args.models = ['llama8b']
     tdir = args.out / 'tables'
@@ -356,10 +378,14 @@ def main():
         units = [u for u in units if u in args.units]
         ppl_text, ppl_data = ppl_section(args.out, args.models, units)
         lm_text, lm_data = lmeval_section(args.out, args.models, units)
-        lat_text, lat_data = latency_section(args.out, args.models, units)
+        lat_text, lat_data = latency_section(args.out, args.models, units, ('graph',))     # CUDA graph: the primary numbers
+        eager_text = ''
+        if name == 'appendix':        # eager prefill, every unit: supplementary, with the host-bound mark
+            eager_text, _ = latency_section(args.out, args.models, list(args.units), ('eager',))
         gemm_text, _, gemm_data = gemm_section(args.out, args.models, units, prefill_all)
-        title = 'Main tables: 8x64 and 16x64' if name == 'main' else 'Appendix: 256x64, and the per-shape GEMM detail'
-        docs[name] = '\n\n'.join(x for x in (f'# {title}', note.strip(), ppl_text, lm_text, lat_text, gemm_text,
+        title = ('Main tables: 8x64 and 16x64' if name == 'main' else
+                 'Appendix: 256x64, eager prefill (every unit), and the per-shape GEMM detail')
+        docs[name] = '\n\n'.join(x for x in (f'# {title}', note.strip(), ppl_text, lm_text, lat_text, gemm_text, eager_text,
                                              gemm_detail if name == 'appendix' else '') if x) + '\n'
         everything[name] = dict(units=units, ppl=ppl_data, downstream=lm_data, prefill=lat_data, gemm=gemm_data)
     for name, text in docs.items():

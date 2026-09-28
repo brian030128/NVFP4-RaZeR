@@ -1,8 +1,9 @@
 # Paper experiments: the flow, step by step
 
-Written 2026-09-28 on branch `tm-opt`. The flow is ready and has been smoke-tested on Llama-3.1-8B only; the
-full runs have **not** been started. It is meant to be reviewed first, and re-run later by anyone, without the
-sessions that wrote it.
+Written 2026-09-28 on branch `tm-opt`, and smoke-tested on Llama-3.1-8B. It can be re-run later by anyone,
+without the sessions that wrote it. The user approved the flow on 2026-09-28. The full runs follow
+`results/paper/PROTOCOL.md`, with the user's decisions: CUDA-graph latency is primary, eager supplementary; 5
+rounds; lm-eval's default MMLU scoring; a Qwen BF16 MMLU out-of-memory rule.
 
 - **Scripts:** `experiments/paper/`, one per step, plus `run_all.sh`.
 - **Environment:** every path is an environment variable with a documented default (`paper_common.py`).
@@ -226,6 +227,9 @@ Times below are per model: Llama / Mistral / Phi-4 / Qwen. Sources:
   The report records this, and the per-subject and per-category metrics.
 - **Recorded per example:** its correctness under the primary metric (acc_norm; MMLU acc), and the per-choice
   log-likelihoods (`loglikelihoods`).
+- **Recorded per task:** `sample_digest`, a hash of lm-eval's doc / prompt / target hashes of every example, and a
+  12-character prompt-hash prefix per example. Step 07 requires equal digests across the policies, i.e. the same
+  samples.
 - **Checks:**
   - native coverage: every quantized Linear ran in every forward; the unscoped Linears (Qwen's vision tower) never
     ran;
@@ -271,7 +275,8 @@ Times below are per model: Llama / Mistral / Phi-4 / Qwen. Sources:
     - every quantized Linear ran natively in every forward (224 / 224), on the tile table's widths;
     - every accuracy recomputed from the examples equals lm-eval's (step 07);
     - resume: one task removed from a finished report, and the rerun kept the other four. The re-run task's examples
-      and log-likelihoods were bit-identical.
+      and log-likelihoods were bit-identical;
+    - same samples: the five policies have equal `sample_digest` on all five tasks.
   - **Peak GPU:** 37.6 GiB for BF16 and 29.9 GiB for native, both on MMLU. lm-eval takes a vocabulary-sized log-softmax
     over batch × the longest 5-shot prompts.
   - **Observation:** in 5–10 % of the smoke's MMLU questions, depending on the policy, the top two choices have equal
@@ -300,6 +305,10 @@ Times below are per model: Llama / Mistral / Phi-4 / Qwen. Sources:
   - set when the graph is more than 5% faster than eager;
   - without a graph, when the host's enqueue time reaches 90% of the eager time.
 - **Reported:** the median over rounds; ratios paired within rounds.
+  - **The CUDA-graph numbers are the primary ones** (main tables; the user's decision).
+  - **Eager is supplementary** (appendix), with the host-bound flag.
+- **Registered check:** every shape is captured, and the graph's logits equal eager's bitwise. A failure stops the
+  step, and a recorded failure is not skipped on a re-run.
 - **Checks:**
   - an idle GPU;
   - strict install, no fallback;
@@ -367,8 +376,10 @@ Times below are per model: Llama / Mistral / Phi-4 / Qwen. Sources:
     compared), against FourOverSix and NVFP4.
   - **Downstream accuracies** and paired differences in percentage points ± 2 SE over the same examples; the mean
     over the five tasks has SE √(Σ SE²)/5.
-  - **Prefill:** eager and graph ms (median of rounds), with † for host-bound points. Ours / reference − 1 uses the
-    same activation quantizer, paired within rounds.
+  - **Prefill:** CUDA-graph ms (median of rounds) in the main tables. Eager ms in the appendix, with † for
+    host-bound points. Ours / reference − 1 uses the same activation quantizer, paired within rounds.
+  - **Checks:** equal `sample_digest` across the policies of each (model, task). A missing digest is also an error
+    outside `--smoke`.
   - **GEMM per-forward sums** and ratios (16x64 and 256x64 against stock_wA; 8x64 against stock_wB and stock_wA),
     with the NVFP4-vs-FourOverSix quantizer sums.
 - **Missing results show as '—'.**
@@ -398,6 +409,17 @@ $PY experiments/paper/07_tables.py
 
 - **A crashed lm-eval process:** re-running step 04 resumes that (model, policy) at the next unfinished task.
 - **A crashed latency round:** re-running step 05 repeats only the missing (model, policy, round).
+
+## Collecting results into the repository
+
+```bash
+$PY experiments/paper/collect_results.py          # PAPER_OUT -> results/paper (records and tables; see its docstring)
+```
+
+- **Collected:** the environment check, `commands.log`, and the calibration and export records. Also the per-window
+  perplexity records, and the lm-eval records (gzipped compact JSON with per-example correctness, per-choice
+  log-likelihoods and sample hashes). Also the latency and GEMM records, and the tables.
+- **Not collected:** the artifacts, the maps and the per-command logs.
 
 ## Total time and the critical path
 
