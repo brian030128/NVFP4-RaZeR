@@ -1019,6 +1019,68 @@ flipping on minibatch noise):
   (c4). C4 is 0.005 worse than with C4 calibration, the expected cost of taking
   C4 out of the calibration data.
 
+**Making joint easier to train: two fixes (`--tile-lr-scale`, `--scale-grad-in-e0m3`).**
+
+Joint is harder to optimize than scale-only for two reasons:
+- **A tile flip is a large step.** It moves 512 weights (32 scale blocks) at once
+  on a first-order STE estimate, yet Adam moves a tile logit about as fast as a
+  block logit.
+- **Scale logits go stale.** Under an E0M3 tile they receive no gradient, so they
+  are stale if the tile flips back.
+
+The fixes, as a variant (fixed joint):
+- the tile logits get lr × 1/√32 (0.1768), with cosine applied per parameter
+  group;
+- scale gradients pass straight through the tile gate, so blocks under E0M3
+  tiles keep learning.
+
+Same Pile protocol, 10 epochs, job 449128:
+
+| 1B, Pile 10k × 10 epochs | dev KL | E0M3 tiles | WikiText-2 | C4 | ΔNLL vs scale-only (wiki / c4) |
+|---|---:|---:|---:|---:|---|
+| scale 1×16 | 0.08762 | 0 | 14.196342 | 19.342672 | — |
+| joint 8×64 | 0.09072 | 594,079 | 14.205508 | 19.370768 | +0.00065±0.00205 / +0.00145±0.00137 |
+| **fixed joint 8×64** | 0.08796 | 13,768 | **14.162215** | 19.381046 | **−0.00241±0.00176** / +0.00198±0.00127 |
+
+- **Easier to train.** The fixed joint follows scale-only's dev-KL curve and ends
+  0.0003 behind, against 0.003 for the original. Its tile flips peak at about
+  0.7 M per epoch instead of about 11 M.
+- **It uses very little E0M3 at 10 epochs** (0.7% of tiles). Test PPL splits:
+  WikiText is better and C4 worse, each just beyond 2 SE.
+
+**Longer training (job 448965).** Scale-only, Pile 10k × 30 epochs: best dev KL
+0.08557 at epoch 30, still falling about 0.0005 per epoch; flips settle to 2% in
+the last epoch; WikiText-2 **14.102578**, C4 **19.327739**. That is the best 1B
+result in the study. No overfitting appears at 30 epochs with 10k sequences.
+
+**Half the data, twice the epochs (jobs 449281, 449425, 449426).** The same number
+of optimizer steps as 10k × 30: 5,000 Pile windows + 128 math/code, 60-epoch
+cosine, dev = the next 192 Pile windows. The dev set differs from the 10k runs', so
+dev KL compares within this block only.
+
+| 1B, Pile 5k × 60 epochs | best dev KL (epoch) | E0M3 tiles | WikiText-2 | C4 | ΔNLL vs scale-only (wiki / c4) |
+|---|---:|---:|---:|---:|---|
+| scale 1×16 | 0.09264 (59) | 0 | 14.319501 | 19.398090 | — |
+| joint 8×64 | 0.09539 (60) | 407,638 (21%) | 14.313015 | 19.401102 | −0.00045±0.00193 / +0.00016±0.00148 |
+| fixed joint 8×64 | 0.09657 (60) | 184,834 (9.7%) | **14.267786** | 19.403507 | **−0.00362±0.00155** / +0.00028±0.00116 |
+
+- **Scale-only converges;** dev KL is flat within noise over the last ~8 epochs.
+- **Both joint arms were still improving at epoch 60.** Their best dev KL is at the
+  last epoch, with a −0.005 drop over the last 10 epochs as the learning rate
+  decays. Joint needs more training than scale-only.
+- **Test:**
+  - The original joint ties.
+  - The fixed joint is better on WikiText (−0.0036, beyond 2 SE) and ties on C4.
+  - The fixed joint has now won WikiText in both of its runs (10k × 10 and
+    5k × 60), with no C4 gain in either.
+  - Dev KL ranks the joint arms *worse* than scale-only, yet their test PPL is
+    equal or better on WikiText.
+- **Distinct data beats epochs.** At the same step count, all three 5k × 60 arms
+  are worse than scale-only at 10k × 30: +0.0153±0.0018 (wiki) and
+  +0.0036±0.0014 (c4) for scale-only. Training KL is lower (0.043 against 0.049),
+  so the extra epochs fit the smaller calibration set more closely instead of
+  generalizing.
+
 **Activations: a static per-K-strip type map (job 444558,
 `analyze_act_e0m3_headroom.py`, `results/mixfp4_potential/train_map/act_e0m3_headroom_1b.json`).**
 - **Setup:**

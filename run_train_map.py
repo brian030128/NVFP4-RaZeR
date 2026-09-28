@@ -206,6 +206,11 @@ def main():
     ap.add_argument('--scale-epochs', type=int, default=0,
                     help='--alt joint: train only the per-block scale logits for the first N epochs (tiles stay E2M1), '
                          'then let tiles flip on top')
+    ap.add_argument('--tile-lr-scale', type=float, default=1.0,
+                    help='--alt joint: learning-rate multiplier for the type-tile logits (e.g. 1/sqrt(32) at 8x64)')
+    ap.add_argument('--scale-grad-in-e0m3', action='store_true',
+                    help='--alt joint: keep training the per-block scale logits under E0M3 tiles (straight-through '
+                         'the tile gate), so they are current if the tile flips back to E2M1')
     ap.add_argument('--stage2', choices=('joint', 'tiles'), default='joint',
                     help='After --scale-epochs: keep training the scale with the tiles (joint), or freeze it (tiles)')
     ap.add_argument('--fit-source', choices=('mathcode', 'c4', 'mix'), default='mathcode',
@@ -575,17 +580,28 @@ def main():
                 grads[n] += reduce(g * d, rows, cols)
                 if joint:
                     # dLoss/ds_b = sum over scale block b of G * (1 - t) * (hi - lo).
-                    e2 = ~expand(theta[n] > 0, rows, cols, g.shape[0])
+                    # --scale-grad-in-e0m3: straight-through the tile gate as well (drop the (1 - t) factor),
+                    # so scale logits under an E0M3 tile keep learning and are current if the tile flips back.
                     lo, hi = scale_cands[n]
-                    psi_grads[n] += reduce(g * e2 * (hi.float() - lo.float()), 1, 16)
+                    if args.scale_grad_in_e0m3:
+                        psi_grads[n] += reduce(g * (hi.float() - lo.float()), 1, 16)
+                    else:
+                        e2 = ~expand(theta[n] > 0, rows, cols, g.shape[0])
+                        psi_grads[n] += reduce(g * e2 * (hi.float() - lo.float()), 1, 16)
             output.register_hook(backward)
         return forward
 
-    params = list(theta.values()) + list(psi.values())
+    # Two parameter groups: under --alt joint, theta are the type-tile logits and get lr * --tile-lr-scale
+    # (a tile flip moves rows*cols/16 scale blocks' worth of weights at once); psi (per-block scales) get lr.
+    # For --alt e0m3/scale, theta is the only set of logits and keeps lr.
+    tile_lr = args.lr * (args.tile_lr_scale if joint else 1.0)
+    groups = [dict(params=list(theta.values()), lr=tile_lr, base_lr=tile_lr)]
+    if psi:
+        groups.append(dict(params=list(psi.values()), lr=args.lr, base_lr=args.lr))
     if args.optimizer == 'adam':
-        opt = torch.optim.Adam(params, lr=args.lr, betas=tuple(args.betas), eps=args.eps)
+        opt = torch.optim.Adam(groups, lr=args.lr, betas=tuple(args.betas), eps=args.eps)
     else:
-        opt = torch.optim.SGD(params, lr=args.lr)
+        opt = torch.optim.SGD(groups, lr=args.lr)
     steps_per_epoch = math.ceil(math.ceil(len(fit) / local_batch) / args.accum)
     total_steps = steps_per_epoch * args.epochs
     rng = random.Random(args.seed if world == 1 else args.seed * 1000 + rank)
@@ -673,7 +689,7 @@ def main():
                     dist.all_reduce(g)
             if args.schedule == 'cosine':
                 for pg in opt.param_groups:
-                    pg['lr'] = args.lr * 0.5 * (1 + math.cos(math.pi * step / total_steps))
+                    pg['lr'] = pg['base_lr'] * 0.5 * (1 + math.cos(math.pi * step / total_steps))
             # Staged joint training: grad None (not zero) keeps Adam from stepping, and from
             # advancing the bias-correction count of, the logits that are frozen this stage.
             scale_stage = epoch < args.scale_epochs
@@ -717,7 +733,8 @@ def main():
             dist.all_reduce(t)
             loss_sum, loss_n = float(t[0]), int(t[1])
         entry = dict(epoch=epoch, step=step, train_kl=loss_sum / loss_n, e0m3_units=e0m3,
-                     hard_flips=flips_epoch, tau=tau[0], lr=opt.param_groups[0]['lr'], epoch_seconds=time.time() - t0)
+                     hard_flips=flips_epoch, tau=tau[0], lr=opt.param_groups[-1]['lr'],
+                     tile_lr=opt.param_groups[0]['lr'], epoch_seconds=time.time() - t0)
         if joint:
             entry['scale_flipped_blocks'] = sum(int((t > 0).sum()) for t in psi.values())
             # Scale blocks whose flipped scale is actually in effect (inside E2M1 tiles).
