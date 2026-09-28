@@ -135,6 +135,50 @@ def c4_train_windows(tok, count):
     return windows, dict(repo='allenai/c4', revision=REVISION, path=C4_TRAIN, records=records)
 
 
+PILE_VAL = 'mit-han-lab/pile-val-backup'   # the AWQ calibration set
+PILE_EXCLUDE = {'Wikipedia (en)'}           # WikiText-2 is Wikipedia: keep its domain out of calibration
+
+
+def pile_val_windows(tok, count):
+    """`count` 512-token windows of the Pile validation set (AWQ's calibration data), one window per
+    document in stream order, skipping Wikipedia documents and documents shorter than 513 tokens.
+    Neither C4 nor WikiText, the two evaluation sets. The dataset revision is pinned at run time."""
+    import collections
+    import hashlib
+    from datasets import load_dataset
+    from huggingface_hub import HfApi
+    revision = HfApi().dataset_info(PILE_VAL).sha
+    stream = load_dataset(PILE_VAL, revision=revision, data_files={'validation': 'val.jsonl.zst'},
+                          split='validation', streaming=True)
+    windows, records, seen, subsets, skipped = [], [], set(), collections.Counter(), collections.Counter()
+    for row in stream:
+        subset = (row.get('meta') or {}).get('pile_set_name', 'unknown')
+        if subset in PILE_EXCLUDE:
+            skipped[subset] += 1
+            continue
+        digest = hashlib.sha256(row['text'].encode()).hexdigest()
+        if digest in seen:
+            continue
+        seen.add(digest)
+        ids = tok(row['text'], return_tensors='pt').input_ids
+        if ids.shape[1] < 513:
+            continue
+        offset = int(digest[:12], 16) % (ids.shape[1] - 512 + 1)
+        window = ids[:, offset:offset + 512].clone()
+        windows.append(window)
+        records.append(dict(document_sha256=digest, offset=offset, token_sha256=sha(window), subset=subset))
+        subsets[subset] += 1
+        if len(windows) == count:
+            break
+    assert len(windows) == count, len(windows)
+    return windows, dict(repo=PILE_VAL, revision=revision, path='val.jsonl.zst', excluded_subsets=sorted(PILE_EXCLUDE),
+                         skipped_documents=dict(skipped), subset_counts=dict(subsets), records=records)
+
+
+def general_windows(tok, corpus, count):
+    return c4_train_windows(tok, count) if corpus == 'c4' else pile_val_windows(tok, count)
+
+
 @torch.no_grad()
 def main():
     assert os.environ.get('SLURM_JOB_ID'), 'Run through Slurm'
@@ -174,12 +218,21 @@ def main():
                     help='--alt joint: initial type-tile logit (default --init-logit); more negative = fewer, '
                          'more consistent tile flips')
     ap.add_argument('--fit-count', type=int, default=512, help='--fit-source c4: number of 512-token windows')
+    ap.add_argument('--general-corpus', choices=('c4', 'pile'), default='c4',
+                    help='General-text corpus behind --fit-source c4/mix and --dev-source c4: a C4 train shard, or the '
+                         'Pile validation set without Wikipedia (AWQ calibration data; disjoint from both evaluation sets)')
     ap.add_argument('--dev-source', choices=('mathcode', 'c4'), default='mathcode',
                     help='Monitoring/epoch-selection set; with c4 the math/code set is also reported as dev2')
     ap.add_argument('--dev-count', type=int, default=192, help='--dev-source c4: number of held-out 512-token windows')
     ap.add_argument('--no-epoch-maps', action='store_true', help='Save only the final hard maps (disk quota)')
     ap.add_argument('--no-logits', action='store_true', help='Do not save the FP32 latent logits (disk quota)')
     ap.add_argument('--packed-maps', action='store_true', help='Save final hard maps bit-packed (disk quota)')
+    ap.add_argument('--resume-maps', type=Path, default=None,
+                    help='Warm start from a completed run directory: its final hard maps become logits +/- --resume-margin')
+    ap.add_argument('--resume-margin', type=float, default=1.0)
+    ap.add_argument('--teacher-topk', type=int, default=0,
+                    help='Store the calibration teacher as top-K log-probs + tail mass (0 = full vocabulary); '
+                         'development KL always uses the full teacher')
     ap.add_argument('--no-dev2', action='store_true',
                     help='--dev-source c4: skip the secondary math/code dev monitor (saves ~25 GB of teacher logits)')
     ap.add_argument('--extra-fit', type=int, default=0,
@@ -194,6 +247,27 @@ def main():
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     started = time.time()
+    # Data parallel over Slurm tasks (srun --ntasks=W --gpus-per-task=1): every rank holds the model, the
+    # candidates and identical logits; each rank owns a 1/W shard of the calibration sequences and processes
+    # batch/W of every step; per-tile gradients are summed across ranks before each optimizer step, so all
+    # ranks take identical steps. Rank 0 alone evaluates, keeps the best maps and writes outputs.
+    world = int(os.environ.get('SLURM_NTASKS', '1')) if os.environ.get('TRAIN_MAP_DDP') else 1
+    rank = int(os.environ.get('SLURM_PROCID', '0')) if world > 1 else 0
+    main_rank = rank == 0
+    if world > 1:
+        import datetime
+        import sys
+        import torch.distributed as dist
+        dist.init_process_group('nccl', rank=rank, world_size=world, timeout=datetime.timedelta(minutes=90))
+        assert args.batch % world == 0, 'batch must be divisible by the number of ranks'
+        assert args.param == 'ste' and args.accum == 1
+        if not main_rank:
+            sys.stdout = open(os.devnull, 'w')
+    local_batch = args.batch // world
+
+    def save_report():
+        if main_rank:
+            save(args.out, report)
     torch.backends.cuda.matmul.allow_tf32 = False
     rows, cols = UNITS[args.unit]
     qwen = args.model == 'qwen27b'
@@ -201,13 +275,14 @@ def main():
         assert args.batch == 1 and args.eval_batch == 1, 'Qwen batched forward is not identical to batch 1'
     prior = json.loads((CALIBRATIONS[args.model] / 'report.json').read_text())
     assert transformers.__version__ == prior['transformers_version']
-    args.out.mkdir(parents=True, exist_ok=False)
-    report = dict(status='running', job_id=os.environ['SLURM_JOB_ID'],
+    if main_rank:
+        args.out.mkdir(parents=True, exist_ok=False)
+    report = dict(status='running', job_id=os.environ['SLURM_JOB_ID'], world_size=world,
                   args={k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
                   source_sha256={p: digest_file(p) for p in ('run_train_map.py', 'run_multiround.py', 'quantize/quantizer.py',
                                                              'quantize/causal_four_over_six.py')},
                   epochs=[])
-    save(args.out, report)
+    save_report()
     if qwen:
         from transformers import Qwen3_5ForConditionalGeneration
         model, loading = Qwen3_5ForConditionalGeneration.from_pretrained(
@@ -226,7 +301,12 @@ def main():
     c4_needed = c4_fit + (args.dev_count if args.dev_source == 'c4' else 0)
     if c4_needed:
         # Calibration windows first, then development windows: disjoint documents of the same C4 train shard.
-        c4, c4_meta = c4_train_windows(tok, c4_needed)
+        # "c4" in --fit-source / --dev-source means the general-text corpus chosen by --general-corpus.
+        c4, c4_meta = general_windows(tok, args.general_corpus, c4_needed)
+        report['general_corpus'] = args.general_corpus
+        if args.general_corpus == 'pile':
+            print('PILE subsets ' + json.dumps(c4_meta['subset_counts']) + ' skipped ' + json.dumps(c4_meta['skipped_documents']),
+                  flush=True)
     fit = []
     if c4_fit:
         assert not args.extra_fit or args.fit_source == 'mix', '--extra-fit applies to math/code calibration'
@@ -239,8 +319,15 @@ def main():
             extra, report['extra_fit'] = extra_math_code(tok, prior['fit'], args.extra_fit, args.model)
             fit += extra
     report['fit_source'], report['fit_sequences'] = args.fit_source, len(fit)
-    save(args.out, report)
-    print(f'FIT {len(fit)} {args.fit_source} calibration sequences', flush=True)
+    if world > 1:
+        # Equal shards (the few left-over sequences are dropped) so every rank takes the same number of steps.
+        per_rank = len(fit) // world
+        report['fit_sequences_used'] = per_rank * world
+        fit = fit[rank::world][:per_rank]
+    save_report()
+    print(f'FIT {report["fit_sequences"]} {args.fit_source} calibration sequences'
+          + (f' ({report["fit_sequences_used"]} used, {len(fit)} per rank x {world} ranks)' if world > 1 else ''),
+          flush=True)
     mathcode_dev, report['development'] = load_development(args.model)
     if args.dev_source == 'c4':
         start = c4_fit
@@ -258,13 +345,27 @@ def main():
             logits = model(input_ids=r['ids'].to(device), use_cache=False).logits
             out.append(logits[:, :-1].float().log_softmax(-1).bfloat16().cpu())
         return out
+    if not main_rank:
+        dev, second_dev = [], None   # only rank 0 evaluates
     dev_teacher = teacher_of(dev)
     second_teacher = teacher_of(second_dev) if second_dev is not None else None
-    teacher = []
-    for ids in fit:
+    # Calibration teacher. Full: BF16 log-probs over the whole vocabulary (~250 KB/token).
+    # --teacher-topk K: the K most likely tokens' log-probs + indices and the log of the remaining
+    # mass (~6K bytes/token); training then minimises the exact KL over the partition
+    # {top-K tokens, everything else}. Development/early stopping always uses the full teacher.
+    teacher, topk_check_full = [], []
+    for i, ids in enumerate(fit):
         logits = model(input_ids=ids.to(device), use_cache=False).logits
-        teacher.append(logits[:, :-1].float().log_softmax(-1).bfloat16().cpu())
-    del logits
+        lp_t = logits[:, :-1].float().log_softmax(-1)
+        if args.teacher_topk:
+            vals, idx = lp_t.topk(args.teacher_topk, dim=-1)
+            tail = torch.log1p(-vals.exp().sum(-1, keepdim=True).clamp(max=1 - 1e-7))
+            teacher.append((vals.half().cpu(), idx.int().cpu(), tail.cpu()))
+            if i < 8:
+                topk_check_full.append(lp_t.bfloat16().cpu())
+        else:
+            teacher.append(lp_t.bfloat16().cpu())
+    del logits, lp_t
     # Candidates exactly as run_multiround.py: packed 4-bit codes + FP8 scales,
     # verified bitwise by pack(), dense BF16 fallback otherwise.
     joint = args.alt == 'joint'
@@ -317,6 +418,33 @@ def main():
         theta[n] = torch.full((-(-o // rows), k // cols), tile_init, dtype=torch.float32, device=m.weight.device)
         m.weight.copy_(scale_cands[n][0] if joint else b)
         del a, b
+    if args.resume_maps:
+        # Warm start (training cycle k+1): the previous run's final hard maps, as logits +/- margin.
+        prev = json.loads((args.resume_maps / 'report.json').read_text())
+        assert prev['status'] == 'complete', args.resume_maps
+        for key in ('model', 'unit', 'alt', 'scale_init'):
+            assert prev['args'][key] == getattr(args, key), (key, prev['args'][key], getattr(args, key))
+
+        def load_map(path):
+            import numpy as np
+            out = {}
+            for n, v in torch.load(path, weights_only=False).items():
+                if isinstance(v, tuple):
+                    bits, shape = v
+                    count = int(np.prod(shape))
+                    v = torch.from_numpy(np.unpackbits(bits.numpy())[:count].reshape(shape).astype(bool))
+                out[n] = v
+            return out
+        tile_map = load_map(args.resume_maps / 'map.pt')
+        for n in theta:
+            theta[n].copy_(torch.where(tile_map[n].to(theta[n].device), 1., -1.) * args.resume_margin)
+        if joint:
+            scale_map = load_map(args.resume_maps / 'scale_map.pt')
+            for n in psi:
+                psi[n].copy_(torch.where(scale_map[n].to(psi[n].device), 1., -1.) * args.resume_margin)
+        report['resumed_from'] = dict(path=str(args.resume_maps), job_id=prev['job_id'],
+                                      map_sha256=prev.get('map_sha256'), best_dev_kl=prev.get('best_dev_kl'),
+                                      margin=args.resume_margin)
     if nvfp4_equal:
         # Informational: the max->6 branch vs quant_nvfp4 (which differ only if quant_nvfp4 rounds differently).
         report['lo_equals_quant_nvfp4_modules'] = sum(nvfp4_equal)
@@ -377,6 +505,20 @@ def main():
 
     def per_sequence_kl(lp, t):
         return (t.exp() * (t - lp)).sum(-1).mean(-1)
+
+    def per_sequence_kl_topk(lp, vals, idx, tail):
+        """Exact KL between teacher and student over the partition {top-K tokens, rest}."""
+        vals, tail = vals.float(), tail.float()
+        q = lp.gather(-1, idx.long())
+        q_tail = torch.log1p(-q.exp().sum(-1, keepdim=True).clamp(max=1 - 1e-7))
+        kl = (vals.exp() * (vals - q)).sum(-1, keepdim=True) + tail.exp() * (tail - q_tail)
+        return kl.squeeze(-1).mean(-1)
+
+    def batch_kl(lp, idx_list):
+        if not args.teacher_topk:
+            return per_sequence_kl(lp, torch.cat([teacher[i] for i in idx_list]).to(lp.device).float())
+        vals, ids, tail = (torch.cat([teacher[i][j] for i in idx_list]).to(lp.device) for j in range(3))
+        return per_sequence_kl_topk(lp, vals, ids, tail)
 
     def eval_hooks(on):
         nonlocal eval_handles
@@ -444,12 +586,44 @@ def main():
         opt = torch.optim.Adam(params, lr=args.lr, betas=tuple(args.betas), eps=args.eps)
     else:
         opt = torch.optim.SGD(params, lr=args.lr)
-    steps_per_epoch = math.ceil(math.ceil(len(fit) / args.batch) / args.accum)
+    steps_per_epoch = math.ceil(math.ceil(len(fit) / local_batch) / args.accum)
     total_steps = steps_per_epoch * args.epochs
-    rng = random.Random(args.seed)
+    rng = random.Random(args.seed if world == 1 else args.seed * 1000 + rank)
 
-    initial = dev_eval()
+    if args.resume_maps:
+        for n in modules:
+            apply(n, True)
+    initial = dev_eval() if main_rank else dict(kl=float('inf'), ce=float('nan'))
     report['initial_dev'] = initial
+    if args.resume_maps:
+        print(f'RESUMED from {args.resume_maps} (previous best dev KL {report["resumed_from"]["best_dev_kl"]}), '
+              f'start dev KL {initial["kl"]:.6f}', flush=True)
+    if not main_rank:
+        topk_check_full = []
+    if topk_check_full:
+        # How much of the full-vocabulary KL the top-K partition KL captures, on the starting weights.
+        eval_hooks(True)
+        full, part = [], []
+        other_k = {k: [] for k in (128, 512, 2048, 8192)}
+        for i, t_full in enumerate(topk_check_full):
+            lp = model(input_ids=fit[i].to(device), use_cache=False).logits[:, :-1].float().log_softmax(-1)
+            t_full = t_full.to(lp.device).float()
+            full.append(float(per_sequence_kl(lp, t_full)))
+            vals, ids, tail = (x.to(lp.device) for x in teacher[i])
+            part.append(float(per_sequence_kl_topk(lp, vals, ids, tail)))
+            for k in other_k:
+                v, j = t_full.topk(k, dim=-1)
+                tl = torch.log1p(-v.exp().sum(-1, keepdim=True).clamp(max=1 - 1e-7))
+                other_k[k].append(float(per_sequence_kl_topk(lp, v, j, tl)))
+            del lp, t_full
+        eval_hooks(False)
+        report['topk_check'] = dict(k=args.teacher_topk, full_kl=full, topk_kl=part,
+                                    captured_fraction=sum(part) / sum(full),
+                                    captured_by_k={k: sum(v) / sum(full) for k, v in other_k.items()})
+        print('TOPK_BY_K ' + json.dumps(report['topk_check']['captured_by_k']), flush=True)
+        print(f'TOPK_CHECK k={args.teacher_topk} full {sum(full) / len(full):.6f} '
+              f'topk {sum(part) / len(part):.6f} captured {sum(part) / sum(full):.4f}', flush=True)
+        del topk_check_full
     best = dict(kl=initial['kl'], epoch=0)
 
     def snapshot():
@@ -461,7 +635,7 @@ def main():
         report['initial_dev2'] = dev_eval(second_dev, second_teacher)
         print(f'START dev2 (math/code) KL {report["initial_dev2"]["kl"]:.6f}', flush=True)
     report['setup_seconds'] = time.time() - started
-    save(args.out, report)
+    save_report()
     print(f'START dev CE {initial["ce"]:.6f} KL {initial["kl"]:.6f} tiles={report["tiles"]} '
           f'steps/epoch={steps_per_epoch} total={total_steps}', flush=True)
     if args.param == 'sigmoid':
@@ -474,13 +648,13 @@ def main():
         t0 = time.time()
         order = list(range(len(fit)))
         rng.shuffle(order)
-        batches = [order[i:i + args.batch] for i in range(0, len(order), args.batch)]
+        batches = [order[i:i + local_batch] for i in range(0, len(order), local_batch)]
         losses, flips_epoch, scale_flips_epoch = [], 0, 0
         handles = [m.register_forward_pre_hook(act) for m in modules.values()]
         handles += [m.register_forward_hook(make_hook(n)) for n, m in modules.items()]
         for g0 in range(0, len(batches), args.accum):
             group = batches[g0:g0 + args.accum]
-            n_seq = sum(len(b) for b in group)
+            n_seq = sum(len(b) for b in group) * world   # sequences in the global step (equal shards)
             for g in (*grads.values(), *psi_grads.values()):
                 g.zero_()
             with torch.enable_grad():
@@ -488,12 +662,15 @@ def main():
                     ids = torch.cat([fit[i] for i in idx]).to(device)
                     embeds = model.get_input_embeddings()(ids).detach().requires_grad_()
                     lp = model(inputs_embeds=embeds, use_cache=False).logits[:, :-1].float().log_softmax(-1)
-                    t = torch.cat([teacher[i] for i in idx]).to(lp.device).float()
-                    kl = per_sequence_kl(lp, t)
+                    kl = batch_kl(lp, idx)
                     # Mean KL over the sequences of one optimizer step.
                     (kl.sum() / n_seq).backward()
                     losses.extend(kl.tolist())
-                    del embeds, lp, t, kl
+                    del embeds, lp, kl
+            if world > 1:
+                # Sum the per-tile gradients over ranks: every rank then takes the identical optimizer step.
+                for g in (*grads.values(), *psi_grads.values()):
+                    dist.all_reduce(g)
             if args.schedule == 'cosine':
                 for pg in opt.param_groups:
                     pg['lr'] = args.lr * 0.5 * (1 + math.cos(math.pi * step / total_steps))
@@ -534,7 +711,12 @@ def main():
         for h in handles:
             h.remove()
         e0m3 = sum(int((t > 0).sum()) for t in theta.values())
-        entry = dict(epoch=epoch, step=step, train_kl=sum(losses) / len(losses), e0m3_units=e0m3,
+        loss_sum, loss_n = sum(losses), len(losses)
+        if world > 1:
+            t = torch.tensor([loss_sum, float(loss_n)], dtype=torch.float64, device=device)
+            dist.all_reduce(t)
+            loss_sum, loss_n = float(t[0]), int(t[1])
+        entry = dict(epoch=epoch, step=step, train_kl=loss_sum / loss_n, e0m3_units=e0m3,
                      hard_flips=flips_epoch, tau=tau[0], lr=opt.param_groups[0]['lr'], epoch_seconds=time.time() - t0)
         if joint:
             entry['scale_flipped_blocks'] = sum(int((t > 0).sum()) for t in psi.values())
@@ -545,7 +727,7 @@ def main():
         if args.param == 'sigmoid':
             soft = torch.cat([torch.sigmoid(t / tau[0]).reshape(-1) for t in theta.values()])
             entry['undecided_fraction'] = float(((soft > 0.05) & (soft < 0.95)).float().mean())
-        if (epoch + 1) % args.eval_every == 0 or epoch + 1 == args.epochs:
+        if main_rank and ((epoch + 1) % args.eval_every == 0 or epoch + 1 == args.epochs):
             d = dev_eval()
             entry['dev_ce'], entry['dev_kl'] = d['ce'], d['kl']
             if args.keep_best and d['kl'] < best['kl']:
@@ -560,8 +742,16 @@ def main():
                 if joint:
                     torch.save({n: (t > 0).cpu() for n, t in psi.items()}, args.out / f'scale_map_epoch{epoch + 1:03d}.pt')
         report['epochs'].append(entry)
-        save(args.out, report)
+        save_report()
         print('EPOCH ' + json.dumps({k: v for k, v in entry.items() if k != 'dev_kl_values'}), flush=True)
+    if world > 1:
+        # Training is done; only rank 0 restores the best maps and evaluates. The other ranks stay alive
+        # (srun would otherwise tear down the whole step when they exit) until rank 0 reaches the final barrier.
+        dist.barrier()
+        if not main_rank:
+            dist.barrier()
+            dist.destroy_process_group()
+            return
     if args.keep_best:
         # Early stopping: the final hard maps are those of the lowest primary dev KL. Logits are
         # replaced by +/-1 with the same signs, so hard_map()/apply() reproduce that map exactly.
@@ -601,7 +791,7 @@ def main():
     report['final_e0m3_units'] = sum(int(m.sum()) for m in final_map.values())
     report['map_sha256'] = digest_file(args.out / 'map.pt')
     report['optimization_seconds'] = time.time() - started - report['setup_seconds']
-    save(args.out, report)
+    save_report()
     print(f'FINAL dev CE {report["final_dev"]["ce"]:.6f} KL {report["final_dev"]["kl"]:.6f} '
           f'e0m3={report["final_e0m3_units"]}', flush=True)
     # Released PPL windows on the final HARD map.
@@ -624,7 +814,7 @@ def main():
         key = 'c4' if domain == 'c4_paper' else domain
         report['evaluation'][key] = dict(nll=values, ppl=float(torch.exp(losses.sum() / (len(values) * 2048))))
         print(f'PPL train_{args.alt}_{args.param}_{args.unit} {key} {report["evaluation"][key]["ppl"]:.6f}', flush=True)
-        save(args.out, report)
+        save_report()
     eval_hooks(False)
     report['resources'] = dict(
         total_seconds=time.time() - started,
@@ -632,7 +822,10 @@ def main():
         gpu_peak_allocated_gib=[torch.cuda.max_memory_allocated(i) / 2 ** 30 for i in range(torch.cuda.device_count())],
         cpu_peak_rss_gib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2 ** 20)
     report['status'] = 'complete'
-    save(args.out, report)
+    save_report()
+    if world > 1:
+        dist.barrier()
+        dist.destroy_process_group()
 
 
 if __name__ == '__main__':

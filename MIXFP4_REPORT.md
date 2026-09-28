@@ -944,6 +944,81 @@ Joint 8×64 − scale 1×16, same model and seed (ΔNLL ± 2 SE, wiki / c4):
 - **Conclusion:** with a better calibration and early stopping, joint 8×64 is not
   worse than scale search on average, but it is not better either.
 
+#### Converged comparison: more data, cosine schedule, top-k teacher
+
+This setup fixes the non-convergence seen above (constant learning rate, logits
+flipping on minibatch noise):
+- **Schedule:** cosine lr (0.02 → 0), with the best-dev-KL maps kept (epoch 0
+  included).
+- **Data:** thousands of calibration sequences.
+- **Teacher:** stored as the top-K log-probs plus a tail bucket
+  (`--teacher-topk`). Training minimises the exact KL over the partition {top-K,
+  rest}; dev KL and early stopping always use the full-vocabulary teacher.
+  Measured on 8 calibration sequences, top-K captures 97.4–98.8% of the full KL
+  (K = 3072–4096).
+- **Optimiser:** Adam as above, with one learning rate for scale and tile logits.
+
+**C4 + math/code, 4,224 sequences, 6-epoch cosine (jobs 447195–447200, 447683).**
+- Dev KL now falls to (or near) the last epoch on every model.
+- Flips per epoch decay toward zero (0.4–1.6% in the last epoch, against 16–25%
+  mid-run).
+- Joint − scale ΔNLL (wiki / c4):
+  - 1B: −0.0026±0.0022 / −0.0018±0.0014
+  - 3B: +0.0022±0.0019 / −0.0010±0.0012
+  - 8B: −0.0023±0.0014 / −0.0009±0.0011
+- A single 12-epoch schedule on 3B reached a *worse* dev KL (0.0630 / 0.0632
+  against 0.0617 / 0.0622) but better test PPL (joint − scale −0.0021±0.0019 /
+  −0.0016±0.0012). Dev KL and test PPL rank these runs differently.
+
+**Warm-restart cycles until dev KL converges (`--resume-maps`).**
+- Each cycle is 6 more cosine epochs (peak lr 0.01) starting from the previous
+  best maps. A resumed run's starting dev KL equals the previous best exactly.
+- Stopping rule, fixed in advance: stop when a cycle improves dev KL by less than
+  0.0003.
+- **1B converged after 4 cycles in both arms:**
+
+  | 1B, converged | Dev KL | WikiText-2 | C4 | E0M3 tiles |
+  |---|---:|---:|---:|---:|
+  | scale 1×16 | 0.083951 | 14.559416 | 19.252747 | 0 |
+  | joint 8×64 | 0.083969 | 14.550602 | 19.255983 | 371,510 (19.5%) |
+
+  Joint − scale: −0.00061±0.00181 / +0.00017±0.00123, an exact tie.
+- The cycles kept lowering dev KL, but test PPL got slightly worse than after the
+  first cycle (1B scale WikiText 14.48 → 14.56) in both arms alike.
+- 3B and 8B cycles were stopped at cycle 3, before converging, when the protocol
+  changed to a single long run.
+  - Latest matched dev KL, scale vs joint: 3B 0.06095 / 0.06092 (cycle 2); 8B
+    0.06122 / 0.06139 (cycle 2).
+  - Joint's E0M3 share grew with each cycle: 3B 9.2% → 10.4%, 8B 4.4% → 5.2%.
+
+**Final protocol: Pile calibration, one long run, 1B only (jobs 448862, 448863).**
+- **Calibration:** C4 is a test set, so calibration uses neither C4 nor
+  Wikipedia (WikiText's source). It is 10,000 windows of the **Pile validation
+  set** (`mit-han-lab/pile-val-backup`, AWQ's calibration data) with the
+  `Wikipedia (en)` subset removed, plus the 128 math/code windows: 10,128
+  sequences, 5.2 M tokens.
+- **Dev:** the next 192 Pile-val windows.
+- **Training:** one 10-epoch cosine run, no restarts, top-3072 teacher.
+- **Hardware:** data-parallel on 4 H200s with the same global batch of 8
+  (`slurm/train_map_ddp.sbatch`).
+
+| 1B | best epoch | dev KL | WikiText-2 | C4 | ΔNLL vs FourOverSix (wiki / c4) |
+|---|---:|---:|---:|---:|---|
+| FourOverSix | — | — | 15.356671 | 21.532633 | — |
+| scale 1×16 | 10/10 | 0.08762 | **14.196342** | 19.342672 | −0.07857±0.00313 / −0.10726±0.00433 |
+| joint 8×64 (594,079 E0M3 tiles, 31.3%) | 10/10 | 0.09072 | 14.205508 | 19.370768 | −0.07792±0.00307 / −0.10581±0.00446 |
+
+- **Both arms converge cleanly.** Dev KL falls every epoch (scale 0.1012 → 0.0876,
+  joint 0.1053 → 0.0907), and the best epoch is the last one. There is no sign of
+  overfitting with 10k sequences.
+- **Joint ties scale search:** +0.00065±0.00205 / +0.00145±0.00137. Its converged
+  dev KL is *higher* (0.0907 against 0.0876), even though it elects 31% of tiles
+  as E0M3.
+- **This is the best 1B WikiText result in the study.** Scale search alone beats
+  the §7 E0M3-only MixFP4 8×64 map by −0.0216±0.0023 (wiki) and −0.0159±0.0023
+  (c4). C4 is 0.005 worse than with C4 calibration, the expected cost of taking
+  C4 out of the calibration data.
+
 **Activations: a static per-K-strip type map (job 444558,
 `analyze_act_e0m3_headroom.py`, `results/mixfp4_potential/train_map/act_e0m3_headroom_1b.json`).**
 - **Setup:**
