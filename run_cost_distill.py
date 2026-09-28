@@ -30,8 +30,15 @@ Task 2 (results/scale_additivity/PROTOCOL.md), all opt-in:
                  per-document.
   --map / --unit (scale arm) a fixed MixFP4 tile map (run_train_map.py map.pt): the flagged blocks are E0M3 with a
                  learned scale, the others E2M1 with a learned scale (quantize/learned_scale.LearnedScaleMixed).
+Unified baselines (results/unified_baselines/PROTOCOL.md):
+  --model        llama8b (default), mistral7b, phi4 or qwen27b: that model's calibration record, fit set and
+                 development set (run_multiround.data_paths). Qwen3.8-27B loads as run_train_map.py loads it, on one GPU.
+  Every run records which parameters are trained ('trained_parameters'). It also hashes every model parameter
+  outside the scoped Linear weights before and after training (phase 'frozen_check', outside the calibration cost):
+  'outside_scope_unchanged'.
 """
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -315,11 +322,46 @@ def per_step_kl(lp, t):
     return (t.exp() * (t - lp)).sum(-1).mean(-1)
 
 
+def load_student_model(key, prior):
+    """The model and its quantized Linears: run_multiround.py's loader, or run_train_map.py's for Qwen3.8-27B."""
+    if key == 'qwen27b':
+        from transformers import Qwen3_5ForConditionalGeneration
+        model, loading = Qwen3_5ForConditionalGeneration.from_pretrained(
+            prior['source'], revision=prior['revision'], dtype=torch.bfloat16, attn_implementation='sdpa',
+            device_map='cuda', output_loading_info=True)
+        assert not loading['missing_keys'] and not loading.get('mismatched_keys') and not loading.get('error_msgs')
+        model.eval().requires_grad_(False)
+        modules = {n: m for n, m in model.named_modules() if isinstance(m, torch.nn.Linear)
+                   and 'language_model' in n and 'head' not in n}
+        assert list(modules) == list(prior['matrices'])
+        return model, modules
+    model, modules = load_model(prior, False)
+    model.set_attn_implementation('sdpa')
+    return model, modules
+
+
+@torch.no_grad()
+def outside_scope_digest(model, modules):
+    """sha256 over every model parameter that is not a scoped Linear weight (name, dtype, bytes), with the counts."""
+    scoped = {id(m.weight) for m in modules.values()}
+    h, tensors, elements = hashlib.sha256(), 0, 0
+    for n, p in model.named_parameters():
+        if id(p) in scoped:
+            continue
+        h.update(n.encode())
+        h.update(str(p.dtype).encode())
+        h.update(p.detach().reshape(-1).contiguous().view(torch.uint8).cpu().numpy().tobytes())
+        tensors += 1
+        elements += p.numel()
+    return dict(sha256=h.hexdigest(), tensors=tensors, elements=elements)
+
+
 def main():
     monitor = PhaseMonitor()
     monitor.enter('model_load')
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--arm', choices=('qat', 'lora', 'scale'), required=True)
+    ap.add_argument('--model', choices=('llama8b', 'mistral7b', 'phi4', 'qwen27b'), default='llama8b')
     ap.add_argument('--optimizer', choices=('adamw_fp32', 'adamw_8bit', 'cpu_offload', 'torch_adamw'), default=None,
                     help='qat: adamw_fp32 / adamw_8bit / cpu_offload; lora and scale: torch_adamw (FP32 parameters)')
     ap.add_argument('--lr', type=float, default=0.0)
@@ -367,7 +409,9 @@ def main():
         args.optimizer = 'adamw_fp32' if args.arm == 'qat' else 'torch_adamw'
     assert (args.arm == 'qat') == (args.optimizer != 'torch_adamw'), 'qat uses a BF16-weight optimizer'
     assert args.batch % args.micro_batch == 0
-    calibration, development = data_paths('llama8b', args.data_root)
+    assert args.model == 'llama8b' or (args.budget != 'zero' and args.evaluate is None), \
+        'the WikiText-2 / C4 evaluation here is run_multiround.py\'s Llama one; evaluate other models with run_ppl_deploy.py'
+    calibration, development = data_paths(args.model, args.data_root)
     prior = json.loads((calibration / 'report.json').read_text())
     deviations = []
     if transformers.__version__ != prior['transformers_version']:
@@ -382,10 +426,11 @@ def main():
                   source_sha256={p: digest_file(p) for p in SOURCES})
     save(args.out, report)
 
-    model, modules = load_model(prior, False)
-    model.set_attn_implementation('sdpa')
+    model, modules = load_student_model(args.model, prior)
     for name, m in modules.items():
         assert sha(m.weight) == prior['matrices'][name]['source_sha256'], name
+    monitor.enter('frozen_check')
+    report['outside_scope_before'] = outside_scope_digest(model, modules)
     device = model.get_input_embeddings().weight.device
     counts = dict(teacher_forward_sequences=0, student_forward_sequences=0, student_backward_sequences=0,
                   recompute_forward_sequences=0, development_forward_sequences=0, optimizer_steps=0)
@@ -506,6 +551,13 @@ def main():
 
     params = student.parameters()
     trainable = sum(p.numel() for p in params)
+    ids = {id(p) for p in params}
+    outside = [n for n, p in model.named_parameters() if p.requires_grad and id(p) not in ids]
+    report['trained_parameters'] = dict(
+        group={'qat': 'the scoped Linear weights', 'scale': 'block-scale factors (not model parameters)',
+               'lora': 'LoRA adapters (not model parameters)'}[args.arm],
+        tensors=len(params), elements=trainable, model_parameters_requiring_grad_outside_them=outside)
+    assert not outside, outside[:5]
     optimizer = None
     report['memory_computed'] = dict(
         model_weights_bytes=sum(p.numel() * p.element_size() for p in model.parameters()),
@@ -634,6 +686,10 @@ def main():
     if args.checkpointing:
         model.gradient_checkpointing_disable()
     torch.cuda.empty_cache()
+    monitor.enter('frozen_check')
+    report['outside_scope_after'] = outside_scope_digest(model, modules)
+    report['outside_scope_unchanged'] = report['outside_scope_after']['sha256'] == report['outside_scope_before']['sha256']
+    assert report['outside_scope_unchanged'], 'a parameter outside the scoped Linears changed'
     if not args.no_dev:
         monitor.enter('final_dev_eval')
         with torch.no_grad():

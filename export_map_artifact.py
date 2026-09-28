@@ -34,6 +34,12 @@ run_cost_distill.py --arm scale ({module: factor per 16-element block}).
   E0M3 flag) come from the learned scales, and numerics.decode_fake_order must equal the learned fake-quant weight
   (value-equal, as the exporter's own check: -0 packs as +0).
 - Step 3 then also checks that the learned parametrization at f = 1 equals the standard candidates on every module.
+
+--weights STATE (results/unified_baselines/PROTOCOL.md): QAT-trained weights, the state.pt of run_cost_distill.py
+--arm qat ({module: trained BF16 weight}), with --kind four_over_six. After step 2 has checked the model's own weights,
+the trained weights replace them; steps 3-5 then run on the trained weights. So the packed weights must equal the
+FourOverSix fake quant of the trained weights bitwise (the exporter's own check), and the ownership check runs on
+them. Nothing outside the scoped Linears is exported: the evaluation loads the model's own embeddings, norms and head.
 """
 import argparse
 import dataclasses
@@ -70,7 +76,8 @@ def load_path(name, path):
 
 
 def file_sha(p):
-    return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+    with open(p, 'rb') as stream:          # streamed: a QAT weight state is 16 GB
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
 def row_mask(mask, rows, height):
@@ -214,6 +221,7 @@ def main():
     ap.add_argument('--policy-name', default='TM-OPT+TC', help='recorded in the MIXFP4MAP header')
     ap.add_argument('--ownership', action='store_true', help='B3: run the ownership check on the artifact')
     ap.add_argument('--scales', type=Path, default=None, help='learned block-scale factors (run_cost_distill.py state.pt)')
+    ap.add_argument('--weights', type=Path, default=None, help='QAT-trained weights (run_cost_distill.py --arm qat state.pt)')
     ap.add_argument('--scales-apply', choices=('e2m1', 'all'), default='e2m1',
                     help='e2m1: factors on the E2M1 blocks only (E0M3 tiles at alpha=1); all: on every block')
     ap.add_argument('--out', type=Path, required=True, help='artifact directory (must not exist or be empty)')
@@ -251,6 +259,21 @@ def main():
     wrong = [n for n, m in mods.items() if sha(m.weight) != prior['matrices'][n]['source_sha256']]
     assert not wrong, f'weights differ from the calibration record: {wrong[:3]}'
     record['weights_equal_calibration_record'] = True
+    if args.weights is not None:
+        assert args.kind == 'four_over_six' and args.scales is None, '--weights exports QAT-trained weights as FourOverSix'
+        state = torch.load(args.weights, map_location='cpu', weights_only=True)
+        assert list(state) == list(mods), 'the weight state\'s modules differ from the model scope'
+        changed = 0
+        with torch.no_grad():
+            for n, m in mods.items():
+                w = state[n].to(m.weight.device)
+                assert w.shape == m.weight.shape and w.dtype == m.weight.dtype, n
+                changed += int(not torch.equal(w, m.weight))
+                m.weight.copy_(w)
+        del state
+        record['trained_weights'] = dict(state=str(args.weights), state_sha256=file_sha(args.weights), modules=len(mods),
+                                         modules_changed=changed)
+        print('TRAINED WEIGHTS', json.dumps(record['trained_weights']), flush=True)
     record['candidates'] = check_candidates(mods, args.kind, record.get('type_block') and tuple(record['type_block']))
     assert not record['candidates']['mismatching_modules'], record['candidates']
     print('CANDIDATES equal sm120 fake-quant candidates on all', record['candidates']['modules'], 'modules', flush=True)
@@ -264,7 +287,9 @@ def main():
                                 verified_against_fake_quant='learned-scale fake-quant weight, value-equal, per module')
     else:
         meta = A.export(args.out, mods, kind=args.kind, map_path=map_file, model_info=info, verify_fake=True,
-                        note=dict(exporter='export_map_artifact.py (B2)', record=record))
+                        note=dict(exporter='export_map_artifact.py (B2)' + (' --weights' if args.weights else ''), record=record))
+        if args.weights is not None:
+            meta['numerics'].update(weight_baseline=f'FourOverSix (quant_nvfp4_4over6) of the QAT-trained weights ({args.weights})')
     meta['note']['export_seconds'] = round(time.time() - t0, 1)
     Path(args.out, 'artifact.json').write_text(json.dumps(meta, indent=1, sort_keys=True) + '\n')
     del model, mods

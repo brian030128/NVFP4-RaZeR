@@ -16,12 +16,15 @@ window by window with run_multiround.py's evaluations (conventions (a)).
 
 Policies, convention (c) (per-token activation scales):
   bf16                  the model as loaded (no quantization).
-  fake:four_over_six | fake:nvfp4 | fake:map:<.mixfp4map>
+  fake:four_over_six | fake:nvfp4 | fake:map:<.mixfp4map> | fake:weights:<state.pt>
                         fake quant, the like-for-like reference for the kernel:
                         - the fake-quant weight installed in BF16 (FourOverSix, NVFP4, or a map's tiles);
                         - every quantized Linear input quantized per token and dequantized (FourOverSix rows for
                           four_over_six and maps, NVFP4 rows for nvfp4);
                         - then a BF16 GEMM (sm120/eval/common.FakeQuant).
+                        fake:weights:<state.pt> is FourOverSix of trained weights (run_cost_distill.py --arm qat
+                        state.pt, {module: BF16 weight}) instead of the model's, the reference for a QAT artifact
+                        (results/unified_baselines).
   native:<artifact>[:<kernel>]
                         NativeLinear: every quantized Linear on the SM120 kernel (the per-token activation quantizer,
                         then the FP4 GEMM with a one-rounding epilogue). Default kernel, by the artifact's type block:
@@ -52,6 +55,7 @@ SM120 = REPO / 'sm120'
 sys.path.insert(0, str(SM120))
 from mixfp4_sm120 import model as NM  # noqa: E402
 from run_baseline_protocol_audit import data  # noqa: E402
+from run_c4_frozen import digest_file  # noqa: E402
 from run_conditional_format import sha  # noqa: E402
 from run_math_code_calibration import load_model  # noqa: E402
 from run_multiround import PUBLISHED, data_paths  # noqa: E402
@@ -74,6 +78,8 @@ def parse(spec):
         return dict(label=label, kind='fake', weight=parts[1])
     if parts[0] == 'fake' and parts[1] == 'map':
         return dict(label=label, kind='fake', weight='map', map=':'.join(parts[2:]))
+    if parts[0] == 'fake' and parts[1] == 'weights':
+        return dict(label=label, kind='fake', weight='four_over_six', state=':'.join(parts[2:]))
     if parts[0] == 'native':
         return dict(label=label, kind='native', artifact=parts[1], kernel=parts[2] if len(parts) > 2 else None)
     raise SystemExit(f'bad --evaluate {spec!r}')
@@ -134,6 +140,20 @@ def install_fake(fq, pol, key, modules, C):
         header, masks, digest = C.read_map_for(key, pol['map'], modules)
         type_block = tuple(header['type_block'])
         out.update(map_sha256=digest, type_block=list(type_block), e0m3_tiles=header['totals']['selected_tiles'])
+    if pol.get('state'):
+        # trained weights (QAT): FakeQuant quantizes what it holds as the source weights, so they stand in for them
+        state = torch.load(pol['state'], map_location='cpu', weights_only=True)
+        assert list(state) == list(fq.pristine), 'the weight state\'s modules differ from the quantized scope'
+        assert all(state[n].shape == w.shape and state[n].dtype == w.dtype for n, w in fq.pristine.items())
+        saved, fq.pristine = fq.pristine, state
+        try:
+            out['installed_weight_sha256'] = fq.install(pol['weight'], masks, type_block)
+        finally:
+            fq.pristine = saved
+        out.update(trained_weights=pol['state'], trained_weights_file_sha256=digest_file(pol['state']),
+                   trained_modules_changed=sum(not torch.equal(state[n], w) for n, w in saved.items()))
+        del state
+        return out
     out['installed_weight_sha256'] = fq.install(pol['weight'], masks, type_block)
     return out
 

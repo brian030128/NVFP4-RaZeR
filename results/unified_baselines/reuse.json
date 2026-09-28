@@ -1,0 +1,96 @@
+{
+ "ours": {
+  "llama8b 8x64": {
+   "run": "/home/dev/n16k64_campaign/tm_opt/runs/tc_llama8b_8x64",
+   "nodev_run": "/home/dev/NVFP4-RaZeR/results/nodev_cost/runs/nd_tc_llama8b_8x64",
+   "checks": {
+    "configuration": true,
+    "per_token_training_activations": true,
+    "epochs_20": true,
+    "deterministic": true,
+    "batch_8": true,
+    "lr_002": true,
+    "fit_sequences_128": true,
+    "nodev_map_bitwise_equal": true
+   }
+  },
+  "llama8b 16x64": {
+   "run": "/home/dev/n16k64_campaign/tm_opt/runs/tc_llama8b_16x64",
+   "nodev_run": "/home/dev/NVFP4-RaZeR/results/nodev_cost/runs/nd_tc_llama8b_16x64",
+   "checks": {
+    "configuration": true,
+    "per_token_training_activations": true,
+    "epochs_20": true,
+    "deterministic": true,
+    "batch_8": true,
+    "lr_002": true,
+    "fit_sequences_128": true,
+    "nodev_map_bitwise_equal": true
+   }
+  },
+  "mistral7b 8x64": {
+   "run": "/home/dev/n16k64_campaign/tm_opt/runs/tc_mistral7b_8x64",
+   "nodev_run": "/home/dev/NVFP4-RaZeR/results/nodev_cost/runs/nd_tc_mistral7b_8x64",
+   "checks": {
+    "configuration": true,
+    "per_token_training_activations": true,
+    "epochs_20": true,
+    "deterministic": true,
+    "batch_8": true,
+    "lr_002": true,
+    "fit_sequences_128": true,
+    "nodev_map_bitwise_equal": true
+   }
+  },
+  "mistral7b 16x64": {
+   "run": "/home/dev/n16k64_campaign/tm_opt/runs/tc_mistral7b_16x64",
+   "nodev_run": "/home/dev/NVFP4-RaZeR/results/nodev_cost/runs/nd_tc_mistral7b_16x64",
+   "checks": {
+    "configuration": true,
+    "per_token_training_activations": true,
+    "epochs_20": true,
+    "deterministic": true,
+    "batch_8": true,
+    "lr_002": true,
+    "fit_sequences_128": true,
+    "nodev_map_bitwise_equal": true
+   }
+  }
+ },
+ "scale": {
+  "llama8b": {
+   "run": "/home/dev/NVFP4-RaZeR/results/scale_additivity/runs/scale_nodev",
+   "lr_choice": {
+    "grid": [
+     "1e-4",
+     "3e-4",
+     "1e-3"
+    ],
+    "extension": null,
+    "final_dev_kl": {
+     "1e-4": 0.0908030232725044,
+     "3e-4": 0.08588326760218479,
+     "1e-3": 0.09534178754256573
+    },
+    "initial_dev_kl": {
+     "1e-4": 0.10837183200055733,
+     "3e-4": 0.10837183200055733,
+     "1e-3": 0.10837183200055733
+    },
+    "chosen": "3e-4",
+    "rule": "lowest final development KL (math/code, per-token activations); one edge extension; ties to the smaller rate"
+   },
+   "checks": {
+    "arm_scale": true,
+    "per_token_training_activations": true,
+    "epochs_20": true,
+    "deterministic": true,
+    "batch_8": true,
+    "no_dev": true,
+    "lr_is_the_rule_choice": true,
+    "per_step_kl_equals_chosen_dev_run": true
+   }
+  }
+ },
+ "all_pass": true
+}
