@@ -22,6 +22,10 @@
     the peak GPU memory.
 - **Recorded per native policy:** coverage. Every quantized Linear must run natively, with no fallback. Linears
   outside the quantization scope (Qwen's vision tower; the head is not a scoped Linear) stay BF16 and must never run.
+  Per task (`native_gemm`): the native GEMM calls and tokens, the model forwards by token count (the selection
+  buckets of mixfp4_sm120.select; a gsm8k decode step is a forward of batch-size tokens), whether every quantized
+  Linear ran in every forward, and, for a width-selecting KernelSet ('auto', 'auto_stock'), the GEMM calls by CTA
+  tile width. The install record's `kernel_set` is replaced after the policy by its cumulative description.
 - **--repeat LABEL** evaluates that policy a second time in the same process (a determinism check).
 - **--no-bos** passes add_bos_token=False to HFLM: contexts without BOS, lm-eval 0.4.5 / 0.4.9.1's behaviour. 0.4.11's
   default keeps the tokenizer's special tokens (BOS for Llama-3.1 and Mistral).
@@ -131,6 +135,24 @@ def main():
             entry.update(D.install_native(model, pol, args.model, C))
             from mixfp4_sm120 import model as NM
             NM.reset_counters(model)
+            from mixfp4_sm120.select import bucket
+            nat = NM.native_modules(model)
+            ksets = list({id(m.kernel_set): m.kernel_set for m in nat.values() if m.kernel_set is not None}.values())
+            # every quantized Linear of a forward sees the same token count, so the first one's input gives the forward's
+            forwards = {}
+
+            def count_forward(mod, inputs):
+                b = bucket(inputs[0].numel() // inputs[0].shape[-1])
+                forwards[b] = forwards.get(b, 0) + 1
+            probe = next(iter(nat.values())).register_forward_pre_hook(count_forward)
+
+            def native_counts():
+                widths = {}
+                for ks in ksets:
+                    for w, c in ks.stats.items():
+                        widths[w] = widths.get(w, 0) + c
+                return dict(calls=sum(m.calls for m in nat.values()), tokens=sum(m.tokens for m in nat.values()),
+                            calls_by_width=widths, forwards_by_token_bucket=dict(forwards))
             # the Linears left in BF16 (outside the scope) must never run during the evaluation
             head = model.get_output_embeddings()
             unscoped_calls = {}
@@ -165,6 +187,7 @@ def main():
         for task in tasks:
             timing.clear()
             limit = args.gsm8k_limit if (task == 'gsm8k' and args.gsm8k_limit is not None) else args.limit
+            before = native_counts() if pol['kind'] == 'native' else None
             torch.cuda.reset_peak_memory_stats()
             t2 = time.time()
             # lm-eval's defaults. Every metric here aggregates by mean, whose stderr is the closed form (no bootstrap
@@ -176,6 +199,15 @@ def main():
             summary.update(seconds=time.time() - t2, examples_evaluated=len(summary['examples']),
                            peak_gpu_allocated_gib=torch.cuda.max_memory_allocated() / 2 ** 30, n_shot=res.get('n-shot', {}).get(task),
                            chance=CHANCE[task], model_timing=dict(timing))
+            if before is not None:
+                after = native_counts()
+                delta = lambda a, b: {k: a[k] - b.get(k, 0) for k in a if a[k] != b.get(k, 0)}  # noqa: E731
+                g = summary['native_gemm'] = dict(calls=after['calls'] - before['calls'], tokens=after['tokens'] - before['tokens'],
+                                                  forwards_by_token_bucket=delta(after['forwards_by_token_bucket'], before['forwards_by_token_bucket']),
+                                                  calls_by_width=delta(after['calls_by_width'], before['calls_by_width']) if ksets else None,
+                                                  kernel=entry['install']['kernel'])
+                g['forwards'] = sum(g['forwards_by_token_bucket'].values())
+                g['every_linear_every_forward'] = g['calls'] == len(nat) * g['forwards']
             entry['tasks'][task] = summary
             print(f"LMEVAL {pol['label']} {task} {PRIMARY[task]} {summary['metrics'].get(PRIMARY[task] + ',none', summary['metrics'].get(PRIMARY[task] + ',strict-match'))} "
                   f"({summary['examples_evaluated']} examples, {summary['seconds']:.0f}s)", flush=True)
@@ -188,6 +220,9 @@ def main():
             entry['coverage']['remaining_bf16_linears_called'] = dict(unscoped_calls)
             for h in unscoped_hooks:
                 h.remove()
+            probe.remove()
+            if ksets:
+                entry['install']['kernel_set'] = ksets[0].describe() if len(ksets) == 1 else [k.describe() for k in ksets]
             # every quantized Linear ran natively; no Linear of the scope is left in BF16; the unscoped ones never ran
             assert cov['native_called'] == cov['native'] == len(scoped), cov
             assert not scoped & set(cov['remaining_bf16_linears']) and not unscoped_calls, (cov, unscoped_calls)

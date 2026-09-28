@@ -9,7 +9,10 @@ Per model (runs/<model>/report.json, run_lmeval_deploy.py):
   count, plus the task's fixed time (building, scoring) as measured. Small subsets batch less well, so this is an
   upper estimate.
 
-python results/lmeval_ready/analyze_smoke.py   -> smoke.{json,md}
+- per native policy and task, when recorded: the forwards by token-count bucket, the GEMM calls by CTA tile width
+  and whether every quantized Linear ran in every forward (decode evidence for gsm8k).
+
+python results/lmeval_ready/analyze_smoke.py [RUNS [STEM]]   -> STEM.{json,md} (default runs/, smoke)
 """
 import json
 import sys
@@ -17,6 +20,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 RUNS = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / 'runs'
+STEM = sys.argv[2] if len(sys.argv) > 2 else 'smoke'
 FULL = dict(arc_easy=2376, arc_challenge=1172, hellaswag=10042, openbookqa=500, boolq=3270, winogrande=1267, piqa=1838, gsm8k=1319)
 PRIMARY = dict(arc_easy='acc_norm', arc_challenge='acc_norm', hellaswag='acc_norm', openbookqa='acc_norm', piqa='acc_norm',
                boolq='acc', winogrande='acc', gsm8k='exact_match')
@@ -50,6 +54,9 @@ def main():
                 res['coverage'][lab] = dict(native=cov.get('native'), native_called=cov.get('native_called'),
                                             remaining_bf16_linears=len(cov.get('remaining_bf16_linears', [])),
                                             fallback=len(e['install']['fallback']), kernel=e['install']['kernel'])
+                gemm = {t: v['native_gemm'] for t, v in e.get('tasks', {}).items() if 'native_gemm' in v}
+                if gemm:            # recorded by run_lmeval_deploy.py since the 8x64 smoke test
+                    res.setdefault('native_gemm', {})[lab] = gemm
         for lab in ev:
             fake = f'{lab}-fake'
             if fake in ev and ev[lab].get('backend') == 'NativeLinear (c)':
@@ -98,7 +105,23 @@ def main():
         md += ['', 'NativeLinear (c) vs fake (c), same examples (identical correctness / gsm8k answers; accuracy native vs fake):', '']
         for lab, row in res['native_vs_fake'].items():
             md.append(f'- {lab}: ' + '; '.join(f"{t} {x['identical']}/{x['examples']} ({x['native']:.2f} vs {x['fake']:.2f})" for t, x in row.items()))
-        md += ['', f"Rerun identical: {json.dumps(res['repeat'])}", f"Coverage: {json.dumps(res['coverage'])}", '',
+        md += ['', f"Rerun identical: {json.dumps(res['repeat'])}", f"Coverage: {json.dumps(res['coverage'])}", '']
+        if res.get('native_gemm'):
+            md += ['Native GEMMs per task (forwards by token-count bucket; GEMM calls by CTA tile width, auto sets only; '
+                   'every quantized Linear in every forward):', '',
+                   '| policy | kernel | task | forwards by tokens | calls by width | all Linears every forward |', '|---|---|---|---|---|---|']
+            for lab, gemm in res['native_gemm'].items():
+                for t, g in gemm.items():
+                    fw = ', '.join(f'≤{b}: {c}' for b, c in sorted(g['forwards_by_token_bucket'].items(), key=lambda x: int(x[0])))
+                    cw = '—' if g['calls_by_width'] is None else ', '.join(
+                        f'{w}: {c}' for w, c in sorted(g['calls_by_width'].items(), key=lambda x: int(x[0])))
+                    if g['calls_by_width'] is not None:
+                        # every GEMM call picked a width (KernelSet.pick), so the widths must account for all calls
+                        g['widths_cover_all_calls'] = sum(g['calls_by_width'].values()) == g['calls']
+                        cw += '' if g['widths_cover_all_calls'] else ' (**not all calls**)'
+                    md.append(f"| {lab} | {g['kernel']} | {t} | {fw} | {cw} | {'yes' if g['every_linear_every_forward'] else 'NO'} |")
+            md.append('')
+        md += [
                'Full-evaluation estimate (hours per task, from the smoke timings; peak GPU GiB):', '',
                '| policy | ' + ' | '.join(FULL) + ' | total |', '|---|' + '---:|' * (len(FULL) + 1)]
         for lab, est in res['estimates'].items():
@@ -133,8 +156,8 @@ def main():
             md.append(f'| {name} | ' + ' | '.join(f"{v['identical']}/{v['examples']} ({v['values'][0]:.2f} / {v['values'][1]:.2f})"
                                                   for v in xc[name].values()) + ' |')
         md += ['', f"Tokenization: {json.dumps(xc['tokenization'])}", '']
-    (HERE / 'smoke.json').write_text(json.dumps(out, indent=1) + '\n')
-    (HERE / 'smoke.md').write_text('\n'.join(md) + '\n')
+    (HERE / f'{STEM}.json').write_text(json.dumps(out, indent=1) + '\n')
+    (HERE / f'{STEM}.md').write_text('\n'.join(md) + '\n')
     print('\n'.join(md))
 
 

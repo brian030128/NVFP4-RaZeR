@@ -1,0 +1,3618 @@
+{
+ "status": "complete",
+ "model": "qwen27b",
+ "evaluate": [
+  "tc-8x64-fake=fake:map:/home/dev/n16k64_campaign/deploy_eval/artifacts/qwen27b_tc_8x64.mixfp4map",
+  "FourOverSix=native:/home/dev/n16k64_campaign/deploy_eval/artifacts/qwen27b_fo6",
+  "tc-16x64=native:/home/dev/n16k64_campaign/deploy_eval/artifacts/qwen27b_tc_16x64",
+  "tc-8x64=native:/home/dev/n16k64_campaign/deploy_eval/artifacts/qwen27b_tc_8x64"
+ ],
+ "tasks": [
+  "arc_easy",
+  "arc_challenge",
+  "hellaswag",
+  "openbookqa",
+  "boolq",
+  "winogrande",
+  "piqa",
+  "gsm8k"
+ ],
+ "limit": 20,
+ "gsm8k_limit": 5,
+ "batch_size": 8,
+ "no_bos": false,
+ "lm_eval_path": "/home/dev/.conda/envs/n16k64/lib/python3.11/site-packages/lm_eval/__init__.py",
+ "versions": {
+  "lm_eval": "0.4.11",
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "datasets": "4.8.5"
+ },
+ "dataset_pins": {
+  "allenai/ai2_arc": "210d026faf9955653af8916fad021475a3f00453",
+  "Rowan/hellaswag": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+  "allenai/openbookqa": "388097ea7776314e93a529163e0fea805b8a6454",
+  "aps/super_glue": "3de24cf8022e94f4ee4b9d55a6f539891524d646",
+  "allenai/winogrande": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+  "baber/piqa": "142f6d7367fd9877f0fb3b5734ea6a545f54cdd1",
+  "openai/gsm8k": "740312add88f781978c0658806c59bc2815b9866"
+ },
+ "host": {
+  "hostname": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+ },
+ "started_utc": "2026-09-28T05:12:44+00:00",
+ "evaluations": {
+  "tc-8x64-fake": {
+   "label": "tc-8x64-fake",
+   "kind": "fake",
+   "weight": "map",
+   "map": "/home/dev/n16k64_campaign/deploy_eval/artifacts/qwen27b_tc_8x64.mixfp4map",
+   "backend": "fake (c)",
+   "map_sha256": "c020c4fc2a0a724fa99bf0b531a5939f8dccafd8caf0b814b38fbb26dd9511c2",
+   "type_block": [
+    8,
+    64
+   ],
+   "e0m3_tiles": 614657,
+   "installed_weight_sha256": "c79a9a76ab73a6bf6ebb0d0adca7dbed4b2523a5f1577e68f2f23cb61ff6c12d",
+   "install_seconds": 108.11479139328003,
+   "tasks": {
+    "arc_easy": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.0819178021909125,
+      "acc_norm,none": 0.65,
+      "acc_norm_stderr,none": 0.10942433098048311
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 0.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 1.0
+     },
+     "seconds": 12.49892544746399,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 52.59353971481323,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 6.066375970840454,
+      "loglikelihood_requests": 80
+     }
+    },
+    "arc_challenge": {
+     "metrics": {
+      "acc,none": 0.6,
+      "acc_stderr,none": 0.11239029738980327,
+      "acc_norm,none": 0.55,
+      "acc_norm_stderr,none": 0.11413288653790232
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 0.0,
+      "6": 0.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 11.650744915008545,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 52.80342245101929,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 6.400572061538696,
+      "loglikelihood_requests": 80
+     }
+    },
+    "hellaswag": {
+     "metrics": {
+      "acc,none": 0.5,
+      "acc_stderr,none": 0.11470786693528086,
+      "acc_norm,none": 0.65,
+      "acc_norm_stderr,none": 0.10942433098048308
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 0.0,
+      "9": 0.0,
+      "10": 1.0,
+      "11": 0.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 14.106359481811523,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 52.637667655944824,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 6.145933628082275,
+      "loglikelihood_requests": 80
+     }
+    },
+    "openbookqa": {
+     "metrics": {
+      "acc,none": 0.2,
+      "acc_stderr,none": 0.09176629354822471,
+      "acc_norm,none": 0.35,
+      "acc_norm_stderr,none": 0.10942433098048308
+     },
+     "examples": {
+      "0": 0.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 11.211208581924438,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 52.526498794555664,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 4.900390386581421,
+      "loglikelihood_requests": 80
+     }
+    },
+    "boolq": {
+     "metrics": {
+      "acc,none": 0.95,
+      "acc_stderr,none": 0.05000000000000003
+     },
+     "examples": {
+      "0": 0.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 9.188984155654907,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 53.9495587348938,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 3.249521017074585,
+      "loglikelihood_requests": 40
+     }
+    },
+    "winogrande": {
+     "metrics": {
+      "acc,none": 0.65,
+      "acc_stderr,none": 0.10942433098048311
+     },
+     "examples": {
+      "0": 0.0,
+      "1": 1.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 0.0,
+      "8": 0.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 1.0
+     },
+     "seconds": 10.014244556427002,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 52.45016098022461,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 3.0505709648132324,
+      "loglikelihood_requests": 40
+     }
+    },
+    "piqa": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.0819178021909125,
+      "acc_norm,none": 0.8,
+      "acc_norm_stderr,none": 0.09176629354822471
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 10.365661382675171,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 52.619441509246826,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 3.403963088989258,
+      "loglikelihood_requests": 40
+     }
+    },
+    "gsm8k": {
+     "metrics": {
+      "exact_match,strict-match": 0.8,
+      "exact_match_stderr,strict-match": 0.19999999999999998,
+      "exact_match,flexible-extract": 0.8,
+      "exact_match_stderr,flexible-extract": 0.19999999999999998
+     },
+     "examples": {
+      "0": {
+       "raw": "\n\nJanet's ducks lay 16 eggs per day.\nShe eats 3 eggs for breakfast and uses 4 eggs to bake muffins, so she uses 3 + 4 = <<3+4=7>>7 eggs.\nThe number of eggs remaining to sell is 16 - 7 = <<16-7=9>>9 eggs.\nShe sells these eggs for $2 each, so she makes 9 * 2 = <<9*2=18>>18 dollars.\n#### 18",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "18"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "18"
+       }
+      },
+      "1": {
+       "raw": "\n\nA robe takes 2 bolts of blue fiber.\nIt takes half that much white fiber, which is 2 / 2 = <<2/2=1>>1 bolt of white fiber.\nIn total, it takes 2 + 1 = <<2+1=3>>3 bolts.\n#### 3",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "3"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "3"
+       }
+      },
+      "2": {
+       "raw": "\n\nThe original value of the house was $80,000.\nThe value of the house increased by 150%, which means the increase in value is $80,000 * 150/100 = $<<80000*150/100=120000>>120,000.\nThe new value of the house is the original value plus the increase, so $80,000 + $120,000 = $<<80000+120000=200000>>200,000.\nJosh's total cost was the purchase price plus the repairs, which is $80,000 + $50,000 = $<<80000+50000=130000>>130,000.\nThe profit is the new value minus the total cost, so $200,000 - $130,000 = $<<200000-130000=70",
+       "strict-match": {
+        "exact_match": 0.0,
+        "response": "[invalid]"
+       },
+       "flexible-extract": {
+        "exact_match": 0.0,
+        "response": "70"
+       }
+      },
+      "3": {
+       "raw": "\n\nHe runs 3 sprints 3 times a week, so he runs a total of 3 x 3 = <<3*3=9>>9 sprints a week.\nEach sprint is 60 meters, so he runs a total of 9 x 60 = <<9*60=540>>540 meters a week.\n#### 540",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "540"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "540"
+       }
+      },
+      "4": {
+       "raw": "\n\nWendi has 20 chickens and each chicken needs 3 cups of feed per day, so the total amount of feed needed for the day is 20 * 3 = <<20*3=60>>60 cups.\nIn the morning, she gives 15 cups, and in the afternoon, she gives 25 cups. The total amount of feed given so far is 15 + 25 = <<15+25=40>>40 cups.\nThe amount of feed needed for the final meal is the total daily feed minus the amount already given: 60 - 40 = <<60-40=20>>20 cups.\n#### 20",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "20"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "20"
+       }
+      }
+     },
+     "seconds": 93.40569233894348,
+     "examples_evaluated": 5,
+     "peak_gpu_allocated_gib": 54.5858850479126,
+     "n_shot": 5,
+     "chance": 0.0,
+     "model_timing": {
+      "generate_until_seconds": 87.28786301612854,
+      "generate_until_requests": 5
+     }
+    }
+   },
+   "seconds": 280.5747549533844
+  },
+  "FourOverSix": {
+   "label": "FourOverSix",
+   "kind": "native",
+   "artifact": "/home/dev/n16k64_campaign/deploy_eval/artifacts/qwen27b_fo6",
+   "kernel": "auto_stock",
+   "backend": "NativeLinear (c)",
+   "install": {
+    "kernel": "KernelSet(stock)",
+    "kernel_sha256": {
+     "stock_wA_n16": "3f563ca61ae712971db424dbf61e6f2f847d3941f8423c16316ca83a2562c749",
+     "stock_wA_n32": "a67179aed96d9683fdb4ab5bded2071eb355cf353124c2b16a99fb8f090d59dc",
+     "stock_wA_n64": "88199433928844ab48ebbae42a048d50e68202d0dcfbe1c89b86819f7b6cdc7b",
+     "stock_wA": "13c13a23ed145a8ac191179b16f302f0f0ef3bb38e60d73283fbce200965418c"
+    },
+    "artifact_weights_sha256": "6e8db371eb28044a5d5662babe11503dc70e9b3f07c11b18b8376baa5e83d1ac",
+    "map_sha256": null,
+    "native_modules": 496,
+    "fallback": [],
+    "bf16_by_design": [
+     "model.visual.blocks.0.attn.qkv",
+     "model.visual.blocks.0.attn.proj",
+     "model.visual.blocks.0.mlp.linear_fc1",
+     "model.visual.blocks.0.mlp.linear_fc2",
+     "model.visual.blocks.1.attn.qkv",
+     "model.visual.blocks.1.attn.proj",
+     "model.visual.blocks.1.mlp.linear_fc1",
+     "model.visual.blocks.1.mlp.linear_fc2",
+     "model.visual.blocks.2.attn.qkv",
+     "model.visual.blocks.2.attn.proj",
+     "model.visual.blocks.2.mlp.linear_fc1",
+     "model.visual.blocks.2.mlp.linear_fc2",
+     "model.visual.blocks.3.attn.qkv",
+     "model.visual.blocks.3.attn.proj",
+     "model.visual.blocks.3.mlp.linear_fc1",
+     "model.visual.blocks.3.mlp.linear_fc2",
+     "model.visual.blocks.4.attn.qkv",
+     "model.visual.blocks.4.attn.proj",
+     "model.visual.blocks.4.mlp.linear_fc1",
+     "model.visual.blocks.4.mlp.linear_fc2",
+     "model.visual.blocks.5.attn.qkv",
+     "model.visual.blocks.5.attn.proj",
+     "model.visual.blocks.5.mlp.linear_fc1",
+     "model.visual.blocks.5.mlp.linear_fc2",
+     "model.visual.blocks.6.attn.qkv",
+     "model.visual.blocks.6.attn.proj",
+     "model.visual.blocks.6.mlp.linear_fc1",
+     "model.visual.blocks.6.mlp.linear_fc2",
+     "model.visual.blocks.7.attn.qkv",
+     "model.visual.blocks.7.attn.proj",
+     "model.visual.blocks.7.mlp.linear_fc1",
+     "model.visual.blocks.7.mlp.linear_fc2",
+     "model.visual.blocks.8.attn.qkv",
+     "model.visual.blocks.8.attn.proj",
+     "model.visual.blocks.8.mlp.linear_fc1",
+     "model.visual.blocks.8.mlp.linear_fc2",
+     "model.visual.blocks.9.attn.qkv",
+     "model.visual.blocks.9.attn.proj",
+     "model.visual.blocks.9.mlp.linear_fc1",
+     "model.visual.blocks.9.mlp.linear_fc2",
+     "model.visual.blocks.10.attn.qkv",
+     "model.visual.blocks.10.attn.proj",
+     "model.visual.blocks.10.mlp.linear_fc1",
+     "model.visual.blocks.10.mlp.linear_fc2",
+     "model.visual.blocks.11.attn.qkv",
+     "model.visual.blocks.11.attn.proj",
+     "model.visual.blocks.11.mlp.linear_fc1",
+     "model.visual.blocks.11.mlp.linear_fc2",
+     "model.visual.blocks.12.attn.qkv",
+     "model.visual.blocks.12.attn.proj",
+     "model.visual.blocks.12.mlp.linear_fc1",
+     "model.visual.blocks.12.mlp.linear_fc2",
+     "model.visual.blocks.13.attn.qkv",
+     "model.visual.blocks.13.attn.proj",
+     "model.visual.blocks.13.mlp.linear_fc1",
+     "model.visual.blocks.13.mlp.linear_fc2",
+     "model.visual.blocks.14.attn.qkv",
+     "model.visual.blocks.14.attn.proj",
+     "model.visual.blocks.14.mlp.linear_fc1",
+     "model.visual.blocks.14.mlp.linear_fc2",
+     "model.visual.blocks.15.attn.qkv",
+     "model.visual.blocks.15.attn.proj",
+     "model.visual.blocks.15.mlp.linear_fc1",
+     "model.visual.blocks.15.mlp.linear_fc2",
+     "model.visual.blocks.16.attn.qkv",
+     "model.visual.blocks.16.attn.proj",
+     "model.visual.blocks.16.mlp.linear_fc1",
+     "model.visual.blocks.16.mlp.linear_fc2",
+     "model.visual.blocks.17.attn.qkv",
+     "model.visual.blocks.17.attn.proj",
+     "model.visual.blocks.17.mlp.linear_fc1",
+     "model.visual.blocks.17.mlp.linear_fc2",
+     "model.visual.blocks.18.attn.qkv",
+     "model.visual.blocks.18.attn.proj",
+     "model.visual.blocks.18.mlp.linear_fc1",
+     "model.visual.blocks.18.mlp.linear_fc2",
+     "model.visual.blocks.19.attn.qkv",
+     "model.visual.blocks.19.attn.proj",
+     "model.visual.blocks.19.mlp.linear_fc1",
+     "model.visual.blocks.19.mlp.linear_fc2",
+     "model.visual.blocks.20.attn.qkv",
+     "model.visual.blocks.20.attn.proj",
+     "model.visual.blocks.20.mlp.linear_fc1",
+     "model.visual.blocks.20.mlp.linear_fc2",
+     "model.visual.blocks.21.attn.qkv",
+     "model.visual.blocks.21.attn.proj",
+     "model.visual.blocks.21.mlp.linear_fc1",
+     "model.visual.blocks.21.mlp.linear_fc2",
+     "model.visual.blocks.22.attn.qkv",
+     "model.visual.blocks.22.attn.proj",
+     "model.visual.blocks.22.mlp.linear_fc1",
+     "model.visual.blocks.22.mlp.linear_fc2",
+     "model.visual.blocks.23.attn.qkv",
+     "model.visual.blocks.23.attn.proj",
+     "model.visual.blocks.23.mlp.linear_fc1",
+     "model.visual.blocks.23.mlp.linear_fc2",
+     "model.visual.blocks.24.attn.qkv",
+     "model.visual.blocks.24.attn.proj",
+     "model.visual.blocks.24.mlp.linear_fc1",
+     "model.visual.blocks.24.mlp.linear_fc2",
+     "model.visual.blocks.25.attn.qkv",
+     "model.visual.blocks.25.attn.proj",
+     "model.visual.blocks.25.mlp.linear_fc1",
+     "model.visual.blocks.25.mlp.linear_fc2",
+     "model.visual.blocks.26.attn.qkv",
+     "model.visual.blocks.26.attn.proj",
+     "model.visual.blocks.26.mlp.linear_fc1",
+     "model.visual.blocks.26.mlp.linear_fc2",
+     "model.visual.merger.linear_fc1",
+     "model.visual.merger.linear_fc2",
+     "lm_head (output head)"
+    ],
+    "e0m3_tiles": 0,
+    "device_bytes": {
+     "packed": 12175278080,
+     "scales_placed": 1524367360,
+     "scales_padding": 2457600,
+     "bias": 0
+    },
+    "kernel_set": {
+     "family": "stock",
+     "kernels": {
+      "stock_wA_n16": "3f563ca61ae712971db424dbf61e6f2f847d3941f8423c16316ca83a2562c749",
+      "stock_wA_n32": "a67179aed96d9683fdb4ab5bded2071eb355cf353124c2b16a99fb8f090d59dc",
+      "stock_wA_n64": "88199433928844ab48ebbae42a048d50e68202d0dcfbe1c89b86819f7b6cdc7b",
+      "stock_wA": "13c13a23ed145a8ac191179b16f302f0f0ef3bb38e60d73283fbce200965418c"
+     },
+     "table": null,
+     "table_shapes": 0,
+     "calls_by_width": {
+      "16": 126480,
+      "32": 496,
+      "64": 1488,
+      "128": 23312
+     }
+    }
+   },
+   "artifact_weights_sha256": "6e8db371eb28044a5d5662babe11503dc70e9b3f07c11b18b8376baa5e83d1ac",
+   "artifact_map_sha256": null,
+   "artifact_weight_kind": "four_over_six",
+   "install_seconds": 29.054837703704834,
+   "tasks": {
+    "arc_easy": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.0819178021909125,
+      "acc_norm,none": 0.55,
+      "acc_norm_stderr,none": 0.11413288653790232
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 0.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 0.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 1.0
+     },
+     "seconds": 8.641921281814575,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 19.996819972991943,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.4452672004699707,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 4464,
+      "tokens": 1109056,
+      "forwards_by_token_bucket": {
+       "512": 3,
+       "256": 5,
+       "64": 1
+      },
+      "calls_by_width": {
+       "128": 3968,
+       "64": 496
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 9,
+      "every_linear_every_forward": true
+     }
+    },
+    "arc_challenge": {
+     "metrics": {
+      "acc,none": 0.6,
+      "acc_stderr,none": 0.11239029738980327,
+      "acc_norm,none": 0.5,
+      "acc_norm_stderr,none": 0.11470786693528086
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 0.0,
+      "6": 0.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 9.472048997879028,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 20.205164909362793,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.8943068981170654,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 4960,
+      "tokens": 1920512,
+      "forwards_by_token_bucket": {
+       "512": 5,
+       "256": 1,
+       "1024": 3,
+       "32": 1
+      },
+      "calls_by_width": {
+       "128": 4464,
+       "32": 496
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 10,
+      "every_linear_every_forward": true
+     }
+    },
+    "hellaswag": {
+     "metrics": {
+      "acc,none": 0.5,
+      "acc_stderr,none": 0.11470786693528086,
+      "acc_norm,none": 0.75,
+      "acc_norm_stderr,none": 0.09933992677987828
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 0.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 11.067966222763062,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 20.020482063293457,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.5980494022369385,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 4960,
+      "tokens": 1658624,
+      "forwards_by_token_bucket": {
+       "512": 8,
+       "256": 2
+      },
+      "calls_by_width": {
+       "128": 4960
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 10,
+      "every_linear_every_forward": true
+     }
+    },
+    "openbookqa": {
+     "metrics": {
+      "acc,none": 0.2,
+      "acc_stderr,none": 0.09176629354822471,
+      "acc_norm,none": 0.3,
+      "acc_norm_stderr,none": 0.10513149660756933
+     },
+     "examples": {
+      "0": 0.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 8.610392093658447,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 19.929645538330078,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.2399349212646484,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 3968,
+      "tokens": 584784,
+      "forwards_by_token_bucket": {
+       "512": 2,
+       "256": 1,
+       "64": 2,
+       "128": 3
+      },
+      "calls_by_width": {
+       "128": 2976,
+       "64": 992
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 8,
+      "every_linear_every_forward": true
+     }
+    },
+    "boolq": {
+     "metrics": {
+      "acc,none": 0.9,
+      "acc_stderr,none": 0.06882472016116853
+     },
+     "examples": {
+      "0": 0.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 9.47786831855774,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 21.25105905532837,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 1.4326002597808838,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 1488,
+      "tokens": 1900672,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "4096": 1,
+       "2048": 1
+      },
+      "calls_by_width": {
+       "128": 1488
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 3,
+      "every_linear_every_forward": true
+     }
+    },
+    "winogrande": {
+     "metrics": {
+      "acc,none": 0.75,
+      "acc_stderr,none": 0.09933992677987828
+     },
+     "examples": {
+      "0": 0.0,
+      "1": 1.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 0.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 7.901577472686768,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 19.85304021835327,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 1.9862051010131836,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 2480,
+      "tokens": 416640,
+      "forwards_by_token_bucket": {
+       "256": 5
+      },
+      "calls_by_width": {
+       "128": 2480
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "piqa": {
+     "metrics": {
+      "acc,none": 0.8,
+      "acc_stderr,none": 0.09176629354822471,
+      "acc_norm,none": 0.8,
+      "acc_norm_stderr,none": 0.09176629354822471
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 11.722261905670166,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 20.022721767425537,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 2.1337857246398926,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 2480,
+      "tokens": 706304,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "256": 3,
+       "1024": 1
+      },
+      "calls_by_width": {
+       "128": 2480
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "gsm8k": {
+     "metrics": {
+      "exact_match,strict-match": 0.8,
+      "exact_match_stderr,strict-match": 0.19999999999999998,
+      "exact_match,flexible-extract": 0.8,
+      "exact_match_stderr,flexible-extract": 0.19999999999999998
+     },
+     "examples": {
+      "0": {
+       "raw": "\n\nJanet's ducks lay 16 eggs per day.\nShe eats 3 eggs for breakfast and uses 4 eggs to bake muffins, so she uses a total of 3 + 4 = <<3+4=7>>7 eggs.\nThe number of eggs remaining to sell is 16 - 7 = <<16-7=9>>9 eggs.\nShe sells these eggs for $2 each, so she makes 9 * 2 = <<9*2=18>>$18.\n#### 18",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "18"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "18"
+       }
+      },
+      "1": {
+       "raw": "\n\nThe robe takes 2 bolts of blue fiber.\nIt takes half as much white fiber, which is 2 / 2 = <<2/2=1>>1 bolt.\nIn total, it takes 2 + 1 = <<2+1=3>>3 bolts.\n#### 3",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "3"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "3"
+       }
+      },
+      "2": {
+       "raw": "\n\n<think>\nThe question asks about Josh flipping a house. Let me work through this:\n\n1. He buys a house for $80,000\n2. He puts in $50,000 in repairs\n3. This increased the value of the house by 150%\n\nSo the original value of the house was $80,000.\nThe repairs increased the value by 150%, so the new value is $80,000 + ($80,000 \u00d7 150/100) = $80,000 + $120,000 = $200,000.\n\nWait, let me re-read. \"This increased the value of the house by 150%.\" The \"this\" refers to the repairs. So the value increased by 150% of the original value.\n\nNew value = $80,000 + ($80,000 \u00d7 1.5) = $80,000 + $120,000 = $200,000\n\nTotal cost = $80,",
+       "strict-match": {
+        "exact_match": 0.0,
+        "response": "[invalid]"
+       },
+       "flexible-extract": {
+        "exact_match": 0.0,
+        "response": "$80,"
+       }
+      },
+      "3": {
+       "raw": " He runs 3 sprints 3 times a week for a total of 3 * 3 = <<3*3=9>>9 sprints.\nEach sprint is 60 meters so he runs 9 * 60 = <<9*60=540>>540 meters a week.\n#### 540\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "540"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "540"
+       }
+      },
+      "4": {
+       "raw": "\n\nWendi has 20 chickens, and each chicken needs 3 cups of feed per day.\nThe total amount of feed needed for the day is 20 chickens * 3 cups/chicken = <<20*3=60>>60 cups.\nIn the morning, she gives 15 cups, and in the afternoon, she gives 25 cups.\nThe total amount of feed given so far is 15 cups + 25 cups = <<15+25=40>>40 cups.\nThe amount of feed needed for the final meal is 60 cups - 40 cups = <<60-40=20>>20 cups.\n#### 20",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "20"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "20"
+       }
+      }
+     },
+     "seconds": 36.508711099624634,
+     "examples_evaluated": 5,
+     "peak_gpu_allocated_gib": 21.193065643310547,
+     "n_shot": 5,
+     "chance": 0.0,
+     "model_timing": {
+      "generate_until_seconds": 28.038543224334717,
+      "generate_until_requests": 5
+     },
+     "native_gemm": {
+      "calls": 126976,
+      "tokens": 3340560,
+      "forwards_by_token_bucket": {
+       "8192": 1,
+       "8": 255
+      },
+      "calls_by_width": {
+       "128": 496,
+       "16": 126480
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 256,
+      "every_linear_every_forward": true
+     }
+    }
+   },
+   "coverage": {
+    "native": 496,
+    "native_called": 496,
+    "native_not_called": [],
+    "calls": 151776,
+    "tokens": 11637152,
+    "remaining_bf16_linears": [
+     "model.visual.blocks.0.attn.qkv",
+     "model.visual.blocks.0.attn.proj",
+     "model.visual.blocks.0.mlp.linear_fc1",
+     "model.visual.blocks.0.mlp.linear_fc2",
+     "model.visual.blocks.1.attn.qkv",
+     "model.visual.blocks.1.attn.proj",
+     "model.visual.blocks.1.mlp.linear_fc1",
+     "model.visual.blocks.1.mlp.linear_fc2",
+     "model.visual.blocks.2.attn.qkv",
+     "model.visual.blocks.2.attn.proj",
+     "model.visual.blocks.2.mlp.linear_fc1",
+     "model.visual.blocks.2.mlp.linear_fc2",
+     "model.visual.blocks.3.attn.qkv",
+     "model.visual.blocks.3.attn.proj",
+     "model.visual.blocks.3.mlp.linear_fc1",
+     "model.visual.blocks.3.mlp.linear_fc2",
+     "model.visual.blocks.4.attn.qkv",
+     "model.visual.blocks.4.attn.proj",
+     "model.visual.blocks.4.mlp.linear_fc1",
+     "model.visual.blocks.4.mlp.linear_fc2",
+     "model.visual.blocks.5.attn.qkv",
+     "model.visual.blocks.5.attn.proj",
+     "model.visual.blocks.5.mlp.linear_fc1",
+     "model.visual.blocks.5.mlp.linear_fc2",
+     "model.visual.blocks.6.attn.qkv",
+     "model.visual.blocks.6.attn.proj",
+     "model.visual.blocks.6.mlp.linear_fc1",
+     "model.visual.blocks.6.mlp.linear_fc2",
+     "model.visual.blocks.7.attn.qkv",
+     "model.visual.blocks.7.attn.proj",
+     "model.visual.blocks.7.mlp.linear_fc1",
+     "model.visual.blocks.7.mlp.linear_fc2",
+     "model.visual.blocks.8.attn.qkv",
+     "model.visual.blocks.8.attn.proj",
+     "model.visual.blocks.8.mlp.linear_fc1",
+     "model.visual.blocks.8.mlp.linear_fc2",
+     "model.visual.blocks.9.attn.qkv",
+     "model.visual.blocks.9.attn.proj",
+     "model.visual.blocks.9.mlp.linear_fc1",
+     "model.visual.blocks.9.mlp.linear_fc2",
+     "model.visual.blocks.10.attn.qkv",
+     "model.visual.blocks.10.attn.proj",
+     "model.visual.blocks.10.mlp.linear_fc1",
+     "model.visual.blocks.10.mlp.linear_fc2",
+     "model.visual.blocks.11.attn.qkv",
+     "model.visual.blocks.11.attn.proj",
+     "model.visual.blocks.11.mlp.linear_fc1",
+     "model.visual.blocks.11.mlp.linear_fc2",
+     "model.visual.blocks.12.attn.qkv",
+     "model.visual.blocks.12.attn.proj",
+     "model.visual.blocks.12.mlp.linear_fc1",
+     "model.visual.blocks.12.mlp.linear_fc2",
+     "model.visual.blocks.13.attn.qkv",
+     "model.visual.blocks.13.attn.proj",
+     "model.visual.blocks.13.mlp.linear_fc1",
+     "model.visual.blocks.13.mlp.linear_fc2",
+     "model.visual.blocks.14.attn.qkv",
+     "model.visual.blocks.14.attn.proj",
+     "model.visual.blocks.14.mlp.linear_fc1",
+     "model.visual.blocks.14.mlp.linear_fc2",
+     "model.visual.blocks.15.attn.qkv",
+     "model.visual.blocks.15.attn.proj",
+     "model.visual.blocks.15.mlp.linear_fc1",
+     "model.visual.blocks.15.mlp.linear_fc2",
+     "model.visual.blocks.16.attn.qkv",
+     "model.visual.blocks.16.attn.proj",
+     "model.visual.blocks.16.mlp.linear_fc1",
+     "model.visual.blocks.16.mlp.linear_fc2",
+     "model.visual.blocks.17.attn.qkv",
+     "model.visual.blocks.17.attn.proj",
+     "model.visual.blocks.17.mlp.linear_fc1",
+     "model.visual.blocks.17.mlp.linear_fc2",
+     "model.visual.blocks.18.attn.qkv",
+     "model.visual.blocks.18.attn.proj",
+     "model.visual.blocks.18.mlp.linear_fc1",
+     "model.visual.blocks.18.mlp.linear_fc2",
+     "model.visual.blocks.19.attn.qkv",
+     "model.visual.blocks.19.attn.proj",
+     "model.visual.blocks.19.mlp.linear_fc1",
+     "model.visual.blocks.19.mlp.linear_fc2",
+     "model.visual.blocks.20.attn.qkv",
+     "model.visual.blocks.20.attn.proj",
+     "model.visual.blocks.20.mlp.linear_fc1",
+     "model.visual.blocks.20.mlp.linear_fc2",
+     "model.visual.blocks.21.attn.qkv",
+     "model.visual.blocks.21.attn.proj",
+     "model.visual.blocks.21.mlp.linear_fc1",
+     "model.visual.blocks.21.mlp.linear_fc2",
+     "model.visual.blocks.22.attn.qkv",
+     "model.visual.blocks.22.attn.proj",
+     "model.visual.blocks.22.mlp.linear_fc1",
+     "model.visual.blocks.22.mlp.linear_fc2",
+     "model.visual.blocks.23.attn.qkv",
+     "model.visual.blocks.23.attn.proj",
+     "model.visual.blocks.23.mlp.linear_fc1",
+     "model.visual.blocks.23.mlp.linear_fc2",
+     "model.visual.blocks.24.attn.qkv",
+     "model.visual.blocks.24.attn.proj",
+     "model.visual.blocks.24.mlp.linear_fc1",
+     "model.visual.blocks.24.mlp.linear_fc2",
+     "model.visual.blocks.25.attn.qkv",
+     "model.visual.blocks.25.attn.proj",
+     "model.visual.blocks.25.mlp.linear_fc1",
+     "model.visual.blocks.25.mlp.linear_fc2",
+     "model.visual.blocks.26.attn.qkv",
+     "model.visual.blocks.26.attn.proj",
+     "model.visual.blocks.26.mlp.linear_fc1",
+     "model.visual.blocks.26.mlp.linear_fc2",
+     "model.visual.merger.linear_fc1",
+     "model.visual.merger.linear_fc2"
+    ],
+    "remaining_bf16_linears_called": {}
+   },
+   "seconds": 132.47924327850342
+  },
+  "tc-16x64": {
+   "label": "tc-16x64",
+   "kind": "native",
+   "artifact": "/home/dev/n16k64_campaign/deploy_eval/artifacts/qwen27b_tc_16x64",
+   "kernel": "auto",
+   "backend": "NativeLinear (c)",
+   "install": {
+    "kernel": "KernelSet(mixed)",
+    "kernel_sha256": {
+     "n16k64_wA_n16": "773f183ed3130c47c3ae0b3c1c63dbf344c48d998dc313dabb5e00bf56d2ac76",
+     "n16k64_wA_n32": "a70d49fefba0ae6391898332007b21c360d39c48e317fb5a0a4c2561d82c25ac",
+     "n16k64_wA_n64": "0ce3bcc9360a77ee595e6b7ef72ebbe0c020c30c368574686362e2fbf176439e",
+     "n16k64_wA": "be8fd62d97b231c69e64afc62f1f31fbcf4535a45759f8feb13aeadfb86fe332"
+    },
+    "artifact_weights_sha256": "cc8fd270162958d8f6bbf98c365376baeca9a56077c374d7d5f8a6af1402f183",
+    "map_sha256": "2f238b38b505e7b5a7548f273acde77a84a7fc9eeafed7c30bab3cf6c69eed89",
+    "native_modules": 496,
+    "fallback": [],
+    "bf16_by_design": [
+     "model.visual.blocks.0.attn.qkv",
+     "model.visual.blocks.0.attn.proj",
+     "model.visual.blocks.0.mlp.linear_fc1",
+     "model.visual.blocks.0.mlp.linear_fc2",
+     "model.visual.blocks.1.attn.qkv",
+     "model.visual.blocks.1.attn.proj",
+     "model.visual.blocks.1.mlp.linear_fc1",
+     "model.visual.blocks.1.mlp.linear_fc2",
+     "model.visual.blocks.2.attn.qkv",
+     "model.visual.blocks.2.attn.proj",
+     "model.visual.blocks.2.mlp.linear_fc1",
+     "model.visual.blocks.2.mlp.linear_fc2",
+     "model.visual.blocks.3.attn.qkv",
+     "model.visual.blocks.3.attn.proj",
+     "model.visual.blocks.3.mlp.linear_fc1",
+     "model.visual.blocks.3.mlp.linear_fc2",
+     "model.visual.blocks.4.attn.qkv",
+     "model.visual.blocks.4.attn.proj",
+     "model.visual.blocks.4.mlp.linear_fc1",
+     "model.visual.blocks.4.mlp.linear_fc2",
+     "model.visual.blocks.5.attn.qkv",
+     "model.visual.blocks.5.attn.proj",
+     "model.visual.blocks.5.mlp.linear_fc1",
+     "model.visual.blocks.5.mlp.linear_fc2",
+     "model.visual.blocks.6.attn.qkv",
+     "model.visual.blocks.6.attn.proj",
+     "model.visual.blocks.6.mlp.linear_fc1",
+     "model.visual.blocks.6.mlp.linear_fc2",
+     "model.visual.blocks.7.attn.qkv",
+     "model.visual.blocks.7.attn.proj",
+     "model.visual.blocks.7.mlp.linear_fc1",
+     "model.visual.blocks.7.mlp.linear_fc2",
+     "model.visual.blocks.8.attn.qkv",
+     "model.visual.blocks.8.attn.proj",
+     "model.visual.blocks.8.mlp.linear_fc1",
+     "model.visual.blocks.8.mlp.linear_fc2",
+     "model.visual.blocks.9.attn.qkv",
+     "model.visual.blocks.9.attn.proj",
+     "model.visual.blocks.9.mlp.linear_fc1",
+     "model.visual.blocks.9.mlp.linear_fc2",
+     "model.visual.blocks.10.attn.qkv",
+     "model.visual.blocks.10.attn.proj",
+     "model.visual.blocks.10.mlp.linear_fc1",
+     "model.visual.blocks.10.mlp.linear_fc2",
+     "model.visual.blocks.11.attn.qkv",
+     "model.visual.blocks.11.attn.proj",
+     "model.visual.blocks.11.mlp.linear_fc1",
+     "model.visual.blocks.11.mlp.linear_fc2",
+     "model.visual.blocks.12.attn.qkv",
+     "model.visual.blocks.12.attn.proj",
+     "model.visual.blocks.12.mlp.linear_fc1",
+     "model.visual.blocks.12.mlp.linear_fc2",
+     "model.visual.blocks.13.attn.qkv",
+     "model.visual.blocks.13.attn.proj",
+     "model.visual.blocks.13.mlp.linear_fc1",
+     "model.visual.blocks.13.mlp.linear_fc2",
+     "model.visual.blocks.14.attn.qkv",
+     "model.visual.blocks.14.attn.proj",
+     "model.visual.blocks.14.mlp.linear_fc1",
+     "model.visual.blocks.14.mlp.linear_fc2",
+     "model.visual.blocks.15.attn.qkv",
+     "model.visual.blocks.15.attn.proj",
+     "model.visual.blocks.15.mlp.linear_fc1",
+     "model.visual.blocks.15.mlp.linear_fc2",
+     "model.visual.blocks.16.attn.qkv",
+     "model.visual.blocks.16.attn.proj",
+     "model.visual.blocks.16.mlp.linear_fc1",
+     "model.visual.blocks.16.mlp.linear_fc2",
+     "model.visual.blocks.17.attn.qkv",
+     "model.visual.blocks.17.attn.proj",
+     "model.visual.blocks.17.mlp.linear_fc1",
+     "model.visual.blocks.17.mlp.linear_fc2",
+     "model.visual.blocks.18.attn.qkv",
+     "model.visual.blocks.18.attn.proj",
+     "model.visual.blocks.18.mlp.linear_fc1",
+     "model.visual.blocks.18.mlp.linear_fc2",
+     "model.visual.blocks.19.attn.qkv",
+     "model.visual.blocks.19.attn.proj",
+     "model.visual.blocks.19.mlp.linear_fc1",
+     "model.visual.blocks.19.mlp.linear_fc2",
+     "model.visual.blocks.20.attn.qkv",
+     "model.visual.blocks.20.attn.proj",
+     "model.visual.blocks.20.mlp.linear_fc1",
+     "model.visual.blocks.20.mlp.linear_fc2",
+     "model.visual.blocks.21.attn.qkv",
+     "model.visual.blocks.21.attn.proj",
+     "model.visual.blocks.21.mlp.linear_fc1",
+     "model.visual.blocks.21.mlp.linear_fc2",
+     "model.visual.blocks.22.attn.qkv",
+     "model.visual.blocks.22.attn.proj",
+     "model.visual.blocks.22.mlp.linear_fc1",
+     "model.visual.blocks.22.mlp.linear_fc2",
+     "model.visual.blocks.23.attn.qkv",
+     "model.visual.blocks.23.attn.proj",
+     "model.visual.blocks.23.mlp.linear_fc1",
+     "model.visual.blocks.23.mlp.linear_fc2",
+     "model.visual.blocks.24.attn.qkv",
+     "model.visual.blocks.24.attn.proj",
+     "model.visual.blocks.24.mlp.linear_fc1",
+     "model.visual.blocks.24.mlp.linear_fc2",
+     "model.visual.blocks.25.attn.qkv",
+     "model.visual.blocks.25.attn.proj",
+     "model.visual.blocks.25.mlp.linear_fc1",
+     "model.visual.blocks.25.mlp.linear_fc2",
+     "model.visual.blocks.26.attn.qkv",
+     "model.visual.blocks.26.attn.proj",
+     "model.visual.blocks.26.mlp.linear_fc1",
+     "model.visual.blocks.26.mlp.linear_fc2",
+     "model.visual.merger.linear_fc1",
+     "model.visual.merger.linear_fc2",
+     "lm_head (output head)"
+    ],
+    "e0m3_tiles": 375835,
+    "device_bytes": {
+     "packed": 12175278080,
+     "scales_placed": 1524367360,
+     "scales_padding": 2457600,
+     "bias": 0
+    },
+    "kernel_set": {
+     "family": "mixed",
+     "kernels": {
+      "n16k64_wA_n16": "773f183ed3130c47c3ae0b3c1c63dbf344c48d998dc313dabb5e00bf56d2ac76",
+      "n16k64_wA_n32": "a70d49fefba0ae6391898332007b21c360d39c48e317fb5a0a4c2561d82c25ac",
+      "n16k64_wA_n64": "0ce3bcc9360a77ee595e6b7ef72ebbe0c020c30c368574686362e2fbf176439e",
+      "n16k64_wA": "be8fd62d97b231c69e64afc62f1f31fbcf4535a45759f8feb13aeadfb86fe332"
+     },
+     "table": null,
+     "table_shapes": 0,
+     "calls_by_width": {
+      "16": 126480,
+      "32": 496,
+      "64": 1488,
+      "128": 23312
+     }
+    }
+   },
+   "artifact_weights_sha256": "cc8fd270162958d8f6bbf98c365376baeca9a56077c374d7d5f8a6af1402f183",
+   "artifact_map_sha256": "2f238b38b505e7b5a7548f273acde77a84a7fc9eeafed7c30bab3cf6c69eed89",
+   "artifact_weight_kind": "map",
+   "install_seconds": 25.889464139938354,
+   "tasks": {
+    "arc_easy": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.0819178021909125,
+      "acc_norm,none": 0.6,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 0.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 1.0
+     },
+     "seconds": 8.590715885162354,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 19.996819972991943,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.447066307067871,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 4464,
+      "tokens": 1109056,
+      "forwards_by_token_bucket": {
+       "512": 3,
+       "256": 5,
+       "64": 1
+      },
+      "calls_by_width": {
+       "128": 3968,
+       "64": 496
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 9,
+      "every_linear_every_forward": true
+     }
+    },
+    "arc_challenge": {
+     "metrics": {
+      "acc,none": 0.55,
+      "acc_stderr,none": 0.11413288653790232,
+      "acc_norm,none": 0.5,
+      "acc_norm_stderr,none": 0.11470786693528086
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 0.0,
+      "6": 0.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 9.537820816040039,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 20.205164909362793,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.989183187484741,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 4960,
+      "tokens": 1920512,
+      "forwards_by_token_bucket": {
+       "512": 5,
+       "256": 1,
+       "1024": 3,
+       "32": 1
+      },
+      "calls_by_width": {
+       "128": 4464,
+       "32": 496
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 10,
+      "every_linear_every_forward": true
+     }
+    },
+    "hellaswag": {
+     "metrics": {
+      "acc,none": 0.55,
+      "acc_stderr,none": 0.11413288653790232,
+      "acc_norm,none": 0.7,
+      "acc_norm_stderr,none": 0.10513149660756933
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 0.0,
+      "9": 0.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 11.389853477478027,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 20.020482063293457,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.654118299484253,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 4960,
+      "tokens": 1658624,
+      "forwards_by_token_bucket": {
+       "512": 8,
+       "256": 2
+      },
+      "calls_by_width": {
+       "128": 4960
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 10,
+      "every_linear_every_forward": true
+     }
+    },
+    "openbookqa": {
+     "metrics": {
+      "acc,none": 0.25,
+      "acc_stderr,none": 0.09933992677987828,
+      "acc_norm,none": 0.4,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 8.307995796203613,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 19.929645538330078,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.0492336750030518,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 3968,
+      "tokens": 584784,
+      "forwards_by_token_bucket": {
+       "512": 2,
+       "256": 1,
+       "64": 2,
+       "128": 3
+      },
+      "calls_by_width": {
+       "128": 2976,
+       "64": 992
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 8,
+      "every_linear_every_forward": true
+     }
+    },
+    "boolq": {
+     "metrics": {
+      "acc,none": 0.9,
+      "acc_stderr,none": 0.06882472016116853
+     },
+     "examples": {
+      "0": 0.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 7.064981937408447,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 21.25105905532837,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 1.4252097606658936,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 1488,
+      "tokens": 1900672,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "4096": 1,
+       "2048": 1
+      },
+      "calls_by_width": {
+       "128": 1488
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 3,
+      "every_linear_every_forward": true
+     }
+    },
+    "winogrande": {
+     "metrics": {
+      "acc,none": 0.7,
+      "acc_stderr,none": 0.10513149660756933
+     },
+     "examples": {
+      "0": 0.0,
+      "1": 1.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 0.0,
+      "8": 0.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 8.466894388198853,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 19.85304021835327,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 2.1300604343414307,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 2480,
+      "tokens": 416640,
+      "forwards_by_token_bucket": {
+       "256": 5
+      },
+      "calls_by_width": {
+       "128": 2480
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "piqa": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.0819178021909125,
+      "acc_norm,none": 0.8,
+      "acc_norm_stderr,none": 0.09176629354822471
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 8.612178802490234,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 20.022721767425537,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 2.108039140701294,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 2480,
+      "tokens": 706304,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "256": 3,
+       "1024": 1
+      },
+      "calls_by_width": {
+       "128": 2480
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "gsm8k": {
+     "metrics": {
+      "exact_match,strict-match": 0.8,
+      "exact_match_stderr,strict-match": 0.19999999999999998,
+      "exact_match,flexible-extract": 0.8,
+      "exact_match_stderr,flexible-extract": 0.19999999999999998
+     },
+     "examples": {
+      "0": {
+       "raw": "\n\nJanet's ducks lay 16 eggs per day.\nShe eats 3 eggs for breakfast and uses 4 eggs for muffins, so she uses a total of 3 + 4 = <<3+4=7>>7 eggs.\nThe number of eggs remaining to sell is 16 - 7 = <<16-7=9>>9 eggs.\nShe sells these eggs for $2 each, so she makes 9 * 2 = <<9*2=18>>$18.\n#### 18",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "18"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "18"
+       }
+      },
+      "1": {
+       "raw": "\n\nThe robe takes 2 bolts of blue fiber.\nIt takes half that much white fiber, which is 2 / 2 = <<2/2=1>>1 bolt of white fiber.\nIn total, it takes 2 + 1 = <<2+1=3>>3 bolts.\n#### 3",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "3"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "3"
+       }
+      },
+      "2": {
+       "raw": "\n\nThe original value of the house was $80,000.\nThe value of the house increased by 150%, which is an increase of $80,000 * 150/100 = $<<80000*150/100=120000>>120,000.\nThe new value of the house is $80,000 + $120,000 = $<<80000+120000=200000>>200,000.\nJosh's total cost was the purchase price plus the repairs, which is $80,000 + $50,000 = $<<80000+50000=130000>>130,000.\nThe profit is the new value minus the total cost, which is $200,000 - $130,000 = $<<200000-130000=70000>>70,00",
+       "strict-match": {
+        "exact_match": 0.0,
+        "response": "[invalid]"
+       },
+       "flexible-extract": {
+        "exact_match": 0.0,
+        "response": "70,00"
+       }
+      },
+      "3": {
+       "raw": "\n\n\nJames runs 3 sprints 3 times a week, so he runs a total of 3 x 3 = <<3*3=9>>9 sprints a week.\nEach sprint is 60 meters, so he runs a total of 9 x 60 = <<9*60=540>>540 meters a week.\n#### 540",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "540"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "540"
+       }
+      },
+      "4": {
+       "raw": "\n\nWendi has 20 chickens and each chicken needs 3 cups of feed per day, so the total amount of feed needed for the day is 20 chickens * 3 cups/chicken = <<20*3=60>>60 cups.\nIn the morning, she gives 15 cups, and in the afternoon, she gives 25 cups. The total amount of feed given so far is 15 cups + 25 cups = <<15+25=40>>40 cups.\nTo find out how much feed is needed for the final meal, subtract the amount already given from the total needed: 60 cups - 40 cups = <<60-40=20>>20 cups.\n#### 20",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "20"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "20"
+       }
+      }
+     },
+     "seconds": 34.80266308784485,
+     "examples_evaluated": 5,
+     "peak_gpu_allocated_gib": 21.193065643310547,
+     "n_shot": 5,
+     "chance": 0.0,
+     "model_timing": {
+      "generate_until_seconds": 29.53835940361023,
+      "generate_until_requests": 5
+     },
+     "native_gemm": {
+      "calls": 126976,
+      "tokens": 3340560,
+      "forwards_by_token_bucket": {
+       "8192": 1,
+       "8": 255
+      },
+      "calls_by_width": {
+       "128": 496,
+       "16": 126480
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 256,
+      "every_linear_every_forward": true
+     }
+    }
+   },
+   "coverage": {
+    "native": 496,
+    "native_called": 496,
+    "native_not_called": [],
+    "calls": 151776,
+    "tokens": 11637152,
+    "remaining_bf16_linears": [
+     "model.visual.blocks.0.attn.qkv",
+     "model.visual.blocks.0.attn.proj",
+     "model.visual.blocks.0.mlp.linear_fc1",
+     "model.visual.blocks.0.mlp.linear_fc2",
+     "model.visual.blocks.1.attn.qkv",
+     "model.visual.blocks.1.attn.proj",
+     "model.visual.blocks.1.mlp.linear_fc1",
+     "model.visual.blocks.1.mlp.linear_fc2",
+     "model.visual.blocks.2.attn.qkv",
+     "model.visual.blocks.2.attn.proj",
+     "model.visual.blocks.2.mlp.linear_fc1",
+     "model.visual.blocks.2.mlp.linear_fc2",
+     "model.visual.blocks.3.attn.qkv",
+     "model.visual.blocks.3.attn.proj",
+     "model.visual.blocks.3.mlp.linear_fc1",
+     "model.visual.blocks.3.mlp.linear_fc2",
+     "model.visual.blocks.4.attn.qkv",
+     "model.visual.blocks.4.attn.proj",
+     "model.visual.blocks.4.mlp.linear_fc1",
+     "model.visual.blocks.4.mlp.linear_fc2",
+     "model.visual.blocks.5.attn.qkv",
+     "model.visual.blocks.5.attn.proj",
+     "model.visual.blocks.5.mlp.linear_fc1",
+     "model.visual.blocks.5.mlp.linear_fc2",
+     "model.visual.blocks.6.attn.qkv",
+     "model.visual.blocks.6.attn.proj",
+     "model.visual.blocks.6.mlp.linear_fc1",
+     "model.visual.blocks.6.mlp.linear_fc2",
+     "model.visual.blocks.7.attn.qkv",
+     "model.visual.blocks.7.attn.proj",
+     "model.visual.blocks.7.mlp.linear_fc1",
+     "model.visual.blocks.7.mlp.linear_fc2",
+     "model.visual.blocks.8.attn.qkv",
+     "model.visual.blocks.8.attn.proj",
+     "model.visual.blocks.8.mlp.linear_fc1",
+     "model.visual.blocks.8.mlp.linear_fc2",
+     "model.visual.blocks.9.attn.qkv",
+     "model.visual.blocks.9.attn.proj",
+     "model.visual.blocks.9.mlp.linear_fc1",
+     "model.visual.blocks.9.mlp.linear_fc2",
+     "model.visual.blocks.10.attn.qkv",
+     "model.visual.blocks.10.attn.proj",
+     "model.visual.blocks.10.mlp.linear_fc1",
+     "model.visual.blocks.10.mlp.linear_fc2",
+     "model.visual.blocks.11.attn.qkv",
+     "model.visual.blocks.11.attn.proj",
+     "model.visual.blocks.11.mlp.linear_fc1",
+     "model.visual.blocks.11.mlp.linear_fc2",
+     "model.visual.blocks.12.attn.qkv",
+     "model.visual.blocks.12.attn.proj",
+     "model.visual.blocks.12.mlp.linear_fc1",
+     "model.visual.blocks.12.mlp.linear_fc2",
+     "model.visual.blocks.13.attn.qkv",
+     "model.visual.blocks.13.attn.proj",
+     "model.visual.blocks.13.mlp.linear_fc1",
+     "model.visual.blocks.13.mlp.linear_fc2",
+     "model.visual.blocks.14.attn.qkv",
+     "model.visual.blocks.14.attn.proj",
+     "model.visual.blocks.14.mlp.linear_fc1",
+     "model.visual.blocks.14.mlp.linear_fc2",
+     "model.visual.blocks.15.attn.qkv",
+     "model.visual.blocks.15.attn.proj",
+     "model.visual.blocks.15.mlp.linear_fc1",
+     "model.visual.blocks.15.mlp.linear_fc2",
+     "model.visual.blocks.16.attn.qkv",
+     "model.visual.blocks.16.attn.proj",
+     "model.visual.blocks.16.mlp.linear_fc1",
+     "model.visual.blocks.16.mlp.linear_fc2",
+     "model.visual.blocks.17.attn.qkv",
+     "model.visual.blocks.17.attn.proj",
+     "model.visual.blocks.17.mlp.linear_fc1",
+     "model.visual.blocks.17.mlp.linear_fc2",
+     "model.visual.blocks.18.attn.qkv",
+     "model.visual.blocks.18.attn.proj",
+     "model.visual.blocks.18.mlp.linear_fc1",
+     "model.visual.blocks.18.mlp.linear_fc2",
+     "model.visual.blocks.19.attn.qkv",
+     "model.visual.blocks.19.attn.proj",
+     "model.visual.blocks.19.mlp.linear_fc1",
+     "model.visual.blocks.19.mlp.linear_fc2",
+     "model.visual.blocks.20.attn.qkv",
+     "model.visual.blocks.20.attn.proj",
+     "model.visual.blocks.20.mlp.linear_fc1",
+     "model.visual.blocks.20.mlp.linear_fc2",
+     "model.visual.blocks.21.attn.qkv",
+     "model.visual.blocks.21.attn.proj",
+     "model.visual.blocks.21.mlp.linear_fc1",
+     "model.visual.blocks.21.mlp.linear_fc2",
+     "model.visual.blocks.22.attn.qkv",
+     "model.visual.blocks.22.attn.proj",
+     "model.visual.blocks.22.mlp.linear_fc1",
+     "model.visual.blocks.22.mlp.linear_fc2",
+     "model.visual.blocks.23.attn.qkv",
+     "model.visual.blocks.23.attn.proj",
+     "model.visual.blocks.23.mlp.linear_fc1",
+     "model.visual.blocks.23.mlp.linear_fc2",
+     "model.visual.blocks.24.attn.qkv",
+     "model.visual.blocks.24.attn.proj",
+     "model.visual.blocks.24.mlp.linear_fc1",
+     "model.visual.blocks.24.mlp.linear_fc2",
+     "model.visual.blocks.25.attn.qkv",
+     "model.visual.blocks.25.attn.proj",
+     "model.visual.blocks.25.mlp.linear_fc1",
+     "model.visual.blocks.25.mlp.linear_fc2",
+     "model.visual.blocks.26.attn.qkv",
+     "model.visual.blocks.26.attn.proj",
+     "model.visual.blocks.26.mlp.linear_fc1",
+     "model.visual.blocks.26.mlp.linear_fc2",
+     "model.visual.merger.linear_fc1",
+     "model.visual.merger.linear_fc2"
+    ],
+    "remaining_bf16_linears_called": {}
+   },
+   "seconds": 122.690358877182
+  },
+  "tc-8x64": {
+   "label": "tc-8x64",
+   "kind": "native",
+   "artifact": "/home/dev/n16k64_campaign/deploy_eval/artifacts/qwen27b_tc_8x64",
+   "kernel": "n8k64_wB",
+   "backend": "NativeLinear (c)",
+   "install": {
+    "kernel": "n8k64_wB",
+    "kernel_sha256": "8d504d10070b952bc499d346aab96175749e834da277874fb3ceeb155fbfaf53",
+    "artifact_weights_sha256": "b81b2032f25caf2df06d1f970afd8d27d17ba5fb92638c0d79502b86b8e1ee62",
+    "map_sha256": "c020c4fc2a0a724fa99bf0b531a5939f8dccafd8caf0b814b38fbb26dd9511c2",
+    "native_modules": 496,
+    "fallback": [],
+    "bf16_by_design": [
+     "model.visual.blocks.0.attn.qkv",
+     "model.visual.blocks.0.attn.proj",
+     "model.visual.blocks.0.mlp.linear_fc1",
+     "model.visual.blocks.0.mlp.linear_fc2",
+     "model.visual.blocks.1.attn.qkv",
+     "model.visual.blocks.1.attn.proj",
+     "model.visual.blocks.1.mlp.linear_fc1",
+     "model.visual.blocks.1.mlp.linear_fc2",
+     "model.visual.blocks.2.attn.qkv",
+     "model.visual.blocks.2.attn.proj",
+     "model.visual.blocks.2.mlp.linear_fc1",
+     "model.visual.blocks.2.mlp.linear_fc2",
+     "model.visual.blocks.3.attn.qkv",
+     "model.visual.blocks.3.attn.proj",
+     "model.visual.blocks.3.mlp.linear_fc1",
+     "model.visual.blocks.3.mlp.linear_fc2",
+     "model.visual.blocks.4.attn.qkv",
+     "model.visual.blocks.4.attn.proj",
+     "model.visual.blocks.4.mlp.linear_fc1",
+     "model.visual.blocks.4.mlp.linear_fc2",
+     "model.visual.blocks.5.attn.qkv",
+     "model.visual.blocks.5.attn.proj",
+     "model.visual.blocks.5.mlp.linear_fc1",
+     "model.visual.blocks.5.mlp.linear_fc2",
+     "model.visual.blocks.6.attn.qkv",
+     "model.visual.blocks.6.attn.proj",
+     "model.visual.blocks.6.mlp.linear_fc1",
+     "model.visual.blocks.6.mlp.linear_fc2",
+     "model.visual.blocks.7.attn.qkv",
+     "model.visual.blocks.7.attn.proj",
+     "model.visual.blocks.7.mlp.linear_fc1",
+     "model.visual.blocks.7.mlp.linear_fc2",
+     "model.visual.blocks.8.attn.qkv",
+     "model.visual.blocks.8.attn.proj",
+     "model.visual.blocks.8.mlp.linear_fc1",
+     "model.visual.blocks.8.mlp.linear_fc2",
+     "model.visual.blocks.9.attn.qkv",
+     "model.visual.blocks.9.attn.proj",
+     "model.visual.blocks.9.mlp.linear_fc1",
+     "model.visual.blocks.9.mlp.linear_fc2",
+     "model.visual.blocks.10.attn.qkv",
+     "model.visual.blocks.10.attn.proj",
+     "model.visual.blocks.10.mlp.linear_fc1",
+     "model.visual.blocks.10.mlp.linear_fc2",
+     "model.visual.blocks.11.attn.qkv",
+     "model.visual.blocks.11.attn.proj",
+     "model.visual.blocks.11.mlp.linear_fc1",
+     "model.visual.blocks.11.mlp.linear_fc2",
+     "model.visual.blocks.12.attn.qkv",
+     "model.visual.blocks.12.attn.proj",
+     "model.visual.blocks.12.mlp.linear_fc1",
+     "model.visual.blocks.12.mlp.linear_fc2",
+     "model.visual.blocks.13.attn.qkv",
+     "model.visual.blocks.13.attn.proj",
+     "model.visual.blocks.13.mlp.linear_fc1",
+     "model.visual.blocks.13.mlp.linear_fc2",
+     "model.visual.blocks.14.attn.qkv",
+     "model.visual.blocks.14.attn.proj",
+     "model.visual.blocks.14.mlp.linear_fc1",
+     "model.visual.blocks.14.mlp.linear_fc2",
+     "model.visual.blocks.15.attn.qkv",
+     "model.visual.blocks.15.attn.proj",
+     "model.visual.blocks.15.mlp.linear_fc1",
+     "model.visual.blocks.15.mlp.linear_fc2",
+     "model.visual.blocks.16.attn.qkv",
+     "model.visual.blocks.16.attn.proj",
+     "model.visual.blocks.16.mlp.linear_fc1",
+     "model.visual.blocks.16.mlp.linear_fc2",
+     "model.visual.blocks.17.attn.qkv",
+     "model.visual.blocks.17.attn.proj",
+     "model.visual.blocks.17.mlp.linear_fc1",
+     "model.visual.blocks.17.mlp.linear_fc2",
+     "model.visual.blocks.18.attn.qkv",
+     "model.visual.blocks.18.attn.proj",
+     "model.visual.blocks.18.mlp.linear_fc1",
+     "model.visual.blocks.18.mlp.linear_fc2",
+     "model.visual.blocks.19.attn.qkv",
+     "model.visual.blocks.19.attn.proj",
+     "model.visual.blocks.19.mlp.linear_fc1",
+     "model.visual.blocks.19.mlp.linear_fc2",
+     "model.visual.blocks.20.attn.qkv",
+     "model.visual.blocks.20.attn.proj",
+     "model.visual.blocks.20.mlp.linear_fc1",
+     "model.visual.blocks.20.mlp.linear_fc2",
+     "model.visual.blocks.21.attn.qkv",
+     "model.visual.blocks.21.attn.proj",
+     "model.visual.blocks.21.mlp.linear_fc1",
+     "model.visual.blocks.21.mlp.linear_fc2",
+     "model.visual.blocks.22.attn.qkv",
+     "model.visual.blocks.22.attn.proj",
+     "model.visual.blocks.22.mlp.linear_fc1",
+     "model.visual.blocks.22.mlp.linear_fc2",
+     "model.visual.blocks.23.attn.qkv",
+     "model.visual.blocks.23.attn.proj",
+     "model.visual.blocks.23.mlp.linear_fc1",
+     "model.visual.blocks.23.mlp.linear_fc2",
+     "model.visual.blocks.24.attn.qkv",
+     "model.visual.blocks.24.attn.proj",
+     "model.visual.blocks.24.mlp.linear_fc1",
+     "model.visual.blocks.24.mlp.linear_fc2",
+     "model.visual.blocks.25.attn.qkv",
+     "model.visual.blocks.25.attn.proj",
+     "model.visual.blocks.25.mlp.linear_fc1",
+     "model.visual.blocks.25.mlp.linear_fc2",
+     "model.visual.blocks.26.attn.qkv",
+     "model.visual.blocks.26.attn.proj",
+     "model.visual.blocks.26.mlp.linear_fc1",
+     "model.visual.blocks.26.mlp.linear_fc2",
+     "model.visual.merger.linear_fc1",
+     "model.visual.merger.linear_fc2",
+     "lm_head (output head)"
+    ],
+    "e0m3_tiles": 614657,
+    "device_bytes": {
+     "packed": 12175278080,
+     "scales_placed": 1524367360,
+     "scales_padding": 2457600,
+     "bias": 0
+    },
+    "kernel_set": null
+   },
+   "artifact_weights_sha256": "b81b2032f25caf2df06d1f970afd8d27d17ba5fb92638c0d79502b86b8e1ee62",
+   "artifact_map_sha256": "c020c4fc2a0a724fa99bf0b531a5939f8dccafd8caf0b814b38fbb26dd9511c2",
+   "artifact_weight_kind": "map",
+   "install_seconds": 21.953633069992065,
+   "tasks": {
+    "arc_easy": {
+     "metrics": {
+      "acc,none": 0.75,
+      "acc_stderr,none": 0.09933992677987828,
+      "acc_norm,none": 0.6,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 0.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 1.0
+     },
+     "seconds": 8.699551820755005,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 19.996819972991943,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.4996674060821533,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 4464,
+      "tokens": 1109056,
+      "forwards_by_token_bucket": {
+       "512": 3,
+       "256": 5,
+       "64": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 9,
+      "every_linear_every_forward": true
+     }
+    },
+    "arc_challenge": {
+     "metrics": {
+      "acc,none": 0.5,
+      "acc_stderr,none": 0.11470786693528086,
+      "acc_norm,none": 0.6,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 0.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 9.415222406387329,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 20.205164909362793,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.9818851947784424,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 4960,
+      "tokens": 1920512,
+      "forwards_by_token_bucket": {
+       "512": 5,
+       "256": 1,
+       "1024": 3,
+       "32": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 10,
+      "every_linear_every_forward": true
+     }
+    },
+    "hellaswag": {
+     "metrics": {
+      "acc,none": 0.6,
+      "acc_stderr,none": 0.11239029738980327,
+      "acc_norm,none": 0.75,
+      "acc_norm_stderr,none": 0.09933992677987828
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 0.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 11.333638668060303,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 20.020482063293457,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.5399515628814697,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 4960,
+      "tokens": 1658624,
+      "forwards_by_token_bucket": {
+       "512": 8,
+       "256": 2
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 10,
+      "every_linear_every_forward": true
+     }
+    },
+    "openbookqa": {
+     "metrics": {
+      "acc,none": 0.3,
+      "acc_stderr,none": 0.10513149660756933,
+      "acc_norm,none": 0.35,
+      "acc_norm_stderr,none": 0.10942433098048308
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 8.535103797912598,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 19.929645538330078,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.1183974742889404,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 3968,
+      "tokens": 584784,
+      "forwards_by_token_bucket": {
+       "512": 2,
+       "256": 1,
+       "64": 2,
+       "128": 3
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 8,
+      "every_linear_every_forward": true
+     }
+    },
+    "boolq": {
+     "metrics": {
+      "acc,none": 0.95,
+      "acc_stderr,none": 0.05000000000000003
+     },
+     "examples": {
+      "0": 0.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 6.92399787902832,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 21.25105905532837,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 1.4149482250213623,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 1488,
+      "tokens": 1900672,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "4096": 1,
+       "2048": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 3,
+      "every_linear_every_forward": true
+     }
+    },
+    "winogrande": {
+     "metrics": {
+      "acc,none": 0.7,
+      "acc_stderr,none": 0.10513149660756933
+     },
+     "examples": {
+      "0": 0.0,
+      "1": 1.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 0.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 1.0
+     },
+     "seconds": 7.986658334732056,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 19.85304021835327,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 1.8949766159057617,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 2480,
+      "tokens": 416640,
+      "forwards_by_token_bucket": {
+       "256": 5
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "piqa": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.0819178021909125,
+      "acc_norm,none": 0.8,
+      "acc_norm_stderr,none": 0.09176629354822471
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 8.598227739334106,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 20.022721767425537,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 2.035104513168335,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 2480,
+      "tokens": 706304,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "256": 3,
+       "1024": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "gsm8k": {
+     "metrics": {
+      "exact_match,strict-match": 0.8,
+      "exact_match_stderr,strict-match": 0.19999999999999998,
+      "exact_match,flexible-extract": 1.0,
+      "exact_match_stderr,flexible-extract": 0.0
+     },
+     "examples": {
+      "0": {
+       "raw": "\n\nJanet's ducks lay 16 eggs per day.\nShe eats 3 eggs for breakfast and uses 4 eggs to bake muffins, so she uses a total of 3 + 4 = <<3+4=7>>7 eggs.\nThe number of eggs remaining to sell is 16 - 7 = <<16-7=9>>9 eggs.\nShe sells these eggs for $2 each, so she makes 9 * 2 = <<9*2=18>>$18.\n#### 18",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "18"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "18"
+       }
+      },
+      "1": {
+       "raw": "\n\nThe robe takes 2 bolts of blue fiber.\nIt takes half that much white fiber, which is 2 / 2 = <<2/2=1>>1 bolt of white fiber.\nIn total, it takes 2 + 1 = <<2+1=3>>3 bolts.\n#### 3",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "3"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "3"
+       }
+      },
+      "2": {
+       "raw": "\n\nThe house was originally worth $80,000.\nThe value of the house increased by 150%, so the increase in value is $80,000 * 150/100 = $<<80000*150/100=120000>>120,000.\nThe new value of the house is $80,000 + $120,000 = $<<80000+120000=200000>>200,000.\nJosh's total cost was the purchase price plus the repairs, which is $80,000 + $50,000 = $<<80000+50000=130000>>130,000.\nThe profit is the new value minus the total cost, which is $200,000 - $130,000 = $<<200000-130000=70000>>70,000",
+       "strict-match": {
+        "exact_match": 0.0,
+        "response": "[invalid]"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "70,000"
+       }
+      },
+      "3": {
+       "raw": "\n\nHe runs 3 sprints x 3 times a week = <<3*3=9>>9 sprints a week.\nEach sprint is 60 meters, so he runs 9 sprints x 60 meters per sprint = <<9*60=540>>540 meters a week.\n#### 540",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "540"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "540"
+       }
+      },
+      "4": {
+       "raw": "\n\nWendi has 20 chickens, and each chicken needs 3 cups of feed per day.\nThe total amount of feed needed for the day is 20 chickens * 3 cups/chicken = <<20*3=60>>60 cups.\nIn the morning, she gives 15 cups, and in the afternoon, she gives 25 cups.\nThe total feed given so far is 15 cups + 25 cups = <<15+25=40>>40 cups.\nThe amount of feed needed for the final meal is 60 cups - 40 cups = <<60-40=20>>20 cups.\n#### 20",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "20"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "20"
+       }
+      }
+     },
+     "seconds": 31.838221311569214,
+     "examples_evaluated": 5,
+     "peak_gpu_allocated_gib": 21.193065643310547,
+     "n_shot": 5,
+     "chance": 0.0,
+     "model_timing": {
+      "generate_until_seconds": 26.57290029525757,
+      "generate_until_requests": 5
+     },
+     "native_gemm": {
+      "calls": 126976,
+      "tokens": 3340560,
+      "forwards_by_token_bucket": {
+       "8192": 1,
+       "8": 255
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 256,
+      "every_linear_every_forward": true
+     }
+    }
+   },
+   "coverage": {
+    "native": 496,
+    "native_called": 496,
+    "native_not_called": [],
+    "calls": 151776,
+    "tokens": 11637152,
+    "remaining_bf16_linears": [
+     "model.visual.blocks.0.attn.qkv",
+     "model.visual.blocks.0.attn.proj",
+     "model.visual.blocks.0.mlp.linear_fc1",
+     "model.visual.blocks.0.mlp.linear_fc2",
+     "model.visual.blocks.1.attn.qkv",
+     "model.visual.blocks.1.attn.proj",
+     "model.visual.blocks.1.mlp.linear_fc1",
+     "model.visual.blocks.1.mlp.linear_fc2",
+     "model.visual.blocks.2.attn.qkv",
+     "model.visual.blocks.2.attn.proj",
+     "model.visual.blocks.2.mlp.linear_fc1",
+     "model.visual.blocks.2.mlp.linear_fc2",
+     "model.visual.blocks.3.attn.qkv",
+     "model.visual.blocks.3.attn.proj",
+     "model.visual.blocks.3.mlp.linear_fc1",
+     "model.visual.blocks.3.mlp.linear_fc2",
+     "model.visual.blocks.4.attn.qkv",
+     "model.visual.blocks.4.attn.proj",
+     "model.visual.blocks.4.mlp.linear_fc1",
+     "model.visual.blocks.4.mlp.linear_fc2",
+     "model.visual.blocks.5.attn.qkv",
+     "model.visual.blocks.5.attn.proj",
+     "model.visual.blocks.5.mlp.linear_fc1",
+     "model.visual.blocks.5.mlp.linear_fc2",
+     "model.visual.blocks.6.attn.qkv",
+     "model.visual.blocks.6.attn.proj",
+     "model.visual.blocks.6.mlp.linear_fc1",
+     "model.visual.blocks.6.mlp.linear_fc2",
+     "model.visual.blocks.7.attn.qkv",
+     "model.visual.blocks.7.attn.proj",
+     "model.visual.blocks.7.mlp.linear_fc1",
+     "model.visual.blocks.7.mlp.linear_fc2",
+     "model.visual.blocks.8.attn.qkv",
+     "model.visual.blocks.8.attn.proj",
+     "model.visual.blocks.8.mlp.linear_fc1",
+     "model.visual.blocks.8.mlp.linear_fc2",
+     "model.visual.blocks.9.attn.qkv",
+     "model.visual.blocks.9.attn.proj",
+     "model.visual.blocks.9.mlp.linear_fc1",
+     "model.visual.blocks.9.mlp.linear_fc2",
+     "model.visual.blocks.10.attn.qkv",
+     "model.visual.blocks.10.attn.proj",
+     "model.visual.blocks.10.mlp.linear_fc1",
+     "model.visual.blocks.10.mlp.linear_fc2",
+     "model.visual.blocks.11.attn.qkv",
+     "model.visual.blocks.11.attn.proj",
+     "model.visual.blocks.11.mlp.linear_fc1",
+     "model.visual.blocks.11.mlp.linear_fc2",
+     "model.visual.blocks.12.attn.qkv",
+     "model.visual.blocks.12.attn.proj",
+     "model.visual.blocks.12.mlp.linear_fc1",
+     "model.visual.blocks.12.mlp.linear_fc2",
+     "model.visual.blocks.13.attn.qkv",
+     "model.visual.blocks.13.attn.proj",
+     "model.visual.blocks.13.mlp.linear_fc1",
+     "model.visual.blocks.13.mlp.linear_fc2",
+     "model.visual.blocks.14.attn.qkv",
+     "model.visual.blocks.14.attn.proj",
+     "model.visual.blocks.14.mlp.linear_fc1",
+     "model.visual.blocks.14.mlp.linear_fc2",
+     "model.visual.blocks.15.attn.qkv",
+     "model.visual.blocks.15.attn.proj",
+     "model.visual.blocks.15.mlp.linear_fc1",
+     "model.visual.blocks.15.mlp.linear_fc2",
+     "model.visual.blocks.16.attn.qkv",
+     "model.visual.blocks.16.attn.proj",
+     "model.visual.blocks.16.mlp.linear_fc1",
+     "model.visual.blocks.16.mlp.linear_fc2",
+     "model.visual.blocks.17.attn.qkv",
+     "model.visual.blocks.17.attn.proj",
+     "model.visual.blocks.17.mlp.linear_fc1",
+     "model.visual.blocks.17.mlp.linear_fc2",
+     "model.visual.blocks.18.attn.qkv",
+     "model.visual.blocks.18.attn.proj",
+     "model.visual.blocks.18.mlp.linear_fc1",
+     "model.visual.blocks.18.mlp.linear_fc2",
+     "model.visual.blocks.19.attn.qkv",
+     "model.visual.blocks.19.attn.proj",
+     "model.visual.blocks.19.mlp.linear_fc1",
+     "model.visual.blocks.19.mlp.linear_fc2",
+     "model.visual.blocks.20.attn.qkv",
+     "model.visual.blocks.20.attn.proj",
+     "model.visual.blocks.20.mlp.linear_fc1",
+     "model.visual.blocks.20.mlp.linear_fc2",
+     "model.visual.blocks.21.attn.qkv",
+     "model.visual.blocks.21.attn.proj",
+     "model.visual.blocks.21.mlp.linear_fc1",
+     "model.visual.blocks.21.mlp.linear_fc2",
+     "model.visual.blocks.22.attn.qkv",
+     "model.visual.blocks.22.attn.proj",
+     "model.visual.blocks.22.mlp.linear_fc1",
+     "model.visual.blocks.22.mlp.linear_fc2",
+     "model.visual.blocks.23.attn.qkv",
+     "model.visual.blocks.23.attn.proj",
+     "model.visual.blocks.23.mlp.linear_fc1",
+     "model.visual.blocks.23.mlp.linear_fc2",
+     "model.visual.blocks.24.attn.qkv",
+     "model.visual.blocks.24.attn.proj",
+     "model.visual.blocks.24.mlp.linear_fc1",
+     "model.visual.blocks.24.mlp.linear_fc2",
+     "model.visual.blocks.25.attn.qkv",
+     "model.visual.blocks.25.attn.proj",
+     "model.visual.blocks.25.mlp.linear_fc1",
+     "model.visual.blocks.25.mlp.linear_fc2",
+     "model.visual.blocks.26.attn.qkv",
+     "model.visual.blocks.26.attn.proj",
+     "model.visual.blocks.26.mlp.linear_fc1",
+     "model.visual.blocks.26.mlp.linear_fc2",
+     "model.visual.merger.linear_fc1",
+     "model.visual.merger.linear_fc2"
+    ],
+    "remaining_bf16_linears_called": {}
+   },
+   "seconds": 115.31738066673279
+  },
+  "tc-8x64#repeat": {
+   "label": "tc-8x64#repeat",
+   "kind": "native",
+   "artifact": "/home/dev/n16k64_campaign/deploy_eval/artifacts/qwen27b_tc_8x64",
+   "kernel": "n8k64_wB",
+   "backend": "NativeLinear (c)",
+   "install": {
+    "kernel": "n8k64_wB",
+    "kernel_sha256": "8d504d10070b952bc499d346aab96175749e834da277874fb3ceeb155fbfaf53",
+    "artifact_weights_sha256": "b81b2032f25caf2df06d1f970afd8d27d17ba5fb92638c0d79502b86b8e1ee62",
+    "map_sha256": "c020c4fc2a0a724fa99bf0b531a5939f8dccafd8caf0b814b38fbb26dd9511c2",
+    "native_modules": 496,
+    "fallback": [],
+    "bf16_by_design": [
+     "model.visual.blocks.0.attn.qkv",
+     "model.visual.blocks.0.attn.proj",
+     "model.visual.blocks.0.mlp.linear_fc1",
+     "model.visual.blocks.0.mlp.linear_fc2",
+     "model.visual.blocks.1.attn.qkv",
+     "model.visual.blocks.1.attn.proj",
+     "model.visual.blocks.1.mlp.linear_fc1",
+     "model.visual.blocks.1.mlp.linear_fc2",
+     "model.visual.blocks.2.attn.qkv",
+     "model.visual.blocks.2.attn.proj",
+     "model.visual.blocks.2.mlp.linear_fc1",
+     "model.visual.blocks.2.mlp.linear_fc2",
+     "model.visual.blocks.3.attn.qkv",
+     "model.visual.blocks.3.attn.proj",
+     "model.visual.blocks.3.mlp.linear_fc1",
+     "model.visual.blocks.3.mlp.linear_fc2",
+     "model.visual.blocks.4.attn.qkv",
+     "model.visual.blocks.4.attn.proj",
+     "model.visual.blocks.4.mlp.linear_fc1",
+     "model.visual.blocks.4.mlp.linear_fc2",
+     "model.visual.blocks.5.attn.qkv",
+     "model.visual.blocks.5.attn.proj",
+     "model.visual.blocks.5.mlp.linear_fc1",
+     "model.visual.blocks.5.mlp.linear_fc2",
+     "model.visual.blocks.6.attn.qkv",
+     "model.visual.blocks.6.attn.proj",
+     "model.visual.blocks.6.mlp.linear_fc1",
+     "model.visual.blocks.6.mlp.linear_fc2",
+     "model.visual.blocks.7.attn.qkv",
+     "model.visual.blocks.7.attn.proj",
+     "model.visual.blocks.7.mlp.linear_fc1",
+     "model.visual.blocks.7.mlp.linear_fc2",
+     "model.visual.blocks.8.attn.qkv",
+     "model.visual.blocks.8.attn.proj",
+     "model.visual.blocks.8.mlp.linear_fc1",
+     "model.visual.blocks.8.mlp.linear_fc2",
+     "model.visual.blocks.9.attn.qkv",
+     "model.visual.blocks.9.attn.proj",
+     "model.visual.blocks.9.mlp.linear_fc1",
+     "model.visual.blocks.9.mlp.linear_fc2",
+     "model.visual.blocks.10.attn.qkv",
+     "model.visual.blocks.10.attn.proj",
+     "model.visual.blocks.10.mlp.linear_fc1",
+     "model.visual.blocks.10.mlp.linear_fc2",
+     "model.visual.blocks.11.attn.qkv",
+     "model.visual.blocks.11.attn.proj",
+     "model.visual.blocks.11.mlp.linear_fc1",
+     "model.visual.blocks.11.mlp.linear_fc2",
+     "model.visual.blocks.12.attn.qkv",
+     "model.visual.blocks.12.attn.proj",
+     "model.visual.blocks.12.mlp.linear_fc1",
+     "model.visual.blocks.12.mlp.linear_fc2",
+     "model.visual.blocks.13.attn.qkv",
+     "model.visual.blocks.13.attn.proj",
+     "model.visual.blocks.13.mlp.linear_fc1",
+     "model.visual.blocks.13.mlp.linear_fc2",
+     "model.visual.blocks.14.attn.qkv",
+     "model.visual.blocks.14.attn.proj",
+     "model.visual.blocks.14.mlp.linear_fc1",
+     "model.visual.blocks.14.mlp.linear_fc2",
+     "model.visual.blocks.15.attn.qkv",
+     "model.visual.blocks.15.attn.proj",
+     "model.visual.blocks.15.mlp.linear_fc1",
+     "model.visual.blocks.15.mlp.linear_fc2",
+     "model.visual.blocks.16.attn.qkv",
+     "model.visual.blocks.16.attn.proj",
+     "model.visual.blocks.16.mlp.linear_fc1",
+     "model.visual.blocks.16.mlp.linear_fc2",
+     "model.visual.blocks.17.attn.qkv",
+     "model.visual.blocks.17.attn.proj",
+     "model.visual.blocks.17.mlp.linear_fc1",
+     "model.visual.blocks.17.mlp.linear_fc2",
+     "model.visual.blocks.18.attn.qkv",
+     "model.visual.blocks.18.attn.proj",
+     "model.visual.blocks.18.mlp.linear_fc1",
+     "model.visual.blocks.18.mlp.linear_fc2",
+     "model.visual.blocks.19.attn.qkv",
+     "model.visual.blocks.19.attn.proj",
+     "model.visual.blocks.19.mlp.linear_fc1",
+     "model.visual.blocks.19.mlp.linear_fc2",
+     "model.visual.blocks.20.attn.qkv",
+     "model.visual.blocks.20.attn.proj",
+     "model.visual.blocks.20.mlp.linear_fc1",
+     "model.visual.blocks.20.mlp.linear_fc2",
+     "model.visual.blocks.21.attn.qkv",
+     "model.visual.blocks.21.attn.proj",
+     "model.visual.blocks.21.mlp.linear_fc1",
+     "model.visual.blocks.21.mlp.linear_fc2",
+     "model.visual.blocks.22.attn.qkv",
+     "model.visual.blocks.22.attn.proj",
+     "model.visual.blocks.22.mlp.linear_fc1",
+     "model.visual.blocks.22.mlp.linear_fc2",
+     "model.visual.blocks.23.attn.qkv",
+     "model.visual.blocks.23.attn.proj",
+     "model.visual.blocks.23.mlp.linear_fc1",
+     "model.visual.blocks.23.mlp.linear_fc2",
+     "model.visual.blocks.24.attn.qkv",
+     "model.visual.blocks.24.attn.proj",
+     "model.visual.blocks.24.mlp.linear_fc1",
+     "model.visual.blocks.24.mlp.linear_fc2",
+     "model.visual.blocks.25.attn.qkv",
+     "model.visual.blocks.25.attn.proj",
+     "model.visual.blocks.25.mlp.linear_fc1",
+     "model.visual.blocks.25.mlp.linear_fc2",
+     "model.visual.blocks.26.attn.qkv",
+     "model.visual.blocks.26.attn.proj",
+     "model.visual.blocks.26.mlp.linear_fc1",
+     "model.visual.blocks.26.mlp.linear_fc2",
+     "model.visual.merger.linear_fc1",
+     "model.visual.merger.linear_fc2",
+     "lm_head (output head)"
+    ],
+    "e0m3_tiles": 614657,
+    "device_bytes": {
+     "packed": 12175278080,
+     "scales_placed": 1524367360,
+     "scales_padding": 2457600,
+     "bias": 0
+    },
+    "kernel_set": null
+   },
+   "artifact_weights_sha256": "b81b2032f25caf2df06d1f970afd8d27d17ba5fb92638c0d79502b86b8e1ee62",
+   "artifact_map_sha256": "c020c4fc2a0a724fa99bf0b531a5939f8dccafd8caf0b814b38fbb26dd9511c2",
+   "artifact_weight_kind": "map",
+   "install_seconds": 18.161696434020996,
+   "tasks": {
+    "arc_easy": {
+     "metrics": {
+      "acc,none": 0.75,
+      "acc_stderr,none": 0.09933992677987828,
+      "acc_norm,none": 0.6,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 0.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 1.0
+     },
+     "seconds": 16.714542150497437,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 19.996819972991943,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.782458543777466,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 4464,
+      "tokens": 1109056,
+      "forwards_by_token_bucket": {
+       "512": 3,
+       "256": 5,
+       "64": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 9,
+      "every_linear_every_forward": true
+     }
+    },
+    "arc_challenge": {
+     "metrics": {
+      "acc,none": 0.5,
+      "acc_stderr,none": 0.11470786693528086,
+      "acc_norm,none": 0.6,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 0.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 9.284407138824463,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 20.205164909362793,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.999145030975342,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 4960,
+      "tokens": 1920512,
+      "forwards_by_token_bucket": {
+       "512": 5,
+       "256": 1,
+       "1024": 3,
+       "32": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 10,
+      "every_linear_every_forward": true
+     }
+    },
+    "hellaswag": {
+     "metrics": {
+      "acc,none": 0.6,
+      "acc_stderr,none": 0.11239029738980327,
+      "acc_norm,none": 0.75,
+      "acc_norm_stderr,none": 0.09933992677987828
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 0.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 14.454280138015747,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 20.020482063293457,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.543222427368164,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 4960,
+      "tokens": 1658624,
+      "forwards_by_token_bucket": {
+       "512": 8,
+       "256": 2
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 10,
+      "every_linear_every_forward": true
+     }
+    },
+    "openbookqa": {
+     "metrics": {
+      "acc,none": 0.3,
+      "acc_stderr,none": 0.10513149660756933,
+      "acc_norm,none": 0.35,
+      "acc_norm_stderr,none": 0.10942433098048308
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 9.043206214904785,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 19.929645538330078,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 3.298445463180542,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 3968,
+      "tokens": 584784,
+      "forwards_by_token_bucket": {
+       "512": 2,
+       "256": 1,
+       "64": 2,
+       "128": 3
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 8,
+      "every_linear_every_forward": true
+     }
+    },
+    "boolq": {
+     "metrics": {
+      "acc,none": 0.95,
+      "acc_stderr,none": 0.05000000000000003
+     },
+     "examples": {
+      "0": 0.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 7.1223976612091064,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 21.25105905532837,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 1.4212443828582764,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 1488,
+      "tokens": 1900672,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "4096": 1,
+       "2048": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 3,
+      "every_linear_every_forward": true
+     }
+    },
+    "winogrande": {
+     "metrics": {
+      "acc,none": 0.7,
+      "acc_stderr,none": 0.10513149660756933
+     },
+     "examples": {
+      "0": 0.0,
+      "1": 1.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 0.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 1.0
+     },
+     "seconds": 7.901616096496582,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 19.85304021835327,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 1.9060354232788086,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 2480,
+      "tokens": 416640,
+      "forwards_by_token_bucket": {
+       "256": 5
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "piqa": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.0819178021909125,
+      "acc_norm,none": 0.8,
+      "acc_norm_stderr,none": 0.09176629354822471
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 8.639999389648438,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 20.022721767425537,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 2.058901071548462,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 2480,
+      "tokens": 706304,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "256": 3,
+       "1024": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "gsm8k": {
+     "metrics": {
+      "exact_match,strict-match": 0.8,
+      "exact_match_stderr,strict-match": 0.19999999999999998,
+      "exact_match,flexible-extract": 1.0,
+      "exact_match_stderr,flexible-extract": 0.0
+     },
+     "examples": {
+      "0": {
+       "raw": "\n\nJanet's ducks lay 16 eggs per day.\nShe eats 3 eggs for breakfast and uses 4 eggs to bake muffins, so she uses a total of 3 + 4 = <<3+4=7>>7 eggs.\nThe number of eggs remaining to sell is 16 - 7 = <<16-7=9>>9 eggs.\nShe sells these eggs for $2 each, so she makes 9 * 2 = <<9*2=18>>$18.\n#### 18",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "18"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "18"
+       }
+      },
+      "1": {
+       "raw": "\n\nThe robe takes 2 bolts of blue fiber.\nIt takes half that much white fiber, which is 2 / 2 = <<2/2=1>>1 bolt of white fiber.\nIn total, it takes 2 + 1 = <<2+1=3>>3 bolts.\n#### 3",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "3"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "3"
+       }
+      },
+      "2": {
+       "raw": "\n\nThe house was originally worth $80,000.\nThe value of the house increased by 150%, so the increase in value is $80,000 * 150/100 = $<<80000*150/100=120000>>120,000.\nThe new value of the house is $80,000 + $120,000 = $<<80000+120000=200000>>200,000.\nJosh's total cost was the purchase price plus the repairs, which is $80,000 + $50,000 = $<<80000+50000=130000>>130,000.\nThe profit is the new value minus the total cost, which is $200,000 - $130,000 = $<<200000-130000=70000>>70,000",
+       "strict-match": {
+        "exact_match": 0.0,
+        "response": "[invalid]"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "70,000"
+       }
+      },
+      "3": {
+       "raw": "\n\nHe runs 3 sprints x 3 times a week = <<3*3=9>>9 sprints a week.\nEach sprint is 60 meters, so he runs 9 sprints x 60 meters per sprint = <<9*60=540>>540 meters a week.\n#### 540",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "540"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "540"
+       }
+      },
+      "4": {
+       "raw": "\n\nWendi has 20 chickens, and each chicken needs 3 cups of feed per day.\nThe total amount of feed needed for the day is 20 chickens * 3 cups/chicken = <<20*3=60>>60 cups.\nIn the morning, she gives 15 cups, and in the afternoon, she gives 25 cups.\nThe total feed given so far is 15 cups + 25 cups = <<15+25=40>>40 cups.\nThe amount of feed needed for the final meal is 60 cups - 40 cups = <<60-40=20>>20 cups.\n#### 20",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "20"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "20"
+       }
+      }
+     },
+     "seconds": 32.594268798828125,
+     "examples_evaluated": 5,
+     "peak_gpu_allocated_gib": 21.193065643310547,
+     "n_shot": 5,
+     "chance": 0.0,
+     "model_timing": {
+      "generate_until_seconds": 27.432255029678345,
+      "generate_until_requests": 5
+     },
+     "native_gemm": {
+      "calls": 126976,
+      "tokens": 3340560,
+      "forwards_by_token_bucket": {
+       "8192": 1,
+       "8": 255
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 256,
+      "every_linear_every_forward": true
+     }
+    }
+   },
+   "coverage": {
+    "native": 496,
+    "native_called": 496,
+    "native_not_called": [],
+    "calls": 151776,
+    "tokens": 11637152,
+    "remaining_bf16_linears": [
+     "model.visual.blocks.0.attn.qkv",
+     "model.visual.blocks.0.attn.proj",
+     "model.visual.blocks.0.mlp.linear_fc1",
+     "model.visual.blocks.0.mlp.linear_fc2",
+     "model.visual.blocks.1.attn.qkv",
+     "model.visual.blocks.1.attn.proj",
+     "model.visual.blocks.1.mlp.linear_fc1",
+     "model.visual.blocks.1.mlp.linear_fc2",
+     "model.visual.blocks.2.attn.qkv",
+     "model.visual.blocks.2.attn.proj",
+     "model.visual.blocks.2.mlp.linear_fc1",
+     "model.visual.blocks.2.mlp.linear_fc2",
+     "model.visual.blocks.3.attn.qkv",
+     "model.visual.blocks.3.attn.proj",
+     "model.visual.blocks.3.mlp.linear_fc1",
+     "model.visual.blocks.3.mlp.linear_fc2",
+     "model.visual.blocks.4.attn.qkv",
+     "model.visual.blocks.4.attn.proj",
+     "model.visual.blocks.4.mlp.linear_fc1",
+     "model.visual.blocks.4.mlp.linear_fc2",
+     "model.visual.blocks.5.attn.qkv",
+     "model.visual.blocks.5.attn.proj",
+     "model.visual.blocks.5.mlp.linear_fc1",
+     "model.visual.blocks.5.mlp.linear_fc2",
+     "model.visual.blocks.6.attn.qkv",
+     "model.visual.blocks.6.attn.proj",
+     "model.visual.blocks.6.mlp.linear_fc1",
+     "model.visual.blocks.6.mlp.linear_fc2",
+     "model.visual.blocks.7.attn.qkv",
+     "model.visual.blocks.7.attn.proj",
+     "model.visual.blocks.7.mlp.linear_fc1",
+     "model.visual.blocks.7.mlp.linear_fc2",
+     "model.visual.blocks.8.attn.qkv",
+     "model.visual.blocks.8.attn.proj",
+     "model.visual.blocks.8.mlp.linear_fc1",
+     "model.visual.blocks.8.mlp.linear_fc2",
+     "model.visual.blocks.9.attn.qkv",
+     "model.visual.blocks.9.attn.proj",
+     "model.visual.blocks.9.mlp.linear_fc1",
+     "model.visual.blocks.9.mlp.linear_fc2",
+     "model.visual.blocks.10.attn.qkv",
+     "model.visual.blocks.10.attn.proj",
+     "model.visual.blocks.10.mlp.linear_fc1",
+     "model.visual.blocks.10.mlp.linear_fc2",
+     "model.visual.blocks.11.attn.qkv",
+     "model.visual.blocks.11.attn.proj",
+     "model.visual.blocks.11.mlp.linear_fc1",
+     "model.visual.blocks.11.mlp.linear_fc2",
+     "model.visual.blocks.12.attn.qkv",
+     "model.visual.blocks.12.attn.proj",
+     "model.visual.blocks.12.mlp.linear_fc1",
+     "model.visual.blocks.12.mlp.linear_fc2",
+     "model.visual.blocks.13.attn.qkv",
+     "model.visual.blocks.13.attn.proj",
+     "model.visual.blocks.13.mlp.linear_fc1",
+     "model.visual.blocks.13.mlp.linear_fc2",
+     "model.visual.blocks.14.attn.qkv",
+     "model.visual.blocks.14.attn.proj",
+     "model.visual.blocks.14.mlp.linear_fc1",
+     "model.visual.blocks.14.mlp.linear_fc2",
+     "model.visual.blocks.15.attn.qkv",
+     "model.visual.blocks.15.attn.proj",
+     "model.visual.blocks.15.mlp.linear_fc1",
+     "model.visual.blocks.15.mlp.linear_fc2",
+     "model.visual.blocks.16.attn.qkv",
+     "model.visual.blocks.16.attn.proj",
+     "model.visual.blocks.16.mlp.linear_fc1",
+     "model.visual.blocks.16.mlp.linear_fc2",
+     "model.visual.blocks.17.attn.qkv",
+     "model.visual.blocks.17.attn.proj",
+     "model.visual.blocks.17.mlp.linear_fc1",
+     "model.visual.blocks.17.mlp.linear_fc2",
+     "model.visual.blocks.18.attn.qkv",
+     "model.visual.blocks.18.attn.proj",
+     "model.visual.blocks.18.mlp.linear_fc1",
+     "model.visual.blocks.18.mlp.linear_fc2",
+     "model.visual.blocks.19.attn.qkv",
+     "model.visual.blocks.19.attn.proj",
+     "model.visual.blocks.19.mlp.linear_fc1",
+     "model.visual.blocks.19.mlp.linear_fc2",
+     "model.visual.blocks.20.attn.qkv",
+     "model.visual.blocks.20.attn.proj",
+     "model.visual.blocks.20.mlp.linear_fc1",
+     "model.visual.blocks.20.mlp.linear_fc2",
+     "model.visual.blocks.21.attn.qkv",
+     "model.visual.blocks.21.attn.proj",
+     "model.visual.blocks.21.mlp.linear_fc1",
+     "model.visual.blocks.21.mlp.linear_fc2",
+     "model.visual.blocks.22.attn.qkv",
+     "model.visual.blocks.22.attn.proj",
+     "model.visual.blocks.22.mlp.linear_fc1",
+     "model.visual.blocks.22.mlp.linear_fc2",
+     "model.visual.blocks.23.attn.qkv",
+     "model.visual.blocks.23.attn.proj",
+     "model.visual.blocks.23.mlp.linear_fc1",
+     "model.visual.blocks.23.mlp.linear_fc2",
+     "model.visual.blocks.24.attn.qkv",
+     "model.visual.blocks.24.attn.proj",
+     "model.visual.blocks.24.mlp.linear_fc1",
+     "model.visual.blocks.24.mlp.linear_fc2",
+     "model.visual.blocks.25.attn.qkv",
+     "model.visual.blocks.25.attn.proj",
+     "model.visual.blocks.25.mlp.linear_fc1",
+     "model.visual.blocks.25.mlp.linear_fc2",
+     "model.visual.blocks.26.attn.qkv",
+     "model.visual.blocks.26.attn.proj",
+     "model.visual.blocks.26.mlp.linear_fc1",
+     "model.visual.blocks.26.mlp.linear_fc2",
+     "model.visual.merger.linear_fc1",
+     "model.visual.merger.linear_fc2"
+    ],
+    "remaining_bf16_linears_called": {}
+   },
+   "seconds": 123.95546627044678
+  }
+ },
+ "load_seconds": 95.08081030845642,
+ "tokenization": {
+  "add_bos_token": null,
+  "bos_token": null,
+  "bos_token_id": null,
+  "context_starts_with_bos": false,
+  "probe_ids": [
+   14162,
+   25,
+   220,
+   16
+  ]
+ },
+ "dataset_loads": [
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Easy",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Challenge",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "Rowan/hellaswag",
+   "loaded": "Rowan/hellaswag",
+   "name": null,
+   "revision": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/openbookqa",
+   "loaded": "allenai/openbookqa",
+   "name": "main",
+   "revision": "388097ea7776314e93a529163e0fea805b8a6454",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "aps/super_glue",
+   "loaded": "aps/super_glue",
+   "name": "boolq",
+   "revision": "3de24cf8022e94f4ee4b9d55a6f539891524d646",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/winogrande",
+   "loaded": "allenai/winogrande",
+   "name": "winogrande_xl",
+   "revision": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "baber/piqa",
+   "loaded": "baber/piqa",
+   "name": null,
+   "revision": "142f6d7367fd9877f0fb3b5734ea6a545f54cdd1",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "openai/gsm8k",
+   "loaded": "openai/gsm8k",
+   "name": "main",
+   "revision": "740312add88f781978c0658806c59bc2815b9866",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Easy",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Challenge",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "Rowan/hellaswag",
+   "loaded": "Rowan/hellaswag",
+   "name": null,
+   "revision": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/openbookqa",
+   "loaded": "allenai/openbookqa",
+   "name": "main",
+   "revision": "388097ea7776314e93a529163e0fea805b8a6454",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "aps/super_glue",
+   "loaded": "aps/super_glue",
+   "name": "boolq",
+   "revision": "3de24cf8022e94f4ee4b9d55a6f539891524d646",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/winogrande",
+   "loaded": "allenai/winogrande",
+   "name": "winogrande_xl",
+   "revision": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "baber/piqa",
+   "loaded": "baber/piqa",
+   "name": null,
+   "revision": "142f6d7367fd9877f0fb3b5734ea6a545f54cdd1",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "openai/gsm8k",
+   "loaded": "openai/gsm8k",
+   "name": "main",
+   "revision": "740312add88f781978c0658806c59bc2815b9866",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Easy",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Challenge",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "Rowan/hellaswag",
+   "loaded": "Rowan/hellaswag",
+   "name": null,
+   "revision": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/openbookqa",
+   "loaded": "allenai/openbookqa",
+   "name": "main",
+   "revision": "388097ea7776314e93a529163e0fea805b8a6454",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "aps/super_glue",
+   "loaded": "aps/super_glue",
+   "name": "boolq",
+   "revision": "3de24cf8022e94f4ee4b9d55a6f539891524d646",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/winogrande",
+   "loaded": "allenai/winogrande",
+   "name": "winogrande_xl",
+   "revision": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "baber/piqa",
+   "loaded": "baber/piqa",
+   "name": null,
+   "revision": "142f6d7367fd9877f0fb3b5734ea6a545f54cdd1",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "openai/gsm8k",
+   "loaded": "openai/gsm8k",
+   "name": "main",
+   "revision": "740312add88f781978c0658806c59bc2815b9866",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Easy",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Challenge",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "Rowan/hellaswag",
+   "loaded": "Rowan/hellaswag",
+   "name": null,
+   "revision": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/openbookqa",
+   "loaded": "allenai/openbookqa",
+   "name": "main",
+   "revision": "388097ea7776314e93a529163e0fea805b8a6454",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "aps/super_glue",
+   "loaded": "aps/super_glue",
+   "name": "boolq",
+   "revision": "3de24cf8022e94f4ee4b9d55a6f539891524d646",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/winogrande",
+   "loaded": "allenai/winogrande",
+   "name": "winogrande_xl",
+   "revision": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "baber/piqa",
+   "loaded": "baber/piqa",
+   "name": null,
+   "revision": "142f6d7367fd9877f0fb3b5734ea6a545f54cdd1",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "openai/gsm8k",
+   "loaded": "openai/gsm8k",
+   "name": "main",
+   "revision": "740312add88f781978c0658806c59bc2815b9866",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Easy",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Challenge",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "Rowan/hellaswag",
+   "loaded": "Rowan/hellaswag",
+   "name": null,
+   "revision": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/openbookqa",
+   "loaded": "allenai/openbookqa",
+   "name": "main",
+   "revision": "388097ea7776314e93a529163e0fea805b8a6454",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "aps/super_glue",
+   "loaded": "aps/super_glue",
+   "name": "boolq",
+   "revision": "3de24cf8022e94f4ee4b9d55a6f539891524d646",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/winogrande",
+   "loaded": "allenai/winogrande",
+   "name": "winogrande_xl",
+   "revision": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "baber/piqa",
+   "loaded": "baber/piqa",
+   "name": null,
+   "revision": "142f6d7367fd9877f0fb3b5734ea6a545f54cdd1",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "openai/gsm8k",
+   "loaded": "openai/gsm8k",
+   "name": "main",
+   "revision": "740312add88f781978c0658806c59bc2815b9866",
+   "dropped_trust_remote_code": null
+  }
+ ],
+ "seconds": 898.1707873344421
+}

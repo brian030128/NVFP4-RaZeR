@@ -38,6 +38,10 @@ BF16 Linears, but Qwen's vision tower is outside the text-only scope by design, 
   - no unscoped Linear ever ran (forward hooks count calls).
 - **Rerun:** Qwen was rerun in full. The failed run's record is kept (`runs/qwen27b_failed_coverage_check`).
 
+**8x64 (2026-09-28):** TC 8x64 NativeLinear (`n8k64_wB`) passes the same checks on all four models. The kernel
+widths are measured: gsm8k decode runs every quantized Linear natively, on the 16-wide builds for the auto sets. See
+"8x64 and native kernel widths".
+
 **Recommendation:** lm-eval 0.4.11 (pinned) with the datasets pinned by `lm_eval_datasets.py`, and the 0.4.11 default
 tokenization, which adds BOS for Llama and Mistral. Scores are then not comparable with the earlier 0.4.5 zero-shot
 numbers for those two models; `--no-bos` reproduces 0.4.5 exactly.
@@ -156,6 +160,60 @@ upper estimates, gsm8k especially. Memory is peak GPU allocated.
 - **All five policies on all four models:** about 41 h.
 - **BF16 plus the two native policies:** about 13.5 h.
 
+## 8x64 and native kernel widths (2026-09-28)
+
+**Question:** does the downstream evaluation run the real-quant kernels in decode? Measured: yes. Every gsm8k
+decode step runs every quantized Linear natively.
+- **FourOverSix and TC 16x64** use the auto kernel sets. They decode on the 16-wide CTA-tile builds and prefill on
+  the 128-wide ones.
+- **TC 8x64** runs everything on its single build, `n8k64_wB`: weights on operand B, and no narrow token-tile
+  variants.
+- **How widths are chosen here:** this GPU has no tile table in `sm120/configs` (only the RTX 5090's). The auto sets
+  therefore take `select.fallback_width`, the narrowest width that holds the forward's tokens.
+
+**What was run:** `runs_8x64/smoke_8x64.sh`; `smoke_8x64.{md,json}` from `analyze_smoke.py runs_8x64 smoke_8x64`.
+- Four models, batch 16 (Qwen 8), 20 documents per task (gsm8k 5), lm-eval 0.4.11 with the default BOS.
+- Policies: TC 8x64 fake (c); FourOverSix, TC 16x64 and TC 8x64 native; TC 8x64 native repeated in the same
+  process.
+
+**What is new in `run_lmeval_deploy.py`:**
+- Per native policy and task, a `native_gemm` record holds:
+  - the GEMM calls and tokens;
+  - the model forwards by token-count bucket (`select.bucket`, from a pre-hook on the first NativeLinear);
+  - whether every quantized Linear ran in every forward;
+  - for the auto sets, the calls by CTA tile width (the task's delta of `KernelSet.stats`).
+- After each policy, the install record's `kernel_set` holds its cumulative description.
+- `analyze_smoke.py` takes an output stem. Rerun on `runs/`, it reproduces `smoke.md` and `smoke.json` byte for byte.
+
+**Checks that hold in every record:**
+- every quantized Linear ran in every forward: 128 of 128 native (policy, task) records;
+- for the auto sets, the per-width calls add up to all calls: 64 of 64.
+- In gsm8k, the width-16 calls equal the decode forwards × the Linears exactly, for FourOverSix and TC 16x64 on
+  every model. The one prefill forward (≤ 8192 tokens: 5 prompts) is exactly the width-128 calls.
+
+| model | 8x64 coverage (n8k64_wB) | 8x64 native = fake (c): MC examples; gsm8k texts | 8x64 repeat | gsm8k forwards, prefill + decode: FourOverSix / TC 16x64 / TC 8x64 | 8x64 full-run estimate, native / fake (c) |
+|---|---|---|---|---|---|
+| Llama-3.1-8B | 224 / 224 | 132 / 140; 0 / 5 (accuracy 0.60 vs 0.40) | identical, 8 / 8 tasks | 1 + 154 / 1 + 96 / 1 + 100 | 0.33 h / 1.78 h |
+| Mistral-7B-v0.3 | 224 / 224 | 129 / 140; 1 / 5 (0.00 vs 0.20) | identical, 8 / 8 | 1 + 170 / 1 + 218 / 1 + 223 | 0.66 h / 2.43 h |
+| Phi-4 | 160 / 160 | 132 / 140; 1 / 5 (1.00 vs 1.00) | identical, 8 / 8 | 1 + 182 / 1 + 186 / 1 + 182 | 0.64 h / 1.98 h |
+| Qwen3.8-27B | 496 / 496; 110 vision Linears BF16, 0 calls | 133 / 140; 0 / 5 (0.80 vs 0.80) | identical, 8 / 8 | 1 + 255 / 1 + 255 / 1 + 255 | 2.81 h / 7.89 h |
+
+- **Decode forwards** carry 5 tokens: the 5 gsm8k documents form one batch. In full runs they carry up to 16 tokens
+  (Qwen: 8), which still gives width 16 under the fallback rule.
+- **Prefill and decode widths:** in every model and in both auto sets, the prefill forward is on width 128 and every
+  decode forward is on width 16. The multiple-choice forwards are mostly on width 128, and on 64 or 32 when a
+  forward holds 64 or 32 tokens or fewer.
+- **The 8x64 native and fake (c) policies agree** as closely as the 16x64 ones in Task 3 (16–20 of 20 per task).
+  Greedy gsm8k texts diverge after small numeric differences, as before.
+- **gsm8k answers:**
+  - The 8x64 native answers end in "#### answer" on 5 / 5 documents for Llama, Mistral and Phi-4, and on 4 / 5 for
+    Qwen. Qwen's generation through `n8k64_wB` with the hybrid cache works.
+  - Qwen's fifth document (doc 2) has no "####" line in any of the 11 policy runs of the two smoke tests, BF16
+    included. Its reasoning is coherent but verbose, sometimes with a `<think>` block. lm-eval's 256-token
+    generation limit cuts it off first; that is why Qwen runs all 255 decode steps.
+- **Cost:** the 8x64 native full-run estimate is within 0.05 h of TC 16x64's on the 7–14B models, and 0.23 h
+  shorter on Qwen. These are upper estimates, as above.
+
 ## Open choices for the full runs
 
 1. **Fake (c) on gsm8k** costs 1.1–6.4 h per policy per model. Options:
@@ -169,7 +227,12 @@ upper estimates, gsm8k especially. Memory is peak GPU allocated.
 3. **Records:** per-example correctness and gsm8k texts are recorded, which is enough for paired tests such as
    McNemar. Per-choice log-likelihoods are not recorded yet; adding them would allow more sensitive paired
    comparisons.
-4. **lm-eval 0.4.5** logs a harmless "Repo id must be a string" warning when given a model object; it only affects
+4. **Qwen's gsm8k and the generation limit:** at lm-eval's default `max_gen_toks` = 256, one of Qwen's 5 smoke
+   documents is cut off before its answer line in every policy, BF16 included. Qwen's gsm8k score is therefore
+   partly a truncation measure. Options:
+   - keep the default (comparable with other lm-eval numbers);
+   - raise the limit for all models, which is a task-setting change and raises the gsm8k estimates.
+5. **lm-eval 0.4.5** logs a harmless "Repo id must be a string" warning when given a model object; it only affects
    its model-info lookup.
 
 ## How to run
@@ -191,5 +254,5 @@ determinism check.
     is kept.
 - **Version checks:** `compare_versions.py` gives `versions.{md,json}` and `versions_diffs/`; `compare_requests.py`
   gives `requests.{md,json}`.
-- **Smoke tests:** `analyze_smoke.py` gives `smoke.{md,json}`. The records are in `runs/<model>/report.json`, the
+- **Smoke tests:** `analyze_smoke.py` gives `smoke.{md,json}`, and `smoke_8x64.{md,json}` from `runs_8x64/`. The records are in `runs/<model>/report.json`, the
   cross-checks in `runs/xcheck_*`, the queue in `runs/smoke.sh`, `runs/rerun_qwen.sh` and `runs/commands.txt`.

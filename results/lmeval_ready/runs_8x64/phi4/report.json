@@ -1,0 +1,2724 @@
+{
+ "status": "complete",
+ "model": "phi4",
+ "evaluate": [
+  "tc-8x64-fake=fake:map:/home/dev/n16k64_campaign/deploy_eval/artifacts/phi4_tc_8x64.mixfp4map",
+  "FourOverSix=native:/home/dev/n16k64_campaign/deploy_eval/artifacts/phi4_fo6",
+  "tc-16x64=native:/home/dev/n16k64_campaign/deploy_eval/artifacts/phi4_tc_16x64",
+  "tc-8x64=native:/home/dev/n16k64_campaign/deploy_eval/artifacts/phi4_tc_8x64"
+ ],
+ "tasks": [
+  "arc_easy",
+  "arc_challenge",
+  "hellaswag",
+  "openbookqa",
+  "boolq",
+  "winogrande",
+  "piqa",
+  "gsm8k"
+ ],
+ "limit": 20,
+ "gsm8k_limit": 5,
+ "batch_size": 16,
+ "no_bos": false,
+ "lm_eval_path": "/home/dev/.conda/envs/n16k64/lib/python3.11/site-packages/lm_eval/__init__.py",
+ "versions": {
+  "lm_eval": "0.4.11",
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "datasets": "4.8.5"
+ },
+ "dataset_pins": {
+  "allenai/ai2_arc": "210d026faf9955653af8916fad021475a3f00453",
+  "Rowan/hellaswag": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+  "allenai/openbookqa": "388097ea7776314e93a529163e0fea805b8a6454",
+  "aps/super_glue": "3de24cf8022e94f4ee4b9d55a6f539891524d646",
+  "allenai/winogrande": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+  "baber/piqa": "142f6d7367fd9877f0fb3b5734ea6a545f54cdd1",
+  "openai/gsm8k": "740312add88f781978c0658806c59bc2815b9866"
+ },
+ "host": {
+  "hostname": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+ },
+ "started_utc": "2026-09-28T05:04:02+00:00",
+ "evaluations": {
+  "tc-8x64-fake": {
+   "label": "tc-8x64-fake",
+   "kind": "fake",
+   "weight": "map",
+   "map": "/home/dev/n16k64_campaign/deploy_eval/artifacts/phi4_tc_8x64.mixfp4map",
+   "backend": "fake (c)",
+   "map_sha256": "4038414a2c9d1179040af3a24bcea7c86fed88b27d50038643185bda39a60b39",
+   "type_block": [
+    8,
+    64
+   ],
+   "e0m3_tiles": 418023,
+   "installed_weight_sha256": "2157a01b69754826c9203a986dc0ce0866dffb793d9799bc0957192ff5788b83",
+   "install_seconds": 60.55863904953003,
+   "tasks": {
+    "arc_easy": {
+     "metrics": {
+      "acc,none": 0.75,
+      "acc_stderr,none": 0.09933992677987828,
+      "acc_norm,none": 0.55,
+      "acc_norm_stderr,none": 0.11413288653790232
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 0.0,
+      "19": 1.0
+     },
+     "seconds": 7.4375083446502686,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 28.14000368118286,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 1.2538201808929443,
+      "loglikelihood_requests": 80
+     }
+    },
+    "arc_challenge": {
+     "metrics": {
+      "acc,none": 0.45,
+      "acc_stderr,none": 0.11413288653790232,
+      "acc_norm,none": 0.6,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 0.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 0.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 0.0
+     },
+     "seconds": 7.045705556869507,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 28.466323375701904,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 1.1681478023529053,
+      "loglikelihood_requests": 80
+     }
+    },
+    "hellaswag": {
+     "metrics": {
+      "acc,none": 0.5,
+      "acc_stderr,none": 0.11470786693528086,
+      "acc_norm,none": 0.8,
+      "acc_norm_stderr,none": 0.0917662935482247
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 12.563977241516113,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 28.196043968200684,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.936166524887085,
+      "loglikelihood_requests": 80
+     }
+    },
+    "openbookqa": {
+     "metrics": {
+      "acc,none": 0.2,
+      "acc_stderr,none": 0.09176629354822471,
+      "acc_norm,none": 0.4,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 7.143654823303223,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 27.929851055145264,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.636237382888794,
+      "loglikelihood_requests": 80
+     }
+    },
+    "boolq": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.08191780219091253
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 0.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 7.8098227977752686,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 31.042183876037598,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 1.478224754333496,
+      "loglikelihood_requests": 40
+     }
+    },
+    "winogrande": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.08191780219091253
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 0.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 7.528031587600708,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 27.69167947769165,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 0.4242584705352783,
+      "loglikelihood_requests": 40
+     }
+    },
+    "piqa": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.0819178021909125,
+      "acc_norm,none": 0.9,
+      "acc_norm_stderr,none": 0.06882472016116853
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 7.498653173446655,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 28.23808240890503,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 0.5534298419952393,
+      "loglikelihood_requests": 40
+     }
+    },
+    "gsm8k": {
+     "metrics": {
+      "exact_match,strict-match": 1.0,
+      "exact_match_stderr,strict-match": 0.0,
+      "exact_match,flexible-extract": 1.0,
+      "exact_match_stderr,flexible-extract": 0.0
+     },
+     "examples": {
+      "0": {
+       "raw": " Janet eats 3 + 4 = <<3+4=7>>7 eggs every day.\nShe sells 16 - 7 = <<16-7=9>>9 eggs every day.\nShe makes 9 * $2 = $<<9*2=18>>18 every day.\n#### 18\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "18"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "18"
+       }
+      },
+      "1": {
+       "raw": " A robe takes 2 bolts of blue fiber and 2/2 = <<2/2=1>>1 bolt of white fiber.\nThus, a robe takes 2 + 1 = <<2+1=3>>3 bolts in total.\n#### 3\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "3"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "3"
+       }
+      },
+      "2": {
+       "raw": " The value of the house increased by 150% of $80,000, which is 150/100*$80,000 = $<<150/100*80000=120000>>120,000.\nSo the value of the house is now $80,000 + $120,000 = $<<80000+120000=200000>>200,000.\nJosh spent $80,000 to buy the house and $50,000 to repair it, so he spent a total of $80,000 + $50,000 = $<<80000+50000=130000>>130,000.\nSince the value of the house is now $200,000 and Josh spent $130,000, he made a profit of $200,000 - $130,000 = $<<200000-130000=70000>>70,000.\n#### 70000\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "70000"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "70000"
+       }
+      },
+      "3": {
+       "raw": " James runs 3 sprints * 60 meters per sprint = <<3*60=180>>180 meters per session.\nHe runs 3 sessions per week, so he runs 180 meters per session * 3 sessions per week = <<180*3=540>>540 meters per week.\n#### 540\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "540"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "540"
+       }
+      },
+      "4": {
+       "raw": " Wendi feeds her chickens 3 cups of feed per chicken per day.\nIn the morning, she feeds her chickens 15 cups of feed.\nIn the afternoon, she feeds her chickens 25 cups of feed.\nIn total, she feeds her chickens 15 + 25 = <<15+25=40>>40 cups of feed.\nWendi has 20 chickens.\nSo, she feeds her chickens 40 / 20 = <<40/20=2>>2 cups of feed per chicken.\nSince she feeds her chickens 3 cups of feed per chicken per day, she needs to feed her chickens 3 - 2 = <<3-2=1>>1 cup of feed per chicken in the final meal of the day.\nSince she has 20 chickens, she needs to feed her chickens 1 * 20 = <<1*20=20>>20 cups of feed in the final meal of the day.\n#### 20\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "20"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "20"
+       }
+      }
+     },
+     "seconds": 28.98204731941223,
+     "examples_evaluated": 5,
+     "peak_gpu_allocated_gib": 31.11831521987915,
+     "n_shot": 5,
+     "chance": 0.0,
+     "model_timing": {
+      "generate_until_seconds": 22.95982265472412,
+      "generate_until_requests": 5
+     }
+    }
+   },
+   "seconds": 146.5841748714447
+  },
+  "FourOverSix": {
+   "label": "FourOverSix",
+   "kind": "native",
+   "artifact": "/home/dev/n16k64_campaign/deploy_eval/artifacts/phi4_fo6",
+   "kernel": "auto_stock",
+   "backend": "NativeLinear (c)",
+   "install": {
+    "kernel": "KernelSet(stock)",
+    "kernel_sha256": {
+     "stock_wA_n16": "3f563ca61ae712971db424dbf61e6f2f847d3941f8423c16316ca83a2562c749",
+     "stock_wA_n32": "a67179aed96d9683fdb4ab5bded2071eb355cf353124c2b16a99fb8f090d59dc",
+     "stock_wA_n64": "88199433928844ab48ebbae42a048d50e68202d0dcfbe1c89b86819f7b6cdc7b",
+     "stock_wA": "13c13a23ed145a8ac191179b16f302f0f0ef3bb38e60d73283fbce200965418c"
+    },
+    "artifact_weights_sha256": "671c109b385c828d4e04be18c5cd668a4c0e88603e4e4341e338beadf9f48b84",
+    "map_sha256": null,
+    "native_modules": 160,
+    "fallback": [],
+    "bf16_by_design": [
+     "lm_head (output head)"
+    ],
+    "e0m3_tiles": 0,
+    "device_bytes": {
+     "packed": 6815744000,
+     "scales_placed": 851968000,
+     "scales_padding": 0,
+     "bias": 0
+    },
+    "kernel_set": {
+     "family": "stock",
+     "kernels": {
+      "stock_wA_n16": "3f563ca61ae712971db424dbf61e6f2f847d3941f8423c16316ca83a2562c749",
+      "stock_wA_n32": "a67179aed96d9683fdb4ab5bded2071eb355cf353124c2b16a99fb8f090d59dc",
+      "stock_wA_n64": "88199433928844ab48ebbae42a048d50e68202d0dcfbe1c89b86819f7b6cdc7b",
+      "stock_wA": "13c13a23ed145a8ac191179b16f302f0f0ef3bb38e60d73283fbce200965418c"
+     },
+     "table": null,
+     "table_shapes": 0,
+     "calls_by_width": {
+      "16": 29120,
+      "64": 160,
+      "128": 4320
+     }
+    }
+   },
+   "artifact_weights_sha256": "671c109b385c828d4e04be18c5cd668a4c0e88603e4e4341e338beadf9f48b84",
+   "artifact_map_sha256": null,
+   "artifact_weight_kind": "four_over_six",
+   "install_seconds": 22.225855112075806,
+   "tasks": {
+    "arc_easy": {
+     "metrics": {
+      "acc,none": 0.8,
+      "acc_stderr,none": 0.0917662935482247,
+      "acc_norm,none": 0.6,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 0.0,
+      "19": 1.0
+     },
+     "seconds": 5.390947341918945,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.494938850402832,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.25522637367248535,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 800,
+      "tokens": 385920,
+      "forwards_by_token_bucket": {
+       "1024": 2,
+       "512": 2,
+       "64": 1
+      },
+      "calls_by_width": {
+       "128": 640,
+       "64": 160
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "arc_challenge": {
+     "metrics": {
+      "acc,none": 0.55,
+      "acc_stderr,none": 0.11413288653790232,
+      "acc_norm,none": 0.6,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 0.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 0.0
+     },
+     "seconds": 5.762614727020264,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.753435611724854,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.2662487030029297,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 800,
+      "tokens": 650240,
+      "forwards_by_token_bucket": {
+       "1024": 2,
+       "2048": 2,
+       "256": 1
+      },
+      "calls_by_width": {
+       "128": 800
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "hellaswag": {
+     "metrics": {
+      "acc,none": 0.55,
+      "acc_stderr,none": 0.11413288653790232,
+      "acc_norm,none": 0.75,
+      "acc_norm_stderr,none": 0.09933992677987828
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 0.0,
+      "9": 0.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 7.990078449249268,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.58952283859253,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.2148268222808838,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 800,
+      "tokens": 565760,
+      "forwards_by_token_bucket": {
+       "1024": 4,
+       "512": 1
+      },
+      "calls_by_width": {
+       "128": 800
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "openbookqa": {
+     "metrics": {
+      "acc,none": 0.25,
+      "acc_stderr,none": 0.09933992677987828,
+      "acc_norm,none": 0.4,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 5.817964792251587,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.366657257080078,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.19521307945251465,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 640,
+      "tokens": 211200,
+      "forwards_by_token_bucket": {
+       "1024": 1,
+       "512": 1,
+       "256": 1,
+       "128": 1
+      },
+      "calls_by_width": {
+       "128": 640
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 4,
+      "every_linear_every_forward": true
+     }
+    },
+    "boolq": {
+     "metrics": {
+      "acc,none": 0.75,
+      "acc_stderr,none": 0.09933992677987828
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 0.0,
+      "17": 1.0,
+      "18": 0.0,
+      "19": 1.0
+     },
+     "seconds": 5.779531955718994,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 11.010907649993896,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 0.28206562995910645,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 320,
+      "tokens": 782080,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "8192": 1
+      },
+      "calls_by_width": {
+       "128": 320
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 2,
+      "every_linear_every_forward": true
+     }
+    },
+    "winogrande": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.08191780219091252
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 6.1839540004730225,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.275437831878662,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 0.14043688774108887,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 480,
+      "tokens": 139520,
+      "forwards_by_token_bucket": {
+       "512": 2,
+       "256": 1
+      },
+      "calls_by_width": {
+       "128": 480
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 3,
+      "every_linear_every_forward": true
+     }
+    },
+    "piqa": {
+     "metrics": {
+      "acc,none": 0.8,
+      "acc_stderr,none": 0.09176629354822471,
+      "acc_norm,none": 0.9,
+      "acc_norm_stderr,none": 0.06882472016116853
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 6.560840368270874,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.51804780960083,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 0.14467215538024902,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 480,
+      "tokens": 259840,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "2048": 1,
+       "256": 1
+      },
+      "calls_by_width": {
+       "128": 480
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 3,
+      "every_linear_every_forward": true
+     }
+    },
+    "gsm8k": {
+     "metrics": {
+      "exact_match,strict-match": 1.0,
+      "exact_match_stderr,strict-match": 0.0,
+      "exact_match,flexible-extract": 1.0,
+      "exact_match_stderr,flexible-extract": 0.0
+     },
+     "examples": {
+      "0": {
+       "raw": " Janet eats 3 + 4 = <<3+4=7>>7 eggs every day.\nShe sells 16 - 7 = <<16-7=9>>9 eggs every day.\nShe makes 9 * $2 = $<<9*2=18>>18 every day.\n#### 18\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "18"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "18"
+       }
+      },
+      "1": {
+       "raw": " It takes 2 bolts of blue fiber and 2/2 = <<2/2=1>>1 bolt of white fiber.\nIn total, it takes 2 + 1 = <<2+1=3>>3 bolts of fiber.\n#### 3\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "3"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "3"
+       }
+      },
+      "2": {
+       "raw": " The value of the house increased by 150% of $80,000, which is 150/100*$80,000 = $<<150/100*80000=120000>>120,000.\nSo the value of the house is now $80,000 + $120,000 = $<<80000+120000=200000>>200,000.\nJosh spent $80,000 to buy the house and $50,000 to repair it, so he spent a total of $80,000 + $50,000 = $<<80000+50000=130000>>130,000.\nSince the value of the house is now $200,000 and Josh spent $130,000, he made a profit of $200,000 - $130,000 = $<<200000-130000=70000>>70,000.\n#### 70000\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "70000"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "70000"
+       }
+      },
+      "3": {
+       "raw": " James runs 3 sprints * 3 times a week = <<3*3=9>>9 sprints a week.\nHe runs 9 sprints * 60 meters per sprint = <<9*60=540>>540 meters a week.\n#### 540\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "540"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "540"
+       }
+      },
+      "4": {
+       "raw": " Wendi feeds her chickens 3 cups of feed per chicken per day.\nWendi's flock of chickens is 20 chickens.\nWendi feeds her chickens 3 cups/chicken * 20 chickens = <<3*20=60>>60 cups of feed per day.\nWendi feeds her chickens 15 cups of feed in the morning.\nWendi feeds her chickens 25 cups of feed in the afternoon.\nWendi feeds her chickens 15 cups + 25 cups = <<15+25=40>>40 cups of feed in the morning and afternoon.\nWendi feeds her chickens 60 cups - 40 cups = <<60-40=20>>20 cups of feed in the final meal of the day.\n#### 20\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "20"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "20"
+       }
+      }
+     },
+     "seconds": 13.26265811920166,
+     "examples_evaluated": 5,
+     "peak_gpu_allocated_gib": 10.801001071929932,
+     "n_shot": 5,
+     "chance": 0.0,
+     "model_timing": {
+      "generate_until_seconds": 7.634462118148804,
+      "generate_until_requests": 5
+     },
+     "native_gemm": {
+      "calls": 29280,
+      "tokens": 904000,
+      "forwards_by_token_bucket": {
+       "8192": 1,
+       "8": 182
+      },
+      "calls_by_width": {
+       "128": 160,
+       "16": 29120
+      },
+      "kernel": "KernelSet(stock)",
+      "forwards": 183,
+      "every_linear_every_forward": true
+     }
+    }
+   },
+   "coverage": {
+    "native": 160,
+    "native_called": 160,
+    "native_not_called": [],
+    "calls": 33600,
+    "tokens": 3898560,
+    "remaining_bf16_linears": [],
+    "remaining_bf16_linears_called": {}
+   },
+   "seconds": 78.98986577987671
+  },
+  "tc-16x64": {
+   "label": "tc-16x64",
+   "kind": "native",
+   "artifact": "/home/dev/n16k64_campaign/deploy_eval/artifacts/phi4_tc_16x64",
+   "kernel": "auto",
+   "backend": "NativeLinear (c)",
+   "install": {
+    "kernel": "KernelSet(mixed)",
+    "kernel_sha256": {
+     "n16k64_wA_n16": "773f183ed3130c47c3ae0b3c1c63dbf344c48d998dc313dabb5e00bf56d2ac76",
+     "n16k64_wA_n32": "a70d49fefba0ae6391898332007b21c360d39c48e317fb5a0a4c2561d82c25ac",
+     "n16k64_wA_n64": "0ce3bcc9360a77ee595e6b7ef72ebbe0c020c30c368574686362e2fbf176439e",
+     "n16k64_wA": "be8fd62d97b231c69e64afc62f1f31fbcf4535a45759f8feb13aeadfb86fe332"
+    },
+    "artifact_weights_sha256": "4323bf9d699a38c7ddfc19a04a9c8a0e023d90436e4c09136e862306d32b47dd",
+    "map_sha256": "ec07b7b0ec20839018c85e9628460f21272506851b69dd7a0c03a3e2e2fb031a",
+    "native_modules": 160,
+    "fallback": [],
+    "bf16_by_design": [
+     "lm_head (output head)"
+    ],
+    "e0m3_tiles": 287062,
+    "device_bytes": {
+     "packed": 6815744000,
+     "scales_placed": 851968000,
+     "scales_padding": 0,
+     "bias": 0
+    },
+    "kernel_set": {
+     "family": "mixed",
+     "kernels": {
+      "n16k64_wA_n16": "773f183ed3130c47c3ae0b3c1c63dbf344c48d998dc313dabb5e00bf56d2ac76",
+      "n16k64_wA_n32": "a70d49fefba0ae6391898332007b21c360d39c48e317fb5a0a4c2561d82c25ac",
+      "n16k64_wA_n64": "0ce3bcc9360a77ee595e6b7ef72ebbe0c020c30c368574686362e2fbf176439e",
+      "n16k64_wA": "be8fd62d97b231c69e64afc62f1f31fbcf4535a45759f8feb13aeadfb86fe332"
+     },
+     "table": null,
+     "table_shapes": 0,
+     "calls_by_width": {
+      "16": 29760,
+      "64": 160,
+      "128": 4320
+     }
+    }
+   },
+   "artifact_weights_sha256": "4323bf9d699a38c7ddfc19a04a9c8a0e023d90436e4c09136e862306d32b47dd",
+   "artifact_map_sha256": "ec07b7b0ec20839018c85e9628460f21272506851b69dd7a0c03a3e2e2fb031a",
+   "artifact_weight_kind": "map",
+   "install_seconds": 13.515182733535767,
+   "tasks": {
+    "arc_easy": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.0819178021909125,
+      "acc_norm,none": 0.6,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 0.0,
+      "19": 1.0
+     },
+     "seconds": 5.778743267059326,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.494938850402832,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.2531461715698242,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 800,
+      "tokens": 385920,
+      "forwards_by_token_bucket": {
+       "1024": 2,
+       "512": 2,
+       "64": 1
+      },
+      "calls_by_width": {
+       "128": 640,
+       "64": 160
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "arc_challenge": {
+     "metrics": {
+      "acc,none": 0.45,
+      "acc_stderr,none": 0.11413288653790232,
+      "acc_norm,none": 0.6,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 0.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 0.0
+     },
+     "seconds": 5.106490850448608,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.753435611724854,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.2682826519012451,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 800,
+      "tokens": 650240,
+      "forwards_by_token_bucket": {
+       "1024": 2,
+       "2048": 2,
+       "256": 1
+      },
+      "calls_by_width": {
+       "128": 800
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "hellaswag": {
+     "metrics": {
+      "acc,none": 0.5,
+      "acc_stderr,none": 0.11470786693528086,
+      "acc_norm,none": 0.8,
+      "acc_norm_stderr,none": 0.0917662935482247
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 7.3057520389556885,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.58952283859253,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.2149360179901123,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 800,
+      "tokens": 565760,
+      "forwards_by_token_bucket": {
+       "1024": 4,
+       "512": 1
+      },
+      "calls_by_width": {
+       "128": 800
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "openbookqa": {
+     "metrics": {
+      "acc,none": 0.2,
+      "acc_stderr,none": 0.09176629354822471,
+      "acc_norm,none": 0.4,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 5.733989000320435,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.366657257080078,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.19162726402282715,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 640,
+      "tokens": 211200,
+      "forwards_by_token_bucket": {
+       "1024": 1,
+       "512": 1,
+       "256": 1,
+       "128": 1
+      },
+      "calls_by_width": {
+       "128": 640
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 4,
+      "every_linear_every_forward": true
+     }
+    },
+    "boolq": {
+     "metrics": {
+      "acc,none": 0.9,
+      "acc_stderr,none": 0.06882472016116853
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 0.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 5.772929668426514,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 11.010907649993896,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 0.28525829315185547,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 320,
+      "tokens": 782080,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "8192": 1
+      },
+      "calls_by_width": {
+       "128": 320
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 2,
+      "every_linear_every_forward": true
+     }
+    },
+    "winogrande": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.08191780219091252
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 6.034656763076782,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.275437831878662,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 0.13904356956481934,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 480,
+      "tokens": 139520,
+      "forwards_by_token_bucket": {
+       "512": 2,
+       "256": 1
+      },
+      "calls_by_width": {
+       "128": 480
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 3,
+      "every_linear_every_forward": true
+     }
+    },
+    "piqa": {
+     "metrics": {
+      "acc,none": 0.8,
+      "acc_stderr,none": 0.09176629354822471,
+      "acc_norm,none": 0.85,
+      "acc_norm_stderr,none": 0.0819178021909125
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 6.476975202560425,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.51804780960083,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 0.14261078834533691,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 480,
+      "tokens": 259840,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "2048": 1,
+       "256": 1
+      },
+      "calls_by_width": {
+       "128": 480
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 3,
+      "every_linear_every_forward": true
+     }
+    },
+    "gsm8k": {
+     "metrics": {
+      "exact_match,strict-match": 1.0,
+      "exact_match_stderr,strict-match": 0.0,
+      "exact_match,flexible-extract": 1.0,
+      "exact_match_stderr,flexible-extract": 0.0
+     },
+     "examples": {
+      "0": {
+       "raw": " Janet eats 3 + 4 = <<3+4=7>>7 eggs every day.\nShe sells 16 - 7 = <<16-7=9>>9 eggs every day.\nShe makes 9 * $2 = $<<9*2=18>>18 every day.\n#### 18\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "18"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "18"
+       }
+      },
+      "1": {
+       "raw": " A robe takes 2 bolts of blue fiber and half that much white fiber.\nThus, a robe takes 2 + 2/2 = <<2+2/2=3>>3 bolts in total.\n#### 3\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "3"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "3"
+       }
+      },
+      "2": {
+       "raw": " The value of the house increased by 150% of the original value, so the value of the house increased by 150/100*$80,000 = $<<150/100*80000=120000>>120,000.\nThe value of the house is now $80,000 + $120,000 = $<<80000+120000=200000>>200,000.\nJosh spent $80,000 to buy the house and $50,000 to repair it, so he spent a total of $80,000 + $50,000 = $<<80000+50000=130000>>130,000.\nSince the value of the house is now $200,000 and Josh spent $130,000, he made a profit of $200,000 - $130,000 = $<<200000-130000=70000>>70,000.\n#### 70000\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "70000"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "70000"
+       }
+      },
+      "3": {
+       "raw": " James runs 3 sprints * 60 meters per sprint = <<3*60=180>>180 meters per day.\nHe runs 180 meters per day * 3 days per week = <<180*3=540>>540 meters per week.\n#### 540\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "540"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "540"
+       }
+      },
+      "4": {
+       "raw": " Wendi feeds her chickens 3 cups of feed per chicken per day.\nWendi's flock of chickens is 20 chickens.\nWendi feeds her chickens 3 x 20 = <<3*20=60>>60 cups of feed per day.\nWendi feeds her chickens 15 cups of feed in the morning.\nWendi feeds her chickens 25 cups of feed in the afternoon.\nWendi feeds her chickens 15 + 25 = <<15+25=40>>40 cups of feed in the morning and afternoon.\nWendi feeds her chickens 60 - 40 = <<60-40=20>>20 cups of feed in the final meal of the day.\n#### 20\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "20"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "20"
+       }
+      }
+     },
+     "seconds": 13.362605810165405,
+     "examples_evaluated": 5,
+     "peak_gpu_allocated_gib": 10.801001071929932,
+     "n_shot": 5,
+     "chance": 0.0,
+     "model_timing": {
+      "generate_until_seconds": 8.047125577926636,
+      "generate_until_requests": 5
+     },
+     "native_gemm": {
+      "calls": 29920,
+      "tokens": 907200,
+      "forwards_by_token_bucket": {
+       "8192": 1,
+       "8": 186
+      },
+      "calls_by_width": {
+       "128": 160,
+       "16": 29760
+      },
+      "kernel": "KernelSet(mixed)",
+      "forwards": 187,
+      "every_linear_every_forward": true
+     }
+    }
+   },
+   "coverage": {
+    "native": 160,
+    "native_called": 160,
+    "native_not_called": [],
+    "calls": 34240,
+    "tokens": 3901760,
+    "remaining_bf16_linears": [],
+    "remaining_bf16_linears_called": {}
+   },
+   "seconds": 69.10821342468262
+  },
+  "tc-8x64": {
+   "label": "tc-8x64",
+   "kind": "native",
+   "artifact": "/home/dev/n16k64_campaign/deploy_eval/artifacts/phi4_tc_8x64",
+   "kernel": "n8k64_wB",
+   "backend": "NativeLinear (c)",
+   "install": {
+    "kernel": "n8k64_wB",
+    "kernel_sha256": "8d504d10070b952bc499d346aab96175749e834da277874fb3ceeb155fbfaf53",
+    "artifact_weights_sha256": "ec7fd743323503d5d047ffe9d04be35a9796fa6e064bb13f8a15dc6638d40e2b",
+    "map_sha256": "4038414a2c9d1179040af3a24bcea7c86fed88b27d50038643185bda39a60b39",
+    "native_modules": 160,
+    "fallback": [],
+    "bf16_by_design": [
+     "lm_head (output head)"
+    ],
+    "e0m3_tiles": 418023,
+    "device_bytes": {
+     "packed": 6815744000,
+     "scales_placed": 851968000,
+     "scales_padding": 0,
+     "bias": 0
+    },
+    "kernel_set": null
+   },
+   "artifact_weights_sha256": "ec7fd743323503d5d047ffe9d04be35a9796fa6e064bb13f8a15dc6638d40e2b",
+   "artifact_map_sha256": "4038414a2c9d1179040af3a24bcea7c86fed88b27d50038643185bda39a60b39",
+   "artifact_weight_kind": "map",
+   "install_seconds": 16.36205816268921,
+   "tasks": {
+    "arc_easy": {
+     "metrics": {
+      "acc,none": 0.8,
+      "acc_stderr,none": 0.0917662935482247,
+      "acc_norm,none": 0.6,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 0.0,
+      "19": 1.0
+     },
+     "seconds": 5.3531317710876465,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.494938850402832,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.25354814529418945,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 800,
+      "tokens": 385920,
+      "forwards_by_token_bucket": {
+       "1024": 2,
+       "512": 2,
+       "64": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "arc_challenge": {
+     "metrics": {
+      "acc,none": 0.45,
+      "acc_stderr,none": 0.11413288653790232,
+      "acc_norm,none": 0.55,
+      "acc_norm_stderr,none": 0.11413288653790232
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 0.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 0.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 0.0
+     },
+     "seconds": 5.850220680236816,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.753435611724854,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.27418947219848633,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 800,
+      "tokens": 650240,
+      "forwards_by_token_bucket": {
+       "1024": 2,
+       "2048": 2,
+       "256": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "hellaswag": {
+     "metrics": {
+      "acc,none": 0.45,
+      "acc_stderr,none": 0.11413288653790232,
+      "acc_norm,none": 0.8,
+      "acc_norm_stderr,none": 0.0917662935482247
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 7.483089447021484,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.58952283859253,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.2493128776550293,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 800,
+      "tokens": 565760,
+      "forwards_by_token_bucket": {
+       "1024": 4,
+       "512": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "openbookqa": {
+     "metrics": {
+      "acc,none": 0.25,
+      "acc_stderr,none": 0.09933992677987828,
+      "acc_norm,none": 0.4,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 5.786310434341431,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.366657257080078,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.19620084762573242,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 640,
+      "tokens": 211200,
+      "forwards_by_token_bucket": {
+       "1024": 1,
+       "512": 1,
+       "256": 1,
+       "128": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 4,
+      "every_linear_every_forward": true
+     }
+    },
+    "boolq": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.0819178021909125
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 0.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 5.284123659133911,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 11.010907649993896,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 0.2955505847930908,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 320,
+      "tokens": 782080,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "8192": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 2,
+      "every_linear_every_forward": true
+     }
+    },
+    "winogrande": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.08191780219091252
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 10.816718101501465,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.275437831878662,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 0.13962864875793457,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 480,
+      "tokens": 139520,
+      "forwards_by_token_bucket": {
+       "512": 2,
+       "256": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 3,
+      "every_linear_every_forward": true
+     }
+    },
+    "piqa": {
+     "metrics": {
+      "acc,none": 0.8,
+      "acc_stderr,none": 0.09176629354822471,
+      "acc_norm,none": 0.9,
+      "acc_norm_stderr,none": 0.06882472016116853
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 12.69310998916626,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.51804780960083,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 0.1479799747467041,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 480,
+      "tokens": 259840,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "2048": 1,
+       "256": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 3,
+      "every_linear_every_forward": true
+     }
+    },
+    "gsm8k": {
+     "metrics": {
+      "exact_match,strict-match": 1.0,
+      "exact_match_stderr,strict-match": 0.0,
+      "exact_match,flexible-extract": 1.0,
+      "exact_match_stderr,flexible-extract": 0.0
+     },
+     "examples": {
+      "0": {
+       "raw": " Janet eats 3 eggs for breakfast and bakes 4 eggs for muffins, so she uses 3 + 4 = <<3+4=7>>7 eggs.\nShe has 16 - 7 = <<16-7=9>>9 eggs left.\nShe sells the eggs for $2 each, so she makes 9 * $2 = $<<9*2=18>>18 every day.\n#### 18\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "18"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "18"
+       }
+      },
+      "1": {
+       "raw": " A robe takes 2 bolts of blue fiber and half that much white fiber.\nThus, a robe takes 2 + 2/2 = <<2+2/2=3>>3 bolts of fiber in total.\n#### 3\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "3"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "3"
+       }
+      },
+      "2": {
+       "raw": " The value of the house increased by 150% of $80,000, which is 150/100*$80,000 = $<<150/100*80000=120000>>120,000.\nSo the value of the house is now $80,000 + $120,000 = $<<80000+120000=200000>>200,000.\nJosh spent $80,000 to buy the house and $50,000 to repair it, so he spent a total of $80,000 + $50,000 = $<<80000+50000=130000>>130,000.\nSince the value of the house is now $200,000 and Josh spent $130,000, he made a profit of $200,000 - $130,000 = $<<200000-130000=70000>>70,000.\n#### 70000\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "70000"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "70000"
+       }
+      },
+      "3": {
+       "raw": " James runs 3 sprints * 3 times a week = <<3*3=9>>9 sprints a week.\nHe runs 9 sprints * 60 meters per sprint = <<9*60=540>>540 meters a week.\n#### 540\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "540"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "540"
+       }
+      },
+      "4": {
+       "raw": " Wendi feeds her chickens 3 cups of feed per chicken per day.\nShe has 20 chickens, so she needs to feed them 20 x 3 = <<20*3=60>>60 cups of feed per day.\nShe has already fed them 15 + 25 = <<15+25=40>>40 cups of feed.\nShe needs to feed them 60 - 40 = <<60-40=20>>20 more cups of feed.\n#### 20\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "20"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "20"
+       }
+      }
+     },
+     "seconds": 16.00302243232727,
+     "examples_evaluated": 5,
+     "peak_gpu_allocated_gib": 10.801001071929932,
+     "n_shot": 5,
+     "chance": 0.0,
+     "model_timing": {
+      "generate_until_seconds": 7.608983516693115,
+      "generate_until_requests": 5
+     },
+     "native_gemm": {
+      "calls": 29280,
+      "tokens": 904000,
+      "forwards_by_token_bucket": {
+       "8192": 1,
+       "8": 182
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 183,
+      "every_linear_every_forward": true
+     }
+    }
+   },
+   "coverage": {
+    "native": 160,
+    "native_called": 160,
+    "native_not_called": [],
+    "calls": 33600,
+    "tokens": 3898560,
+    "remaining_bf16_linears": [],
+    "remaining_bf16_linears_called": {}
+   },
+   "seconds": 85.65695023536682
+  },
+  "tc-8x64#repeat": {
+   "label": "tc-8x64#repeat",
+   "kind": "native",
+   "artifact": "/home/dev/n16k64_campaign/deploy_eval/artifacts/phi4_tc_8x64",
+   "kernel": "n8k64_wB",
+   "backend": "NativeLinear (c)",
+   "install": {
+    "kernel": "n8k64_wB",
+    "kernel_sha256": "8d504d10070b952bc499d346aab96175749e834da277874fb3ceeb155fbfaf53",
+    "artifact_weights_sha256": "ec7fd743323503d5d047ffe9d04be35a9796fa6e064bb13f8a15dc6638d40e2b",
+    "map_sha256": "4038414a2c9d1179040af3a24bcea7c86fed88b27d50038643185bda39a60b39",
+    "native_modules": 160,
+    "fallback": [],
+    "bf16_by_design": [
+     "lm_head (output head)"
+    ],
+    "e0m3_tiles": 418023,
+    "device_bytes": {
+     "packed": 6815744000,
+     "scales_placed": 851968000,
+     "scales_padding": 0,
+     "bias": 0
+    },
+    "kernel_set": null
+   },
+   "artifact_weights_sha256": "ec7fd743323503d5d047ffe9d04be35a9796fa6e064bb13f8a15dc6638d40e2b",
+   "artifact_map_sha256": "4038414a2c9d1179040af3a24bcea7c86fed88b27d50038643185bda39a60b39",
+   "artifact_weight_kind": "map",
+   "install_seconds": 13.261836767196655,
+   "tasks": {
+    "arc_easy": {
+     "metrics": {
+      "acc,none": 0.8,
+      "acc_stderr,none": 0.0917662935482247,
+      "acc_norm,none": 0.6,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 0.0,
+      "19": 1.0
+     },
+     "seconds": 5.327934980392456,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.494938850402832,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.2566347122192383,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 800,
+      "tokens": 385920,
+      "forwards_by_token_bucket": {
+       "1024": 2,
+       "512": 2,
+       "64": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "arc_challenge": {
+     "metrics": {
+      "acc,none": 0.45,
+      "acc_stderr,none": 0.11413288653790232,
+      "acc_norm,none": 0.55,
+      "acc_norm_stderr,none": 0.11413288653790232
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 0.0,
+      "5": 0.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 0.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 0.0
+     },
+     "seconds": 5.721330881118774,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.753435611724854,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.2740015983581543,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 800,
+      "tokens": 650240,
+      "forwards_by_token_bucket": {
+       "1024": 2,
+       "2048": 2,
+       "256": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "hellaswag": {
+     "metrics": {
+      "acc,none": 0.45,
+      "acc_stderr,none": 0.11413288653790232,
+      "acc_norm,none": 0.8,
+      "acc_norm_stderr,none": 0.0917662935482247
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 0.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 8.236276388168335,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.58952283859253,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.22056269645690918,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 800,
+      "tokens": 565760,
+      "forwards_by_token_bucket": {
+       "1024": 4,
+       "512": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 5,
+      "every_linear_every_forward": true
+     }
+    },
+    "openbookqa": {
+     "metrics": {
+      "acc,none": 0.25,
+      "acc_stderr,none": 0.09933992677987828,
+      "acc_norm,none": 0.4,
+      "acc_norm_stderr,none": 0.11239029738980327
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 0.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 0.0,
+      "10": 0.0,
+      "11": 0.0,
+      "12": 0.0,
+      "13": 0.0,
+      "14": 0.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 0.0,
+      "19": 0.0
+     },
+     "seconds": 5.2956764698028564,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.366657257080078,
+     "n_shot": 0,
+     "chance": 0.25,
+     "model_timing": {
+      "loglikelihood_seconds": 0.19028973579406738,
+      "loglikelihood_requests": 80
+     },
+     "native_gemm": {
+      "calls": 640,
+      "tokens": 211200,
+      "forwards_by_token_bucket": {
+       "1024": 1,
+       "512": 1,
+       "256": 1,
+       "128": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 4,
+      "every_linear_every_forward": true
+     }
+    },
+    "boolq": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.0819178021909125
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 1.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 0.0,
+      "16": 0.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 5.976638555526733,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 11.010907649993896,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 0.29395174980163574,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 320,
+      "tokens": 782080,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "8192": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 2,
+      "every_linear_every_forward": true
+     }
+    },
+    "winogrande": {
+     "metrics": {
+      "acc,none": 0.85,
+      "acc_stderr,none": 0.08191780219091252
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 0.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 0.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 6.05101466178894,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.275437831878662,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 0.13767504692077637,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 480,
+      "tokens": 139520,
+      "forwards_by_token_bucket": {
+       "512": 2,
+       "256": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 3,
+      "every_linear_every_forward": true
+     }
+    },
+    "piqa": {
+     "metrics": {
+      "acc,none": 0.8,
+      "acc_stderr,none": 0.09176629354822471,
+      "acc_norm,none": 0.9,
+      "acc_norm_stderr,none": 0.06882472016116853
+     },
+     "examples": {
+      "0": 1.0,
+      "1": 0.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0,
+      "5": 1.0,
+      "6": 1.0,
+      "7": 1.0,
+      "8": 1.0,
+      "9": 1.0,
+      "10": 0.0,
+      "11": 1.0,
+      "12": 1.0,
+      "13": 1.0,
+      "14": 1.0,
+      "15": 1.0,
+      "16": 1.0,
+      "17": 1.0,
+      "18": 1.0,
+      "19": 1.0
+     },
+     "seconds": 6.619770288467407,
+     "examples_evaluated": 20,
+     "peak_gpu_allocated_gib": 9.51804780960083,
+     "n_shot": 0,
+     "chance": 0.5,
+     "model_timing": {
+      "loglikelihood_seconds": 0.14530134201049805,
+      "loglikelihood_requests": 40
+     },
+     "native_gemm": {
+      "calls": 480,
+      "tokens": 259840,
+      "forwards_by_token_bucket": {
+       "512": 1,
+       "2048": 1,
+       "256": 1
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 3,
+      "every_linear_every_forward": true
+     }
+    },
+    "gsm8k": {
+     "metrics": {
+      "exact_match,strict-match": 1.0,
+      "exact_match_stderr,strict-match": 0.0,
+      "exact_match,flexible-extract": 1.0,
+      "exact_match_stderr,flexible-extract": 0.0
+     },
+     "examples": {
+      "0": {
+       "raw": " Janet eats 3 eggs for breakfast and bakes 4 eggs for muffins, so she uses 3 + 4 = <<3+4=7>>7 eggs.\nShe has 16 - 7 = <<16-7=9>>9 eggs left.\nShe sells the eggs for $2 each, so she makes 9 * $2 = $<<9*2=18>>18 every day.\n#### 18\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "18"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "18"
+       }
+      },
+      "1": {
+       "raw": " A robe takes 2 bolts of blue fiber and half that much white fiber.\nThus, a robe takes 2 + 2/2 = <<2+2/2=3>>3 bolts of fiber in total.\n#### 3\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "3"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "3"
+       }
+      },
+      "2": {
+       "raw": " The value of the house increased by 150% of $80,000, which is 150/100*$80,000 = $<<150/100*80000=120000>>120,000.\nSo the value of the house is now $80,000 + $120,000 = $<<80000+120000=200000>>200,000.\nJosh spent $80,000 to buy the house and $50,000 to repair it, so he spent a total of $80,000 + $50,000 = $<<80000+50000=130000>>130,000.\nSince the value of the house is now $200,000 and Josh spent $130,000, he made a profit of $200,000 - $130,000 = $<<200000-130000=70000>>70,000.\n#### 70000\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "70000"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "70000"
+       }
+      },
+      "3": {
+       "raw": " James runs 3 sprints * 3 times a week = <<3*3=9>>9 sprints a week.\nHe runs 9 sprints * 60 meters per sprint = <<9*60=540>>540 meters a week.\n#### 540\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "540"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "540"
+       }
+      },
+      "4": {
+       "raw": " Wendi feeds her chickens 3 cups of feed per chicken per day.\nShe has 20 chickens, so she needs to feed them 20 x 3 = <<20*3=60>>60 cups of feed per day.\nShe has already fed them 15 + 25 = <<15+25=40>>40 cups of feed.\nShe needs to feed them 60 - 40 = <<60-40=20>>20 more cups of feed.\n#### 20\n\n",
+       "strict-match": {
+        "exact_match": 1.0,
+        "response": "20"
+       },
+       "flexible-extract": {
+        "exact_match": 1.0,
+        "response": "20"
+       }
+      }
+     },
+     "seconds": 12.465845823287964,
+     "examples_evaluated": 5,
+     "peak_gpu_allocated_gib": 10.801001071929932,
+     "n_shot": 5,
+     "chance": 0.0,
+     "model_timing": {
+      "generate_until_seconds": 7.1939473152160645,
+      "generate_until_requests": 5
+     },
+     "native_gemm": {
+      "calls": 29280,
+      "tokens": 904000,
+      "forwards_by_token_bucket": {
+       "8192": 1,
+       "8": 182
+      },
+      "calls_by_width": null,
+      "kernel": "n8k64_wB",
+      "forwards": 183,
+      "every_linear_every_forward": true
+     }
+    }
+   },
+   "coverage": {
+    "native": 160,
+    "native_called": 160,
+    "native_not_called": [],
+    "calls": 33600,
+    "tokens": 3898560,
+    "remaining_bf16_linears": [],
+    "remaining_bf16_linears_called": {}
+   },
+   "seconds": 68.98713636398315
+  }
+ },
+ "load_seconds": 51.47012281417847,
+ "tokenization": {
+  "add_bos_token": null,
+  "bos_token": "<|endoftext|>",
+  "bos_token_id": 100257,
+  "context_starts_with_bos": false,
+  "probe_ids": [
+   14924,
+   25,
+   220,
+   16
+  ]
+ },
+ "dataset_loads": [
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Easy",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Challenge",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "Rowan/hellaswag",
+   "loaded": "Rowan/hellaswag",
+   "name": null,
+   "revision": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/openbookqa",
+   "loaded": "allenai/openbookqa",
+   "name": "main",
+   "revision": "388097ea7776314e93a529163e0fea805b8a6454",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "aps/super_glue",
+   "loaded": "aps/super_glue",
+   "name": "boolq",
+   "revision": "3de24cf8022e94f4ee4b9d55a6f539891524d646",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/winogrande",
+   "loaded": "allenai/winogrande",
+   "name": "winogrande_xl",
+   "revision": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "baber/piqa",
+   "loaded": "baber/piqa",
+   "name": null,
+   "revision": "142f6d7367fd9877f0fb3b5734ea6a545f54cdd1",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "openai/gsm8k",
+   "loaded": "openai/gsm8k",
+   "name": "main",
+   "revision": "740312add88f781978c0658806c59bc2815b9866",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Easy",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Challenge",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "Rowan/hellaswag",
+   "loaded": "Rowan/hellaswag",
+   "name": null,
+   "revision": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/openbookqa",
+   "loaded": "allenai/openbookqa",
+   "name": "main",
+   "revision": "388097ea7776314e93a529163e0fea805b8a6454",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "aps/super_glue",
+   "loaded": "aps/super_glue",
+   "name": "boolq",
+   "revision": "3de24cf8022e94f4ee4b9d55a6f539891524d646",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/winogrande",
+   "loaded": "allenai/winogrande",
+   "name": "winogrande_xl",
+   "revision": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "baber/piqa",
+   "loaded": "baber/piqa",
+   "name": null,
+   "revision": "142f6d7367fd9877f0fb3b5734ea6a545f54cdd1",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "openai/gsm8k",
+   "loaded": "openai/gsm8k",
+   "name": "main",
+   "revision": "740312add88f781978c0658806c59bc2815b9866",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Easy",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Challenge",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "Rowan/hellaswag",
+   "loaded": "Rowan/hellaswag",
+   "name": null,
+   "revision": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/openbookqa",
+   "loaded": "allenai/openbookqa",
+   "name": "main",
+   "revision": "388097ea7776314e93a529163e0fea805b8a6454",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "aps/super_glue",
+   "loaded": "aps/super_glue",
+   "name": "boolq",
+   "revision": "3de24cf8022e94f4ee4b9d55a6f539891524d646",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/winogrande",
+   "loaded": "allenai/winogrande",
+   "name": "winogrande_xl",
+   "revision": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "baber/piqa",
+   "loaded": "baber/piqa",
+   "name": null,
+   "revision": "142f6d7367fd9877f0fb3b5734ea6a545f54cdd1",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "openai/gsm8k",
+   "loaded": "openai/gsm8k",
+   "name": "main",
+   "revision": "740312add88f781978c0658806c59bc2815b9866",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Easy",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Challenge",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "Rowan/hellaswag",
+   "loaded": "Rowan/hellaswag",
+   "name": null,
+   "revision": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/openbookqa",
+   "loaded": "allenai/openbookqa",
+   "name": "main",
+   "revision": "388097ea7776314e93a529163e0fea805b8a6454",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "aps/super_glue",
+   "loaded": "aps/super_glue",
+   "name": "boolq",
+   "revision": "3de24cf8022e94f4ee4b9d55a6f539891524d646",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/winogrande",
+   "loaded": "allenai/winogrande",
+   "name": "winogrande_xl",
+   "revision": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "baber/piqa",
+   "loaded": "baber/piqa",
+   "name": null,
+   "revision": "142f6d7367fd9877f0fb3b5734ea6a545f54cdd1",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "openai/gsm8k",
+   "loaded": "openai/gsm8k",
+   "name": "main",
+   "revision": "740312add88f781978c0658806c59bc2815b9866",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Easy",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/ai2_arc",
+   "loaded": "allenai/ai2_arc",
+   "name": "ARC-Challenge",
+   "revision": "210d026faf9955653af8916fad021475a3f00453",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "Rowan/hellaswag",
+   "loaded": "Rowan/hellaswag",
+   "name": null,
+   "revision": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/openbookqa",
+   "loaded": "allenai/openbookqa",
+   "name": "main",
+   "revision": "388097ea7776314e93a529163e0fea805b8a6454",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "aps/super_glue",
+   "loaded": "aps/super_glue",
+   "name": "boolq",
+   "revision": "3de24cf8022e94f4ee4b9d55a6f539891524d646",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "allenai/winogrande",
+   "loaded": "allenai/winogrande",
+   "name": "winogrande_xl",
+   "revision": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "baber/piqa",
+   "loaded": "baber/piqa",
+   "name": null,
+   "revision": "142f6d7367fd9877f0fb3b5734ea6a545f54cdd1",
+   "dropped_trust_remote_code": null
+  },
+  {
+   "requested": "openai/gsm8k",
+   "loaded": "openai/gsm8k",
+   "name": "main",
+   "revision": "740312add88f781978c0658806c59bc2815b9866",
+   "dropped_trust_remote_code": null
+  }
+ ],
+ "seconds": 515.7869226932526
+}
