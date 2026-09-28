@@ -30,7 +30,20 @@ from quantize.packed_candidates import LEVELS, _fp8, _pack_nibbles, decode_alt, 
 
 REPO = 'nvidia/Qwen3.8-27B-NVFP4'
 REVISION = '482ca0f3832238542f8f5295dde86b5f22711d80'
+# Per-model modelopt checkpoints (repo, pinned revision). Nemotron's release is uniform
+# NVFP4 with an exclude list and was further trained with quantization-aware distillation.
+CHECKPOINTS = {'qwen27b': (REPO, REVISION),
+               'nemotron9b': ('nvidia/NVIDIA-Nemotron-Nano-9B-v2-NVFP4', '8556c9164ddb43fe1f4f4ad730593b3c5e3f7328')}
+# Checkpoint-name prefixes that transformers renames on load (conversion_mapping.py).
+RENAMES = (('backbone.', 'model.'),)
 _MIDS = {}
+
+
+def to_model_name(name):
+    for old, new in RENAMES:
+        if name.startswith(old):
+            return new + name[len(old):]
+    return name
 
 
 def download(repo=REPO, revision=REVISION):
@@ -88,16 +101,31 @@ class Checkpoint:
     def __init__(self, path):
         self.path = Path(path)
         self.config = json.loads((self.path / 'hf_quant_config.json').read_text())['quantization']
-        self.layers = self.config['quantized_layers']
         index = json.loads((self.path / 'model.safetensors.index.json').read_text())['weight_map']
-        self.index = index
+        # Everything is keyed by the MODEL's tensor names; self.original maps back to the file.
+        self.original = {to_model_name(n): n for n in index}
+        assert len(self.original) == len(index)
+        self.index = {to_model_name(n): f for n, f in index.items()}
+        if 'quantized_layers' in self.config:
+            self.layers = {to_model_name(n): v for n, v in self.config['quantized_layers'].items()}
+        else:
+            # Uniform config (quant_algo + exclude_modules): the quantized modules are the
+            # ones that carry scales; check that agrees with the exclude list.
+            algo = self.config['quant_algo']
+            assert algo == 'NVFP4', algo
+            self.layers = {n[:-len('.weight_scale_2')]: dict(quant_algo='NVFP4')
+                           for n in self.index if n.endswith('.weight_scale_2')}
+            assert not any(n.endswith('.weight_scale') and n[:-len('.weight_scale')] not in self.layers
+                           for n in self.index)
+            excluded = {to_model_name(n) for n in self.config.get('exclude_modules', [])}
+            assert not excluded & set(self.layers), excluded & set(self.layers)
         self._files = {}
 
     def get(self, name):
         f = self.index[name]
         if f not in self._files:
             self._files[f] = safe_open(str(self.path / f), framework='pt', device='cpu')
-        return self._files[f].get_tensor(name)
+        return self._files[f].get_tensor(self.original[name])
 
     def kind(self, module_name):
         v = self.layers.get(module_name)
@@ -112,7 +140,7 @@ class Checkpoint:
         acts, audit = {}, dict(plain_copied=0, plain_changed=0, plain_max_abs_diff=0.0, skipped=[])
         names = set(self.index)
         for n in sorted(names):
-            if n.startswith('mtp.'):
+            if n.startswith('mtp.') or n.startswith('model.mtp.'):
                 audit['skipped'].append(n)
                 continue
             if n.endswith(('.weight_scale', '.weight_scale_2', '.input_scale')):
@@ -132,8 +160,10 @@ class Checkpoint:
                 audit['fp8_max_nmse'] = max(audit.get('fp8_max_nmse', 0.0), nmse)
                 acts[module] = ('fp8', float(self.get(module + '.input_scale')))
             else:
-                assert t.shape == p.shape and t.dtype == p.dtype, (n, t.shape, p.shape, t.dtype, p.dtype)
-                w = t
+                assert t.shape == p.shape, (n, t.shape, p.shape)
+                if t.dtype != p.dtype:
+                    audit.setdefault('dtype_cast', []).append([n, str(t.dtype), str(p.dtype)])
+                w = t.to(p.dtype)
                 d = (t.to(p.device).float() - p.float()).abs().max().item()
                 audit['plain_copied'] += 1
                 audit['plain_changed'] += int(d > 0)
@@ -143,9 +173,11 @@ class Checkpoint:
         return acts, audit
 
     @torch.no_grad()
-    def nvfp4_candidate(self, module, w_bf16):
+    def nvfp4_candidate(self, module, w_bf16, alt_source='bf16'):
         """Packed candidates for one NVFP4 layer: base = nvidia's codes/scales (bitwise),
-        alt = E0M3 of the original BF16 weight under nvidia's global scale."""
+        alt = E0M3 under nvidia's global scale, of the original BF16 weight (alt_source
+        'bf16') or of nvidia's dequantized weight ('base'; for QAD checkpoints, whose
+        NVFP4 weights were trained and no longer approximate the BF16 release)."""
         dev = w_bf16.device
         codes = self.get(module + '.weight').to(dev)
         scale = self.get(module + '.weight_scale').to(dev)
@@ -153,9 +185,10 @@ class Checkpoint:
         shape = tuple(w_bf16.shape)
         assert codes.dtype == torch.uint8 and codes.shape == (shape[0], shape[1] // 2), module
         assert scale.dtype == torch.float8_e4m3fn and scale.shape == (shape[0], shape[1] // 16), module
-        e0m3, s0 = encode_alt(w_bf16, gs)
-        p = dict(shape=shape, gs=gs, e2m1=codes.reshape(-1), s2=scale.reshape(-1), e0m3=e0m3, s0=s0)
+        p = dict(shape=shape, gs=gs, e2m1=codes.reshape(-1), s2=scale.reshape(-1))
         base = decode_base(p)
+        assert alt_source in ('bf16', 'base'), alt_source
+        p['e0m3'], p['s0'] = encode_alt(w_bf16 if alt_source == 'bf16' else base, gs)
         assert torch.equal(base.view(torch.int16),
                            reference_dequant(codes, scale, gs, shape).view(torch.int16)), module
         stats = dict(gs=float(gs), gs_over_amax_rule=float(gs / (w_bf16.float().abs().amax() / (6 * 448))),
@@ -163,5 +196,6 @@ class Checkpoint:
                      alt_nmse=float((decode_alt(p).float() - w_bf16.float()).square().sum()
                                     / w_bf16.float().square().sum()))
         # Guards the nibble order and code table, which the bitwise audit above shares.
-        assert stats['base_nmse'] < 0.05, (module, stats)
+        # (A wrong nibble order gives NMSE ~2; QAD drift from the BF16 release is allowed.)
+        assert stats['base_nmse'] < 0.1, (module, stats)
         return p, stats

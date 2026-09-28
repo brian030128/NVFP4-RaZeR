@@ -54,6 +54,12 @@ for _name in ('llama1b_ins', 'llama3b_ins'):
     CALIBRATIONS[_name] = Path(f'/work/u4320956/mixfp4_potential/{_name}_calibration')
     DEVELOPMENT[_name] = DEVELOPMENT['llama8b']
     PUBLISHED[_name] = PUBLISHED['llama8b']
+# NVIDIA-Nemotron-Nano-9B-v2 has its own tokenizer: calibration and development windows
+# from make_nemotron_prior.py. No published evaluation run exists, so the windows are
+# only recorded; summarize_train_map.py checks they match across compared runs.
+CALIBRATIONS['nemotron9b'] = Path('/work/u4320956/mixfp4_potential/nemotron9b_calibration')
+DEVELOPMENT['nemotron9b'] = [Path('/work/u4320956/mixfp4_potential/nemotron9b_development')]
+PUBLISHED['nemotron9b'] = None
 
 
 @torch.no_grad()
@@ -81,15 +87,18 @@ def main():
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--gpus', type=int, default=None, help='Qwen: 1 loads on one device, else balanced')
     ap.add_argument('--modelopt', action='store_true',
-                    help='Start from nvidia/Qwen3.8-27B-NVFP4 (quantize/modelopt_ckpt.py): its NVFP4 MLP '
-                         'weights are the E2M1 candidate, tiles only on those layers, its activation recipe')
+                    help="Start from nvidia's modelopt checkpoint of this model (modelopt_ckpt.CHECKPOINTS): its NVFP4 "
+                         'weights are the E2M1 candidate, tiles only on its NVFP4 layers, its activation recipe')
+    ap.add_argument('--alt-source', choices=('bf16', 'base'), default='bf16',
+                    help='--modelopt E0M3 candidate: from the BF16 release (bf16) or from the checkpoint\'s own '
+                         'dequantized NVFP4 weights (base)')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     started = time.time()
     torch.backends.cuda.matmul.allow_tf32 = False
     rows, cols = UNITS[args.unit]
     qwen = args.model == 'qwen27b'
-    assert not args.modelopt or qwen, '--modelopt is the nvidia Qwen3.8-27B checkpoint'
+    assert not args.modelopt or args.model in modelopt_ckpt.CHECKPOINTS, args.model
     if qwen:
         assert args.batch == 1 and args.eval_batch == 1, 'Qwen batched forward is not identical to batch 1'
     prior = json.loads((CALIBRATIONS[args.model] / 'report.json').read_text())
@@ -130,8 +139,9 @@ def main():
         teacher.append(logits[:, :-1].float().log_softmax(-1).bfloat16().cpu())
     del logits
     if args.modelopt:
-        ckpt = modelopt_ckpt.Checkpoint(modelopt_ckpt.download())
-        report['modelopt'] = dict(repo=modelopt_ckpt.REPO, revision=modelopt_ckpt.REVISION,
+        repo, revision = modelopt_ckpt.CHECKPOINTS[args.model]
+        ckpt = modelopt_ckpt.Checkpoint(modelopt_ckpt.download(repo, revision))
+        report['modelopt'] = dict(repo=repo, revision=revision, alt_source=args.alt_source,
                                   producer=json.loads((ckpt.path / 'hf_quant_config.json').read_text())['producer'])
         candidate_stats = {}
     # Candidates exactly as run_multiround.py: packed 4-bit codes + FP8 scales,
@@ -142,7 +152,7 @@ def main():
         if args.modelopt:
             if ckpt.kind(n) != 'NVFP4':
                 continue  # FP8 attention layers: loaded by ckpt.apply below, no tiles
-            packed[n], candidate_stats[n] = ckpt.nvfp4_candidate(n, m.weight)
+            packed[n], candidate_stats[n] = ckpt.nvfp4_candidate(n, m.weight, args.alt_source)
             o, k = m.weight.shape
             theta[n] = torch.full((-(-o // rows), k // cols), args.init_logit, dtype=torch.float32,
                                   device=m.weight.device)
@@ -164,10 +174,11 @@ def main():
     if args.modelopt:
         # lm_head is NVFP4 in the checkpoint but carries no tiles; FP8 layers and all
         # unquantized tensors are loaded from the checkpoint as well.
-        head = model.lm_head
-        p, report['lm_head_stats'] = ckpt.nvfp4_candidate('lm_head', head.weight)
-        head.weight.copy_(decode_base(p))
-        del p
+        if ckpt.kind('lm_head') == 'NVFP4':
+            head = model.lm_head
+            p, report['lm_head_stats'] = ckpt.nvfp4_candidate('lm_head', head.weight)
+            head.weight.copy_(decode_base(p))
+            del p
         acts, report['modelopt_load_audit'] = ckpt.apply(model, None)
         named = dict(model.named_modules())
         act_modules = {n: (named[n], kind, scale) for n, (kind, scale) in acts.items()}
@@ -393,8 +404,9 @@ def main():
     for n in modules:
         apply(n, True)
     batches, report['data'] = data(tok, prior, 2048)
-    published = json.loads(Path(PUBLISHED[args.model]).read_text())
-    validate_evaluation_data(report['data'], published['data'])
+    if PUBLISHED[args.model] is not None:
+        published = json.loads(Path(PUBLISHED[args.model]).read_text())
+        validate_evaluation_data(report['data'], published['data'])
     eval_hooks(True)
     report['evaluation'] = {}
     for domain, sequences in batches.items():

@@ -69,6 +69,10 @@ def main():
         assert r['status'] == 'complete', run
         assert r['args']['model'] == args.model, run
         ev, unit = r['evaluation'], r['args']['unit']
+        if args.baseline:
+            # Runs without a published reference must have evaluated identical windows.
+            base_data = json.loads((args.baseline / 'report.json').read_text())['data']
+            assert all(r['data'][d]['token_sha256'] == base_data[d]['token_sha256'] for d in base_data), run
         vs_fo = [paired(ev[d]['nll'], fo[d]['nll']) for d in ('wiki', 'c4')]
         vs_mr = ' / '.join(f'{m:+.5f}±{s:.5f}' for m, s in (
             paired(ev[d]['nll'], multi[unit]['evaluation'][d]['nll']) for d in ('wiki', 'c4'))) if unit in multi else '—'
