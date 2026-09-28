@@ -1,0 +1,130 @@
+--- 0.4.11/api/task.py:ConfigurableTask.fewshot_context
++++ 0.4.9.1/api/task.py:ConfigurableTask.fewshot_context
+@@ -1,52 +1,82 @@
+ @utils.positional_deprecated
+-def fewshot_context(self, doc: dict, num_fewshot: int, system_instruction: str | None=None, apply_chat_template: bool=False, fewshot_as_multiturn: bool=False, chat_template: Callable[..., str] | None=None, gen_prefix: str | None=None) -> str | list[str]:
+-    """Build the full prompt context including system prompt, few-shot examples, and eval doc.
++def fewshot_context(self, doc: dict, num_fewshot: int, system_instruction: Optional[str]=None, apply_chat_template: bool=False, fewshot_as_multiturn: bool=False, chat_template: Optional[Callable]=None, gen_prefix: Optional[str]=None) -> Union[str, List[str]]:
++    """Returns a fewshot context string that is made up of a prepended description
++        (if provided), the `num_fewshot` number of examples, and an appended prompt example.
+ 
+-        Constructs a complete prompt by:
+-        1. Adding system instruction + task description (if provided)
+-        2. Adding `num_fewshot` labeled examples from the fewshot split
+-        3. Adding the evaluation document (without its answer)
+-
+-        Each component is built using `build_qa_turn()` and can be rendered as plain
+-        text or formatted via a chat template.
+-
+-        Args:
+-            doc (dict): The evaluation document to build context for.
+-            num_fewshot (int): Number of few-shot examples to include.
+-            system_instruction (str | None): System instruction to prepend to the prompt.
+-            apply_chat_template (bool): If True, format output using the chat template.
+-            fewshot_as_multiturn (bool): If True, keep few-shot examples as separate
+-                user/assistant turns. If False, collapse into a single user message.
+-            chat_template (Callable | None): Renders a list of message dicts to a string.
+-            gen_prefix (str | None): Prefix to start the assistant's response (e.g., "Answer:").
+-
+-        Returns:
+-            str | list[str]: The formatted prompt string, or a list of strings for
+-                multiple-input tasks (e.g., Winogrande where each choice becomes a
+-                separate context).
++        :param doc: str
++            The document as returned from training_docs, validation_docs, or test_docs.
++        :param num_fewshot: int
++            The number of fewshot examples to provide in the returned context string.
++        :param  system_instruction: str
++            System instruction to be applied to the prompt.
++        :param apply_chat_template: bool
++            Whether to apply the chat template to the fewshot context.
++        :param fewshot_as_multiturn: bool
++            Whether to provide the fewshot examples as a multiturn conversation or a single user turn.
++        :param chat_template:
++            callable (from lm.apply_chat_template) that takes in a list[Dict] chat transcript and renders it into a string.
++        :param gen_prefix:
++            String to append after the <|assistant|> token.
++        :returns: str
++            The fewshot context.
+         """
+-    messages = []
+-    chat_template = partial(chat_template, add_generation_prompt=not gen_prefix) if chat_template else None
+-    description = self.resolve_field(doc, self.config.description) or ''
+-    system_prompt = maybe_delimit(system_instruction, description, self.config.fewshot_delimiter)
++    if apply_chat_template:
++        labeled_examples = []
++    else:
++        labeled_examples = ''
++    if (description := self.config.description):
++        description = utils.apply_template(self.config.description, doc)
++    if system_instruction is not None and description:
++        system_prompt = f'{system_instruction}{self.sampler.fewshot_delimiter}{description}'
++    elif system_instruction is not None:
++        system_prompt = system_instruction
++    elif description:
++        system_prompt = description
++    else:
++        system_prompt = ''
+     if system_prompt:
+-        messages.append(Message('system', system_prompt))
++        if apply_chat_template:
++            labeled_examples.append({'role': 'system', 'content': system_prompt})
++        else:
++            labeled_examples = system_prompt
+     if num_fewshot > 0:
+-        for fs_doc in self.sampler.sample(n=num_fewshot, eval_doc=doc if self.fewshot_cfg.split == self.config.test_split else None):
+-            q, c, a = (self.doc_to_text(fs_doc, self.fewshot_cfg.doc_to_text), self.doc_to_choice(fs_doc, self.fewshot_cfg.doc_to_choice) if self.fewshot_cfg.doc_to_choice else None, self.doc_to_target(fs_doc, self.fewshot_cfg.doc_to_target))
+-            _gen_prefix = self.resolve_field(doc, self.fewshot_cfg.gen_prefix)
+-            if self.multiple_input:
+-                q = cast('str', c[q])
+-                c = None
+-            messages += self.build_qa_turn(q=q, c=c, a=a, gen_prefix=_gen_prefix, tgt_delim=self.fewshot_cfg.target_delimiter, few_delim=self.fewshot_cfg.fewshot_delimiter)
+-    q, c, a = (self.doc_to_text(doc), self.doc_to_choice(doc) if self.config.doc_to_choice else None, self.doc_to_target(doc))
+-    if self.multiple_input:
+-        assert isinstance(c, list), 'multiple inputs require choices to be a list'
+-        return self.multiple_input_context(messages, gen_prefix, c, chat_template=chat_template if apply_chat_template else None, fewshot_as_multiturn=fewshot_as_multiturn)
+-    messages += self.build_qa_turn(q=q, c=c, gen_prefix=gen_prefix, tgt_delim=self.config.target_delimiter, few_delim='')
+-    if apply_chat_template and chat_template:
+-        res = [m.to_dict() for m in messages] if fewshot_as_multiturn else multiturn_to_singleturn(messages)
+-        res = chat_template(res)
++        if apply_chat_template:
++            labeled_examples.extend(self.sampler.get_chat_context(doc, num_fewshot, fewshot_as_multiturn, gen_prefix=gen_prefix))
++        else:
++            labeled_examples += self.sampler.get_context(doc, num_fewshot, gen_prefix=gen_prefix)
++    example = self.doc_to_text(doc)
++    if apply_chat_template:
++        if self.multiple_input:
++            if not labeled_examples:
++                return ''
++            return chat_template(labeled_examples)
++        if isinstance(example, str):
++            self.append_target_question(labeled_examples, example, fewshot_as_multiturn, gen_prefix=gen_prefix)
++        elif isinstance(example, list):
++            labeled_examples_list = []
++            for ex in example:
++                chat = deepcopy(labeled_examples)
++                self.append_target_question(chat, ex, fewshot_as_multiturn, gen_prefix=gen_prefix)
++                labeled_examples_list.append(chat_template(chat, add_generation_prompt=False if gen_prefix else True))
++            return labeled_examples_list
++        elif isinstance(example, int):
++            if self.config.doc_to_choice is not None:
++                choices = self.doc_to_choice(doc)
++                self.append_target_question(labeled_examples, choices[example], fewshot_as_multiturn, gen_prefix=gen_prefix)
++            else:
++                self.append_target_question(labeled_examples, str(example), fewshot_as_multiturn, gen_prefix=gen_prefix)
++        return chat_template(labeled_examples, add_generation_prompt=False if gen_prefix else True)
+     else:
+-        res = ''.join((m.to_text() for m in messages))
+-    return res+        prefix = self.config.target_delimiter + gen_prefix if gen_prefix is not None else ''
++        if self.multiple_input:
++            return labeled_examples
++        if isinstance(example, str):
++            return labeled_examples + example + prefix
++        elif isinstance(example, list):
++            return [labeled_examples + ex + prefix for ex in example]
++        elif isinstance(example, int):
++            if self.config.doc_to_choice is not None:
++                choices = self.doc_to_choice(doc)
++                return labeled_examples + choices[example] + prefix
++            else:
++                return labeled_examples + str(example) + prefix

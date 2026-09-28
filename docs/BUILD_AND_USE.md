@@ -164,6 +164,22 @@ from mixfp4_sm120 import model as NM
 report = NM.install(hf_model, 'artifacts/mistral7b_tc_8x64', kernel='n8k64_wB')   # 16x64 artifacts: kernel='auto'
 ```
 
+### Downstream tasks (lm-eval)
+
+```bash
+python run_lmeval_deploy.py --model mistral7b --data-root $DATA \
+    --evaluate BF16=bf16 --evaluate tc-16x64=native:artifacts/mistral7b_tc_16x64 \
+    --evaluate tc-16x64-fake=fake:map:artifacts/mistral7b_tc_16x64.mixfp4map --out eval/mistral7b_lmeval
+```
+
+- **Harness:** lm-eval 0.4.11 through HFLM. The suite is arc_easy, arc_challenge, hellaswag, openbookqa, boolq,
+  winogrande and piqa (0-shot), and gsm8k (5-shot).
+- **Datasets and policies:** the datasets are pinned by `lm_eval_datasets.py`; the policies are the PPL evaluation's.
+- **Output:** `report.json` holds the metrics, the per-example results, the gsm8k generations, the timings and the
+  native coverage.
+- **Readiness:** `results/lmeval_ready/READINESS.md` has the smoke tests, the version notes (BOS) and the runtime
+  estimates.
+
 ## 8. Benchmark
 
 ```bash
@@ -189,6 +205,7 @@ team decides which. See `sm120/kernel/NOTICE.md`. CUTLASS (the submodule) is BSD
 | `sm120/` | the vendored mixfp4 kernel (`kernel/`, provenance in `VENDORED.json` / `LOCAL_CHANGES.md`), `build.py`, the `mixfp4_sm120` package (`NativeLinear`, `model.install`, activation quantizer, kernel selection), eval / bench / tests |
 | `run_train_map.py` | TM-OPT and TM-OPT+TC calibration |
 | `export_map_artifact.py`, `run_ppl_deploy.py` | map → artifact, and PPL through NativeLinear / fake (c); `--scales` exports learned block scales |
+| `run_lmeval_deploy.py`, `lm_eval_datasets.py` | downstream tasks through lm-eval (BF16, fake (c), NativeLinear (c)), pinned datasets |
 | `run_cost_distill.py`, `quantize/learned_scale.py` | the QAT and scale-only baselines, and learned scales on a fixed map (`results/scale_additivity`) |
 | `run_multiround.py` | MR-OPT, and the convention (a) evaluators (native (a), fake (a)) |
 | `repro_local/realquant/` | the native (a) evaluator's kernel library (built from the vendored kernel), candidate store, research benches |

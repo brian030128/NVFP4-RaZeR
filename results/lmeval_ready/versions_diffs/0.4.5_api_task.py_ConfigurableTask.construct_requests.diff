@@ -1,0 +1,36 @@
+--- 0.4.11/api/task.py:ConfigurableTask.construct_requests
++++ 0.4.5/api/task.py:ConfigurableTask.construct_requests
+@@ -1,6 +1,4 @@
+-def construct_requests(self, doc: dict, ctx: str | list[str], **kwargs) -> list[Instance] | Instance:
+-    apply_chat_template = kwargs.pop('apply_chat_template', False)
+-    chat_template: Callable | None = kwargs.pop('chat_template', None)
++def construct_requests(self, doc: dict, ctx: str, **kwargs) -> Union[List[Instance], Instance]:
+     aux_arguments = None
+     if self.OUTPUT_TYPE == 'loglikelihood':
+         arguments = (ctx, self.doc_to_target(doc))
+@@ -9,23 +7,19 @@
+     elif self.OUTPUT_TYPE == 'multiple_choice':
+         choices = self.doc_to_choice(doc)
+         target_delimiter = self.config.target_delimiter
+-        if apply_chat_template:
+-            target_delimiter = self.config.target_delimiter if self.config.gen_prefix and (not ends_with_whitespace(self.config.gen_prefix)) else ''
+         if self.multiple_input:
+             cont = self.doc_to_target(doc)
+-            arguments = [(context, f'{target_delimiter}{cont}') for context in ctx]
++            arguments = [(ctx + choice, f'{target_delimiter}{cont}') for choice in choices]
+         else:
+             arguments = [(ctx, f'{target_delimiter}{cont}') for cont in choices]
+         if 'acc_mutual_info' in self._metric_fn_list.keys():
+-            aux_arguments = [('', f'{target_delimiter}{choice}') for choice in choices]
++            aux_arguments = [('', f'{choice}') for choice in choices]
+             arguments.extend(aux_arguments)
+     elif self.OUTPUT_TYPE == 'generate_until':
+         arguments = (ctx, deepcopy(self.config.generation_kwargs))
+     multimodal_arg = {}
+     if self.config.doc_to_image:
+         multimodal_arg = {**multimodal_arg, **{'visual': self.doc_to_image(doc)}}
+-    if self.config.doc_to_audio:
+-        multimodal_arg = {**multimodal_arg, **{'audio': self.doc_to_audio(doc)}}
+     if bool(multimodal_arg):
+         if isinstance(arguments, list):
+             arguments = [arg + (multimodal_arg,) for arg in arguments]

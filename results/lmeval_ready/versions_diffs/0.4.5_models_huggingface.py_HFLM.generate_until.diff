@@ -1,0 +1,79 @@
+--- 0.4.11/models/huggingface.py:HFLM.generate_until
++++ 0.4.5/models/huggingface.py:HFLM.generate_until
+@@ -1,7 +1,7 @@
+-def generate_until(self, requests: list[Instance], disable_tqdm: bool=False) -> list[str]:
++def generate_until(self, requests: List[Instance], disable_tqdm: bool=False) -> List[str]:
+     res = []
+ 
+-    def _collate(req: tuple[str, dict]):
++    def _collate(req: Tuple[str, dict]):
+         """Defines the key for the sorted method"""
+         toks = self.tok_encode(req[0])
+         return (-len(toks), req[0])
+@@ -16,38 +16,47 @@
+     batch_fn = self._batch_scheduler if self.batch_size == 'auto' and (not adaptive_batch_size) else None
+     re_ords = Collator([reg.args for reg in requests], sort_fn=_collate, group_by='gen_kwargs', group_fn=lambda x: x[1])
+     chunks = re_ords.get_batched(n=batch_size, batch_fn=batch_fn)
+-    eos = self.tok_decode(self.eot_token_id, skip_special_tokens=False)
+     for chunk in chunks:
+-        contexts, all_gen_kwargs = zip(*chunk, strict=True)
++        contexts, all_gen_kwargs = zip(*chunk)
+         gen_kwargs = all_gen_kwargs[0]
+-        assert isinstance(gen_kwargs, dict), f'Expected `kwargs` to be of type `dict` but got {type(gen_kwargs)}'
+-        kwargs = normalize_gen_kwargs(gen_kwargs, self.max_gen_toks)
+-        until = handle_stop_sequences(kwargs.pop('until', None), eos=eos)
+-        max_gen_toks = kwargs.pop('max_gen_toks')
++        until = None
++        if isinstance(gen_kwargs, dict):
++            kwargs = copy.deepcopy(gen_kwargs)
++            if 'until' in kwargs.keys():
++                until = kwargs.pop('until')
++                if isinstance(until, str):
++                    until = [until]
++                elif not isinstance(until, list):
++                    raise ValueError(f"Expected `kwargs['until']` to be of type Union[str,list] but got {until}")
++        else:
++            raise ValueError(f'Expected `kwargs` to be of type `dict` but got {type(gen_kwargs)}')
++        eos = self.tok_decode(self.eot_token_id, skip_special_tokens=False)
++        if not until:
++            until = [eos]
++        else:
++            until.append(eos)
++        if 'max_gen_toks' in kwargs.keys():
++            max_gen_toks = kwargs.pop('max_gen_toks')
++        else:
++            max_gen_toks = self.max_gen_toks
+         if self.backend == 'causal':
+             max_ctx_len = self.max_length - max_gen_toks
+-            assert max_ctx_len > 0, f"Invalid configuration: requested max tokens to generate ({max_gen_toks}) must be less than model's maximum sequence length ({self.max_length})."
+         elif self.backend == 'seq2seq':
+             max_ctx_len = self.max_length
+         context_enc, attn_masks = self.tok_batch_encode(contexts, left_truncate_len=max_ctx_len, truncation=self.truncation)
+         context_enc = context_enc.to(self.device)
+         attn_masks = attn_masks.to(self.device)
+-        if 'max_length' in kwargs:
+-            eval_logger.warning('`max_length` in generation kwargs. Please use `max_gen_toks` instead.')
+-        max_length = kwargs.pop('max_length', context_enc.shape[1] + max_gen_toks)
+-        cont = self._model_generate(context=context_enc, attention_mask=attn_masks, stop=until, max_length=max_length, **kwargs)
++        if 'max_length' not in kwargs:
++            kwargs['max_length'] = context_enc.shape[1] + max_gen_toks
++        cont = self._model_generate(context=context_enc, attention_mask=attn_masks, stop=until, **kwargs)
+         cont_toks_list = cont.tolist()
+-        for cont_toks, context in zip(cont_toks_list, contexts, strict=True):
++        for cont_toks, context in zip(cont_toks_list, contexts):
+             if self.backend == 'causal':
+                 cont_toks = cont_toks[context_enc.shape[1]:]
+-            if isinstance(self.think_end_token, int):
+-                think_token_indices = [i for i, token in enumerate(cont_toks) if token == self.think_end_token]
+-                if think_token_indices:
+-                    cont_toks = cont_toks[think_token_indices[-1] + 1:]
+             s = self.tok_decode(cont_toks)
+-            if isinstance(self.think_end_token, int):
+-                s = s.lstrip()
+-            s = postprocess_generated_text(generation=s, stop=until, think_end_token=self.think_end_token if isinstance(self.think_end_token, str) else None)
++            for term in until:
++                if len(term) > 0:
++                    s = s.split(term)[0]
+             res.append(s)
+             self.cache_hook.add_partial('generate_until', (context, gen_kwargs), s)
+             pbar.update(1)

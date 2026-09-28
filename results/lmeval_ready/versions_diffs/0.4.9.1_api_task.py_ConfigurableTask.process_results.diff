@@ -1,0 +1,55 @@
+--- 0.4.11/api/task.py:ConfigurableTask.process_results
++++ 0.4.9.1/api/task.py:ConfigurableTask.process_results
+@@ -13,10 +13,9 @@
+         _bytes = self.count_bytes(self.doc_to_target(doc))
+         return {**({'word_perplexity': (loglikelihood, _words)} if 'word_perplexity' in use_metric else {}), **({'byte_perplexity': (loglikelihood, _bytes)} if 'byte_perplexity' in use_metric else {}), **({'bits_per_byte': (loglikelihood, _bytes)} if 'bits_per_byte' in use_metric else {})}
+     elif self.OUTPUT_TYPE == 'multiple_choice':
+-        lls, is_greedy = zip(*results, strict=True)
++        lls, is_greedy = zip(*results)
+         choices = self.doc_to_choice(doc)
+         completion_len = np.array([float(len(i)) for i in choices])
+-        byte_length = np.array([float(len(i.encode('utf-8'))) for i in choices])
+         if 2 * len(choices) == len(lls) and 'acc_mutual_info' in self._metric_fn_list.keys():
+             lls_unconditional = lls[len(choices):]
+             if len(lls_unconditional) != len(choices):
+@@ -24,7 +23,6 @@
+             lls = lls[:len(choices)]
+         pred = np.argmax(lls)
+         pred_norm = np.argmax(lls / completion_len)
+-        pred_byte = np.argmax(lls / byte_length)
+         if self.multiple_input:
+             gold = self.doc_to_text(doc)
+         else:
+@@ -46,17 +44,15 @@
+         if self.multiple_target:
+             acc = 1.0 if pred in gold else 0.0
+             acc_norm = 1.0 if pred_norm in gold else 0.0
+-            acc_bytes = 1.0 if pred_byte in gold else 0.0
+-            exact_match = int(any((is_greedy[i] if i != -100 else 0 for i in gold)))
++            exact_match = int(any([is_greedy[i] if i != -100 else 0 for i in gold]))
+         else:
+             acc = 1.0 if pred == gold else 0.0
+             acc_norm = 1.0 if pred_norm == gold else 0.0
+-            acc_bytes = 1.0 if pred_byte == gold else 0.0
+             exact_match = int(is_greedy[gold]) if gold != -100 else 0
+         prob_norm = utils.softmax(lls)
+-        result_dict = {**({'acc': acc} if 'acc' in use_metric else {}), **({'f1': (gold, pred)} if 'f1' in use_metric else {}), **({'mcc': (gold, pred)} if 'mcc' in use_metric else {}), **({'acc_norm': acc_norm} if 'acc_norm' in use_metric else {}), **({'acc_bytes': acc_bytes} if 'acc_bytes' in use_metric else {}), **({'exact_match': exact_match} if 'exact_match' in use_metric else {}), **({'brier_score': (gold, prob_norm)} if 'brier_score' in use_metric else {}), **({'likelihood': (gold, lls)} if 'likelihood' in use_metric else {})}
++        result_dict = {**({'acc': acc} if 'acc' in use_metric else {}), **({'f1': (gold, pred)} if 'f1' in use_metric else {}), **({'mcc': (gold, pred)} if 'mcc' in use_metric else {}), **({'acc_norm': acc_norm} if 'acc_norm' in use_metric else {}), **({'exact_match': exact_match} if 'exact_match' in use_metric else {}), **({'brier_score': (gold, prob_norm)} if 'brier_score' in use_metric else {})}
+         if 'acc_mutual_info' in use_metric:
+-            lls_mutual_info = [ll_c - ll_u for ll_c, ll_u in zip(lls, lls_unconditional, strict=True)]
++            lls_mutual_info = [ll_c - ll_u for ll_c, ll_u in zip(lls, lls_unconditional)]
+             acc_mutual_info = 1.0 if np.argmax(lls_mutual_info) == gold else 0.0
+             result_dict['acc_mutual_info'] = acc_mutual_info
+     elif self.OUTPUT_TYPE == 'generate_until':
+@@ -87,7 +83,10 @@
+                         if isinstance(result_score, dict):
+                             result_score = result_score[metric]
+                         scores.append(result_score)
+-                    result_score = 1.0 if any(scores) else 0.0
++                    if any(scores):
++                        result_score = 1.0
++                    else:
++                        result_score = 0.0
+             else:
+                 try:
+                     result_score = self._metric_fn_list[metric](references=[gold], predictions=[result], **self._metric_fn_kwargs[metric])

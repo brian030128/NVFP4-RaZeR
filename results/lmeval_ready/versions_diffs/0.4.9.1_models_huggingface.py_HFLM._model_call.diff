@@ -1,0 +1,8 @@
+--- 0.4.11/models/huggingface.py:HFLM._model_call
++++ 0.4.9.1/models/huggingface.py:HFLM._model_call
+@@ -19,4 +19,5 @@
+             assert attn_mask is not None and labels is not None
+             assert transformers.AutoModelForSeq2SeqLM == self.AUTO_MODEL_CLASS
+             return self.model(input_ids=inps, attention_mask=attn_mask, labels=labels).logits
++        assert self.AUTO_MODEL_CLASS in (transformers.AutoModelForCausalLM, transformers.AutoModelForVision2Seq)
+         return self.model(inps).logits

@@ -1,0 +1,21 @@
+--- 0.4.11/models/huggingface.py:HFLM._loglikelihood_tokens
++++ 0.4.9.1/models/huggingface.py:HFLM._loglikelihood_tokens
+@@ -46,17 +46,15 @@
+             cont_toks_list.append(continuation_enc)
+             inplens.append(inplen)
+         call_kwargs = {}
+-        assert padding_len_inp, 'padding_len_inp should be set by now'
+         if self.backend == 'causal':
+             batched_inps = pad_and_concat(padding_len_inp, inps, padding_side='right')
+         elif self.backend == 'seq2seq':
+-            assert padding_len_cont, 'padding_len_cont should be set by now'
+             batched_inps = pad_and_concat(padding_len_inp, inps)
+             batched_conts = pad_and_concat(padding_len_cont, conts)
+             batched_encoder_mask = pad_and_concat(padding_len_inp, encoder_attns)
+             call_kwargs = {'attn_mask': batched_encoder_mask, 'labels': batched_conts}
+         multi_logits = F.log_softmax(self._model_call(batched_inps, **call_kwargs), dim=-1, dtype=self.softmax_dtype)
+-        for (request_str, ctx_tokens, _), logits, inplen, cont_toks in zip(chunk, multi_logits, inplens, cont_toks_list, strict=True):
++        for (request_str, ctx_tokens, _), logits, inplen, cont_toks in zip(chunk, multi_logits, inplens, cont_toks_list):
+             contlen = len(cont_toks)
+             ctx_len = inplen + (logits.shape[0] - padding_len_inp) if self.backend == 'causal' else None
+             logits = self._select_cont_toks(logits, contlen=contlen, inplen=ctx_len)
