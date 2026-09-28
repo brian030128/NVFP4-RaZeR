@@ -1,0 +1,66 @@
+{
+ "windows": 3,
+ "lengths": [
+  1,
+  32,
+  64,
+  128,
+  256,
+  512,
+  1024,
+  2048
+ ],
+ "policies": {
+  "tc-16x64": {
+   "artifact": "/home/dev/n16k64_campaign/deploy_eval/artifacts/llama8b_tc_16x64",
+   "family": "mixed",
+   "table": {
+    "table_source": "/home/dev/NVFP4-RaZeR/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.json",
+    "calls_by_width": {
+     "16": 1536,
+     "32": 1152,
+     "64": 768,
+     "128": 1920
+    }
+   },
+   "fallback": {
+    "table_source": "dict",
+    "calls_by_width": {
+     "16": 672,
+     "32": 672,
+     "64": 672,
+     "128": 3360
+    }
+   },
+   "forwards": 24,
+   "identical": 24,
+   "all_identical": true
+  },
+  "FourOverSix": {
+   "artifact": "/home/dev/n16k64_campaign/deploy_eval/artifacts/llama8b_fo6",
+   "family": "stock",
+   "table": {
+    "table_source": "/home/dev/NVFP4-RaZeR/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.json",
+    "calls_by_width": {
+     "16": 1536,
+     "32": 672,
+     "64": 1248,
+     "128": 1920
+    }
+   },
+   "fallback": {
+    "table_source": "dict",
+    "calls_by_width": {
+     "16": 672,
+     "32": 672,
+     "64": 672,
+     "128": 3360
+    }
+   },
+   "forwards": 24,
+   "identical": 24,
+   "all_identical": true
+  }
+ },
+ "all_identical": true
+}

@@ -113,4 +113,11 @@ MODEL_SHAPES = {
                'gate_proj': (9728, 2560), 'up_proj': (9728, 2560), 'down_proj': (2560, 9728)},
     'mistral7b': {'q_proj': (4096, 4096), 'k_proj': (1024, 4096), 'v_proj': (1024, 4096), 'o_proj': (4096, 4096),
                   'gate_proj': (14336, 4096), 'up_proj': (14336, 4096), 'down_proj': (4096, 14336)},
+    # Phi-4: fused qkv and gate/up projections
+    'phi4': {'qkv_proj': (7680, 5120), 'o_proj': (5120, 5120), 'gate_up_proj': (35840, 5120), 'down_proj': (5120, 17920)},
+    # Qwen3.8-27B, text Linears only: full-attention layers (q/k/v/o_proj), linear-attention layers (in_proj_*, out_proj)
+    # and the MLP
+    'qwen27b': {'q_proj': (12288, 5120), 'k_proj': (1024, 5120), 'v_proj': (1024, 5120), 'o_proj': (5120, 6144),
+                'in_proj_qkv': (10240, 5120), 'in_proj_z': (6144, 5120), 'in_proj_a': (48, 5120), 'in_proj_b': (48, 5120),
+                'out_proj': (5120, 6144), 'gate_proj': (17408, 5120), 'up_proj': (17408, 5120), 'down_proj': (5120, 17408)},
 }
