@@ -1081,6 +1081,47 @@ dev KL compares within this block only.
   so the extra epochs fit the smaller calibration set more closely instead of
   generalizing.
 
+**Why joint does not reach a lower KL: tiles help, but joint's scales are worse
+(jobs 449772–449775).** Each joint map is re-evaluated with its per-block scales kept
+and every tile set back to E2M1 (`--resume-drop-tiles`, 0 epochs). The as-is run
+reproduces the original dev KL and PPL exactly.
+
+| joint map | dev KL as trained | dev KL, tiles → E2M1 | tiles' effect | WikiText-2 / C4 without tiles |
+|---|---:|---:|---:|---|
+| fixed joint, 5k × 60 | 0.09657 | 0.10072 | −0.0042 | 14.3453 / 19.4813 (worse) |
+| joint, 5k × 60 | 0.09539 | 0.10320 | −0.0078 | 14.2865 / 19.3337 (better) |
+| fixed joint, 10k × 10 | 0.08796 | 0.08895 | −0.0010 | 14.1926 / 19.3564 |
+
+- **The tiles lower dev KL given each map's own scales.**
+- **Joint's scales alone are far worse than scale-only's** (0.1007–0.1032 against
+  0.0926 at 5k × 60), so the joint gap comes from its scale solution, not from its
+  tiles.
+- For the original joint, removing the tiles *improves* test PPL despite the
+  worse dev KL.
+
+**Warm start from the converged scale-only map (jobs 449792, 449793).**
+- **Setup:** joint starts from scale-only 10k × 30 (`--resume-scale-from`, start
+  dev KL 0.085567, identical) on the same data and dev windows, with a 10-epoch
+  cosine, tile lr × 1/√32 and early stopping.
+- **A** freezes the scales and trains only tiles (`--scale-epochs 0 --stage2 tiles`).
+- **B** trains both (`--scale-grad-in-e0m3`).
+
+| start: scale-only 10k × 30 (dev KL 0.08557) | best dev KL (epoch) | E0M3 tiles | WikiText-2 | C4 | ΔNLL vs scale-only (wiki / c4) |
+|---|---:|---:|---:|---:|---|
+| A: frozen scales, tiles only | 0.08537 (2) | 817 | 14.135462 | 19.325270 | +0.00233±0.00161 / −0.00013±0.00115 |
+| B: scales + tiles | 0.08546 (10) | 3,253 | 14.131934 | 19.331683 | +0.00207±0.00158 / +0.00020±0.00118 |
+
+- **At the converged scale optimum, E0M3 tiles lower dev KL by at most 0.0002
+  (0.2%), with under 1,000 tiles.**
+- In A, dev KL rises again as tiles keep flipping (up to about 17 k tiles at
+  0.0086): the proposed flips do not lower the true loss.
+- **The tiny dev-KL gain does not reach the test sets.** WikiText is slightly
+  worse, just beyond 2 SE, and C4 ties.
+- The from-scratch fixed-joint WikiText gains (−0.0024, −0.0036) were relative to
+  weaker scale-only maps trained on the same schedules. **Against the strongest
+  scale-only map, 8×64 E0M3 tiles add nothing.** This matches the headroom
+  analysis: an 8×64 tile keeps about 12% of E0M3's per-block gain.
+
 **Activations: a static per-K-strip type map (job 444558,
 `analyze_act_e0m3_headroom.py`, `results/mixfp4_potential/train_map/act_e0m3_headroom_1b.json`).**
 - **Setup:**

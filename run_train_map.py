@@ -235,6 +235,12 @@ def main():
     ap.add_argument('--resume-maps', type=Path, default=None,
                     help='Warm start from a completed run directory: its final hard maps become logits +/- --resume-margin')
     ap.add_argument('--resume-margin', type=float, default=1.0)
+    ap.add_argument('--resume-scale-from', type=Path, default=None,
+                    help='--alt joint: start the per-block scale logits from a completed scale-only (1x16) run\'s '
+                         'final map (same --scale-init); tiles start at --tile-init')
+    ap.add_argument('--resume-drop-tiles', action='store_true',
+                    help='With --resume-maps and --alt joint: keep the resumed per-block scale map but set every '
+                         'type tile to E2M1 (with --epochs 0, measures what the learned E0M3 tiles contribute)')
     ap.add_argument('--teacher-topk', type=int, default=0,
                     help='Store the calibration teacher as top-K log-probs + tail mass (0 = full vocabulary); '
                          'development KL always uses the full teacher')
@@ -441,6 +447,10 @@ def main():
                 out[n] = v
             return out
         tile_map = load_map(args.resume_maps / 'map.pt')
+        if args.resume_drop_tiles:
+            # Diagnostic: keep the resumed scale map but put every type tile back to E2M1.
+            assert joint, '--resume-drop-tiles needs --alt joint'
+            tile_map = {n: torch.zeros_like(m) for n, m in tile_map.items()}
         for n in theta:
             theta[n].copy_(torch.where(tile_map[n].to(theta[n].device), 1., -1.) * args.resume_margin)
         if joint:
@@ -450,6 +460,22 @@ def main():
         report['resumed_from'] = dict(path=str(args.resume_maps), job_id=prev['job_id'],
                                       map_sha256=prev.get('map_sha256'), best_dev_kl=prev.get('best_dev_kl'),
                                       margin=args.resume_margin)
+    if args.resume_scale_from:
+        # Warm start joint's per-block scales from a converged scale-only (--alt scale --unit 1x16) run with the
+        # same --scale-init: its map (True = the `hi` candidate) becomes psi = +/- margin; tiles start at --tile-init.
+        assert joint and not args.resume_maps, '--resume-scale-from needs --alt joint and no --resume-maps'
+        prev = json.loads((args.resume_scale_from / 'report.json').read_text())
+        assert prev['status'] == 'complete', args.resume_scale_from
+        for key, want in (('model', args.model), ('alt', 'scale'), ('unit', '1x16'), ('scale_init', args.scale_init)):
+            assert prev['args'][key] == want, (key, prev['args'][key], want)
+        import numpy as np
+        for n, v in torch.load(args.resume_scale_from / 'map.pt', weights_only=False).items():
+            if isinstance(v, tuple):
+                bits, shape = v
+                v = torch.from_numpy(np.unpackbits(bits.numpy())[:int(np.prod(shape))].reshape(shape).astype(bool))
+            psi[n].copy_(torch.where(v.to(psi[n].device), 1., -1.) * args.resume_margin)
+        report['scale_resumed_from'] = dict(path=str(args.resume_scale_from), job_id=prev['job_id'],
+                                            best_dev_kl=prev.get('best_dev_kl'), margin=args.resume_margin)
     if nvfp4_equal:
         # Informational: the max->6 branch vs quant_nvfp4 (which differ only if quant_nvfp4 rounds differently).
         report['lo_equals_quant_nvfp4_modules'] = sum(nvfp4_equal)
@@ -606,13 +632,16 @@ def main():
     total_steps = steps_per_epoch * args.epochs
     rng = random.Random(args.seed if world == 1 else args.seed * 1000 + rank)
 
-    if args.resume_maps:
+    if args.resume_maps or args.resume_scale_from:
         for n in modules:
             apply(n, True)
     initial = dev_eval() if main_rank else dict(kl=float('inf'), ce=float('nan'))
     report['initial_dev'] = initial
     if args.resume_maps:
         print(f'RESUMED from {args.resume_maps} (previous best dev KL {report["resumed_from"]["best_dev_kl"]}), '
+              f'start dev KL {initial["kl"]:.6f}', flush=True)
+    if args.resume_scale_from:
+        print(f'SCALES FROM {args.resume_scale_from} (its best dev KL {report["scale_resumed_from"]["best_dev_kl"]}), '
               f'start dev KL {initial["kl"]:.6f}', flush=True)
     if not main_rank:
         topk_check_full = []
