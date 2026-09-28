@@ -2,7 +2,8 @@
 
 The downstream suite is:
 - arc_easy, arc_challenge, hellaswag, openbookqa, boolq, winogrande, piqa (0-shot log-likelihood);
-- gsm8k (generative).
+- gsm8k (generative);
+- mmlu (cais/mmlu, the 57 subjects; the paper evaluates it 5-shot).
 
 lm-eval 0.4.11, the pinned version, names every dataset by its namespaced Hugging Face repo but loads the repo's
 current head. This module pins each repo to the commit recorded below, by patching datasets.load_dataset:
@@ -26,6 +27,7 @@ PINS = {
     'allenai/winogrande': '01e74176c63542e6b0bcb004dcdea22d94fb67b5',
     'baber/piqa': '142f6d7367fd9877f0fb3b5734ea6a545f54cdd1',
     'openai/gsm8k': '740312add88f781978c0658806c59bc2815b9866',
+    'cais/mmlu': 'c30699e8356da336a370243923dbaf21066bb9fe',     # added 2026-09-28 (paper experiments; one config per subject)
 }
 LEGACY_TO_NAMESPACED = {'ai2_arc': 'allenai/ai2_arc', 'hellaswag': 'Rowan/hellaswag', 'openbookqa': 'allenai/openbookqa',
                         'super_glue': 'aps/super_glue', 'winogrande': 'allenai/winogrande', 'piqa': 'baber/piqa',

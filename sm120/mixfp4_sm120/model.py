@@ -56,26 +56,39 @@ class InstallReport:
     e0m3_tiles: int = 0
     device_bytes: dict = field(default_factory=lambda: dict(packed=0, scales_placed=0, scales_padding=0, bias=0))
     kernel_set: dict | None = None
+    activation_quantizer: str | None = None
+    activation_quantizer_override: bool = False
 
     def as_dict(self):
         return dict(kernel=self.kernel, kernel_sha256=self.kernel_sha256,
                     artifact_weights_sha256=self.artifact_weights_sha256, map_sha256=self.map_sha256,
                     native_modules=len(self.native), fallback=self.fallback, bf16_by_design=self.bf16_by_design,
-                    e0m3_tiles=self.e0m3_tiles, device_bytes=self.device_bytes, kernel_set=self.kernel_set)
+                    e0m3_tiles=self.e0m3_tiles, device_bytes=self.device_bytes, kernel_set=self.kernel_set,
+                    activation_quantizer=self.activation_quantizer,
+                    activation_quantizer_override=self.activation_quantizer_override)
 
 
 @torch.no_grad()
-def install(model, art_dir, kernel='auto', loader='causal_lm', strict=True, device='cuda'):
+def install(model, art_dir, kernel='auto', loader='causal_lm', strict=True, device='cuda', activation_quantizer=None):
     """Replace every scoped Linear by a NativeLinear from the artifact. Returns an InstallReport.
 
     Modules that already are NativeLinears (a previous install) are replaced as well, so artifacts
-    can be swapped on one loaded model."""
+    can be swapped on one loaded model.
+
+    activation_quantizer: None (the artifact's own, the calibrated configuration) or an explicit override
+    ('nvfp4_rows' / 'four_over_six_rows'). An override is for latency measurements only: the weights were calibrated
+    with the artifact's activation quantizer, so an overridden install is not an evaluated configuration. The report
+    records it (activation_quantizer_override=True)."""
     kern = resolve_kernel(kernel)
     meta, weights = A.load(art_dir, device=device)
-    act_kind = meta['activation_quantizer']
+    act_kind = meta['activation_quantizer'] if activation_quantizer is None else activation_quantizer
+    if act_kind not in ('nvfp4_rows', 'four_over_six_rows'):
+        raise ValueError(f'unknown activation quantizer {act_kind!r}')
     name = kern.cfg.name if isinstance(kern, Kernel) else f'KernelSet({kern.family})'
     rep = InstallReport(name, kern.sha256, meta['weights_sha256'], (meta.get('map') or {}).get('sha256'))
     rep.kernel_set = kern.describe() if isinstance(kern, KernelSet) else None
+    rep.activation_quantizer = act_kind
+    rep.activation_quantizer_override = act_kind != meta['activation_quantizer']
     mods = dict(scope(model, loader))
     mods.update(native_modules(model))
     mods = {n: m for n, m in model.named_modules() if n in mods}      # model order

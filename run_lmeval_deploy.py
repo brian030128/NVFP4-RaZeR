@@ -27,6 +27,14 @@
   Linear ran in every forward, and, for a width-selecting KernelSet ('auto', 'auto_stock'), the GEMM calls by CTA
   tile width. The install record's `kernel_set` is replaced after the policy by its cumulative description.
 - **--repeat LABEL** evaluates that policy a second time in the same process (a determinism check).
+- **--num-fewshot TASK=N** sets that task's few-shot count (lm-eval's default otherwise); the paper runs mmlu=5.
+- **Group tasks (mmlu):** lm-eval evaluates the 57 subjects; the entry `mmlu` holds lm-eval's own group aggregate
+  (weight_by_size: the micro-average over all questions), the per-subject and per-category metrics, and the examples of
+  every subject keyed `<subject>:<doc_id>`.
+- **Per-choice log-likelihoods** of every multiple-choice example are recorded under `loglikelihoods`
+  ({key: {target, ll: [per choice]}}), next to the per-example correctness in `examples`.
+- **--resume** keeps the (policy, task) entries an earlier run of the same --out already finished. Every task entry
+  records the batch size it ran with.
 - **--no-bos** passes add_bos_token=False to HFLM: contexts without BOS, lm-eval 0.4.5 / 0.4.9.1's behaviour. 0.4.11's
   default keeps the tokenizer's special tokens (BOS for Llama-3.1 and Mistral).
 - **Older lm-eval** (a cross-check): run with its install first on PYTHONPATH; lm_eval_compat is imported for
@@ -51,6 +59,17 @@ PRIMARY = dict(arc_easy='acc_norm', arc_challenge='acc_norm', hellaswag='acc_nor
                boolq='acc', winogrande='acc', gsm8k='exact_match')
 CHANCE = dict(arc_easy=0.25, arc_challenge=0.25, hellaswag=0.25, openbookqa=0.25, piqa=0.5, boolq=0.5, winogrande=0.5, gsm8k=0.0)
 GSM8K_FILTERS = ('strict-match', 'flexible-extract')     # gsm8k.yaml's filter_list, in order
+PRIMARY['mmlu'], CHANCE['mmlu'] = 'acc', 0.25
+
+
+def primary(task):
+    return 'acc' if task.startswith('mmlu') else PRIMARY[task]
+
+
+def mc_record(s, key):
+    """(correctness, {target, ll}) of one multiple-choice sample: lm-eval's per-choice (log-likelihood, is_greedy)."""
+    lls = [float(r[0]) for r in s['filtered_resps']] if s.get('filtered_resps') else None
+    return float(s[key]), dict(target=s.get('target'), ll=lls)
 
 
 def summarize(results, samples):
@@ -71,10 +90,31 @@ def summarize(results, samples):
                     response=s['filtered_resps'][0] if s.get('filtered_resps') else None)
             entry['examples'] = examples
         else:
-            key = PRIMARY[task]
-            entry['examples'] = {str(s['doc_id']): float(s[key]) for s in rows if key in s}
+            key = primary(task)
+            entry['examples'], entry['loglikelihoods'] = {}, {}
+            for s in rows:
+                if key in s:
+                    entry['examples'][str(s['doc_id'])], entry['loglikelihoods'][str(s['doc_id'])] = mc_record(s, key)
         out[task] = entry
     return out
+
+
+def summarize_group(res, task):
+    """A group task (mmlu): lm-eval's group aggregate, the metrics of every subtask and subgroup, and the examples of
+    every subtask keyed '<subtask>:<doc_id>'."""
+    results = res['results']
+    groups = res.get('groups', {})
+    top = results.get(task) or groups.get(task)
+    entry = dict(metrics={k: v for k, v in top.items() if isinstance(v, (int, float)) and k != 'alias'},
+                 subtasks={t: {k: v for k, v in m.items() if isinstance(v, (int, float)) and k != 'alias'}
+                           for t, m in results.items() if t != task},
+                 examples={}, loglikelihoods={})
+    for sub, rows in res.get('samples', {}).items():
+        for s in rows:
+            if 'acc' in s:
+                k = f'{sub}:{s["doc_id"]}'
+                entry['examples'][k], entry['loglikelihoods'][k] = mc_record(s, 'acc')
+    return entry
 
 
 def main():
@@ -89,6 +129,8 @@ def main():
     ap.add_argument('--repeat', action='append', default=[], metavar='LABEL', help='evaluate this policy twice')
     ap.add_argument('--transformers-deviation', action='store_true')
     ap.add_argument('--no-bos', action='store_true', help='HFLM add_bos_token=False (lm-eval 0.4.5 / 0.4.9.1 behaviour)')
+    ap.add_argument('--num-fewshot', action='append', default=[], metavar='TASK=N', help='few-shot count of one task')
+    ap.add_argument('--resume', action='store_true', help='keep the finished (policy, task) entries of an earlier run')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     if tuple(int(x) for x in md.version('lm_eval').split('.')[:3]) < (0, 4, 10):
@@ -116,7 +158,15 @@ def main():
                   versions=dict(lm_eval=md.version('lm_eval'), transformers=transformers.__version__, torch=torch.__version__,
                                 datasets=md.version('datasets')),
                   dataset_pins=lm_eval_datasets.PINS, host=dict(hostname=platform.node(), gpu=torch.cuda.get_device_name(0)),
-                  started_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'), evaluations={})
+                  started_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'), evaluations={},
+                  num_fewshot=dict(spec.split('=') for spec in args.num_fewshot))
+    report['num_fewshot'] = {k: int(v) for k, v in report['num_fewshot'].items()}
+    previous = {}
+    if args.resume and (args.out / 'report.json').exists():
+        old = json.loads((args.out / 'report.json').read_text())
+        assert old['model'] == args.model and old.get('num_fewshot', {}) == report['num_fewshot'] and old['limit'] == args.limit, \
+            'resume: the earlier run used other settings'
+        previous = old['evaluations']
     save = lambda: (args.out / 'report.json').write_text(json.dumps(report, indent=1) + '\n')  # noqa: E731
     t0 = time.time()
     model, modules = D.load_for_evaluation(args.model, prior, C)
@@ -165,10 +215,10 @@ def main():
                   **(dict(add_bos_token=False) if args.no_bos else {}))
         if 'tokenization' not in report:
             # lm-eval 0.4.11 keeps the tokenizer's default special tokens (add_bos_token=None); 0.4.5 / 0.4.9.1 add none
-            probe = lm.tok_encode('Question: 1 + 1 =')
+            ids = lm.tok_encode('Question: 1 + 1 =')       # not `probe`: that is the native policy's forward hook
             report['tokenization'] = dict(add_bos_token=lm.add_bos_token, bos_token=tok.bos_token, bos_token_id=tok.bos_token_id,
-                                          context_starts_with_bos=tok.bos_token_id is not None and probe[0] == tok.bos_token_id,
-                                          probe_ids=probe[:4])
+                                          context_starts_with_bos=tok.bos_token_id is not None and ids[0] == tok.bos_token_id,
+                                          probe_ids=ids[:4])
         # the model's share of the time: lm-eval dispatches every request type through getattr(lm, type)
         timing = {}
 
@@ -185,6 +235,11 @@ def main():
         lm.generate_until = timed(lm.generate_until, 'generate_until')
         entry['tasks'] = {}
         for task in tasks:
+            done = previous.get(pol['label'], {}).get('tasks', {}).get(task)
+            if done is not None and done.get('examples'):
+                entry['tasks'][task] = dict(done, resumed=True)
+                print(f"LMEVAL {pol['label']} {task} resumed from the earlier run", flush=True)
+                continue
             timing.clear()
             limit = args.gsm8k_limit if (task == 'gsm8k' and args.gsm8k_limit is not None) else args.limit
             before = native_counts() if pol['kind'] == 'native' else None
@@ -194,11 +249,18 @@ def main():
             # draws); bootstrap_iters=0 would drop the stderr altogether.
             res = lm_eval.simple_evaluate(model=lm, tasks=[task], limit=limit, log_samples=True, bootstrap_iters=100000,
                                           random_seed=0, numpy_random_seed=1234, torch_random_seed=1234,
-                                          fewshot_random_seed=1234)
-            summary = summarize(res, res.get('samples', {}))[task]
-            summary.update(seconds=time.time() - t2, examples_evaluated=len(summary['examples']),
-                           peak_gpu_allocated_gib=torch.cuda.max_memory_allocated() / 2 ** 30, n_shot=res.get('n-shot', {}).get(task),
-                           chance=CHANCE[task], model_timing=dict(timing))
+                                          fewshot_random_seed=1234, num_fewshot=report['num_fewshot'].get(task))
+            if task in res.get('samples', {}):
+                summary = summarize(res, res.get('samples', {}))[task]
+            else:                                   # a group of subtasks (mmlu)
+                summary = summarize_group(res, task)
+                summary['aggregate'] = 'lm-eval group aggregate, weight_by_size (micro-average over all questions)'
+            n_shot = res.get('n-shot', {}).get(task)
+            if n_shot is None and 'subtasks' in summary:    # a group: the distinct few-shot counts of its subtasks
+                n_shot = sorted({v for t, v in res.get('n-shot', {}).items() if t in summary['subtasks']})
+            summary.update(seconds=time.time() - t2, examples_evaluated=len(summary['examples']), batch_size=args.batch_size,
+                           peak_gpu_allocated_gib=torch.cuda.max_memory_allocated() / 2 ** 30, n_shot=n_shot,
+                           chance=CHANCE.get(task, 0.25), model_timing=dict(timing))
             if before is not None:
                 after = native_counts()
                 delta = lambda a, b: {k: a[k] - b.get(k, 0) for k in a if a[k] != b.get(k, 0)}  # noqa: E731
@@ -209,7 +271,7 @@ def main():
                 g['forwards'] = sum(g['forwards_by_token_bucket'].values())
                 g['every_linear_every_forward'] = g['calls'] == len(nat) * g['forwards']
             entry['tasks'][task] = summary
-            print(f"LMEVAL {pol['label']} {task} {PRIMARY[task]} {summary['metrics'].get(PRIMARY[task] + ',none', summary['metrics'].get(PRIMARY[task] + ',strict-match'))} "
+            print(f"LMEVAL {pol['label']} {task} {primary(task)} {summary['metrics'].get(primary(task) + ',none', summary['metrics'].get(primary(task) + ',strict-match'))} "
                   f"({summary['examples_evaluated']} examples, {summary['seconds']:.0f}s)", flush=True)
             save()
         if pol['kind'] == 'native':
