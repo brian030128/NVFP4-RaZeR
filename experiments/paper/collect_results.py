@@ -12,6 +12,7 @@ Collected, from the output root (PAPER_OUT):
                                                   correctness, per-choice log-likelihoods, sample hashes)
   latency/<model>/<policy>/round<r>.json       prefill latency, per process
   gemm/<model>.json                            GEMM and quantizer kernel times
+  gemm_superseded/<model>.json                 the fixed-order GEMM records superseded by deviation 1 (PROTOCOL.md)
   tables/*                                     the tables of step 07
 Not collected: the artifacts, the maps themselves, the logs (logs/*.log), anything else.
 """
@@ -56,8 +57,9 @@ def main():
         copied.append(b)
     for f in sorted(src.glob('latency/*/*/round*.json')):
         put(f, dst / 'latency' / f.parent.parent.name / f.parent.name / f.name)
-    for f in sorted(src.glob('gemm/*.json')):
-        put(f, dst / 'gemm' / f.name)
+    for sub in ('gemm', 'gemm_superseded'):
+        for f in sorted(src.glob(f'{sub}/*.json')):
+            put(f, dst / sub / f.name)
     for f in sorted(src.glob('tables/*')):
         put(f, dst / 'tables' / f.name)
     size = sum(b.stat().st_size for b in copied)
