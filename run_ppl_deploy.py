@@ -16,7 +16,7 @@ window by window with run_multiround.py's evaluations (conventions (a)).
 
 Policies, convention (c) (per-token activation scales):
   bf16                  the model as loaded (no quantization).
-  fake:four_over_six | fake:nvfp4 | fake:map:<.mixfp4map> | fake:weights:<state.pt>
+  fake:four_over_six | fake:nvfp4 | fake:map:<.mixfp4map> | fake:weights:<state.pt> | fake:format:<rule>:<unit>
                         fake quant, the like-for-like reference for the kernel:
                         - the fake-quant weight installed in BF16 (FourOverSix, NVFP4, or a map's tiles);
                         - every quantized Linear input quantized per token and dequantized (FourOverSix rows for
@@ -25,6 +25,10 @@ Policies, convention (c) (per-token activation scales):
                         fake:weights:<state.pt> is FourOverSix of trained weights (run_cost_distill.py --arm qat
                         state.pt, {module: BF16 weight}) instead of the model's, the reference for a QAT artifact
                         (results/unified_baselines).
+                        fake:format:<rule>:<unit> (results/paper_extra/A): the weights of IF4 (rule if4, Cook et al.)
+                        or MixFP4 (rule zou, Zou et al.), quantize/adaptive_formats.py, chosen per 16-element block
+                        (unit 1x16) or elected per tile (8x64, 16x64, 256x64); FourOverSix per-token activations.
+                        The record holds the share of blocks in the uniform format, overall and per projection.
   native:<artifact>[:<kernel>]
                         NativeLinear: every quantized Linear on the SM120 kernel (the per-token activation quantizer,
                         then the FP4 GEMM with a one-rounding epilogue). Default kernel, by the artifact's type block:
@@ -37,6 +41,7 @@ for coverage: in every forward, every quantized Linear ran natively. The dense G
 """
 import argparse
 import datetime
+import hashlib
 import importlib.util
 import json
 import math
@@ -80,6 +85,8 @@ def parse(spec):
         return dict(label=label, kind='fake', weight='map', map=':'.join(parts[2:]))
     if parts[0] == 'fake' and parts[1] == 'weights':
         return dict(label=label, kind='fake', weight='four_over_six', state=':'.join(parts[2:]))
+    if parts[0] == 'fake' and parts[1] == 'format':
+        return dict(label=label, kind='fake', weight='format', rule=parts[2], unit=parts[3])
     if parts[0] == 'native':
         return dict(label=label, kind='native', artifact=parts[1], kernel=parts[2] if len(parts) > 2 else None)
     raise SystemExit(f'bad --evaluate {spec!r}')
@@ -129,11 +136,63 @@ def load_for_evaluation(key, prior, C):
     return model, modules
 
 
+@torch.no_grad()
+def install_format(fq, pol, C):
+    """fake:format:<rule>:<unit>: IF4 / MixFP4 weights (quantize/adaptive_formats.py) with FourOverSix per-token
+    activations, installed on FakeQuant's modules like its own policies. Returns the record fields."""
+    from quantize import adaptive_formats as AF
+    from quantize.causal_four_over_six import quantize_rows
+    assert pol['rule'] in AF.RULES, pol['rule']
+    tile = tuple(int(v) for v in pol['unit'].split('x'))
+    fq.remove()
+    h = hashlib.sha256()
+    total, per_proj, zero, sq = dict(blocks=0, uniform=0), {}, 0, 0.0
+    mix = {}                                   # within-tile mixing of the per-block choices (1x16 arms only)
+    for n, m in fq.modules.items():
+        q, st = AF.quantize(fq.pristine[n].to(m.weight.device), pol['rule'], tile)
+        m.weight.copy_(q)
+        h.update(n.encode())
+        h.update(q.contiguous().view(torch.uint8).cpu().numpy().tobytes())
+        proj = per_proj.setdefault(n.rsplit('.', 1)[-1], dict(blocks=0, uniform=0))
+        for d in (total, proj):
+            d['blocks'] += st['blocks']
+            d['uniform'] += st['uniform_blocks']
+        zero += st['zero_scale_blocks']
+        sq += st['sq_error']
+        for mtile, x in st.get('mixing', {}).items():        # not `tile`: that is the policy's own unit
+            for key in ('all', n.rsplit('.', 1)[-1]):
+                agg = mix.setdefault(mtile, {}).setdefault(key, dict(tiles=0, mixed=0, minority_sum=0.0))
+                for k2 in agg:
+                    agg[k2] += x[k2]
+    for m in fq.modules.values():
+        fq.handles.append(m.register_forward_pre_hook(lambda mod, inp: (C._chunked(quantize_rows, inp[0]), *inp[1:])))
+    frac = lambda d: d['uniform'] / d['blocks']  # noqa: E731
+    return dict(backend='fake (c)', installed_weight_sha256=h.hexdigest(), activation='four_over_six_rows',
+                format=dict(rule=pol['rule'], unit=pol['unit'], tile=list(tile), uniform_fraction=frac(total),
+                            uniform_fraction_by_projection={k: frac(v) for k, v in per_proj.items()},
+                            blocks=total['blocks'], uniform_blocks=total['uniform'], zero_scale_blocks=zero,
+                            weight_sq_error=sq,
+                            mixing={t: {k: dict(v, mixed_fraction=v['mixed'] / v['tiles'],
+                                                mean_minority_share=v['minority_sum'] / v['mixed'] if v['mixed'] else None)
+                                        for k, v in by.items()} for t, by in mix.items()} or None))
+
+
+@torch.no_grad()
+def installed_error(fq):
+    """The total squared error of the installed weights of the quantized Linears against the model's (float64)."""
+    total = 0.0
+    for n, m in fq.modules.items():
+        total += float(((m.weight.double() - fq.pristine[n].to(m.weight.device).double()) ** 2).sum())
+    return total
+
+
 def install_fake(fq, pol, key, modules, C):
     """bf16 or fake (c) through sm120/eval/common.FakeQuant; returns the record fields."""
     if pol['kind'] == 'bf16':
         fq.install('bf16')
         return dict(backend='bf16')
+    if pol['weight'] == 'format':
+        return install_format(fq, pol, C)
     out = dict(backend='fake (c)')
     masks = type_block = None
     if pol['weight'] == 'map':
@@ -227,6 +286,7 @@ def main():
         t1 = time.time()
         if pol['kind'] in ('bf16', 'fake'):
             entry.update(install_fake(fq, pol, args.model, modules, C))
+            entry['installed_weight_sq_error'] = installed_error(fq)
             first = None
         else:
             if fq.modules:                  # the first native policy: the BF16 Linears and their CPU copies go
