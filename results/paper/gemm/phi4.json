@@ -9,7 +9,7 @@
   "clocks.max.mem": "14001 MHz",
   "clocks.applications.graphics": "[Requested functionality has been deprecated]",
   "persistence_mode": "Enabled",
-  "temperature.gpu": "55",
+  "temperature.gpu": "51",
   "utilization.gpu": "0 %",
   "memory.used": "4 MiB",
   "torch": "2.9.0+cu128",
@@ -22,7 +22,7 @@
    0
   ],
   "sm_count": 188,
-  "utc": "2026-09-29T02:21:21+00:00"
+  "utc": "2026-09-29T17:26:08+00:00"
  },
  "model": "phi4",
  "artifacts": {
@@ -33,6 +33,11 @@
   "tc_256x64": "/home/dev/n16k64_campaign/paper/artifacts/phi4_tc_256x64"
  },
  "iters": 20,
+ "protocol": {
+  "rounds": 3,
+  "order": "rotated: round r starts at position r * len / rounds",
+  "value": "median over rounds of the per-round CUPTI median of --iters calls"
+ },
  "kernels": {
   "stock": {
    "family": "stock",
@@ -317,12 +322,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 64,
-   "gemm_us": 11.072000000000116,
-   "quant_us": 4.576000000000022,
+   "gemm_us": 11.088499999999954,
+   "quant_us": 4.592499999999973,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 11.072000000000116,
+     "quant_us": 4.592499999999973
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 11.16800000000012,
+     "quant_us": 4.607999999999947
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 11.088499999999954,
+     "quant_us": 4.576000000000022
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.576,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 11.072
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 11.088
    }
   },
   {
@@ -334,12 +359,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 64,
-   "gemm_us": 11.10400000000027,
-   "quant_us": 4.895999999999731,
+   "gemm_us": 11.136000000000422,
+   "quant_us": 4.895999999999958,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 11.152000000000044,
+     "quant_us": 4.895999999999731
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 11.136000000000422,
+     "quant_us": 4.895999999999958
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 11.136000000000081,
+     "quant_us": 4.895999999999958
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.896,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 11.104
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 11.136
    }
   },
   {
@@ -351,12 +396,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 18.271999999999935,
-   "quant_us": 4.576000000000022,
+   "gemm_us": 18.288500000000113,
+   "quant_us": 4.576999999999941,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 18.288500000000113,
+     "quant_us": 4.576000000000022
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 18.272000000000048,
+     "quant_us": 4.576999999999941
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 18.368000000000052,
+     "quant_us": 4.607999999999947
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.576,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 18.272
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.608,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 18.368
    }
   },
   {
@@ -368,9 +433,29 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 64,
-   "gemm_us": 12.927999999999884,
-   "quant_us": 4.607500000000073,
+   "gemm_us": 12.9285000000001,
+   "quant_us": 4.607999999999947,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 12.960000000000036,
+     "quant_us": 4.60799999999972
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 12.9285000000001,
+     "quant_us": 4.607999999999947
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 12.928000000000111,
+     "quant_us": 4.607999999999947
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.608,
     "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 12.928
@@ -385,12 +470,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 64,
-   "gemm_us": 12.991999999999962,
+   "gemm_us": 12.960500000000025,
    "quant_us": 4.576000000000022,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 12.944500000000062,
+     "quant_us": 4.576000000000022
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 13.008499999999913,
+     "quant_us": 4.576000000000022
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 12.960500000000025,
+     "quant_us": 4.576000000000022
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.576,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 12.992
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 12.961
    }
   },
   {
@@ -402,12 +507,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 20.015499999999975,
-   "quant_us": 4.543999999999869,
+   "gemm_us": 20.048499999999876,
+   "quant_us": 4.480000000000018,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 20.0329999999999,
+     "quant_us": 4.544000000000096
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 20.064500000000066,
+     "quant_us": 4.480000000000018
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 20.048499999999876,
+     "quant_us": 4.464500000000044
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.544,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.015
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.465,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.048
    }
   },
   {
@@ -419,63 +544,143 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 64,
-   "gemm_us": 14.831500000000233,
-   "quant_us": 6.783500000000117,
-   "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.784,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 14.832
-   }
-  },
-  {
-   "proj": "o_proj",
-   "out": 5120,
-   "inp": 5120,
-   "tokens": 256,
-   "config": "stock_wA_nvfp4",
-   "kernel": "stock",
-   "act": "nvfp4_rows",
-   "width": 64,
-   "gemm_us": 14.94399999999996,
-   "quant_us": 7.744000000000085,
-   "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 7.744,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 14.944
-   }
-  },
-  {
-   "proj": "o_proj",
-   "out": 5120,
-   "inp": 5120,
-   "tokens": 256,
-   "config": "stock_wB",
-   "kernel": "stock_wB",
-   "act": "four_over_six_rows",
-   "width": null,
-   "gemm_us": 18.672000000000025,
-   "quant_us": 6.7520000000000095,
-   "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.752,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 18.672
-   }
-  },
-  {
-   "proj": "o_proj",
-   "out": 5120,
-   "inp": 5120,
-   "tokens": 256,
-   "config": "mixed_16x64",
-   "kernel": "mixed",
-   "act": "four_over_six_rows",
-   "width": 64,
-   "gemm_us": 15.311500000000024,
+   "gemm_us": 14.816500000000133,
    "quant_us": 6.7840000000001055,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 14.816000000000031,
+     "quant_us": 6.7840000000001055
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 14.848499999999945,
+     "quant_us": 6.815999999999917
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 14.816500000000133,
+     "quant_us": 6.7840000000001055
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.784,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 15.312
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 14.817
+   }
+  },
+  {
+   "proj": "o_proj",
+   "out": 5120,
+   "inp": 5120,
+   "tokens": 256,
+   "config": "stock_wA_nvfp4",
+   "kernel": "stock",
+   "act": "nvfp4_rows",
+   "width": 64,
+   "gemm_us": 14.879999999999939,
+   "quant_us": 7.711999999999989,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 14.832499999999982,
+     "quant_us": 7.711999999999989
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 14.879999999999939,
+     "quant_us": 7.711999999999989
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 14.896999999999935,
+     "quant_us": 7.7439999999999145
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 7.744,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 14.897
+   }
+  },
+  {
+   "proj": "o_proj",
+   "out": 5120,
+   "inp": 5120,
+   "tokens": 256,
+   "config": "stock_wB",
+   "kernel": "stock_wB",
+   "act": "four_over_six_rows",
+   "width": null,
+   "gemm_us": 18.6724999999999,
+   "quant_us": 6.752499999999827,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 18.6724999999999,
+     "quant_us": 6.752000000000066
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 18.783999999999935,
+     "quant_us": 6.816000000000031
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 18.65599999999995,
+     "quant_us": 6.752499999999827
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.752,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 18.656
+   }
+  },
+  {
+   "proj": "o_proj",
+   "out": 5120,
+   "inp": 5120,
+   "tokens": 256,
+   "config": "mixed_16x64",
+   "kernel": "mixed",
+   "act": "four_over_six_rows",
+   "width": 64,
+   "gemm_us": 15.232500000000016,
+   "quant_us": 6.783999999999935,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 15.232500000000016,
+     "quant_us": 6.783999999999992
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 15.232499999999959,
+     "quant_us": 6.75200000000018
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 15.328499999999963,
+     "quant_us": 6.783999999999935
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.784,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 15.328
    }
   },
   {
@@ -487,12 +692,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 64,
-   "gemm_us": 15.263500000000022,
-   "quant_us": 6.783999999999878,
+   "gemm_us": 15.21550000000002,
+   "quant_us": 6.7840000000001055,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 15.21550000000002,
+     "quant_us": 6.7840000000001055
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 15.232499999999959,
+     "quant_us": 6.7999999999999545
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 15.201000000000022,
+     "quant_us": 6.783999999999764
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.784,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 15.264
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 15.201
    }
   },
   {
@@ -504,12 +729,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 20.415499999999838,
-   "quant_us": 6.751999999999953,
+   "gemm_us": 20.38499999999999,
+   "quant_us": 6.752000000000066,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 20.432000000000016,
+     "quant_us": 6.752000000000066
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 20.38499999999999,
+     "quant_us": 6.753000000000043
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 20.384500000000003,
+     "quant_us": 6.7520000000000095
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.752,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.415
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.385
    }
   },
   {
@@ -521,46 +766,106 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 20.367500000000177,
-   "quant_us": 9.999999999999943,
+   "gemm_us": 20.22449999999992,
+   "quant_us": 9.984000000000151,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 20.22449999999992,
+     "quant_us": 9.952499999999986
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 20.22450000000015,
+     "quant_us": 9.984999999999957
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 20.096000000000004,
+     "quant_us": 9.984000000000151
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 9.984,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.096
+   }
+  },
+  {
+   "proj": "o_proj",
+   "out": 5120,
+   "inp": 5120,
+   "tokens": 512,
+   "config": "stock_wA_nvfp4",
+   "kernel": "stock",
+   "act": "nvfp4_rows",
+   "width": 128,
+   "gemm_us": 20.22400000000016,
+   "quant_us": 11.104000000000042,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 20.22400000000016,
+     "quant_us": 11.072999999999979
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 20.20799999999997,
+     "quant_us": 11.104000000000042
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 20.256500000000187,
+     "quant_us": 11.104500000000144
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 11.105,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.257
+   }
+  },
+  {
+   "proj": "o_proj",
+   "out": 5120,
+   "inp": 5120,
+   "tokens": 512,
+   "config": "stock_wB",
+   "kernel": "stock_wB",
+   "act": "four_over_six_rows",
+   "width": null,
+   "gemm_us": 20.161000000000058,
+   "quant_us": 10.0,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 20.111999999999966,
+     "quant_us": 10.016000000000076
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 20.225000000000136,
+     "quant_us": 9.983999999999924
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 20.161000000000058,
+     "quant_us": 10.0
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.0,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.368
-   }
-  },
-  {
-   "proj": "o_proj",
-   "out": 5120,
-   "inp": 5120,
-   "tokens": 512,
-   "config": "stock_wA_nvfp4",
-   "kernel": "stock",
-   "act": "nvfp4_rows",
-   "width": 128,
-   "gemm_us": 20.320000000000164,
-   "quant_us": 11.103999999999814,
-   "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 11.104,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.32
-   }
-  },
-  {
-   "proj": "o_proj",
-   "out": 5120,
-   "inp": 5120,
-   "tokens": 512,
-   "config": "stock_wB",
-   "kernel": "stock_wB",
-   "act": "four_over_six_rows",
-   "width": null,
-   "gemm_us": 20.271999999999935,
-   "quant_us": 10.01600000000002,
-   "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.016,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.272
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.161
    }
   },
   {
@@ -572,12 +877,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 20.767499999999984,
-   "quant_us": 9.951999999999884,
+   "gemm_us": 20.673000000000002,
+   "quant_us": 9.968499999999949,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 20.591999999999985,
+     "quant_us": 9.952999999999975
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 20.688999999999965,
+     "quant_us": 9.983999999999924
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 20.673000000000002,
+     "quant_us": 9.968499999999949
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 9.952,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.767
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 9.968,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.673
    }
   },
   {
@@ -589,12 +914,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 20.94299999999987,
-   "quant_us": 9.983999999999924,
+   "gemm_us": 20.6400000000001,
+   "quant_us": 9.984500000000025,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 20.608999999999924,
+     "quant_us": 9.984500000000025
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 20.704500000000053,
+     "quant_us": 10.000500000000102
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 20.6400000000001,
+     "quant_us": 9.968499999999949
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 9.984,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.943
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 9.968,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.64
    }
   },
   {
@@ -606,12 +951,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 21.711999999999875,
-   "quant_us": 9.98399999999998,
+   "gemm_us": 21.50449999999978,
+   "quant_us": 10.079999999999927,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 21.456500000000005,
+     "quant_us": 10.063999999999965
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 21.50449999999978,
+     "quant_us": 10.079999999999927
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 21.551999999999907,
+     "quant_us": 10.081000000000131
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 9.984,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 21.712
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.081,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 21.552
    }
   },
   {
@@ -623,12 +988,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 37.87200000000007,
-   "quant_us": 19.966999999999928,
+   "gemm_us": 37.6004999999999,
+   "quant_us": 20.545000000000073,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 37.68100000000004,
+     "quant_us": 20.43250000000012
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 37.53750000000002,
+     "quant_us": 20.545000000000073
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 37.6004999999999,
+     "quant_us": 20.560500000000047
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 19.967,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 37.872
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 20.561,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 37.6
    }
   },
   {
@@ -640,12 +1025,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 38.015499999999975,
-   "quant_us": 16.36749999999995,
+   "gemm_us": 37.60100000000011,
+   "quant_us": 17.120000000000005,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 37.60100000000011,
+     "quant_us": 17.009000000000015
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 37.48849999999999,
+     "quant_us": 17.120000000000005
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 37.66499999999991,
+     "quant_us": 17.26400000000001
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 16.367,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 38.015
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 17.264,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 37.665
    }
   },
   {
@@ -657,12 +1062,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 37.6635,
-   "quant_us": 20.14349999999996,
+   "gemm_us": 37.48849999999993,
+   "quant_us": 20.432000000000016,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 37.58450000000005,
+     "quant_us": 20.656000000000063
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 37.48849999999993,
+     "quant_us": 20.432000000000016
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 37.34500000000003,
+     "quant_us": 20.336000000000013
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 20.143,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 37.663
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 20.336,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 37.345
    }
   },
   {
@@ -674,12 +1099,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 38.9910000000001,
-   "quant_us": 20.25549999999987,
+   "gemm_us": 38.833000000000084,
+   "quant_us": 20.624499999999898,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 38.833000000000084,
+     "quant_us": 20.800500000000056
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 38.91299999999978,
+     "quant_us": 20.624499999999898
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 38.639999999999986,
+     "quant_us": 20.560500000000047
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 20.255,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 38.991
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 20.561,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 38.64
    }
   },
   {
@@ -691,12 +1136,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 39.21500000000003,
-   "quant_us": 20.048000000000116,
+   "gemm_us": 38.89700000000005,
+   "quant_us": 20.544500000000085,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 38.96100000000001,
+     "quant_us": 20.512500000000045
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 38.801000000000045,
+     "quant_us": 20.767999999999972
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 38.89700000000005,
+     "quant_us": 20.544500000000085
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 20.048,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 39.215
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 20.545,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 38.897
    }
   },
   {
@@ -708,12 +1173,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 41.75949999999989,
-   "quant_us": 20.73599999999999,
+   "gemm_us": 41.872999999999934,
+   "quant_us": 20.496500000000026,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 47.80899999999997,
+     "quant_us": 19.327999999999975
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 41.857000000000085,
+     "quant_us": 20.496500000000026
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 41.872999999999934,
+     "quant_us": 20.672500000000014
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 20.736,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 41.759
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 20.673,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 41.873
    }
   },
   {
@@ -725,12 +1210,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 85.94999999999982,
-   "quant_us": 30.128000000000043,
+   "gemm_us": 86.17800000000011,
+   "quant_us": 30.111999999999853,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 86.06550000000016,
+     "quant_us": 30.08050000000003
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 86.17800000000011,
+     "quant_us": 30.111999999999853
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 86.25750000000005,
+     "quant_us": 30.12850000000003
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 30.128,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 85.95
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 30.129,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 86.258
    }
   },
   {
@@ -742,12 +1247,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 85.26299999999992,
-   "quant_us": 26.175500000000056,
+   "gemm_us": 85.4419999999999,
+   "quant_us": 26.160499999999956,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 85.4419999999999,
+     "quant_us": 26.128000000000043
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 85.44249999999988,
+     "quant_us": 26.160499999999956
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 85.31299999999999,
+     "quant_us": 26.192499999999995
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 26.176,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 85.263
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 26.192,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 85.313
    }
   },
   {
@@ -759,12 +1284,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 86.09450000000015,
-   "quant_us": 30.111500000000092,
+   "gemm_us": 86.09750000000008,
+   "quant_us": 30.096499999999878,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 86.09750000000008,
+     "quant_us": 30.096499999999878
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 86.35300000000007,
+     "quant_us": 30.017000000000053
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 85.96849999999995,
+     "quant_us": 30.144000000000005
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 30.112,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 86.095
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 30.144,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 85.968
    }
   },
   {
@@ -776,12 +1321,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 89.31099999999992,
-   "quant_us": 29.982999999999947,
+   "gemm_us": 89.12250000000006,
+   "quant_us": 29.889000000000124,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 89.17000000000007,
+     "quant_us": 29.968500000000006
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 89.12250000000006,
+     "quant_us": 29.872499999999945
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 89.04200000000014,
+     "quant_us": 29.889000000000124
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 29.983,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 89.311
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 29.889,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 89.042
    }
   },
   {
@@ -793,12 +1358,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 89.53500000000031,
-   "quant_us": 29.951000000000022,
+   "gemm_us": 89.21799999999996,
+   "quant_us": 29.952499999999986,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 89.15400000000022,
+     "quant_us": 29.936999999999898
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 89.21799999999996,
+     "quant_us": 29.952499999999986
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 89.29799999999989,
+     "quant_us": 29.952999999999975
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 29.951,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 89.535
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 29.953,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 89.298
    }
   },
   {
@@ -810,12 +1395,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 93.99750000000017,
-   "quant_us": 29.91949999999997,
+   "gemm_us": 93.8895,
+   "quant_us": 29.85650000000021,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 94.0669999999999,
+     "quant_us": 29.85650000000021
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 93.76300000000003,
+     "quant_us": 29.872499999999945
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 93.8895,
+     "quant_us": 29.856500000000096
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 29.919,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 93.998
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 29.857,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 93.889
    }
   },
   {
@@ -827,12 +1432,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 146.49399999999991,
-   "quant_us": 55.26299999999992,
+   "gemm_us": 146.16200000000003,
+   "quant_us": 55.375999999999976,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 146.05200000000036,
+     "quant_us": 55.26549999999975
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 146.16200000000003,
+     "quant_us": 55.375999999999976
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 146.78699999999992,
+     "quant_us": 55.37699999999995
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 55.263,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 146.494
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 55.377,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 146.787
    }
   },
   {
@@ -844,12 +1469,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 148.52599999999984,
-   "quant_us": 49.18350000000032,
+   "gemm_us": 148.211,
+   "quant_us": 49.20050000000015,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 147.95449999999994,
+     "quant_us": 49.16899999999998
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 148.41849999999977,
+     "quant_us": 49.50500000000005
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 148.211,
+     "quant_us": 49.20050000000015
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 49.184,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 148.526
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 49.201,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 148.211
    }
   },
   {
@@ -861,12 +1506,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 146.3979999999999,
-   "quant_us": 55.3275000000001,
+   "gemm_us": 145.95499999999993,
+   "quant_us": 55.28150000000005,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 145.85950000000003,
+     "quant_us": 55.28150000000005
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 146.29100000000017,
+     "quant_us": 55.28099999999995
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 145.95499999999993,
+     "quant_us": 55.34500000000014
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 55.328,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 146.398
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 55.345,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 145.955
    }
   },
   {
@@ -878,12 +1543,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 153.8530000000003,
-   "quant_us": 54.99100000000021,
+   "gemm_us": 153.63599999999997,
+   "quant_us": 54.83400000000006,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 153.33100000000013,
+     "quant_us": 54.84899999999999
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 153.73199999999986,
+     "quant_us": 54.78600000000006
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 153.63599999999997,
+     "quant_us": 54.83400000000006
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 54.991,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 153.853
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 54.834,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 153.636
    }
   },
   {
@@ -895,12 +1580,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 154.55700000000002,
-   "quant_us": 54.911000000000286,
+   "gemm_us": 154.17899999999986,
+   "quant_us": 54.784499999999866,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 154.17849999999999,
+     "quant_us": 54.78449999999998
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 154.17899999999986,
+     "quant_us": 54.784499999999866
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 154.4195000000002,
+     "quant_us": 54.52949999999964
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 54.911,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 154.557
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 54.529,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 154.42
    }
   },
   {
@@ -912,12 +1617,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 164.68599999999992,
-   "quant_us": 54.19099999999992,
+   "gemm_us": 164.03549999999996,
+   "quant_us": 54.352499999999964,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 164.03549999999996,
+     "quant_us": 54.352499999999964
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 163.76199999999994,
+     "quant_us": 54.33700000000022
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 164.3549999999999,
+     "quant_us": 54.384499999999775
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 54.191,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 164.686
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 54.384,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 164.355
    }
   },
   {
@@ -929,12 +1654,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 301.0189999999998,
-   "quant_us": 116.04649999999992,
+   "gemm_us": 301.5590000000002,
+   "quant_us": 116.14699999999993,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 300.21500000000015,
+     "quant_us": 115.77850000000035
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 301.5590000000002,
+     "quant_us": 116.14699999999993
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 302.18250000000035,
+     "quant_us": 116.37100000000032
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.046,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 301.019
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.371,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 302.183
    }
   },
   {
@@ -946,12 +1691,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 307.5949999999998,
-   "quant_us": 105.48649999999975,
+   "gemm_us": 307.27100000000064,
+   "quant_us": 105.26650000000018,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 306.7750000000001,
+     "quant_us": 105.04200000000037
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 307.27100000000064,
+     "quant_us": 105.33000000000038
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 307.76800000000003,
+     "quant_us": 105.26650000000018
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 105.486,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 307.595
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 105.267,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 307.768
    }
   },
   {
@@ -963,12 +1728,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 299.9950000000001,
-   "quant_us": 116.04599999999937,
+   "gemm_us": 298.7750000000001,
+   "quant_us": 115.73099999999977,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 298.1830000000002,
+     "quant_us": 115.73099999999977
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 298.7750000000001,
+     "quant_us": 115.66700000000037
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 299.20650000000023,
+     "quant_us": 116.06600000000026
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.046,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 299.995
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.066,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 299.207
    }
   },
   {
@@ -980,12 +1765,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 315.6259999999995,
-   "quant_us": 116.84600000000023,
+   "gemm_us": 314.59899999999993,
+   "quant_us": 116.30650000000014,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 313.72000000000025,
+     "quant_us": 116.19500000000016
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 314.759,
+     "quant_us": 116.46649999999954
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 314.59899999999993,
+     "quant_us": 116.30650000000014
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.846,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 315.626
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.307,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 314.599
    }
   },
   {
@@ -997,12 +1802,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 315.93150000000014,
-   "quant_us": 116.57400000000052,
+   "gemm_us": 314.8240000000005,
+   "quant_us": 116.45100000000002,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 314.8240000000005,
+     "quant_us": 116.4670000000001
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 314.71100000000024,
+     "quant_us": 116.29050000000029
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 315.17449999999985,
+     "quant_us": 116.45100000000002
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.574,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 315.932
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.451,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 315.174
    }
   },
   {
@@ -1014,12 +1839,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 337.0519999999999,
-   "quant_us": 117.2460000000001,
+   "gemm_us": 335.35100000000057,
+   "quant_us": 116.83400000000029,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 335.22299999999996,
+     "quant_us": 116.83400000000029
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 335.35100000000057,
+     "quant_us": 116.59500000000025
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 335.97650000000044,
+     "quant_us": 116.99499999999989
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 117.246,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 337.052
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.995,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 335.977
    }
   },
   {
@@ -1031,9 +1876,29 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 64,
-   "gemm_us": 13.215999999999894,
+   "gemm_us": 13.199999999999989,
    "quant_us": 4.576000000000022,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 13.199999999999989,
+     "quant_us": 4.576000000000022
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 13.184999999999945,
+     "quant_us": 4.576000000000022
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 13.215999999999894,
+     "quant_us": 4.576000000000022
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.576,
     "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 13.216
@@ -1048,12 +1913,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 64,
-   "gemm_us": 13.199999999999932,
-   "quant_us": 4.879500000000007,
+   "gemm_us": 13.216499999999996,
+   "quant_us": 4.865000000000009,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 13.216499999999996,
+     "quant_us": 4.880499999999984
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 13.216000000000122,
+     "quant_us": 4.864000000000033
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 13.24799999999999,
+     "quant_us": 4.865000000000009
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.88,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 13.2
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.865,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 13.248
    }
   },
   {
@@ -1065,12 +1950,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 18.576000000000022,
+   "gemm_us": 18.591999999999985,
    "quant_us": 4.576000000000022,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 18.49700000000007,
+     "quant_us": 4.576000000000022
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 18.593000000000075,
+     "quant_us": 4.576000000000022
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 18.591999999999985,
+     "quant_us": 4.576000000000022
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.576,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 18.576
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 18.592
    }
   },
   {
@@ -1082,12 +1987,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 64,
-   "gemm_us": 14.032000000000039,
-   "quant_us": 4.591499999999996,
+   "gemm_us": 14.015999999999792,
+   "quant_us": 4.576000000000022,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 14.015999999999792,
+     "quant_us": 4.576000000000022
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 13.984500000000025,
+     "quant_us": 4.576000000000022
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 14.063999999999965,
+     "quant_us": 4.607999999999947
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.591,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 14.032
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.608,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 14.064
    }
   },
   {
@@ -1100,28 +2025,68 @@
    "act": "four_over_six_rows",
    "width": 64,
    "gemm_us": 13.919999999999845,
-   "quant_us": 4.606999999999971,
-   "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.607,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 13.92
-   }
-  },
-  {
-   "proj": "qkv_proj",
-   "out": 7680,
-   "inp": 5120,
-   "tokens": 128,
-   "config": "n8k64_wB",
-   "kernel": "n8k64_wB",
-   "act": "four_over_six_rows",
-   "width": null,
-   "gemm_us": 20.256000000000085,
    "quant_us": 4.576000000000022,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 13.919999999999845,
+     "quant_us": 4.576000000000022
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 13.904500000000098,
+     "quant_us": 4.576000000000022
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 14.00049999999976,
+     "quant_us": 4.607999999999947
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.608,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 14.0
+   }
+  },
+  {
+   "proj": "qkv_proj",
+   "out": 7680,
+   "inp": 5120,
+   "tokens": 128,
+   "config": "n8k64_wB",
+   "kernel": "n8k64_wB",
+   "act": "four_over_six_rows",
+   "width": null,
+   "gemm_us": 20.256500000000187,
+   "quant_us": 4.576000000000022,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 20.256500000000187,
+     "quant_us": 4.576000000000022
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 20.320999999999913,
+     "quant_us": 4.607999999999947
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 20.22499999999991,
+     "quant_us": 4.576000000000022
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.576,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.256
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.225
    }
   },
   {
@@ -1133,97 +2098,217 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 19.327999999999975,
-   "quant_us": 6.816000000000031,
+   "gemm_us": 19.423999999999978,
+   "quant_us": 6.784000000000049,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 19.440500000000043,
+     "quant_us": 6.784000000000049
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 19.392000000000053,
+     "quant_us": 6.783999999999878
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 19.423999999999978,
+     "quant_us": 6.800000000000068
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.8,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 19.424
+   }
+  },
+  {
+   "proj": "qkv_proj",
+   "out": 7680,
+   "inp": 5120,
+   "tokens": 256,
+   "config": "stock_wA_nvfp4",
+   "kernel": "stock",
+   "act": "nvfp4_rows",
+   "width": 128,
+   "gemm_us": 19.440500000000043,
+   "quant_us": 7.680500000000052,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 19.391999999999825,
+     "quant_us": 7.680000000000007
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 19.440500000000043,
+     "quant_us": 7.6965000000000146
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 19.45599999999996,
+     "quant_us": 7.680500000000052
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 7.681,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 19.456
+   }
+  },
+  {
+   "proj": "qkv_proj",
+   "out": 7680,
+   "inp": 5120,
+   "tokens": 256,
+   "config": "stock_wB",
+   "kernel": "stock_wB",
+   "act": "four_over_six_rows",
+   "width": null,
+   "gemm_us": 19.279999999999973,
+   "quant_us": 6.783999999999878,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 19.279999999999973,
+     "quant_us": 6.783999999999764
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 19.391999999999825,
+     "quant_us": 6.7840000000001055
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 19.232500000000073,
+     "quant_us": 6.783999999999878
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.784,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 19.233
+   }
+  },
+  {
+   "proj": "qkv_proj",
+   "out": 7680,
+   "inp": 5120,
+   "tokens": 256,
+   "config": "mixed_16x64",
+   "kernel": "mixed",
+   "act": "four_over_six_rows",
+   "width": 128,
+   "gemm_us": 19.904499999999985,
+   "quant_us": 6.752000000000123,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 19.84050000000002,
+     "quant_us": 6.751999999999953
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 19.904499999999985,
+     "quant_us": 6.752000000000123
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 19.968000000000018,
+     "quant_us": 6.783999999999935
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.784,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 19.968
+   }
+  },
+  {
+   "proj": "qkv_proj",
+   "out": 7680,
+   "inp": 5120,
+   "tokens": 256,
+   "config": "mixed_256x64",
+   "kernel": "mixed",
+   "act": "four_over_six_rows",
+   "width": 128,
+   "gemm_us": 20.000999999999863,
+   "quant_us": 6.783999999999992,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 20.064000000000078,
+     "quant_us": 6.7849999999998545
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 20.000999999999863,
+     "quant_us": 6.783999999999992
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 20.0,
+     "quant_us": 6.783999999999935
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.784,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.0
+   }
+  },
+  {
+   "proj": "qkv_proj",
+   "out": 7680,
+   "inp": 5120,
+   "tokens": 256,
+   "config": "n8k64_wB",
+   "kernel": "n8k64_wB",
+   "act": "four_over_six_rows",
+   "width": null,
+   "gemm_us": 21.089000000000055,
+   "quant_us": 6.784000000000049,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 21.120499999999993,
+     "quant_us": 6.784000000000049
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 21.07249999999999,
+     "quant_us": 6.783999999999878
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 21.089000000000055,
+     "quant_us": 6.816000000000031
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.816,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 19.328
-   }
-  },
-  {
-   "proj": "qkv_proj",
-   "out": 7680,
-   "inp": 5120,
-   "tokens": 256,
-   "config": "stock_wA_nvfp4",
-   "kernel": "stock",
-   "act": "nvfp4_rows",
-   "width": 128,
-   "gemm_us": 19.488000000000056,
-   "quant_us": 7.760000000000218,
-   "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 7.76,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 19.488
-   }
-  },
-  {
-   "proj": "qkv_proj",
-   "out": 7680,
-   "inp": 5120,
-   "tokens": 256,
-   "config": "stock_wB",
-   "kernel": "stock_wB",
-   "act": "four_over_six_rows",
-   "width": null,
-   "gemm_us": 19.248000000000047,
-   "quant_us": 6.848000000000013,
-   "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.848,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 19.248
-   }
-  },
-  {
-   "proj": "qkv_proj",
-   "out": 7680,
-   "inp": 5120,
-   "tokens": 256,
-   "config": "mixed_16x64",
-   "kernel": "mixed",
-   "act": "four_over_six_rows",
-   "width": 128,
-   "gemm_us": 19.88750000000016,
-   "quant_us": 6.815999999999917,
-   "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.816,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 19.888
-   }
-  },
-  {
-   "proj": "qkv_proj",
-   "out": 7680,
-   "inp": 5120,
-   "tokens": 256,
-   "config": "mixed_256x64",
-   "kernel": "mixed",
-   "act": "four_over_six_rows",
-   "width": 128,
-   "gemm_us": 20.03150000000005,
-   "quant_us": 6.847999999999956,
-   "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.848,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 20.032
-   }
-  },
-  {
-   "proj": "qkv_proj",
-   "out": 7680,
-   "inp": 5120,
-   "tokens": 256,
-   "config": "n8k64_wB",
-   "kernel": "n8k64_wB",
-   "act": "four_over_six_rows",
-   "width": null,
-   "gemm_us": 21.18300000000005,
-   "quant_us": 6.8799999999999955,
-   "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 6.88,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 21.183
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 21.089
    }
   },
   {
@@ -1235,12 +2320,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 38.144000000000005,
-   "quant_us": 10.046999999999798,
+   "gemm_us": 37.82449999999983,
+   "quant_us": 10.19199999999995,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 37.79299999999995,
+     "quant_us": 10.208000000000027
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 38.12900000000013,
+     "quant_us": 10.032500000000027
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 37.82449999999983,
+     "quant_us": 10.19199999999995
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.047,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 38.144
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.192,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 37.824
    }
   },
   {
@@ -1252,12 +2357,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 38.144000000000005,
-   "quant_us": 11.135999999999967,
+   "gemm_us": 37.74549999999999,
+   "quant_us": 11.343999999999994,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 37.76099999999997,
+     "quant_us": 11.343999999999994
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 37.681499999999915,
+     "quant_us": 11.392500000000155
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 37.74549999999999,
+     "quant_us": 11.328499999999963
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 11.136,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 38.144
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 11.328,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 37.745
    }
   },
   {
@@ -1269,12 +2394,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 38.0954999999999,
-   "quant_us": 10.031999999999925,
+   "gemm_us": 37.680999999999926,
+   "quant_us": 10.271999999999935,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 37.61650000000003,
+     "quant_us": 10.30399999999986
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 37.680999999999926,
+     "quant_us": 10.271999999999935
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 37.69699999999989,
+     "quant_us": 10.208000000000084
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.032,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 38.095
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.208,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 37.697
    }
   },
   {
@@ -1286,12 +2431,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 39.32700000000011,
-   "quant_us": 10.015999999999906,
+   "gemm_us": 38.785000000000025,
+   "quant_us": 10.288000000000011,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 38.76899999999989,
+     "quant_us": 10.30400000000003
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 39.24849999999992,
+     "quant_us": 10.000500000000102
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 38.785000000000025,
+     "quant_us": 10.288000000000011
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.016,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 39.327
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.288,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 38.785
    }
   },
   {
@@ -1303,12 +2468,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 39.56749999999994,
-   "quant_us": 9.984000000000094,
+   "gemm_us": 38.88099999999997,
+   "quant_us": 10.25649999999996,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 38.88099999999986,
+     "quant_us": 10.25649999999996
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 39.456999999999994,
+     "quant_us": 10.06399999999985
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 38.88099999999997,
+     "quant_us": 10.25649999999996
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 9.984,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 39.567
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.256,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 38.881
    }
   },
   {
@@ -1320,12 +2505,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 43.05600000000004,
-   "quant_us": 10.095499999999902,
+   "gemm_us": 42.39999999999998,
+   "quant_us": 10.32000000000005,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 42.39999999999998,
+     "quant_us": 10.32000000000005
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 43.3454999999999,
+     "quant_us": 10.111999999999966
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 42.289000000000044,
+     "quant_us": 10.416000000000054
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.095,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 43.056
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.416,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 42.289
    }
   },
   {
@@ -1337,12 +2542,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 64.60650000000004,
-   "quant_us": 20.17550000000017,
+   "gemm_us": 59.233999999999924,
+   "quant_us": 21.39300000000003,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 57.56899999999996,
+     "quant_us": 21.39300000000003
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 63.96950000000004,
+     "quant_us": 20.593000000000075
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 59.233999999999924,
+     "quant_us": 22.40050000000008
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 20.176,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 64.607
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 22.401,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 59.234
    }
   },
   {
@@ -1354,12 +2579,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 59.84000000000003,
-   "quant_us": 18.304000000000087,
+   "gemm_us": 58.54500000000007,
+   "quant_us": 18.25649999999996,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 57.841499999999996,
+     "quant_us": 18.25649999999996
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 58.54500000000007,
+     "quant_us": 18.096499999999992
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 60.000999999999976,
+     "quant_us": 18.32000000000005
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 18.304,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 59.84
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 18.32,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 60.001
    }
   },
   {
@@ -1371,12 +2616,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 57.966999999999985,
-   "quant_us": 21.96799999999996,
+   "gemm_us": 57.36149999999998,
+   "quant_us": 21.9045000000001,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 57.77699999999993,
+     "quant_us": 21.9045000000001
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 57.2494999999999,
+     "quant_us": 21.328500000000076
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 57.36149999999998,
+     "quant_us": 22.016500000000065
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 21.968,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 57.967
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 22.017,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 57.361
    }
   },
   {
@@ -1388,12 +2653,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 62.0625,
-   "quant_us": 22.11200000000008,
+   "gemm_us": 61.3454999999999,
+   "quant_us": 22.096499999999935,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 61.3454999999999,
+     "quant_us": 22.096499999999935
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 60.049999999999955,
+     "quant_us": 22.12850000000003
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 63.92150000000004,
+     "quant_us": 21.888000000000147
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 22.112,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 62.062
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 21.888,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 63.922
    }
   },
   {
@@ -1405,12 +2690,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 62.36799999999994,
-   "quant_us": 22.03150000000005,
+   "gemm_us": 61.8900000000001,
+   "quant_us": 22.112500000000068,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 60.62549999999999,
+     "quant_us": 22.19249999999988
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 61.8900000000001,
+     "quant_us": 22.112500000000068
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 61.937999999999874,
+     "quant_us": 22.064499999999953
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 22.032,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 62.368
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 22.064,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 61.938
    }
   },
   {
@@ -1422,12 +2727,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 68.47900000000004,
-   "quant_us": 20.671500000000037,
+   "gemm_us": 68.32150000000013,
+   "quant_us": 20.464500000000044,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 68.00200000000007,
+     "quant_us": 20.464500000000044
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 68.32150000000013,
+     "quant_us": 20.480500000000006
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 68.43349999999998,
+     "quant_us": 20.352999999999838
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 20.672,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 68.479
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 20.353,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 68.433
    }
   },
   {
@@ -1439,12 +2764,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 122.99000000000024,
-   "quant_us": 30.111500000000092,
+   "gemm_us": 123.02650000000006,
+   "quant_us": 30.160499999999956,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 122.94599999999991,
+     "quant_us": 30.17700000000002
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 123.08999999999992,
+     "quant_us": 30.128999999999905
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 123.02650000000006,
+     "quant_us": 30.160499999999956
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 30.112,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 122.99
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 30.16,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 123.027
    }
   },
   {
@@ -1456,12 +2801,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 122.1740000000002,
-   "quant_us": 26.207500000000095,
+   "gemm_us": 122.25900000000001,
+   "quant_us": 26.208500000000186,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 122.25900000000001,
+     "quant_us": 26.208500000000186
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 122.3710000000001,
+     "quant_us": 26.257000000000062
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 121.97199999999998,
+     "quant_us": 26.208499999999958
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 26.208,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 122.174
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 121.972
    }
   },
   {
@@ -1473,12 +2838,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 123.06999999999994,
-   "quant_us": 30.192000000000007,
+   "gemm_us": 122.80349999999999,
+   "quant_us": 30.177000000000135,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 122.61149999999992,
+     "quant_us": 30.177000000000135
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 122.80349999999999,
+     "quant_us": 30.11300000000017
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 123.01150000000013,
+     "quant_us": 30.208499999999844
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 30.192,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 123.07
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 30.208,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 123.012
    }
   },
   {
@@ -1490,12 +2875,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 127.06999999999971,
-   "quant_us": 30.28749999999991,
+   "gemm_us": 126.7059999999999,
+   "quant_us": 30.240000000000236,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 126.94700000000006,
+     "quant_us": 30.240000000000236
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 126.7059999999999,
+     "quant_us": 30.256500000000074
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 126.69100000000003,
+     "quant_us": 30.208499999999958
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 30.287,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 127.07
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 30.208,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 126.691
    }
   },
   {
@@ -1507,12 +2912,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 127.13400000000001,
-   "quant_us": 30.271000000000186,
+   "gemm_us": 127.01099999999997,
+   "quant_us": 30.320500000000266,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 127.01099999999997,
+     "quant_us": 30.288499999999885
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 126.96299999999997,
+     "quant_us": 30.320999999999913
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 127.0915,
+     "quant_us": 30.320500000000266
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 30.271,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 127.134
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 30.321,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 127.091
    }
   },
   {
@@ -1524,12 +2949,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 135.8214999999999,
-   "quant_us": 30.367499999999836,
+   "gemm_us": 135.39499999999998,
+   "quant_us": 30.400499999999965,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 135.39499999999998,
+     "quant_us": 30.416499999999814
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 135.7800000000002,
+     "quant_us": 30.2410000000001
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 134.89900000000011,
+     "quant_us": 30.400499999999965
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 30.367,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 135.821
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 30.4,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 134.899
    }
   },
   {
@@ -1541,12 +2986,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 237.83550000000014,
-   "quant_us": 55.56700000000001,
+   "gemm_us": 237.54149999999981,
+   "quant_us": 55.712999999999965,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 237.04500000000007,
+     "quant_us": 55.55350000000044
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 238.10049999999978,
+     "quant_us": 55.77699999999959
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 237.54149999999981,
+     "quant_us": 55.712999999999965
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 55.567,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 237.836
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 55.713,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 237.541
    }
   },
   {
@@ -1558,12 +3023,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 239.56400000000008,
-   "quant_us": 49.694999999999936,
+   "gemm_us": 239.27100000000019,
+   "quant_us": 49.80899999999974,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 238.2444999999998,
+     "quant_us": 49.64899999999989
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 239.27100000000019,
+     "quant_us": 49.840999999999894
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 239.4135000000001,
+     "quant_us": 49.80899999999974
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 49.695,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 239.564
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 49.809,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 239.414
    }
   },
   {
@@ -1575,12 +3060,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 235.51699999999983,
-   "quant_us": 55.61550000000011,
+   "gemm_us": 235.28549999999973,
+   "quant_us": 55.48949999999991,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 235.07700000000068,
+     "quant_us": 55.42500000000018
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 235.3499999999999,
+     "quant_us": 55.48949999999991
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 235.28549999999973,
+     "quant_us": 55.66550000000018
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 55.616,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 235.517
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 55.666,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 235.285
    }
   },
   {
@@ -1592,12 +3097,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 247.77249999999958,
-   "quant_us": 55.53499999999997,
+   "gemm_us": 247.14199999999983,
+   "quant_us": 55.442000000000235,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 246.67749999999978,
+     "quant_us": 55.42499999999973
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 247.14199999999983,
+     "quant_us": 55.442000000000235
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 247.9255000000005,
+     "quant_us": 55.48949999999991
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 55.535,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 247.772
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 55.489,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 247.926
    }
   },
   {
@@ -1609,12 +3134,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 248.12400000000025,
-   "quant_us": 55.77500000000009,
+   "gemm_us": 247.63699999999972,
+   "quant_us": 55.48900000000003,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 247.67100000000028,
+     "quant_us": 55.50499999999988
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 247.63699999999972,
+     "quant_us": 55.36099999999999
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 247.46099999999979,
+     "quant_us": 55.48900000000003
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 55.775,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 248.124
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 55.489,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 247.461
    }
   },
   {
@@ -1626,12 +3171,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 263.30700000000024,
-   "quant_us": 55.471000000000004,
+   "gemm_us": 262.5340000000002,
+   "quant_us": 55.32899999999995,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 262.5340000000002,
+     "quant_us": 55.281499999999824
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 262.83899999999994,
+     "quant_us": 55.330000000000155
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 262.4069999999999,
+     "quant_us": 55.32899999999995
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 55.471,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 263.307
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 55.329,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 262.407
    }
   },
   {
@@ -1643,12 +3208,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 457.76950000000033,
-   "quant_us": 116.27049999999986,
+   "gemm_us": 460.44150000000036,
+   "quant_us": 116.65899999999988,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 456.44299999999976,
+     "quant_us": 116.19500000000016
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 460.7150000000006,
+     "quant_us": 116.65899999999988
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 460.44150000000036,
+     "quant_us": 116.91449999999963
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.27,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 457.77
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.914,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 460.442
    }
   },
   {
@@ -1660,12 +3245,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 466.47249999999985,
-   "quant_us": 106.3184999999994,
+   "gemm_us": 466.66650000000027,
+   "quant_us": 106.27450000000044,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 464.4265000000005,
+     "quant_us": 105.8105000000005
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 466.66650000000027,
+     "quant_us": 106.27450000000044
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 467.6274999999996,
+     "quant_us": 106.56249999999955
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 106.318,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 466.472
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 106.562,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 467.627
    }
   },
   {
@@ -1677,12 +3282,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 457.4815000000008,
-   "quant_us": 116.63850000000025,
+   "gemm_us": 457.0664999999999,
+   "quant_us": 116.45049999999958,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 455.0194999999994,
+     "quant_us": 116.32250000000113
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 457.0664999999999,
+     "quant_us": 116.45049999999958
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 457.2264999999993,
+     "quant_us": 116.59450000000015
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.639,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 457.482
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.595,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 457.226
    }
   },
   {
@@ -1694,12 +3319,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 479.2250000000008,
-   "quant_us": 116.71799999999939,
+   "gemm_us": 477.6119999999996,
+   "quant_us": 116.51450000000045,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 477.6119999999996,
+     "quant_us": 116.51450000000045
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 478.2049999999995,
+     "quant_us": 116.62750000000005
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 477.09949999999924,
+     "quant_us": 116.33899999999994
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.718,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 479.225
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.339,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 477.099
    }
   },
   {
@@ -1711,12 +3356,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 479.78549999999996,
-   "quant_us": 116.89450000000124,
+   "gemm_us": 478.8914999999997,
+   "quant_us": 116.6265000000003,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 478.2359999999994,
+     "quant_us": 116.61100000000033
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 479.2600000000002,
+     "quant_us": 116.6265000000003
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 478.8914999999997,
+     "quant_us": 116.72300000000041
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.895,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 479.785
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.723,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 478.891
    }
   },
   {
@@ -1728,12 +3393,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 512.1845000000003,
-   "quant_us": 117.32649999999921,
+   "gemm_us": 510.47599999999966,
+   "quant_us": 117.15449999999964,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 510.47599999999966,
+     "quant_us": 117.15449999999964
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 510.45949999999993,
+     "quant_us": 117.02600000000007
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 511.0199999999995,
+     "quant_us": 117.17099999999982
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 117.326,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 512.185
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 117.171,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 511.02
    }
   },
   {
@@ -1745,12 +3430,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 40.36750000000029,
-   "quant_us": 4.831999999999994,
+   "gemm_us": 40.16100000000006,
+   "quant_us": 4.864000000000033,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 40.208999999999946,
+     "quant_us": 4.864000000000033
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 40.08100000000002,
+     "quant_us": 4.865000000000009
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 40.16100000000006,
+     "quant_us": 4.864000000000033
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.832,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 40.368
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.864,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 40.161
    }
   },
   {
@@ -1762,12 +3467,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 40.35200000000009,
-   "quant_us": 5.088000000000079,
+   "gemm_us": 40.176000000000045,
+   "quant_us": 5.136000000000081,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 40.176000000000045,
+     "quant_us": 5.136000000000081
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 40.04849999999999,
+     "quant_us": 5.1200000000000045
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 40.192499999999995,
+     "quant_us": 5.151999999999816
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 5.088,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 40.352
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 5.152,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 40.192
    }
   },
   {
@@ -1779,12 +3504,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 40.41550000000001,
-   "quant_us": 4.831999999999994,
+   "gemm_us": 40.20900000000006,
+   "quant_us": 4.832499999999982,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 40.17700000000002,
+     "quant_us": 4.832000000000107
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 40.256500000000074,
+     "quant_us": 4.832499999999982
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 40.20900000000006,
+     "quant_us": 4.864000000000033
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.832,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 40.416
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.864,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 40.209
    }
   },
   {
@@ -1796,12 +3541,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 41.230999999999995,
-   "quant_us": 4.800000000000125,
+   "gemm_us": 40.832500000000095,
+   "quant_us": 4.864500000000021,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 40.832500000000095,
+     "quant_us": 4.895999999999958
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 40.833000000000084,
+     "quant_us": 4.848500000000058
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 40.817000000000064,
+     "quant_us": 4.864500000000021
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.8,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 41.231
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.865,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 40.817
    }
   },
   {
@@ -1813,12 +3578,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 41.16799999999989,
-   "quant_us": 4.832000000000107,
+   "gemm_us": 40.7050000000001,
+   "quant_us": 4.896499999999946,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 40.84899999999993,
+     "quant_us": 4.896499999999946
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 40.7050000000001,
+     "quant_us": 4.895999999999958
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 40.68900000000002,
+     "quant_us": 4.911999999999921
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.832,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 41.168
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.912,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 40.689
    }
   },
   {
@@ -1830,12 +3615,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 43.407499999999914,
-   "quant_us": 4.991999999999962,
+   "gemm_us": 43.20100000000002,
+   "quant_us": 4.895999999999958,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 43.201499999999896,
+     "quant_us": 4.895999999999958
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 43.12049999999999,
+     "quant_us": 4.896000000000072
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 43.20100000000002,
+     "quant_us": 4.895999999999958
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.992,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 43.407
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 4.896,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 43.201
    }
   },
   {
@@ -1847,12 +3652,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 70.90999999999997,
-   "quant_us": 10.688000000000102,
+   "gemm_us": 69.57,
+   "quant_us": 10.640499999999975,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 70.322,
+     "quant_us": 10.640499999999975
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 69.57,
+     "quant_us": 10.640499999999975
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 68.62450000000001,
+     "quant_us": 10.671999999999969
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.688,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 70.91
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.672,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 68.625
    }
   },
   {
@@ -1864,12 +3689,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 69.99899999999997,
-   "quant_us": 12.191500000000133,
+   "gemm_us": 69.15350000000012,
+   "quant_us": 12.080500000000029,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 69.61800000000005,
+     "quant_us": 12.048999999999864
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 69.15350000000012,
+     "quant_us": 12.143999999999949
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 69.106,
+     "quant_us": 12.080500000000029
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 12.192,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 69.999
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 12.081,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 69.106
    }
   },
   {
@@ -1881,12 +3726,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 69.58300000000008,
-   "quant_us": 10.799499999999966,
+   "gemm_us": 69.15449999999998,
+   "quant_us": 10.624500000000126,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 69.37750000000023,
+     "quant_us": 10.624500000000126
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 69.15449999999998,
+     "quant_us": 10.512000000000171
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 68.96250000000003,
+     "quant_us": 10.640500000000088
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.799,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 69.583
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.641,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 68.963
    }
   },
   {
@@ -1898,12 +3763,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 72.543,
-   "quant_us": 10.639999999999986,
+   "gemm_us": 72.16199999999992,
+   "quant_us": 10.56049999999982,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 72.16199999999992,
+     "quant_us": 10.528999999999996
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 72.08249999999998,
+     "quant_us": 10.576000000000022
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 72.24149999999997,
+     "quant_us": 10.56049999999982
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.64,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 72.543
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.56,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 72.241
    }
   },
   {
@@ -1915,12 +3800,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 72.12749999999994,
-   "quant_us": 10.54349999999988,
+   "gemm_us": 72.17800000000011,
+   "quant_us": 10.591999999999985,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 72.17750000000001,
+     "quant_us": 10.591999999999985
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 72.17800000000011,
+     "quant_us": 10.591999999999985
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 72.73799999999994,
+     "quant_us": 10.559999999999945
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.543,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 72.127
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.56,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 72.738
    }
   },
   {
@@ -1932,12 +3837,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 77.8705000000001,
-   "quant_us": 9.95199999999977,
+   "gemm_us": 77.57,
+   "quant_us": 10.111999999999853,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 77.57,
+     "quant_us": 10.144000000000005
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 77.81000000000006,
+     "quant_us": 9.968000000000075
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 77.53800000000001,
+     "quant_us": 10.111999999999853
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 9.952,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 77.871
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 10.112,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 77.538
    }
   },
   {
@@ -1949,12 +3874,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 144.541,
-   "quant_us": 16.94399999999996,
+   "gemm_us": 144.09900000000016,
+   "quant_us": 16.960499999999968,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 144.09900000000016,
+     "quant_us": 16.928499999999985
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 143.97199999999998,
+     "quant_us": 17.023999999999887
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 144.3230000000001,
+     "quant_us": 16.960499999999968
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 16.944,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 144.541
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 16.96,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 144.323
    }
   },
   {
@@ -1966,12 +3911,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 144.51100000000008,
-   "quant_us": 18.448000000000093,
+   "gemm_us": 144.96350000000007,
+   "quant_us": 18.480499999999893,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 144.54600000000016,
+     "quant_us": 18.480499999999893
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 144.96400000000017,
+     "quant_us": 18.432999999999993
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 144.96350000000007,
+     "quant_us": 18.720500000000015
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 18.448,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 144.511
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 18.721,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 144.964
    }
   },
   {
@@ -1983,12 +3948,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 144.43049999999994,
-   "quant_us": 17.023500000000126,
+   "gemm_us": 144.2279999999999,
+   "quant_us": 16.944500000000062,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 144.06749999999965,
+     "quant_us": 16.944499999999948
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 144.67549999999983,
+     "quant_us": 16.944500000000062
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 144.2279999999999,
+     "quant_us": 17.08799999999985
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 17.024,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 144.43
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 17.088,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 144.228
    }
   },
   {
@@ -2000,29 +3985,69 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 150.68599999999992,
-   "quant_us": 17.103999999999814,
+   "gemm_us": 150.6105,
+   "quant_us": 17.216499999999883,
    "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 17.104,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 150.686
-   }
-  },
-  {
-   "proj": "gate_up_proj",
-   "out": 35840,
-   "inp": 5120,
-   "tokens": 512,
-   "config": "mixed_256x64",
-   "kernel": "mixed",
-   "act": "four_over_six_rows",
-   "width": 128,
-   "gemm_us": 150.44600000000014,
-   "quant_us": 17.26400000000001,
-   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 150.62649999999985,
+     "quant_us": 17.168499999999767
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 150.6105,
+     "quant_us": 17.216499999999883
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 149.74849999999992,
+     "quant_us": 17.264499999999998
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 17.264,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 150.446
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 149.748
+   }
+  },
+  {
+   "proj": "gate_up_proj",
+   "out": 35840,
+   "inp": 5120,
+   "tokens": 512,
+   "config": "mixed_256x64",
+   "kernel": "mixed",
+   "act": "four_over_six_rows",
+   "width": 128,
+   "gemm_us": 150.56399999999996,
+   "quant_us": 17.26400000000001,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 150.56399999999996,
+     "quant_us": 17.26400000000001
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 150.32050000000004,
+     "quant_us": 17.312000000000126
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 150.83400000000006,
+     "quant_us": 17.23299999999972
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 17.233,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 150.834
    }
   },
   {
@@ -2034,12 +4059,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 162.1244999999999,
-   "quant_us": 16.879500000000007,
+   "gemm_us": 161.68300000000022,
+   "quant_us": 16.737000000000307,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 161.68300000000022,
+     "quant_us": 16.737000000000307
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 161.31600000000003,
+     "quant_us": 16.639999999999986
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 161.92399999999998,
+     "quant_us": 16.769000000000233
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 16.88,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 162.124
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 16.769,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 161.924
    }
   },
   {
@@ -2051,12 +4096,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 286.1405000000001,
-   "quant_us": 26.847500000000082,
+   "gemm_us": 284.64599999999973,
+   "quant_us": 27.025000000000546,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 284.63099999999986,
+     "quant_us": 27.025000000000546
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 285.33399999999983,
+     "quant_us": 27.040500000000065
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 284.64599999999973,
+     "quant_us": 27.02449999999999
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 26.848,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 286.141
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 27.024,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 284.646
    }
   },
   {
@@ -2068,12 +4133,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 287.804,
-   "quant_us": 24.016000000000076,
+   "gemm_us": 287.12699999999995,
+   "quant_us": 23.936000000000604,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 286.14999999999986,
+     "quant_us": 23.888999999999896
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 287.12699999999995,
+     "quant_us": 23.936000000000604
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 287.3029999999999,
+     "quant_us": 23.984500000000025
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 24.016,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 287.804
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 23.985,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 287.303
    }
   },
   {
@@ -2085,12 +4170,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 285.2750000000001,
-   "quant_us": 26.942999999999984,
+   "gemm_us": 284.519,
+   "quant_us": 26.832499999999982,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 284.424,
+     "quant_us": 26.784999999999854
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 284.7265000000002,
+     "quant_us": 26.832499999999982
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 284.519,
+     "quant_us": 27.07250000000022
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 26.943,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 285.275
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 27.073,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 284.519
    }
   },
   {
@@ -2102,12 +4207,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 296.8430000000004,
-   "quant_us": 27.072000000000116,
+   "gemm_us": 296.34299999999985,
+   "quant_us": 26.929000000000087,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 296.1989999999996,
+     "quant_us": 26.929000000000087
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 296.34299999999985,
+     "quant_us": 27.056500000000028
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 296.4224999999997,
+     "quant_us": 26.896499999999946
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 27.072,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 296.843
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 26.896,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 296.422
    }
   },
   {
@@ -2119,12 +4244,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 297.3710000000001,
-   "quant_us": 27.039999999999964,
+   "gemm_us": 296.51800000000003,
+   "quant_us": 26.976499999999987,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 296.4870000000001,
+     "quant_us": 26.976499999999987
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 296.53599999999983,
+     "quant_us": 26.912999999999784
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 296.51800000000003,
+     "quant_us": 27.008500000000367
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 27.04,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 297.371
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 27.009,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 296.518
    }
   },
   {
@@ -2136,12 +4281,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 315.6115000000001,
-   "quant_us": 27.600000000000364,
+   "gemm_us": 314.6470000000004,
+   "quant_us": 27.409000000000106,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 314.2165,
+     "quant_us": 27.200500000000375
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 314.83899999999994,
+     "quant_us": 27.552999999999997
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 314.6470000000004,
+     "quant_us": 27.409000000000106
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 27.6,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 315.612
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 27.409,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 314.647
    }
   },
   {
@@ -2153,12 +4318,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 557.5755000000004,
-   "quant_us": 38.78300000000013,
+   "gemm_us": 558.685,
+   "quant_us": 38.59299999999985,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 556.0604999999996,
+     "quant_us": 38.59299999999985
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 558.685,
+     "quant_us": 38.576999999999316
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 558.7494999999994,
+     "quant_us": 38.86449999999877
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 38.783,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 557.576
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 38.864,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 558.749
    }
   },
   {
@@ -2170,12 +4355,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 561.335000000001,
-   "quant_us": 36.9434999999994,
+   "gemm_us": 561.0694999999996,
+   "quant_us": 36.89700000000039,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 559.7735,
+     "quant_us": 36.86499999999978
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 562.2370000000001,
+     "quant_us": 37.08900000000017
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 561.0694999999996,
+     "quant_us": 36.89700000000039
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 36.943,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 561.335
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 36.897,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 561.069
    }
   },
   {
@@ -2187,12 +4392,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 555.5440000000003,
-   "quant_us": 38.575000000000045,
+   "gemm_us": 554.4609999999996,
+   "quant_us": 38.49649999999974,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 553.6144999999999,
+     "quant_us": 38.49649999999974
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 554.4609999999996,
+     "quant_us": 38.40050000000019
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 555.4685000000002,
+     "quant_us": 38.56049999999959
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 38.575,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 555.544
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 38.56,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 555.469
    }
   },
   {
@@ -2204,12 +4429,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 579.3199999999997,
-   "quant_us": 38.46300000000019,
+   "gemm_us": 579.9190000000001,
+   "quant_us": 38.560999999999694,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 577.902000000001,
+     "quant_us": 38.560999999999694
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 579.9190000000001,
+     "quant_us": 38.400999999999954
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 580.3980000000001,
+     "quant_us": 38.7849999999994
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 38.463,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 579.32
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 38.785,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 580.398
    }
   },
   {
@@ -2221,12 +4466,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 580.9200000000001,
-   "quant_us": 38.6869999999999,
+   "gemm_us": 580.3500000000004,
+   "quant_us": 38.68849999999975,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 580.3500000000004,
+     "quant_us": 38.76850000000013
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 580.5574999999999,
+     "quant_us": 38.68849999999975
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 579.9655000000002,
+     "quant_us": 38.656999999999925
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 38.687,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 580.92
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 38.657,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 579.966
    }
   },
   {
@@ -2238,12 +4503,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 618.0724999999998,
-   "quant_us": 38.784000000000106,
+   "gemm_us": 616.5275000000006,
+   "quant_us": 38.688500000000204,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 616.5275000000006,
+     "quant_us": 38.56100000000015
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 616.5109999999997,
+     "quant_us": 38.688500000000204
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 616.5730000000008,
+     "quant_us": 38.73699999999985
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 38.784,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 618.072
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 38.737,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 616.573
    }
   },
   {
@@ -2255,12 +4540,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 1100.7039999999997,
-   "quant_us": 61.26299999999901,
+   "gemm_us": 1102.8110000000006,
+   "quant_us": 61.42549999999983,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 1097.9289999999996,
+     "quant_us": 61.329499999999825
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 1102.8110000000006,
+     "quant_us": 61.60149999999976
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 1106.4584999999988,
+     "quant_us": 61.42549999999983
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 61.263,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1100.704
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 61.425,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1106.458
    }
   },
   {
@@ -2272,12 +4577,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 1108.0975000000008,
-   "quant_us": 56.350999999999885,
+   "gemm_us": 1110.6825000000003,
+   "quant_us": 56.529999999999745,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 1106.763,
+     "quant_us": 56.449499999999716
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 1110.6825000000003,
+     "quant_us": 56.561500000000706
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 1113.3550000000005,
+     "quant_us": 56.529999999999745
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 56.351,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1108.098
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 56.53,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1113.355
    }
   },
   {
@@ -2289,12 +4614,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 1096.7359999999999,
-   "quant_us": 61.52000000000044,
+   "gemm_us": 1096.0250000000015,
+   "quant_us": 61.69800000000032,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 1093.6089999999995,
+     "quant_us": 61.233999999999924
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 1096.0250000000015,
+     "quant_us": 61.69800000000032
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 1098.170000000001,
+     "quant_us": 61.72949999999946
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 61.52,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1096.736
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 61.729,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1098.17
    }
   },
   {
@@ -2306,12 +4651,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 1147.6000000000022,
-   "quant_us": 61.45499999999902,
+   "gemm_us": 1144.9065,
+   "quant_us": 61.39400000000069,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 1141.2119999999995,
+     "quant_us": 61.39400000000069
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 1144.9065,
+     "quant_us": 61.201999999999316
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 1147.9469999999992,
+     "quant_us": 61.40899999999988
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 61.455,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1147.6
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 61.409,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1147.947
    }
   },
   {
@@ -2323,12 +4688,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 1150.0950000000003,
-   "quant_us": 61.35999999999967,
+   "gemm_us": 1146.2835000000005,
+   "quant_us": 61.441500000000815,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 1143.065999999999,
+     "quant_us": 61.665500000000065
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 1146.2835000000005,
+     "quant_us": 61.441500000000815
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 1148.5229999999992,
+     "quant_us": 61.34549999999945
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 61.36,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1150.095
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 61.345,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1148.523
    }
   },
   {
@@ -2340,12 +4725,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 1224.032000000001,
-   "quant_us": 61.39149999999972,
+   "gemm_us": 1222.4130000000005,
+   "quant_us": 61.48900000000003,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 1217.9159999999997,
+     "quant_us": 61.31349999999952
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 1222.4130000000005,
+     "quant_us": 61.489499999999225
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 1223.0209999999988,
+     "quant_us": 61.48900000000003
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 61.391,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1224.032
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 61.489,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1223.021
    }
   },
   {
@@ -2357,12 +4762,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 2186.3065000000006,
-   "quant_us": 115.61450000000332,
+   "gemm_us": 2452.745,
+   "quant_us": 126.32350000000224,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 2180.5329999999994,
+     "quant_us": 115.37850000000003
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 2452.745,
+     "quant_us": 126.32350000000224
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 2482.395000000004,
+     "quant_us": 127.74649999999838
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 115.615,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 2186.307
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 127.746,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 2482.395
    }
   },
   {
@@ -2374,12 +4799,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 2446.2239999999965,
-   "quant_us": 115.13400000000001,
+   "gemm_us": 2430.795,
+   "quant_us": 115.34700000000157,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 2398.1059999999998,
+     "quant_us": 114.32300000000032
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 2441.995000000001,
+     "quant_us": 115.45849999999882
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 2430.795,
+     "quant_us": 115.34700000000157
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 115.134,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 2446.224
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 115.347,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 2430.795
    }
   },
   {
@@ -2391,12 +4836,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 2458.91,
-   "quant_us": 127.19800000000214,
+   "gemm_us": 2416.889000000001,
+   "quant_us": 125.42699999999968,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 2431.6100000000015,
+     "quant_us": 125.71449999999913
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 2416.889000000001,
+     "quant_us": 125.42699999999968
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 2379.0329999999994,
+     "quant_us": 124.32299999999941
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 127.198,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 2458.91
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 124.323,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 2379.033
    }
   },
   {
@@ -2408,12 +4873,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 2544.3809999999976,
-   "quant_us": 126.15850000000137,
+   "gemm_us": 2563.7254999999996,
+   "quant_us": 126.78749999999673,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 2563.7254999999996,
+     "quant_us": 126.99499999999898
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 2564.5890000000018,
+     "quant_us": 126.78749999999673
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 2549.4839999999967,
+     "quant_us": 125.81049999999959
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 126.159,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 2544.381
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 125.81,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 2549.484
    }
   },
   {
@@ -2425,12 +4910,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 2585.7884999999997,
-   "quant_us": 128.52600000000166,
+   "gemm_us": 2559.853000000001,
+   "quant_us": 126.41899999999805,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 2562.237500000001,
+     "quant_us": 126.51550000000134
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 2518.8295000000016,
+     "quant_us": 124.99499999999989
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 2559.853000000001,
+     "quant_us": 126.41899999999805
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 128.526,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 2585.788
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 126.419,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 2559.853
    }
   },
   {
@@ -2442,12 +4947,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 2744.697,
-   "quant_us": 128.02999999999975,
+   "gemm_us": 2729.1839999999993,
+   "quant_us": 126.9310000000005,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 2738.7065000000002,
+     "quant_us": 127.37900000000081
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 2729.1839999999993,
+     "quant_us": 126.9310000000005
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 2615.2625000000007,
+     "quant_us": 122.9629999999998
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 128.03,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 2744.697
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 122.963,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 2615.263
    }
   },
   {
@@ -2459,12 +4984,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 64,
-   "gemm_us": 33.47149999999999,
-   "quant_us": 12.928000000000111,
+   "gemm_us": 31.168499999999938,
+   "quant_us": 11.968499999999949,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 31.649,
+     "quant_us": 12.160000000000082
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 31.168499999999938,
+     "quant_us": 11.968499999999949
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 31.009000000000015,
+     "quant_us": 11.904999999999973
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 12.928,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 33.471
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 11.905,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 31.009
    }
   },
   {
@@ -2476,12 +5021,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 64,
-   "gemm_us": 31.166999999999973,
-   "quant_us": 12.991999999999962,
+   "gemm_us": 31.121000000000038,
+   "quant_us": 12.960000000000036,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 31.121000000000038,
+     "quant_us": 12.944000000000017
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 31.168999999999983,
+     "quant_us": 12.975999999999999
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 31.040500000000065,
+     "quant_us": 12.960000000000036
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 12.992,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 31.167
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 12.96,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 31.041
    }
   },
   {
@@ -2493,12 +5058,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 56.270500000000084,
-   "quant_us": 11.807500000000005,
+   "gemm_us": 56.2734999999999,
+   "quant_us": 11.776000000000067,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 56.2734999999999,
+     "quant_us": 11.776000000000067
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 56.289499999999975,
+     "quant_us": 11.807999999999993
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 56.144999999999925,
+     "quant_us": 11.776000000000067
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 11.808,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 56.271
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 11.776,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 56.145
    }
   },
   {
@@ -2510,12 +5095,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 64,
-   "gemm_us": 37.13599999999997,
-   "quant_us": 11.968000000000018,
+   "gemm_us": 37.057000000000016,
+   "quant_us": 11.9050000000002,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 37.18550000000005,
+     "quant_us": 11.968500000000063
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 37.00899999999996,
+     "quant_us": 11.9050000000002
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 37.057000000000016,
+     "quant_us": 11.903999999999996
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 11.968,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 37.136
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 11.904,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 37.057
    }
   },
   {
@@ -2527,12 +5132,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 64,
-   "gemm_us": 37.168000000000006,
-   "quant_us": 11.967999999999961,
+   "gemm_us": 37.10500000000002,
+   "quant_us": 11.936000000000035,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 36.91250000000002,
+     "quant_us": 11.935999999999979
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 37.216000000000065,
+     "quant_us": 11.968500000000063
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 37.10500000000002,
+     "quant_us": 11.936000000000035
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 11.968,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 37.168
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 11.936,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 37.105
    }
   },
   {
@@ -2544,12 +5169,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 61.53499999999991,
+   "gemm_us": 61.58550000000008,
    "quant_us": 11.807999999999993,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 61.585999999999956,
+     "quant_us": 11.807999999999993
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 61.58550000000008,
+     "quant_us": 11.792500000000018
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 61.45799999999974,
+     "quant_us": 11.807999999999993
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 11.808,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 61.535
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 61.458
    }
   },
   {
@@ -2561,12 +5206,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 64,
-   "gemm_us": 43.29549999999995,
-   "quant_us": 18.943500000000085,
+   "gemm_us": 43.3125,
+   "quant_us": 18.76900000000012,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 43.3125,
+     "quant_us": 18.57650000000001
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 43.185,
+     "quant_us": 18.76900000000012
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 43.40900000000005,
+     "quant_us": 18.928999999999974
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 18.944,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 43.295
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 18.929,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 43.409
    }
   },
   {
@@ -2578,12 +5243,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 64,
-   "gemm_us": 43.278999999999996,
-   "quant_us": 21.232000000000085,
+   "gemm_us": 43.44100000000003,
+   "quant_us": 21.519999999999982,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 43.44100000000003,
+     "quant_us": 21.23199999999997
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 43.537999999999954,
+     "quant_us": 21.519999999999982
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 43.360999999999876,
+     "quant_us": 21.551999999999907
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 21.232,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 43.279
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 21.552,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 43.361
    }
   },
   {
@@ -2595,63 +5280,143 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 57.00699999999995,
-   "quant_us": 17.199500000000057,
+   "gemm_us": 57.02549999999991,
+   "quant_us": 17.2800000000002,
    "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 17.2,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 57.007
-   }
-  },
-  {
-   "proj": "down_proj",
-   "out": 5120,
-   "inp": 17920,
-   "tokens": 256,
-   "config": "mixed_16x64",
-   "kernel": "mixed",
-   "act": "four_over_six_rows",
-   "width": 64,
-   "gemm_us": 44.17500000000007,
-   "quant_us": 19.24700000000007,
-   "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 19.247,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 44.175
-   }
-  },
-  {
-   "proj": "down_proj",
-   "out": 5120,
-   "inp": 17920,
-   "tokens": 256,
-   "config": "mixed_256x64",
-   "kernel": "mixed",
-   "act": "four_over_six_rows",
-   "width": 64,
-   "gemm_us": 44.19099999999992,
-   "quant_us": 18.959500000000048,
-   "other_us": 0.0,
-   "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 18.96,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 44.191
-   }
-  },
-  {
-   "proj": "down_proj",
-   "out": 5120,
-   "inp": 17920,
-   "tokens": 256,
-   "config": "n8k64_wB",
-   "kernel": "n8k64_wB",
-   "act": "four_over_six_rows",
-   "width": null,
-   "gemm_us": 62.6880000000001,
-   "quant_us": 17.311999999999955,
-   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 56.72149999999999,
+     "quant_us": 17.20049999999992
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 57.02549999999991,
+     "quant_us": 17.2800000000002
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 57.07249999999999,
+     "quant_us": 17.3125
+    }
+   ],
    "kernels": {
     "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 17.312,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 62.688
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 57.072
+   }
+  },
+  {
+   "proj": "down_proj",
+   "out": 5120,
+   "inp": 17920,
+   "tokens": 256,
+   "config": "mixed_16x64",
+   "kernel": "mixed",
+   "act": "four_over_six_rows",
+   "width": 64,
+   "gemm_us": 44.209000000000174,
+   "quant_us": 19.135999999999967,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 44.209000000000174,
+     "quant_us": 19.392499999999927
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 44.17700000000008,
+     "quant_us": 18.95999999999998
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 44.337000000000046,
+     "quant_us": 19.135999999999967
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 19.136,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 44.337
+   }
+  },
+  {
+   "proj": "down_proj",
+   "out": 5120,
+   "inp": 17920,
+   "tokens": 256,
+   "config": "mixed_256x64",
+   "kernel": "mixed",
+   "act": "four_over_six_rows",
+   "width": 64,
+   "gemm_us": 44.11300000000017,
+   "quant_us": 19.200000000000045,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 44.11300000000017,
+     "quant_us": 19.152500000000032
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 44.000999999999976,
+     "quant_us": 19.200000000000045
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 44.17749999999995,
+     "quant_us": 19.311999999999898
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 19.312,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 44.177
+   }
+  },
+  {
+   "proj": "down_proj",
+   "out": 5120,
+   "inp": 17920,
+   "tokens": 256,
+   "config": "n8k64_wB",
+   "kernel": "n8k64_wB",
+   "act": "four_over_six_rows",
+   "width": null,
+   "gemm_us": 62.384999999999934,
+   "quant_us": 17.264999999999986,
+   "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 62.289000000000044,
+     "quant_us": 17.23300000000006
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 62.384999999999934,
+     "quant_us": 17.264999999999986
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 62.5619999999999,
+     "quant_us": 17.296500000000037
+    }
+   ],
+   "kernels": {
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 17.297,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 62.562
    }
   },
   {
@@ -2663,12 +5428,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 63.47100000000023,
-   "quant_us": 34.78400000000022,
+   "gemm_us": 63.95349999999996,
+   "quant_us": 34.94499999999971,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 63.90499999999997,
+     "quant_us": 34.76800000000003
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 63.95349999999996,
+     "quant_us": 35.121000000000095
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 64.19399999999996,
+     "quant_us": 34.94499999999971
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 34.784,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 63.471
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 34.945,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 64.194
    }
   },
   {
@@ -2680,12 +5465,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 66.62400000000002,
-   "quant_us": 38.86400000000003,
+   "gemm_us": 67.0735000000002,
+   "quant_us": 38.43299999999999,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 66.48249999999996,
+     "quant_us": 38.43299999999999
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 67.0735000000002,
+     "quant_us": 38.752500000000055
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 67.08950000000004,
+     "quant_us": 38.385499999999865
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 38.864,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 66.624
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 38.385,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 67.09
    }
   },
   {
@@ -2697,12 +5502,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 63.40700000000004,
-   "quant_us": 34.87900000000002,
+   "gemm_us": 63.84149999999988,
+   "quant_us": 34.960000000000036,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 64.0970000000001,
+     "quant_us": 34.960000000000036
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 63.84149999999988,
+     "quant_us": 34.78500000000008
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 63.76149999999984,
+     "quant_us": 35.21650000000011
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 34.879,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 63.407
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 35.217,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 63.761
    }
   },
   {
@@ -2714,12 +5539,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 67.82299999999987,
-   "quant_us": 34.511000000000024,
+   "gemm_us": 68.11349999999993,
+   "quant_us": 34.368999999999915,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 67.84050000000002,
+     "quant_us": 34.52850000000012
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 68.44949999999994,
+     "quant_us": 34.192499999999995
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 68.11349999999993,
+     "quant_us": 34.368999999999915
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 34.511,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 67.823
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 34.369,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 68.113
    }
   },
   {
@@ -2731,12 +5576,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 67.85500000000002,
-   "quant_us": 34.36799999999994,
+   "gemm_us": 68.12950000000001,
+   "quant_us": 34.43299999999999,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 68.01800000000003,
+     "quant_us": 34.43299999999999
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 68.17700000000002,
+     "quant_us": 34.448500000000195
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 68.12950000000001,
+     "quant_us": 34.40049999999985
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 34.368,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 67.855
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 34.4,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 68.13
    }
   },
   {
@@ -2748,12 +5613,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 73.43899999999996,
-   "quant_us": 33.408000000000015,
+   "gemm_us": 73.18499999999995,
+   "quant_us": 33.040500000000065,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 72.94549999999981,
+     "quant_us": 33.040500000000065
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 73.18499999999995,
+     "quant_us": 33.20100000000002
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 73.44149999999996,
+     "quant_us": 32.96050000000014
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 33.408,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 73.439
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 32.961,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 73.441
    }
   },
   {
@@ -2765,12 +5650,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 134.39750000000004,
-   "quant_us": 58.12699999999995,
+   "gemm_us": 134.56400000000008,
+   "quant_us": 58.29000000000019,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 134.30700000000002,
+     "quant_us": 58.2885
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 134.56400000000008,
+     "quant_us": 58.29000000000019
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 134.64300000000026,
+     "quant_us": 58.432999999999765
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 58.127,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 134.398
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 58.433,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 134.643
    }
   },
   {
@@ -2782,12 +5687,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 132.73299999999995,
-   "quant_us": 49.88699999999983,
+   "gemm_us": 132.69100000000026,
+   "quant_us": 49.889000000000124,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 132.69100000000026,
+     "quant_us": 49.95299999999986
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 132.29150000000004,
+     "quant_us": 49.74500000000006
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 132.83500000000015,
+     "quant_us": 49.889000000000124
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 49.887,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 132.733
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 49.889,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 132.835
    }
   },
   {
@@ -2799,12 +5724,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 134.54199999999992,
-   "quant_us": 58.414999999999964,
+   "gemm_us": 134.35500000000002,
+   "quant_us": 58.28899999999999,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 134.19550000000004,
+     "quant_us": 58.22600000000011
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 134.6429999999998,
+     "quant_us": 58.40149999999983
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 134.35500000000002,
+     "quant_us": 58.28899999999999
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 58.415,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 134.542
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 58.289,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 134.355
    }
   },
   {
@@ -2816,12 +5761,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 140.2054999999998,
-   "quant_us": 57.855000000000246,
+   "gemm_us": 140.77199999999993,
+   "quant_us": 57.95349999999985,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 140.0189999999999,
+     "quant_us": 57.95349999999985
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 140.83500000000004,
+     "quant_us": 57.633500000000026
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 140.77199999999993,
+     "quant_us": 58.09699999999998
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 57.855,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 140.205
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 58.097,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 140.772
    }
   },
   {
@@ -2833,12 +5798,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 140.55650000000014,
-   "quant_us": 57.98299999999972,
+   "gemm_us": 140.43599999999992,
+   "quant_us": 57.88999999999987,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 140.43599999999992,
+     "quant_us": 57.88999999999987
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 141.31549999999993,
+     "quant_us": 57.77749999999992
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 139.98649999999998,
+     "quant_us": 58.209000000000174
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 57.983,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 140.557
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 58.209,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 139.986
    }
   },
   {
@@ -2850,12 +5835,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 152.0129999999997,
-   "quant_us": 57.998999999999796,
+   "gemm_us": 151.42700000000002,
+   "quant_us": 57.953500000000076,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 151.17000000000007,
+     "quant_us": 57.920999999999594
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 152.40300000000002,
+     "quant_us": 58.00199999999995
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 151.42700000000002,
+     "quant_us": 57.953500000000076
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 57.999,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 152.013
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 57.954,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 151.427
    }
   },
   {
@@ -2867,12 +5872,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 284.15499999999975,
-   "quant_us": 121.85399999999981,
+   "gemm_us": 284.75850000000037,
+   "quant_us": 121.9704999999999,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 283.302,
+     "quant_us": 121.9704999999999
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 285.22350000000006,
+     "quant_us": 121.8109999999997
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 284.75850000000037,
+     "quant_us": 122.09850000000006
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 121.854,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 284.155
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 122.099,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 284.759
    }
   },
   {
@@ -2884,12 +5909,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 286.0754999999997,
-   "quant_us": 116.18949999999995,
+   "gemm_us": 286.63049999999976,
+   "quant_us": 116.40250000000015,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 285.43000000000075,
+     "quant_us": 116.00199999999995
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 286.85449999999946,
+     "quant_us": 116.43449999999984
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 286.63049999999976,
+     "quant_us": 116.40250000000015
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.189,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 286.075
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 116.403,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 286.63
    }
   },
   {
@@ -2901,12 +5946,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 283.67650000000003,
-   "quant_us": 121.85449999999992,
+   "gemm_us": 284.24649999999974,
+   "quant_us": 121.60300000000007,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 283.4309999999998,
+     "quant_us": 121.60300000000007
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 284.24649999999974,
+     "quant_us": 121.58649999999989
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 284.5505000000003,
+     "quant_us": 122.01900000000023
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 121.854,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 283.677
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 122.019,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 284.551
    }
   },
   {
@@ -2918,12 +5983,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 294.38000000000034,
-   "quant_us": 121.69400000000041,
+   "gemm_us": 295.1585,
+   "quant_us": 121.81049999999982,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 295.1585,
+     "quant_us": 121.81049999999982
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 294.9024999999997,
+     "quant_us": 121.77900000000022
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 295.4470000000001,
+     "quant_us": 122.01850000000013
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 121.694,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 294.38
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 122.019,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 295.447
    }
   },
   {
@@ -2935,12 +6020,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 294.3159999999998,
-   "quant_us": 121.82199999999989,
+   "gemm_us": 295.71950000000015,
+   "quant_us": 121.87499999999977,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 295.3670000000002,
+     "quant_us": 121.79449999999997
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 295.71950000000015,
+     "quant_us": 121.8910000000003
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 295.84649999999965,
+     "quant_us": 121.87499999999977
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 121.822,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 294.316
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 121.875,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 295.846
    }
   },
   {
@@ -2952,12 +6057,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 310.5875,
-   "quant_us": 121.51800000000048,
+   "gemm_us": 310.50400000000013,
+   "quant_us": 121.58799999999974,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 310.616,
+     "quant_us": 121.58799999999974
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 310.1669999999999,
+     "quant_us": 121.76300000000015
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 310.50400000000013,
+     "quant_us": 121.57099999999991
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 121.518,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 310.587
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 121.571,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 310.504
    }
   },
   {
@@ -2969,12 +6094,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 515.6565,
-   "quant_us": 208.1735000000001,
+   "gemm_us": 519.3395,
+   "quant_us": 208.7569999999996,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 514.2039999999997,
+     "quant_us": 208.51700000000073
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 519.3395,
+     "quant_us": 208.7569999999996
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 519.9804999999997,
+     "quant_us": 209.10900000000038
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 208.174,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 515.657
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 209.109,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 519.98
    }
   },
   {
@@ -2986,12 +6131,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 521.7530000000006,
-   "quant_us": 203.6775,
+   "gemm_us": 522.2514999999999,
+   "quant_us": 203.58849999999984,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 519.5470000000007,
+     "quant_us": 203.39650000000006
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 522.2514999999999,
+     "quant_us": 203.58849999999984
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 522.9884999999995,
+     "quant_us": 203.70049999999924
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 203.678,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 521.753
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 203.7,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 522.988
    }
   },
   {
@@ -3003,12 +6168,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 517.3999999999996,
-   "quant_us": 208.8285000000003,
+   "gemm_us": 517.0690000000004,
+   "quant_us": 208.96500000000015,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 517.0690000000004,
+     "quant_us": 208.75750000000016
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 518.1880000000001,
+     "quant_us": 209.1885000000002
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 516.5730000000003,
+     "quant_us": 208.96500000000015
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 208.829,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 517.4
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 208.965,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 516.573
    }
   },
   {
@@ -3020,12 +6205,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 538.7759999999996,
-   "quant_us": 208.8769999999995,
+   "gemm_us": 537.8689999999997,
+   "quant_us": 208.8370000000001,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 537.1495,
+     "quant_us": 208.64499999999953
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 538.8435000000002,
+     "quant_us": 208.8370000000001
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 537.8689999999997,
+     "quant_us": 208.88449999999966
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 208.877,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 538.776
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 208.884,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 537.869
    }
   },
   {
@@ -3037,12 +6242,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 540.1360000000004,
-   "quant_us": 208.76500000000033,
+   "gemm_us": 538.7804999999998,
+   "quant_us": 208.88450000000012,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 537.9639999999999,
+     "quant_us": 208.88450000000012
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 538.7804999999998,
+     "quant_us": 208.78850000000057
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 539.5649999999996,
+     "quant_us": 208.9964999999993
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 208.765,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 540.136
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 208.996,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 539.565
    }
   },
   {
@@ -3054,12 +6279,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 573.096,
-   "quant_us": 209.19650000000047,
+   "gemm_us": 573.0199999999995,
+   "quant_us": 209.34900000000016,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 572.3494999999998,
+     "quant_us": 208.98099999999977
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 573.0199999999995,
+     "quant_us": 209.50900000000001
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 574.1415000000002,
+     "quant_us": 209.34900000000016
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 209.197,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 573.096
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 209.349,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 574.142
    }
   },
   {
@@ -3071,12 +6316,32 @@
    "kernel": "stock",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 1052.6730000000007,
-   "quant_us": 376.65049999999974,
+   "gemm_us": 1088.6659999999993,
+   "quant_us": 386.66499999999996,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 0,
+     "gemm_us": 1049.0010000000002,
+     "quant_us": 376.6975000000002
+    },
+    {
+     "round": 1,
+     "position": 4,
+     "gemm_us": 1088.6659999999993,
+     "quant_us": 386.66499999999996
+    },
+    {
+     "round": 2,
+     "position": 2,
+     "gemm_us": 1102.3945000000003,
+     "quant_us": 389.0810000000006
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 376.65,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1052.673
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 389.081,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1102.395
    }
   },
   {
@@ -3088,12 +6353,32 @@
    "kernel": "stock",
    "act": "nvfp4_rows",
    "width": 128,
-   "gemm_us": 1063.25,
-   "quant_us": 352.92299999999886,
+   "gemm_us": 1081.1454999999996,
+   "quant_us": 356.36049999999886,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 1,
+     "gemm_us": 1062.696499999999,
+     "quant_us": 352.9519999999993
+    },
+    {
+     "round": 1,
+     "position": 5,
+     "gemm_us": 1090.4889999999996,
+     "quant_us": 357.76800000000003
+    },
+    {
+     "round": 2,
+     "position": 3,
+     "gemm_us": 1081.1454999999996,
+     "quant_us": 356.36049999999886
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 352.923,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1063.25
+    "void sm120_quant::quant_rows_kernel<0>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 356.36,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1081.145
    }
   },
   {
@@ -3105,12 +6390,32 @@
    "kernel": "stock_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 1061.6980000000003,
-   "quant_us": 378.5709999999999,
+   "gemm_us": 1070.9215000000004,
+   "quant_us": 380.1849999999986,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 2,
+     "gemm_us": 1058.0080000000007,
+     "quant_us": 377.4160000000011
+    },
+    {
+     "round": 1,
+     "position": 0,
+     "gemm_us": 1074.1525000000001,
+     "quant_us": 381.01700000000073
+    },
+    {
+     "round": 2,
+     "position": 4,
+     "gemm_us": 1070.9215000000004,
+     "quant_us": 380.1849999999986
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 378.571,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1061.698
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 380.185,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1070.922
    }
   },
   {
@@ -3122,12 +6427,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 1101.3289999999988,
-   "quant_us": 377.9310000000005,
+   "gemm_us": 1120.601999999999,
+   "quant_us": 383.7200000000021,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 3,
+     "gemm_us": 1098.0735000000004,
+     "quant_us": 377.9930000000004
+    },
+    {
+     "round": 1,
+     "position": 1,
+     "gemm_us": 1122.7290000000012,
+     "quant_us": 384.8085000000001
+    },
+    {
+     "round": 2,
+     "position": 5,
+     "gemm_us": 1120.601999999999,
+     "quant_us": 383.7200000000021
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 377.931,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1101.329
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 383.72,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1120.602
    }
   },
   {
@@ -3139,12 +6464,32 @@
    "kernel": "mixed",
    "act": "four_over_six_rows",
    "width": 128,
-   "gemm_us": 1107.3129999999994,
-   "quant_us": 379.08250000000135,
+   "gemm_us": 1102.9694999999992,
+   "quant_us": 378.24900000000025,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 4,
+     "gemm_us": 1100.6814999999997,
+     "quant_us": 378.24900000000025
+    },
+    {
+     "round": 1,
+     "position": 2,
+     "gemm_us": 1102.9694999999992,
+     "quant_us": 378.20099999999957
+    },
+    {
+     "round": 2,
+     "position": 0,
+     "gemm_us": 1113.6419999999998,
+     "quant_us": 381.1769999999997
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 379.083,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1107.313
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 381.177,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1113.642
    }
   },
   {
@@ -3156,12 +6501,32 @@
    "kernel": "n8k64_wB",
    "act": "four_over_six_rows",
    "width": null,
-   "gemm_us": 1180.3999999999996,
-   "quant_us": 379.77100000000064,
+   "gemm_us": 1202.5569999999989,
+   "quant_us": 386.21650000000045,
    "other_us": 0.0,
+   "rounds": [
+    {
+     "round": 0,
+     "position": 5,
+     "gemm_us": 1202.5569999999989,
+     "quant_us": 386.21650000000045
+    },
+    {
+     "round": 1,
+     "position": 3,
+     "gemm_us": 1174.5865000000003,
+     "quant_us": 378.40899999999897
+    },
+    {
+     "round": 2,
+     "position": 1,
+     "gemm_us": 1205.2115,
+     "quant_us": 386.40899999999965
+    }
+   ],
    "kernels": {
-    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 379.771,
-    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1180.4
+    "void sm120_quant::quant_rows_kernel<1>(__nv_bfloat16 const*, long, unsigned char*, unsigne": 386.409,
+    "_ZN7cutlass13device_kernelINS_4gemm6kernel13GemmUniversalIN4cute5tupleIJiiiiEEENS1_10colle": 1205.211
    }
   }
  ],
@@ -3177,8 +6542,8 @@
    "table": "/home/dev/NVFP4-RaZeR/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.json",
    "table_shapes": 16,
    "calls_by_width": {
-    "64": 250,
-    "128": 1150
+    "64": 750,
+    "128": 3450
    }
   },
   "mixed": {
@@ -3192,8 +6557,8 @@
    "table": "/home/dev/NVFP4-RaZeR/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.json",
    "table_shapes": 16,
    "calls_by_width": {
-    "64": 250,
-    "128": 1150
+    "64": 750,
+    "128": 3450
    }
   }
  },
@@ -3206,8 +6571,8 @@
   "clocks.max.mem": "14001 MHz",
   "clocks.applications.graphics": "[Requested functionality has been deprecated]",
   "persistence_mode": "Enabled",
-  "temperature.gpu": "52",
-  "utilization.gpu": "6 %",
+  "temperature.gpu": "63",
+  "utilization.gpu": "69 %",
   "memory.used": "2310 MiB",
   "torch": "2.9.0+cu128",
   "torch_cuda": "12.8",
@@ -3219,6 +6584,6 @@
    0
   ],
   "sm_count": 188,
-  "utc": "2026-09-29T02:22:34+00:00"
+  "utc": "2026-09-29T17:27:32+00:00"
  }
 }

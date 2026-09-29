@@ -99,3 +99,36 @@ A failure stops the run. It is reported, not worked around.
      0.5 pp, except Phi-4 at T = 8192. Other rows disagree by 1–5 pp: 1×128 and 1×256, where the isolated GEMM
      difference is larger, and 8x64 at mid lengths, where the end-to-end difference is larger. The old vs new numbers
      are appended below after the rerun.
+
+   **Follow-up, 2026-09-29 17:50 UTC: applied and re-run** (f239539).
+   - **The Qwen run ended at 17:22.** Its own step 06 used the registered fixed order; those records are superseded too.
+   - **The rerun:** step 06 for all four models, 3 rounds in a rotated order (17:24–17:48). All four runs exited 0.
+   - **Old (fixed order) vs new (rotated), per-forward GEMM:**
+
+     | model | T | FlipQuant (ours) 16x64 vs stock_wA, old → new | 8x64 vs stock_wB, old → new | same stock kernel, NVFP4 vs FourOverSix weights, old → new |
+     |---|---:|---:|---:|---:|
+     | Llama-3.1-8B | 2048 | +4.9 → +4.6 % | +12.2 → +11.6 % | +0.7 → +0.8 % |
+     | Llama-3.1-8B | 8192 | +5.4 → +4.8 % | +12.9 → +12.9 % | +1.4 → +1.2 % |
+     | Mistral-7B-v0.3 | 8192 | +5.2 → +4.7 % | +13.0 → +12.8 % | +1.4 → +1.3 % |
+     | Phi-4 | 8192 | **+11.1 → +4.0 %** | +11.6 → +12.6 % | **+7.1 → −0.4 %** |
+     | Qwen3.8-27B | 8192 | +5.6 → +4.1 % | +12.2 → +12.1 % | +1.3 → +0.9 % |
+
+   - **The Phi-4 T = 8192 anomaly was an order effect.** The fixed-order stock_wA was measured first and read 7.6 %
+     too fast (159.9 vs 172.1 ms per forward). Rotated, Phi-4's 16x64 overhead (+4.0 %) is in line with the other
+     models, and with its own +3.6 % at T = 2048.
+   - **A residual that is not an order effect:** with rotation, the same stock kernel still takes 0.8–1.3 % longer with
+     NVFP4 weights than with FourOverSix weights at T ≥ 2048 (Llama, Mistral, Qwen). This holds at every position in
+     the rotation (e.g. Llama q_proj, T = 8192: 192.9–193.9 vs 197.6–198.2 µs). It is a dependence on the weight data,
+     read as power draw under load, not a measurement artefact.
+   - **Elsewhere the ratios move by at most 1.6 pp.**
+   - **The new consistency check:** tolerance 1 % of the reference prefill.
+     - Flagged rows: Llama 16, Mistral 22, Phi-4 16 and Qwen 5, of 32 each. The fixed-order records gave 14 / 21 / 18
+       on the first three models.
+     - **At 4×2048,** the most GPU-bound shape, the GEMM difference explains the end-to-end difference within 1 pp:
+       for 16x64, 256x64 and 8x64 on wB, on every model.
+     - **At 1×128–1×256,** the isolated GEMM difference is 1.2–5.8 pp larger than end to end.
+     - **At mid lengths,** 8x64's end-to-end cost exceeds its isolated GEMM cost by 1–4 pp.
+     - A likely cause, not tested: the isolated benchmark reuses one weight matrix for 25 calls, so it can stay
+       L2-resident, while a forward reads every weight from DRAM once.
+     - Testing it would need a cold-cache GEMM measurement, which is not in this protocol; it is proposed, not run.
+     - The end-to-end prefill numbers are the primary latency result either way.

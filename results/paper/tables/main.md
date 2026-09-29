@@ -2,7 +2,7 @@
 
 ### Perplexity (NativeLinear (c); BF16 as loaded)
 
-| model | corpus | BF16 | NVFP4 | FourOverSix | Ours 8x64 | Ours 16x64 |
+| model | corpus | BF16 | NVFP4 | FourOverSix | FlipQuant (ours) 8x64 | FlipQuant (ours) 16x64 |
 |---|---|---:|---:|---:|---:|---:|
 | Llama-3.1-8B | WikiText-2 | 6.2403 | 6.9338 | 6.8706 | 6.7877 | 6.7827 |
 | Llama-3.1-8B | C4 | 8.9579 | 9.9284 | 9.8257 | 9.6774 | 9.6827 |
@@ -10,10 +10,12 @@
 | Mistral-7B-v0.3 | C4 | 7.8306 | 8.0895 | 8.0623 | 8.0215 | 8.0323 |
 | Phi-4 | WikiText-2 | 6.4615 | 6.6934 | 6.6617 | 6.6078 | 6.6133 |
 | Phi-4 | C4 | 10.3098 | 10.5795 | 10.5441 | 10.4979 | 10.5047 |
+| Qwen3.8-27B | WikiText-2 | 7.0509 | 7.5506 | 7.3215 | 7.1074 | 7.1232 |
+| Qwen3.8-27B | C4 | 9.8935 | 10.2185 | 10.1869 | 10.1235 | 10.1276 |
 
 ### Paired ΔNLL, nats per token (= Δ log PPL), ± 2 SE over windows; * = |Δ| > 2 SE
 
-| model | corpus | windows | Ours 8x64 − FourOverSix | Ours 8x64 − NVFP4 | Ours 16x64 − FourOverSix | Ours 16x64 − NVFP4 |
+| model | corpus | windows | FlipQuant (ours) 8x64 − FourOverSix | FlipQuant (ours) 8x64 − NVFP4 | FlipQuant (ours) 16x64 − FourOverSix | FlipQuant (ours) 16x64 − NVFP4 |
 |---|---|---:|---:|---:|---:|---:|
 | Llama-3.1-8B | WikiText-2 | 141 | -0.0121 ± 0.0017 * | -0.0213 ± 0.0023 * | -0.0129 ± 0.0018 * | -0.0220 ± 0.0023 * |
 | Llama-3.1-8B | C4 | 256 | -0.0152 ± 0.0030 * | -0.0256 ± 0.0045 * | -0.0147 ± 0.0031 * | -0.0251 ± 0.0046 * |
@@ -21,10 +23,12 @@
 | Mistral-7B-v0.3 | C4 | 256 | -0.0051 ± 0.0010 * | -0.0084 ± 0.0009 * | -0.0037 ± 0.0017 * | -0.0071 ± 0.0014 * |
 | Phi-4 | WikiText-2 | 141 | -0.0081 ± 0.0015 * | -0.0129 ± 0.0020 * | -0.0073 ± 0.0014 * | -0.0120 ± 0.0020 * |
 | Phi-4 | C4 | 256 | -0.0044 ± 0.0009 * | -0.0077 ± 0.0011 * | -0.0037 ± 0.0009 * | -0.0071 ± 0.0011 * |
+| Qwen3.8-27B | WikiText-2 | 145 | -0.0297 ± 0.0061 * | -0.0605 ± 0.0092 * | -0.0275 ± 0.0052 * | -0.0583 ± 0.0091 * |
+| Qwen3.8-27B | C4 | 256 | -0.0062 ± 0.0010 * | -0.0093 ± 0.0013 * | -0.0058 ± 0.0010 * | -0.0089 ± 0.0013 * |
 
 ### Downstream accuracy, % (lm-eval 0.4.11; MMLU 5-shot, the others 0-shot; acc_norm, MMLU acc)
 
-| model | task | BF16 | NVFP4 | FourOverSix | Ours 8x64 | Ours 16x64 |
+| model | task | BF16 | NVFP4 | FourOverSix | FlipQuant (ours) 8x64 | FlipQuant (ours) 16x64 |
 |---|---|---:|---:|---:|---:|---:|
 | Llama-3.1-8B | MMLU (5-shot) | 65.31 | 62.51 | 62.98 | 63.47 | 63.24 |
 | Llama-3.1-8B | ARC-C | 54.78 | 52.30 | 53.84 | 53.75 | 53.92 |
@@ -44,10 +48,16 @@
 | Phi-4 | HellaSwag | 81.95 | 80.86 | 81.11 | 81.11 | 81.25 |
 | Phi-4 | PIQA | 81.12 | 80.85 | 80.69 | 80.79 | 80.69 |
 | Phi-4 | mean of 5 | 74.45 | 73.63 | 73.56 | 73.61 | 73.69 |
+| Qwen3.8-27B | MMLU (5-shot) | 82.57 | 81.25 | 81.29 | 82.47 | 82.38 |
+| Qwen3.8-27B | ARC-C | 58.79 | 60.92 | 59.30 | 59.98 | 60.15 |
+| Qwen3.8-27B | ARC-E | 73.02 | 76.47 | 74.58 | 75.72 | 76.64 |
+| Qwen3.8-27B | HellaSwag | 82.89 | 82.44 | 82.26 | 82.31 | 82.08 |
+| Qwen3.8-27B | PIQA | 81.50 | 81.39 | 81.28 | 81.18 | 81.28 |
+| Qwen3.8-27B | mean of 5 | 75.76 | 76.50 | 75.74 | 76.33 | 76.51 |
 
 ### Paired accuracy differences, percentage points, ± 2 SE; * = |Δ| > 2 SE
 
-| model | task | examples | Ours 8x64 − FourOverSix | Ours 8x64 − NVFP4 | Ours 16x64 − FourOverSix | Ours 16x64 − NVFP4 |
+| model | task | examples | FlipQuant (ours) 8x64 − FourOverSix | FlipQuant (ours) 8x64 − NVFP4 | FlipQuant (ours) 16x64 − FourOverSix | FlipQuant (ours) 16x64 − NVFP4 |
 |---|---|---:|---:|---:|---:|---:|
 | Llama-3.1-8B | MMLU (5-shot) | 14042 | +0.49 ± 0.63 | +0.97 ± 0.64 * | +0.26 ± 0.62 | +0.73 ± 0.65 * |
 | Llama-3.1-8B | ARC-C | 1172 | -0.09 ± 1.72 | +1.45 ± 1.88 | +0.09 ± 1.81 | +1.62 ± 1.83 |
@@ -67,20 +77,27 @@
 | Phi-4 | HellaSwag | 10042 | +0.00 ± 0.31 | +0.25 ± 0.36 | +0.14 ± 0.31 | +0.39 ± 0.36 * |
 | Phi-4 | PIQA | 1838 | +0.11 ± 0.84 | -0.05 ± 0.96 | +0.00 ± 0.87 | -0.16 ± 0.88 |
 | Phi-4 | mean of 5 |  | +0.05 ± 0.35 | -0.02 ± 0.41 | +0.14 ± 0.35 | +0.06 ± 0.39 |
+| Qwen3.8-27B | MMLU (5-shot) | 14042 | +1.18 ± 0.44 * | +1.22 ± 0.46 * | +1.09 ± 0.44 * | +1.13 ± 0.47 * |
+| Qwen3.8-27B | ARC-C | 1172 | +0.68 ± 1.41 | -0.94 ± 1.65 | +0.85 ± 1.41 | -0.77 ± 1.72 |
+| Qwen3.8-27B | ARC-E | 2376 | +1.14 ± 0.94 * | -0.76 ± 1.00 | +2.06 ± 0.97 * | +0.17 ± 1.03 |
+| Qwen3.8-27B | HellaSwag | 10042 | +0.05 ± 0.30 | -0.13 ± 0.34 | -0.19 ± 0.30 | -0.37 ± 0.34 * |
+| Qwen3.8-27B | PIQA | 1838 | -0.11 ± 0.81 | -0.22 ± 0.92 | +0.00 ± 0.84 | -0.11 ± 0.92 |
+| Qwen3.8-27B | mean of 5 |  | +0.59 ± 0.39 * | -0.16 ± 0.44 | +0.76 ± 0.40 * | +0.01 ± 0.46 |
 
 MMLU questions whose top two choices tie in log-likelihood, % (lm-eval computes them from BF16 logits and its argmax takes the earlier choice; every policy is scored the same way):
 
-| model | BF16 | NVFP4 | FourOverSix | Ours 8x64 | Ours 16x64 |
+| model | BF16 | NVFP4 | FourOverSix | FlipQuant (ours) 8x64 | FlipQuant (ours) 16x64 |
 |---|---:|---:|---:|---:|---:|
 | Llama-3.1-8B | 5.8 | 5.6 | 6.7 | 6.1 | 6.2 |
 | Mistral-7B-v0.3 | 6.4 | 6.3 | 7.4 | 6.7 | 7.0 |
 | Phi-4 | 0.9 | 1.1 | 1.0 | 1.1 | 1.0 |
+| Qwen3.8-27B | 1.0 | 1.0 | 1.1 | 1.2 | 1.2 |
 
 ### Prefill latency, CUDA graph (primary)
 
 #### Llama-3.1-8B, CUDA-graph prefill, ms, median of [5] round(s)
 
-| batch x prompt | BF16 | NVFP4 | FourOverSix | NVFP4 (wB) | FourOverSix (wB) | Ours 8x64, NVFP4 act. (latency only) | Ours 8x64 | Ours 16x64, NVFP4 act. (latency only) | Ours 16x64 |
+| batch x prompt | BF16 | NVFP4 | FourOverSix | NVFP4 (wB) | FourOverSix (wB) | FlipQuant (ours) 8x64, NVFP4 act. (latency only) | FlipQuant (ours) 8x64 | FlipQuant (ours) 16x64, NVFP4 act. (latency only) | FlipQuant (ours) 16x64 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 1x128 | 16.41 | 7.55 | 7.46 | 8.97 | 8.88 | 9.30 | 9.21 | 7.67 | 7.58 |
 | 1x256 | 22.18 | 9.49 | 9.40 | 10.60 | 10.51 | 11.02 | 10.94 | 9.63 | 9.53 |
@@ -91,9 +108,9 @@ MMLU questions whose top two choices tie in log-likelihood, % (lm-eval computes 
 | 1x8192 | 604.73 | 324.11 | 324.64 | 324.91 | 326.15 | 337.97 | 338.35 | 328.87 | 329.40 |
 | 4x2048 | 556.90 | 276.53 | 277.11 | 277.54 | 278.16 | 290.41 | 290.77 | 281.10 | 281.84 |
 
-Ours / reference − 1, same activation quantizer; paired within rounds: median [min, max] over rounds:
+FlipQuant (ours) / reference − 1, same activation quantizer; paired within rounds: median [min, max] over rounds:
 
-| batch x prompt | Ours 8x64 vs FourOverSix | Ours 8x64, NVFP4 act. (latency only) vs NVFP4 | Ours 8x64 vs FourOverSix (wB) | Ours 8x64, NVFP4 act. (latency only) vs NVFP4 (wB) | Ours 16x64 vs FourOverSix | Ours 16x64, NVFP4 act. (latency only) vs NVFP4 |
+| batch x prompt | FlipQuant (ours) 8x64 vs FourOverSix | FlipQuant (ours) 8x64, NVFP4 act. (latency only) vs NVFP4 | FlipQuant (ours) 8x64 vs FourOverSix (wB) | FlipQuant (ours) 8x64, NVFP4 act. (latency only) vs NVFP4 (wB) | FlipQuant (ours) 16x64 vs FourOverSix | FlipQuant (ours) 16x64, NVFP4 act. (latency only) vs NVFP4 |
 |---|---:|---:|---:|---:|---:|---:|
 | 1x128 | +23.5 % [+23.4, +23.5] | +23.1 % [+23.0, +23.2] | +3.8 % [+3.8, +3.9] | +3.7 % [+3.6, +3.7] | +1.5 % [+1.5, +1.7] | +1.6 % [+1.5, +1.6] |
 | 1x256 | +16.4 % [+16.3, +16.4] | +16.2 % [+16.1, +16.5] | +4.1 % [+4.0, +4.1] | +4.0 % [+3.9, +4.3] | +1.4 % [+1.4, +1.5] | +1.5 % [+1.4, +1.6] |
@@ -106,7 +123,7 @@ Ours / reference − 1, same activation quantizer; paired within rounds: median 
 
 #### Mistral-7B-v0.3, CUDA-graph prefill, ms, median of [5] round(s)
 
-| batch x prompt | BF16 | NVFP4 | FourOverSix | NVFP4 (wB) | FourOverSix (wB) | Ours 8x64, NVFP4 act. (latency only) | Ours 8x64 | Ours 16x64, NVFP4 act. (latency only) | Ours 16x64 |
+| batch x prompt | BF16 | NVFP4 | FourOverSix | NVFP4 (wB) | FourOverSix (wB) | FlipQuant (ours) 8x64, NVFP4 act. (latency only) | FlipQuant (ours) 8x64 | FlipQuant (ours) 16x64, NVFP4 act. (latency only) | FlipQuant (ours) 16x64 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 1x128 | 15.92 | 7.08 | 6.99 | 8.50 | 8.41 | 8.84 | 8.75 | 7.20 | 7.10 |
 | 1x256 | 21.07 | 8.89 | 8.80 | 10.00 | 9.92 | 10.44 | 10.36 | 9.01 | 8.92 |
@@ -117,9 +134,9 @@ Ours / reference − 1, same activation quantizer; paired within rounds: median 
 | 1x8192 | 579.28 | 300.76 | 300.93 | 301.45 | 302.11 | 314.60 | 315.22 | 305.10 | 305.57 |
 | 4x2048 | 532.00 | 253.18 | 253.40 | 254.10 | 254.48 | 266.93 | 267.74 | 257.53 | 258.07 |
 
-Ours / reference − 1, same activation quantizer; paired within rounds: median [min, max] over rounds:
+FlipQuant (ours) / reference − 1, same activation quantizer; paired within rounds: median [min, max] over rounds:
 
-| batch x prompt | Ours 8x64 vs FourOverSix | Ours 8x64, NVFP4 act. (latency only) vs NVFP4 | Ours 8x64 vs FourOverSix (wB) | Ours 8x64, NVFP4 act. (latency only) vs NVFP4 (wB) | Ours 16x64 vs FourOverSix | Ours 16x64, NVFP4 act. (latency only) vs NVFP4 |
+| batch x prompt | FlipQuant (ours) 8x64 vs FourOverSix | FlipQuant (ours) 8x64, NVFP4 act. (latency only) vs NVFP4 | FlipQuant (ours) 8x64 vs FourOverSix (wB) | FlipQuant (ours) 8x64, NVFP4 act. (latency only) vs NVFP4 (wB) | FlipQuant (ours) 16x64 vs FourOverSix | FlipQuant (ours) 16x64, NVFP4 act. (latency only) vs NVFP4 |
 |---|---:|---:|---:|---:|---:|---:|
 | 1x128 | +25.2 % [+25.2, +25.2] | +24.8 % [+24.8, +24.9] | +4.0 % [+4.0, +4.1] | +4.0 % [+3.9, +4.0] | +1.6 % [+1.6, +1.7] | +1.6 % [+1.6, +1.7] |
 | 1x256 | +17.7 % [+17.6, +17.7] | +17.4 % [+17.4, +17.5] | +4.4 % [+4.4, +4.5] | +4.4 % [+4.4, +4.4] | +1.3 % [+1.3, +1.3] | +1.3 % [+1.3, +1.4] |
@@ -132,7 +149,7 @@ Ours / reference − 1, same activation quantizer; paired within rounds: median 
 
 #### Phi-4, CUDA-graph prefill, ms, median of [5] round(s)
 
-| batch x prompt | BF16 | NVFP4 | FourOverSix | NVFP4 (wB) | FourOverSix (wB) | Ours 8x64, NVFP4 act. (latency only) | Ours 8x64 | Ours 16x64, NVFP4 act. (latency only) | Ours 16x64 |
+| batch x prompt | BF16 | NVFP4 | FourOverSix | NVFP4 (wB) | FourOverSix (wB) | FlipQuant (ours) 8x64, NVFP4 act. (latency only) | FlipQuant (ours) 8x64 | FlipQuant (ours) 16x64, NVFP4 act. (latency only) | FlipQuant (ours) 16x64 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 1x128 | 28.28 | 11.47 | 11.38 | 12.44 | 12.34 | 12.78 | 12.69 | 11.57 | 11.47 |
 | 1x256 | 37.95 | 15.22 | 14.98 | 15.38 | 15.20 | 16.08 | 15.82 | 15.49 | 15.38 |
@@ -143,9 +160,9 @@ Ours / reference − 1, same activation quantizer; paired within rounds: median 
 | 1x8192 | 1119.36 | 559.24 | 560.76 | 562.05 | 563.82 | 586.46 | 587.93 | 568.02 | 569.36 |
 | 4x2048 | 1043.46 | 486.98 | 488.21 | 489.69 | 491.33 | 514.23 | 515.63 | 495.81 | 496.49 |
 
-Ours / reference − 1, same activation quantizer; paired within rounds: median [min, max] over rounds:
+FlipQuant (ours) / reference − 1, same activation quantizer; paired within rounds: median [min, max] over rounds:
 
-| batch x prompt | Ours 8x64 vs FourOverSix | Ours 8x64, NVFP4 act. (latency only) vs NVFP4 | Ours 8x64 vs FourOverSix (wB) | Ours 8x64, NVFP4 act. (latency only) vs NVFP4 (wB) | Ours 16x64 vs FourOverSix | Ours 16x64, NVFP4 act. (latency only) vs NVFP4 |
+| batch x prompt | FlipQuant (ours) 8x64 vs FourOverSix | FlipQuant (ours) 8x64, NVFP4 act. (latency only) vs NVFP4 | FlipQuant (ours) 8x64 vs FourOverSix (wB) | FlipQuant (ours) 8x64, NVFP4 act. (latency only) vs NVFP4 (wB) | FlipQuant (ours) 16x64 vs FourOverSix | FlipQuant (ours) 16x64, NVFP4 act. (latency only) vs NVFP4 |
 |---|---:|---:|---:|---:|---:|---:|
 | 1x128 | +11.6 % [+11.6, +11.6] | +11.4 % [+11.2, +11.4] | +2.9 % [+2.8, +2.9] | +2.7 % [+2.5, +2.9] | +0.8 % [+0.8, +0.9] | +0.8 % [+0.8, +0.9] |
 | 1x256 | +5.9 % [+5.4, +6.3] | +5.3 % [+5.0, +7.8] | +4.2 % [+3.4, +5.3] | +4.4 % [+4.0, +5.0] | +2.7 % [+0.7, +3.2] | +1.2 % [+0.8, +3.9] |
@@ -156,82 +173,136 @@ Ours / reference − 1, same activation quantizer; paired within rounds: median 
 | 1x8192 | +4.9 % [+4.5, +5.1] | +4.9 % [+4.3, +5.3] | +4.3 % [+4.1, +4.4] | +4.3 % [+4.2, +4.7] | +1.6 % [+1.4, +1.7] | +1.6 % [+1.0, +1.9] |
 | 4x2048 | +5.7 % [+5.2, +5.8] | +5.6 % [+5.0, +6.0] | +4.9 % [+4.7, +5.1] | +5.0 % [+4.9, +5.3] | +1.7 % [+1.6, +1.8] | +1.8 % [+1.2, +2.2] |
 
+#### Qwen3.8-27B, CUDA-graph prefill, ms, median of [5] round(s)
+
+| batch x prompt | BF16 | NVFP4 | FourOverSix | NVFP4 (wB) | FourOverSix (wB) | FlipQuant (ours) 8x64, NVFP4 act. (latency only) | FlipQuant (ours) 8x64 | FlipQuant (ours) 16x64, NVFP4 act. (latency only) | FlipQuant (ours) 16x64 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1x128 | 86.47 | 57.79 | 57.71 | 60.88 | 60.78 | 61.46 | 61.29 | 58.01 | 57.81 |
+| 1x256 | 115.81 | 73.23 | 72.94 | 75.35 | 75.00 | 76.52 | 76.15 | 73.76 | 73.34 |
+| 1x512 | 184.01 | 109.14 | 108.64 | 109.71 | 109.21 | 112.51 | 111.92 | 110.30 | 109.86 |
+| 1x1024 | 329.66 | 193.72 | 194.12 | 194.45 | 195.10 | 199.86 | 200.60 | 195.63 | 196.29 |
+| 1x2048 | 637.21 | 380.52 | 380.75 | 381.33 | 382.08 | 392.84 | 392.77 | 384.50 | 385.23 |
+| 1x4096 | 1307.62 | 808.22 | 807.03 | 808.51 | 808.16 | 830.68 | 830.39 | 815.23 | 814.91 |
+| 1x8192 | 2815.62 | 1812.21 | 1812.03 | 1811.73 | 1814.77 | 1855.82 | 1857.50 | 1825.57 | 1826.12 |
+| 4x2048 | 2701.11 | 1677.29 | 1677.30 | 1679.18 | 1681.01 | 1722.99 | 1724.31 | 1691.30 | 1693.84 |
+
+FlipQuant (ours) / reference − 1, same activation quantizer; paired within rounds: median [min, max] over rounds:
+
+| batch x prompt | FlipQuant (ours) 8x64 vs FourOverSix | FlipQuant (ours) 8x64, NVFP4 act. (latency only) vs NVFP4 | FlipQuant (ours) 8x64 vs FourOverSix (wB) | FlipQuant (ours) 8x64, NVFP4 act. (latency only) vs NVFP4 (wB) | FlipQuant (ours) 16x64 vs FourOverSix | FlipQuant (ours) 16x64, NVFP4 act. (latency only) vs NVFP4 |
+|---|---:|---:|---:|---:|---:|---:|
+| 1x128 | +6.2 % [+6.1, +6.2] | +6.3 % [+6.1, +6.6] | +0.9 % [+0.6, +1.0] | +0.9 % [+0.9, +1.0] | +0.2 % [-0.0, +0.2] | +0.4 % [+0.2, +0.4] |
+| 1x256 | +4.4 % [+4.2, +4.5] | +4.5 % [+4.5, +4.7] | +1.5 % [+1.5, +1.6] | +1.6 % [+1.5, +1.7] | +0.6 % [+0.4, +0.7] | +0.7 % [+0.6, +0.8] |
+| 1x512 | +3.0 % [+2.7, +3.1] | +3.1 % [+2.9, +3.3] | +2.5 % [+2.3, +2.7] | +2.6 % [+2.3, +2.8] | +1.1 % [+0.9, +1.2] | +1.1 % [+0.9, +1.3] |
+| 1x1024 | +3.3 % [+2.8, +3.8] | +3.2 % [+3.1, +3.4] | +2.8 % [+2.5, +2.9] | +2.9 % [+2.8, +3.0] | +1.2 % [+0.8, +1.4] | +1.0 % [+0.9, +1.1] |
+| 1x2048 | +3.3 % [+3.0, +3.4] | +3.2 % [+3.1, +3.3] | +3.0 % [+2.7, +3.0] | +2.9 % [+2.9, +3.1] | +1.1 % [+1.1, +1.4] | +1.0 % [+1.0, +1.0] |
+| 1x4096 | +2.9 % [+2.6, +3.0] | +2.9 % [+2.6, +2.9] | +2.7 % [+2.4, +2.8] | +2.8 % [+2.7, +3.0] | +1.0 % [+0.8, +1.1] | +0.9 % [+0.7, +1.0] |
+| 1x8192 | +2.5 % [+2.3, +2.7] | +2.4 % [+2.3, +2.5] | +2.3 % [+2.2, +2.5] | +2.4 % [+2.3, +2.6] | +0.8 % [+0.7, +1.0] | +0.7 % [+0.7, +0.8] |
+| 4x2048 | +2.8 % [+2.6, +2.9] | +2.8 % [+2.7, +2.8] | +2.6 % [+2.4, +2.7] | +2.7 % [+2.5, +2.7] | +1.0 % [+0.8, +1.1] | +0.8 % [+0.8, +1.0] |
+
 ### GEMM latency
 
-#### Llama-3.1-8B: GEMM kernel time per forward, µs (every quantized text Linear; CUPTI median)
+#### Llama-3.1-8B: GEMM kernel time per forward, µs (every quantized text Linear; CUPTI median of 20, median of 3 rounds in rotated order)
 
-| T | stock wA (NVFP4, FourOverSix) | stock wB | Ours 16x64 (n16k64_wA) | Ours 8x64 (n8k64_wB) | Ours 16x64 (n16k64_wA) vs stock wA (NVFP4, FourOverSix) | Ours 8x64 (n8k64_wB) vs stock wB | Ours 8x64 (n8k64_wB) vs stock wA (NVFP4, FourOverSix) |
+| T | stock wA (NVFP4, FourOverSix) | stock wB | FlipQuant (ours) 16x64 (n16k64_wA) | FlipQuant (ours) 8x64 (n8k64_wB) | FlipQuant (ours) 16x64 (n16k64_wA) vs stock wA (NVFP4, FourOverSix) | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wB | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wA (NVFP4, FourOverSix) |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| 128 | 2883 | 4442 | 3151 | 4896 | +9.3 % | +10.2 % | +69.8 % |
-| 256 | 4165 | 5404 | 4383 | 5976 | +5.2 % | +10.6 % | +43.5 % |
-| 512 | 6125 | 6472 | 6442 | 7389 | +5.2 % | +14.2 % | +20.6 % |
-| 1024 | 11846 | 12022 | 12380 | 13620 | +4.5 % | +13.3 % | +15.0 % |
-| 2048 | 20933 | 20812 | 21950 | 23348 | +4.9 % | +12.2 % | +11.5 % |
-| 4096 | 43210 | 43197 | 45322 | 48645 | +4.9 % | +12.6 % | +12.6 % |
-| 8192 | 83866 | 83882 | 88387 | 94671 | +5.4 % | +12.9 % | +12.9 % |
+| 128 | 2864 | 4416 | 3134 | 4868 | +9.4 % | +10.3 % | +70.0 % |
+| 256 | 4140 | 5377 | 4358 | 5941 | +5.3 % | +10.5 % | +43.5 % |
+| 512 | 6138 | 6518 | 6458 | 7342 | +5.2 % | +12.6 % | +19.6 % |
+| 1024 | 11694 | 11872 | 12182 | 13219 | +4.2 % | +11.3 % | +13.0 % |
+| 2048 | 20523 | 20440 | 21468 | 22811 | +4.6 % | +11.6 % | +11.1 % |
+| 4096 | 42378 | 42292 | 44243 | 47566 | +4.4 % | +12.5 % | +12.2 % |
+| 8192 | 82090 | 81712 | 86035 | 92217 | +4.8 % | +12.9 % | +12.3 % |
 
 FourOverSix and NVFP4 run the same stock GEMM (stock wA); their activation quantizers differ (supplementary):
 
 | T | NVFP4 quantizer, µs / forward | FourOverSix quantizer, µs / forward | FourOverSix vs NVFP4 |
 |---|---:|---:|---:|
-| 128 | 799 | 716 | -10.4 % |
-| 256 | 965 | 890 | -7.8 % |
-| 512 | 1653 | 1502 | -9.1 % |
-| 1024 | 2472 | 2810 | +13.7 % |
-| 2048 | 4281 | 4717 | +10.2 % |
-| 4096 | 8821 | 9205 | +4.4 % |
-| 8192 | 17128 | 18233 | +6.5 % |
+| 128 | 796 | 712 | -10.6 % |
+| 256 | 968 | 889 | -8.1 % |
+| 512 | 1631 | 1493 | -8.5 % |
+| 1024 | 2442 | 2800 | +14.7 % |
+| 2048 | 4213 | 4621 | +9.7 % |
+| 4096 | 8718 | 9135 | +4.8 % |
+| 8192 | 16808 | 17939 | +6.7 % |
 
 Quantizer launches net of the reuse measured in step 05.
 
-#### Mistral-7B-v0.3: GEMM kernel time per forward, µs (every quantized text Linear; CUPTI median)
+#### Mistral-7B-v0.3: GEMM kernel time per forward, µs (every quantized text Linear; CUPTI median of 20, median of 3 rounds in rotated order)
 
-| T | stock wA (NVFP4, FourOverSix) | stock wB | Ours 16x64 (n16k64_wA) | Ours 8x64 (n8k64_wB) | Ours 16x64 (n16k64_wA) vs stock wA (NVFP4, FourOverSix) | Ours 8x64 (n8k64_wB) vs stock wB | Ours 8x64 (n8k64_wB) vs stock wA (NVFP4, FourOverSix) |
+| T | stock wA (NVFP4, FourOverSix) | stock wB | FlipQuant (ours) 16x64 (n16k64_wA) | FlipQuant (ours) 8x64 (n8k64_wB) | FlipQuant (ours) 16x64 (n16k64_wA) vs stock wA (NVFP4, FourOverSix) | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wB | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wA (NVFP4, FourOverSix) |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| 128 | 2872 | 4431 | 3154 | 4890 | +9.8 % | +10.4 % | +70.3 % |
-| 256 | 4157 | 5394 | 4370 | 5979 | +5.1 % | +10.8 % | +43.8 % |
-| 512 | 6131 | 6524 | 6489 | 7393 | +5.8 % | +13.3 % | +20.6 % |
-| 1024 | 11823 | 12002 | 12308 | 13263 | +4.1 % | +10.5 % | +12.2 % |
-| 2048 | 20721 | 20646 | 21678 | 23086 | +4.6 % | +11.8 % | +11.4 % |
-| 4096 | 42751 | 42705 | 44727 | 48023 | +4.6 % | +12.5 % | +12.3 % |
-| 8192 | 82818 | 82732 | 87090 | 93453 | +5.2 % | +13.0 % | +12.8 % |
+| 128 | 2863 | 4419 | 3142 | 4882 | +9.7 % | +10.5 % | +70.5 % |
+| 256 | 4140 | 5380 | 4357 | 5938 | +5.2 % | +10.4 % | +43.4 % |
+| 512 | 6114 | 6429 | 6370 | 7310 | +4.2 % | +13.7 % | +19.6 % |
+| 1024 | 11696 | 11900 | 12203 | 13248 | +4.3 % | +11.3 % | +13.3 % |
+| 2048 | 20578 | 20489 | 21496 | 22844 | +4.5 % | +11.5 % | +11.0 % |
+| 4096 | 42485 | 42341 | 44325 | 47487 | +4.3 % | +12.2 % | +11.8 % |
+| 8192 | 82192 | 81770 | 86064 | 92206 | +4.7 % | +12.8 % | +12.2 % |
 
 FourOverSix and NVFP4 run the same stock GEMM (stock wA); their activation quantizers differ (supplementary):
 
 | T | NVFP4 quantizer, µs / forward | FourOverSix quantizer, µs / forward | FourOverSix vs NVFP4 |
 |---|---:|---:|---:|
-| 128 | 795 | 714 | -10.2 % |
-| 256 | 962 | 887 | -7.8 % |
-| 512 | 1649 | 1509 | -8.5 % |
-| 1024 | 2457 | 2809 | +14.4 % |
-| 2048 | 4231 | 4669 | +10.4 % |
-| 4096 | 8771 | 9183 | +4.7 % |
-| 8192 | 16980 | 18041 | +6.2 % |
+| 128 | 796 | 711 | -10.7 % |
+| 256 | 968 | 889 | -8.2 % |
+| 512 | 1638 | 1494 | -8.8 % |
+| 1024 | 2446 | 2801 | +14.5 % |
+| 2048 | 4221 | 4625 | +9.6 % |
+| 4096 | 8736 | 9154 | +4.8 % |
+| 8192 | 16846 | 17961 | +6.6 % |
 
 Quantizer launches net of the reuse measured in step 05.
 
-#### Phi-4: GEMM kernel time per forward, µs (every quantized text Linear; CUPTI median)
+#### Phi-4: GEMM kernel time per forward, µs (every quantized text Linear; CUPTI median of 20, median of 3 rounds in rotated order)
 
-| T | stock wA (NVFP4, FourOverSix) | stock wB | Ours 16x64 (n16k64_wA) | Ours 8x64 (n8k64_wB) | Ours 16x64 (n16k64_wA) vs stock wA (NVFP4, FourOverSix) | Ours 8x64 (n8k64_wB) vs stock wB | Ours 8x64 (n8k64_wB) vs stock wA (NVFP4, FourOverSix) |
+| T | stock wA (NVFP4, FourOverSix) | stock wB | FlipQuant (ours) 16x64 (n16k64_wA) | FlipQuant (ours) 8x64 (n8k64_wB) | FlipQuant (ours) 16x64 (n16k64_wA) vs stock wA (NVFP4, FourOverSix) | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wB | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wA (NVFP4, FourOverSix) |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| 128 | 3925 | 5341 | 4213 | 5809 | +7.3 % | +8.7 % | +48.0 % |
-| 256 | 5935 | 6580 | 6077 | 7286 | +2.4 % | +10.7 % | +22.8 % |
-| 512 | 10661 | 10648 | 11144 | 12013 | +4.5 % | +12.8 % | +12.7 % |
-| 1024 | 20921 | 20618 | 21524 | 23115 | +2.9 % | +12.1 % | +10.5 % |
-| 2048 | 42027 | 41935 | 43603 | 46339 | +3.8 % | +10.5 % | +10.3 % |
-| 4096 | 80028 | 79842 | 83520 | 89005 | +4.4 % | +11.5 % | +11.2 % |
-| 8192 | 159911 | 171123 | 177622 | 190973 | +11.1 % | +11.6 % | +19.4 % |
+| 128 | 3825 | 5335 | 4193 | 5804 | +9.6 % | +8.8 % | +51.7 % |
+| 256 | 5885 | 6565 | 6060 | 7257 | +3.0 % | +10.5 % | +23.3 % |
+| 512 | 10644 | 10636 | 11127 | 11951 | +4.5 % | +12.4 % | +12.3 % |
+| 1024 | 20642 | 20549 | 21492 | 23051 | +4.1 % | +12.2 % | +11.7 % |
+| 2048 | 42106 | 41904 | 43636 | 46253 | +3.6 % | +10.4 % | +9.8 % |
+| 4096 | 80234 | 79773 | 83342 | 88880 | +3.9 % | +11.4 % | +10.8 % |
+| 8192 | 172136 | 169746 | 179062 | 191103 | +4.0 % | +12.6 % | +11.0 % |
 
 FourOverSix and NVFP4 run the same stock GEMM (stock wA); their activation quantizers differ (supplementary):
 
 | T | NVFP4 quantizer, µs / forward | FourOverSix quantizer, µs / forward | FourOverSix vs NVFP4 |
 |---|---:|---:|---:|
-| 128 | 1114 | 1076 | -3.4 % |
-| 256 | 1957 | 1729 | -11.6 % |
-| 512 | 3182 | 2871 | -9.8 % |
-| 1024 | 4343 | 5005 | +15.2 % |
-| 2048 | 8221 | 8835 | +7.5 % |
-| 4096 | 14356 | 15211 | +6.0 % |
-| 8192 | 27194 | 28983 | +6.6 % |
+| 128 | 1114 | 1040 | -6.7 % |
+| 256 | 1960 | 1719 | -12.3 % |
+| 512 | 3174 | 2883 | -9.2 % |
+| 1024 | 4368 | 5090 | +16.5 % |
+| 2048 | 8227 | 8833 | +7.4 % |
+| 4096 | 14365 | 15251 | +6.2 % |
+| 8192 | 27330 | 29832 | +9.2 % |
 
 Quantizer launches net of the reuse measured in step 05.
+
+#### Qwen3.8-27B: GEMM kernel time per forward, µs (every quantized text Linear; CUPTI median of 20, median of 3 rounds in rotated order)
+
+| T | stock wA (NVFP4, FourOverSix) | stock wB | FlipQuant (ours) 16x64 (n16k64_wA) | FlipQuant (ours) 8x64 (n8k64_wB) | FlipQuant (ours) 16x64 (n16k64_wA) vs stock wA (NVFP4, FourOverSix) | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wB | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wA (NVFP4, FourOverSix) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 128 | 7843 | 11817 | 8740 | 12922 | +11.4 % | +9.3 % | +64.8 % |
+| 256 | 12064 | 14595 | 12577 | 16132 | +4.3 % | +10.5 % | +33.7 % |
+| 512 | 18696 | 20018 | 19850 | 22686 | +6.2 % | +13.3 % | +21.3 % |
+| 1024 | 37601 | 38308 | 38907 | 42720 | +3.5 % | +11.5 % | +13.6 % |
+| 2048 | 75558 | 75958 | 78620 | 84201 | +4.1 % | +10.9 % | +11.4 % |
+| 4096 | 145093 | 144284 | 150826 | 161076 | +4.0 % | +11.6 % | +11.0 % |
+| 8192 | 288063 | 286921 | 299740 | 321524 | +4.1 % | +12.1 % | +11.6 % |
+
+FourOverSix and NVFP4 run the same stock GEMM (stock wA); their activation quantizers differ (supplementary):
+
+| T | NVFP4 quantizer, µs / forward | FourOverSix quantizer, µs / forward | FourOverSix vs NVFP4 |
+|---|---:|---:|---:|
+| 128 | 1756 | 1639 | -6.7 % |
+| 256 | 2807 | 2524 | -10.1 % |
+| 512 | 4944 | 4490 | -9.2 % |
+| 1024 | 6450 | 7585 | +17.6 % |
+| 2048 | 12822 | 13770 | +7.4 % |
+| 4096 | 23182 | 24592 | +6.1 % |
+| 8192 | 43429 | 46694 | +7.5 % |
+
+Quantizer launches net of the reuse measured in step 05.
+
+GEMM vs end-to-end consistency (deviation 1; tolerance 1 % of the reference prefill): Llama-3.1-8B 16 of 32 rows flagged; Mistral-7B-v0.3 22 of 32 rows flagged; Phi-4 16 of 32 rows flagged; Qwen3.8-27B 5 of 32 rows flagged (appendix).
