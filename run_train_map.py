@@ -235,6 +235,15 @@ def main():
     ap.add_argument('--resume-maps', type=Path, default=None,
                     help='Warm start from a completed run directory: its final hard maps become logits +/- --resume-margin')
     ap.add_argument('--resume-margin', type=float, default=1.0)
+    ap.add_argument('--greedy-rounds', type=int, default=0,
+                    help='--alt joint: instead of gradient training, select tiles on frozen scales by exact acceptance '
+                         '(measured calibration KL) for up to N rounds')
+    ap.add_argument('--greedy-select', type=int, default=512, help='Calibration sequences (the last N) for acceptance')
+    ap.add_argument('--greedy-grad', type=int, default=4096, help='Calibration sequences (the first N) for flip gains')
+    ap.add_argument('--greedy-tol', type=float, default=1e-6, help='Minimum measured KL decrease to accept a step')
+    ap.add_argument('--greedy-rank', choices=('first', 'tstat', 'cosine', 'random'), default='first',
+                    help='Candidate ranking: first-order gain, its consistency across batches (t-statistic), the '
+                         'alignment of the move with -G (cosine), or random (control)')
     ap.add_argument('--resume-scale-from', type=Path, default=None,
                     help='--alt joint: start the per-block scale logits from a completed scale-only (1x16) run\'s '
                          'final map (same --scale-init); tiles start at --tile-init')
@@ -592,6 +601,8 @@ def main():
         x = inputs[0]
         return (quantize_rows(x.detach()) + (x - x.detach()), *inputs[1:])
 
+    rank_stats = dict(on=False, full=False, sq={}, G={})
+
     def make_hook(n):
         def forward(module, inputs, output):
             x = inputs[0].detach().reshape(-1, inputs[0].shape[-1])
@@ -603,7 +614,14 @@ def main():
                 d = alt(n).float() - b.float()
                 del b
                 # dLoss/dm_u = sum over tile u of G * (A - E), with G = dy^T x (E = B unless joint).
-                grads[n] += reduce(g * d, rows, cols)
+                tile_g = reduce(g * d, rows, cols)
+                grads[n] += tile_g
+                if rank_stats['on']:
+                    # Search-mode ranking statistics: per-batch predicted gains (for a t-statistic) and the full
+                    # weight gradient (for the alignment of the move with -G).
+                    rank_stats['sq'][n] += tile_g.square()
+                    if rank_stats['full']:
+                        rank_stats['G'][n] += g
                 if joint:
                     # dLoss/ds_b = sum over scale block b of G * (1 - t) * (hi - lo).
                     # --scale-grad-in-e0m3: straight-through the tile gate as well (drop the (1 - t) factor),
@@ -689,6 +707,128 @@ def main():
     step = 0
     previous = hard_map()
     previous_psi = {n: t > 0 for n, t in psi.items()}
+    if args.greedy_rounds:
+        # Exact-acceptance tile selection on FROZEN per-block scales (upper-bound test for 8x64 E0M3 tiles).
+        # Each round: first-order flip gains from gradients on a calibration subset rank the tiles (both
+        # directions), the top-k are tried for k on a geometric grid, and the measured KL on a separate
+        # calibration selection subset decides; a k is accepted only if it lowers that measured KL.
+        # Dev and test data are never used for any decision (dev KL is only reported per round).
+        assert joint and world == 1 and args.teacher_topk, '--greedy-rounds: --alt joint, one GPU, --teacher-topk'
+        assert not args.keep_best, '--greedy-rounds: --keep-best would restore the pre-search maps'
+        sel = list(range(len(fit) - args.greedy_select, len(fit)))
+        grad_idx = list(range(min(args.greedy_grad, len(fit) - args.greedy_select)))
+        names = list(theta)
+
+        def select_kl():
+            eval_hooks(True)
+            total = 0.
+            for start in range(0, len(sel), args.eval_batch):
+                chunk = sel[start:start + args.eval_batch]
+                ids = torch.cat([fit[i] for i in chunk]).to(device)
+                current_batch[0] = ids.shape[0]
+                lp = model(input_ids=ids, use_cache=False).logits[:, :-1].float().log_softmax(-1)
+                total += float(batch_kl(lp, chunk).sum())
+                del lp
+            current_batch[0] = 1
+            eval_hooks(False)
+            return total / len(sel)
+
+        def flip_gains():
+            for g in (*grads.values(), *psi_grads.values()):
+                g.zero_()
+            if args.greedy_rank == 'random':
+                # Control: a random order over all tiles (every tile a candidate).
+                gen = torch.Generator(device=device).manual_seed(1000 + len(greedy['rounds']))
+                return torch.rand(offsets[-1], generator=gen, device=device)
+            rank_stats.update(on=args.greedy_rank != 'first', full=args.greedy_rank == 'cosine',
+                              sq={n: torch.zeros_like(t) for n, t in theta.items()},
+                              G={n: torch.zeros_like(modules[n].weight, dtype=torch.float32) for n in theta}
+                              if args.greedy_rank == 'cosine' else {})
+            handles = [m.register_forward_pre_hook(act) for m in modules.values()]
+            handles += [m.register_forward_hook(make_hook(n)) for n, m in modules.items()]
+            with torch.enable_grad():
+                for start in range(0, len(grad_idx), args.batch):
+                    idx = grad_idx[start:start + args.batch]
+                    ids = torch.cat([fit[i] for i in idx]).to(device)
+                    embeds = model.get_input_embeddings()(ids).detach().requires_grad_()
+                    lp = model(inputs_embeds=embeds, use_cache=False).logits[:, :-1].float().log_softmax(-1)
+                    (batch_kl(lp, idx).sum() / len(grad_idx)).backward()
+                    del embeds, lp
+            for h in handles:
+                h.remove()
+            rank_stats['on'] = False
+            out = []
+            for n in names:
+                # Predicted KL decrease from flipping tile u: -g if E2M1 now (t: 0 -> 1), +g if E0M3 now (1 -> 0).
+                gain = torch.where(theta[n] > 0, grads[n], -grads[n])
+                if args.greedy_rank == 'tstat':
+                    # Consistency across batches: summed gain over its root-sum-of-squares (a t-like statistic).
+                    gain = gain / (rank_stats['sq'][n].sqrt() + 1e-30)
+                elif args.greedy_rank == 'cosine':
+                    # Alignment of the tile move with -G: gain / (|G_u| |dW_u|), independent of the move's size.
+                    b = e2m1(n)
+                    d = alt(n).float() - b.float()
+                    del b
+                    norm = (reduce(rank_stats['G'][n].square(), rows, cols).sqrt()
+                            * reduce(d.square(), rows, cols).sqrt())
+                    gain = gain / (norm + 1e-30)
+                    del d
+                out.append(gain.reshape(-1))
+            rank_stats.update(sq={}, G={})
+            return torch.cat(out)
+
+        sizes = [theta[n].numel() for n in names]
+        offsets = [0]
+        for s in sizes:
+            offsets.append(offsets[-1] + s)
+
+        def set_flips(flat_idx):
+            # Toggle the given tiles (flat indices) and re-materialize the touched modules.
+            touched = set()
+            for i, n in enumerate(names):
+                local = flat_idx[(flat_idx >= offsets[i]) & (flat_idx < offsets[i + 1])] - offsets[i]
+                if local.numel():
+                    flat = theta[n].view(-1)
+                    flat[local] = -flat[local]
+                    touched.add(n)
+            for n in touched:
+                apply(n, True)
+
+        greedy = report['greedy'] = dict(select=len(sel), grad=len(grad_idx), rounds=[])
+        current = select_kl()
+        greedy['start_select_kl'] = current
+        print(f'GREEDY start select KL {current:.6f} dev KL {initial["kl"]:.6f}', flush=True)
+        for rnd in range(args.greedy_rounds):
+            t0 = time.time()
+            gains = flip_gains()
+            positive = int((gains > 0).sum())
+            order_idx = torch.argsort(gains, descending=True)
+            trials = {}
+            for k in (16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768):
+                if k > positive:
+                    break
+                chosen = order_idx[:k]
+                set_flips(chosen)
+                trials[k] = select_kl()
+                set_flips(chosen)   # revert
+            entry = dict(round=rnd, positive_candidates=positive, trials=trials, before=current,
+                         seconds=None, accepted_k=0)
+            best_k = min(trials, key=trials.get) if trials else None
+            if best_k is not None and trials[best_k] < current - args.greedy_tol:
+                set_flips(order_idx[:best_k])
+                current = trials[best_k]
+                entry['accepted_k'] = best_k
+            entry['after'] = current
+            entry['e0m3_tiles'] = sum(int((t > 0).sum()) for t in theta.values())
+            entry['dev_kl'] = dev_eval()['kl']   # monitor only
+            entry['seconds'] = time.time() - t0
+            greedy['rounds'].append(entry)
+            save_report()
+            print('GREEDY ' + json.dumps({k: v for k, v in entry.items() if k != 'trials'})
+                  + ' trials ' + json.dumps({str(k): round(v, 6) for k, v in trials.items()}), flush=True)
+            if entry['accepted_k'] == 0:
+                break
+        args.epochs = 0   # no gradient training in this mode
     for epoch in range(args.epochs):
         t0 = time.time()
         order = list(range(len(fit)))

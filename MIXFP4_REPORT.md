@@ -1122,6 +1122,49 @@ reproduces the original dev KL and PPL exactly.
   scale-only map, 8×64 E0M3 tiles add nothing.** This matches the headroom
   analysis: an 8×64 tile keeps about 12% of E0M3's per-block gain.
 
+**Upper bound with exact acceptance (jobs 454158–454161, `--greedy-rounds`).**
+- **Start:** the converged scale-only scales, frozen.
+- **Each round:**
+  - Rank all 8×64 tiles for a flip in either direction, using gradients on 4,096
+    calibration sequences.
+  - Try the top k (16 … 32,768) and measure the top-k KL on the last 512
+    calibration sequences.
+  - Accept the best k only if it lowers that measured KL.
+- **Rankings:** first-order predicted gain; its consistency across batches
+  (t-statistic); alignment of the move with −G (cosine); random (control).
+- **Independence:** dev and test data never influence a decision.
+
+Selection-set KL after flipping the top k tiles (start 0.048097):
+
+| ranking | k = 16 | 128 | 1,024 | 4,096 | 32,768 |
+|---|---:|---:|---:|---:|---:|
+| first-order | 0.04951 | 0.05244 | 0.05897 | 0.08252 | 0.2566 |
+| t-statistic | 0.04853 | 0.04941 | 0.05742 | 0.08782 | 0.1957 |
+| cosine | 0.04816 | 0.04809 | 0.04828 | 0.04849 | 0.05824 |
+| random | 0.04816 | 0.04823 | 0.04828 | 0.04834 | 0.04950 |
+
+| ranking | tiles accepted | selection KL | dev KL | WikiText-2 | C4 |
+|---|---:|---:|---:|---:|---:|
+| none (scale-only 10k × 30) | 0 | 0.048097 | 0.08557 | 14.102578 | 19.327739 |
+| first-order, t-statistic | 0 | — | — | 14.102634 | 19.327732 |
+| cosine | 128 | 0.048092 | 0.08555 | 14.126120 | 19.346884 |
+| random | 144 | 0.048024 | 0.08577 | 14.118463 | 19.328096 |
+
+- **The gradient ranking is worse than random.** Its top 32,768 tiles raise the
+  KL fivefold (to 0.257), while 32,768 random tiles raise it by 3%. The largest
+  first-order gains sit where large moves meet high curvature, so the linear
+  estimate points the wrong way. That is also why STE training picks tiles that
+  do not pay off.
+- **Exact acceptance finds nothing real.**
+  - The only accepted sets (128 and 144 tiles) lower the selection KL by
+    0.01–0.15%, within the best-of-12 noise of each round.
+  - They do not transfer: dev KL is flat or worse, and WikiText is worse (+0.016
+    to +0.024 PPL).
+- **At the converged scales, 8×64 E0M3 tiles are neutral to mildly harmful on
+  average,** and no tested selection rule finds a reachable KL gain. On this model,
+  the joint search space's higher upper bound is, in practice, the scale-only
+  optimum.
+
 **Activations: a static per-K-strip type map (job 444558,
 `analyze_act_e0m3_headroom.py`, `results/mixfp4_potential/train_map/act_e0m3_headroom_1b.json`).**
 - **Setup:**
