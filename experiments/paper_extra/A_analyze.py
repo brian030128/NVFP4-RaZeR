@@ -121,7 +121,7 @@ def main():
         if not {'fo6', 'nvfp4', 'e2m1', 'e2m1z'} <= set(rep):
             continue
         ev = {p: r['evaluations'][p] for p, r in rep.items()}
-        tok = {p: (r['data']['wiki']['token_sha256'], r['data']['c4_paper']['token_sha256']) for p, r in rep.items()}
+        tok = {p: json.dumps([r['data']['wiki']['token_sha256'], r['data']['c4_paper']['token_sha256']]) for p, r in rep.items()}
         assert len(set(tok.values())) == 1, f'{model}: the policies evaluated different windows'
         nll = {p: {c: e['evaluation'][c]['nll'] for c, _ in CORPORA} for p, e in ev.items()}
         ppl = {p: {c: e['evaluation'][c]['ppl'] for c, _ in CORPORA} for p, e in ev.items()}
@@ -275,6 +275,10 @@ def main():
             if by:
                 md.append(f"| {name(p)} | {100 * x['uniform_frac']:.2f} | " +
                           ' | '.join(f'{100 * by[k]:.2f}' if k in by else '—' for k in PROJ) + ' |')
+        zs = {p: x['zero_scale_blocks'] for p, x in d['policies'].items() if x.get('zero_scale_blocks') is not None}
+        if zs:
+            md.append('\nBlocks with a zero (underflowed) E4M3 scale, which become all-zero blocks: ' +
+                      ('0 in every arm.' if not any(zs.values()) else ', '.join(f'{name(p)} {n}' for p, n in zs.items()) + '.'))
         # LaTeX tables in the user's layout
         for c, title in CORPORA:
             def cell(p):
@@ -312,7 +316,8 @@ def main():
                  f"- IF4 against the official fouroversix reference ({a1.get('fouroversix_commit', '')[:8]}): choice equal on every "
                  f"module: {s['if4_choice_equal_all']}; dequantized values bitwise equal: {s['if4_dequantized_bitwise_equal_all']}.\n"
                  f"- IF4's FP candidate vs MixFP4 (Zou et al.)'s E2M1 candidate: {s['if4_fp_vs_zou_e2m1_elements_differing']} of "
-                 f"{s['elements']} elements differ (BF16): the e2m1 reference is the E2M1 base of both.\n"
+                 f"{s['elements']} elements differ (BF16; operation order), so each rule has its own E2M1 base: e2m1 for IF4, "
+                 "e2m1z for MixFP4 (Zou et al.).\n"
                  f"- MixFP4 (Zou et al.) against the repo's quant_nvif4: {s['zou_vs_repo_nvif4_elements_differing']} of "
                  f"{s['elements']} elements differ.\n"
                  f"- MixFP4 (Zou et al.)'s E1M2 candidate against the repo's E0M3 alpha = 1 candidate: "

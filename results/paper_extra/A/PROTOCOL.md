@@ -141,4 +141,19 @@ PPL): ± 2 SE in `A.md`, 1 SE in the CSVs. Negative means the first policy is be
 
 ## Deviations (append-only)
 
-(none yet)
+1. **2026-09-29, after the Llama-3.1-8B runs: three fixes to the analysis script `A_analyze.py`. No GPU run was repeated
+   and no number changed.**
+   - **A crash.** The registered script (sha256 9c67ae37…) stopped at its window-identity check with a TypeError. The
+     check put each policy's (WikiText-2, C4) token hashes into a set, and the reports store those hashes as lists,
+     which cannot go into a set. The fix compares their JSON serialization. The check is the same: every policy must
+     have evaluated the same windows, and it passes.
+   - **A wrong sentence in `A.md`.** The A1 line said "the e2m1 reference is the E2M1 base of both". That contradicts
+     A4: each rule has its own E2M1 base, e2m1 for IF4 and e2m1z for MixFP4 (Zou et al.). The text now says so. The
+     computation already used the per-rule bases (`BASE = dict(if4='e2m1', zou='e2m1z', zoufo6='fo6')`).
+   - **A missing line in `A.md`.** A7 asks for the count of zero-scale blocks. The script stored it in `A.json` but
+     did not print it; `A.md` now does (0 in every Llama arm).
+   - **New sha256 of `A_analyze.py`:** 5033e227f045bbe84ce833934d2a373ac95b6a96d7ec5a3cb0c3bddde775a91b. Every other
+     registered file is unchanged (hashes re-checked).
+   - **Not a deviation, for the record:** the 3-policy smoke test before registration found a variable-shadowing bug
+     in `run_ppl_deploy.py`'s mixing aggregation (`tile` rebound inside the loop). It was fixed before registration;
+     the registered hash includes the fix.
