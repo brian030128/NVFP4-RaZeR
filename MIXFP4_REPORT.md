@@ -1088,6 +1088,34 @@ Findings:
   −0.00235±0.00147 (c4)** relative to the 10k FourOverSix-start run. The 20k
   scale-only map is the best 1B result in the study.
 
+**Twice the epochs on the doubled data (jobs 454985, 454986; 20k × 20-epoch
+cosine, 8gpus partition).**
+
+| 1B, Pile 20k | epochs | E0M3 tiles | best dev KL | WikiText-2 | C4 |
+|---|---:|---:|---:|---:|---:|
+| scale 1×16 | 10 | 0 | 0.08279 | **14.024502** | 19.276232 |
+| scale 1×16 | 20 | 0 | **0.08123** | 14.045716 | **19.265811** |
+| fixed joint 8×64 | 10 | 173,718 (9%) | 0.08562 | 14.039246 | 19.287723 |
+| fixed joint 8×64 | 20 | 295,737 (16%) | 0.08710 | 14.078877 | 19.307197 |
+
+Paired ΔNLL (wiki / c4):
+
+| comparison | ΔNLL |
+|---|---|
+| fixed joint − scale, 20 epochs | +0.00236±0.00194 / +0.00214±0.00134 |
+| scale, 20 − 10 epochs | +0.00151±0.00163 / −0.00054±0.00140 |
+| fixed joint, 20 − 10 epochs | +0.00283±0.00182 / +0.00101±0.00151 |
+
+- **Twice the epochs makes the fixed joint worse, including on dev KL** (0.0871
+  against 0.0856).
+  - Its dev KL stays at 0.095–0.097 through the long high-lr phase (epochs 2–11),
+    as tiles churn.
+  - It elects 296 k E0M3 tiles against 174 k without lowering the loss.
+- **Scale-only's dev KL improves** (0.0828 → 0.0812), but neither test set moves
+  significantly.
+- **At 20 epochs the fixed joint is significantly worse than scale-only on C4.**
+  No E0M3 variant tried on 1B beats KL-trained per-block NVFP4 scale search.
+
 **Making joint easier to train: two fixes (`--tile-lr-scale`, `--scale-grad-in-e0m3`).**
 
 Joint is harder to optimize than scale-only for two reasons:
