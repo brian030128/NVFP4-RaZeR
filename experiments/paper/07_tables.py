@@ -20,13 +20,16 @@ Writes <out>/tables/main.md (8x64 and 16x64), appendix.md (256x64, and the per-s
 - **Prefill:** the median over rounds of each process's median. The CUDA-graph numbers are the primary ones (main
   tables); eager is supplementary (appendix), where `†` marks a host-bound point (bench_prefill.py's flag in any
   round).
-- **Ratios:** Ours / reference − 1 with the same activation quantizer, paired within rounds (the median over rounds of
+- **Ratios:** FlipQuant (ours) / reference − 1 with the same activation quantizer, paired within rounds (the median over rounds of
   the per-round ratio, with its range), as Part R reported them:
   - `ours-<u>` against FourOverSix;
   - `ours-<u>-nvfp4act` (latency only) against NVFP4;
   - for 8x64, also against the weights-on-B references.
 - **GEMM:** the per-forward sum over the quantized text Linears of each projection's kernel time times its module
-  count. The activation quantizer's per-forward sum counts only its launches, net of the reuse measured in step 05
+  count. Since deviation 1, each kernel time is the median of 3 rounds in a rotated order; the fixed-order records are
+  rendered separately as tables/gemm_superseded.md.
+- **GEMM vs end to end:** the per-forward GEMM difference must match the end-to-end CUDA-graph difference within 1 %
+  of the reference prefill. Rows that do not are flagged (appendix; a count in the main tables). The activation quantizer's per-forward sum counts only its launches, net of the reuse measured in step 05
   (q/k/v and gate/up share one quantization). Without a step-05 record, it assumes no reuse, an upper bound, and says so.
 """
 import json
@@ -40,12 +43,14 @@ import paper_common as P  # noqa: E402
 
 TASKS = ('mmlu', 'arc_challenge', 'arc_easy', 'hellaswag', 'piqa')
 TASK_TITLES = dict(mmlu='MMLU (5-shot)', arc_challenge='ARC-C', arc_easy='ARC-E', hellaswag='HellaSwag', piqa='PIQA')
-POLICY_TITLES = {'bf16': 'BF16', 'nvfp4': 'NVFP4', 'fo6': 'FourOverSix', 'ours-8x64': 'Ours 8x64',
-                 'ours-16x64': 'Ours 16x64', 'ours-256x64': 'Ours 256x64', 'nvfp4-wB': 'NVFP4 (wB)', 'fo6-wB': 'FourOverSix (wB)'}
+POLICY_TITLES = {'bf16': 'BF16', 'nvfp4': 'NVFP4', 'fo6': 'FourOverSix', 'ours-8x64': 'FlipQuant (ours) 8x64',
+                 'ours-16x64': 'FlipQuant (ours) 16x64', 'ours-256x64': 'FlipQuant (ours) 256x64', 'nvfp4-wB': 'NVFP4 (wB)',
+                 'fo6-wB': 'FourOverSix (wB)'}
 for _u in P.UNITS:
-    POLICY_TITLES[f'ours-{_u}-nvfp4act'] = f'Ours {_u}, NVFP4 act. (latency only)'
-GEMM_TITLES = dict(stock_wA='stock wA (NVFP4, FourOverSix)', stock_wB='stock wB', mixed_16x64='Ours 16x64 (n16k64_wA)',
-                   mixed_256x64='Ours 256x64 (n16k64_wA)', n8k64_wB='Ours 8x64 (n8k64_wB)')
+    POLICY_TITLES[f'ours-{_u}-nvfp4act'] = f'FlipQuant (ours) {_u}, NVFP4 act. (latency only)'
+GEMM_TITLES = dict(stock_wA='stock wA (NVFP4, FourOverSix)', stock_wB='stock wB',
+                   mixed_16x64='FlipQuant (ours) 16x64 (n16k64_wA)', mixed_256x64='FlipQuant (ours) 256x64 (n16k64_wA)',
+                   n8k64_wB='FlipQuant (ours) 8x64 (n8k64_wB)')
 DASH = '—'
 STRICT = True          # the registered checks must run; --smoke relaxes this for reports older than a check
 
@@ -118,7 +123,7 @@ def ppl_section(out, models, units):
         data[model]['ppl'] = {p: {c: res[p]['evaluation'][c]['ppl'] for c in ('wiki', 'c4')} for p in res}
         data[model]['limit_windows'] = sorted({str(v['limit_windows']) for v in res.values()})
     head = ['model', 'corpus'] + [POLICY_TITLES[p] for p in pols]
-    dhead = ['model', 'corpus', 'windows'] + [f'Ours {u} − {POLICY_TITLES[r]}' for u in units for r in ('fo6', 'nvfp4')]
+    dhead = ['model', 'corpus', 'windows'] + [f'FlipQuant (ours) {u} − {POLICY_TITLES[r]}' for u in units for r in ('fo6', 'nvfp4')]
     text = ('### Perplexity (NativeLinear (c); BF16 as loaded)\n\n' + table(head, rows, 2) +
             '\n\n### Paired ΔNLL, nats per token (= Δ log PPL), ± 2 SE over windows; * = |Δ| > 2 SE\n\n' + table(dhead, drows, 2))
     return text, data
@@ -209,7 +214,7 @@ def lmeval_section(out, models, units):
         data[model]['mmlu_top_ties'] = ties
         tie_rows.append([P.TITLES[model]] + [f'{100 * ties[p]:.1f}' if p in ties else DASH for p in pols])
     head = ['model', 'task'] + [POLICY_TITLES[p] for p in pols]
-    dhead = ['model', 'task', 'examples'] + [f'Ours {u} − {POLICY_TITLES[r]}' for u in units for r in ('fo6', 'nvfp4')]
+    dhead = ['model', 'task', 'examples'] + [f'FlipQuant (ours) {u} − {POLICY_TITLES[r]}' for u in units for r in ('fo6', 'nvfp4')]
     text = ('### Downstream accuracy, % (lm-eval 0.4.11; MMLU 5-shot, the others 0-shot; acc_norm, MMLU acc)\n\n' +
             table(head, rows, 2) + '\n\n### Paired accuracy differences, percentage points, ± 2 SE; * = |Δ| > 2 SE\n\n' +
             table(dhead, drows, 2) +
@@ -291,7 +296,7 @@ def latency_section(out, models, units, modes):
                     'eager prefill (supplementary; † host-bound: the graph is more than 5 % faster)')
             parts.append(f'#### {P.TITLES[model]}, {what}, ms, median of {rounds} round(s)\n\n' +
                          table(['batch x prompt'] + [POLICY_TITLES.get(p, p) for p in pols], rows) +
-                         '\n\nOurs / reference − 1, same activation quantizer; paired within rounds: median [min, max] over rounds:\n\n' +
+                         '\n\nFlipQuant (ours) / reference − 1, same activation quantizer; paired within rounds: median [min, max] over rounds:\n\n' +
                          table(['batch x prompt'] + [f'{POLICY_TITLES[a]} vs {POLICY_TITLES[b]}' for a, b in ratios], rrows))
         errs = sorted({e for p in res.values() for s in p.get('graph', {}).values() for e in s['errors']})
         if errs:
@@ -303,14 +308,14 @@ def latency_section(out, models, units, modes):
     return title + '\n\n' + ('\n\n'.join(parts) if parts else DASH), data
 
 
-def gemm_section(out, models, units, prefill):
+def gemm_section(out, models, units, prefill, gdir='gemm', label=''):
     cfgs = ['stock_wA', 'stock_wB'] + [c for u, c in (('16x64', 'mixed_16x64'), ('256x64', 'mixed_256x64'), ('8x64', 'n8k64_wB'))
                                        if u in units]
     ratios = [(c, 'stock_wA') for c in cfgs if c.startswith('mixed')] + \
              ([('n8k64_wB', 'stock_wB'), ('n8k64_wB', 'stock_wA')] if '8x64' in units else [])
     parts, detail, data = [], [], {}
     for model in models:
-        r = read(out / 'gemm' / f'{model}.json')
+        r = read(out / gdir / f'{model}.json')
         if r is None:
             continue
         projs = r['projections']
@@ -338,7 +343,9 @@ def gemm_section(out, models, units, prefill):
                  [f"{100 * (qsums[('four_over_six_rows', t)] / qsums[('nvfp4_rows', t)] - 1):+.1f} %"
                   if ('four_over_six_rows', t) in qsums and ('nvfp4_rows', t) in qsums else DASH] for t in tokens]
         scope = 'every quantized text Linear' if complete else f'ONLY {", ".join(timed)} (a subset)'
-        parts.append(f'#### {P.TITLES[model]}: GEMM kernel time per forward, µs ({scope}; CUPTI median)\n\n' +
+        how = ('CUPTI median of 20, fixed order' if 'protocol' not in r else
+               f"CUPTI median of 20, median of {r['protocol']['rounds']} rounds in rotated order")
+        parts.append(f'#### {label}{P.TITLES[model]}: GEMM kernel time per forward, µs ({scope}; {how})\n\n' +
                      table(['T'] + [GEMM_TITLES[c] for c in cfgs] + [f'{GEMM_TITLES[a]} vs {GEMM_TITLES[b]}' for a, b in ratios], rows) +
                      '\n\nFourOverSix and NVFP4 run the same stock GEMM (stock wA); their activation quantizers differ '
                      '(supplementary):\n\n' + table(['T', 'NVFP4 quantizer, µs / forward', 'FourOverSix quantizer, µs / forward',
@@ -354,11 +361,70 @@ def gemm_section(out, models, units, prefill):
         data[model] = dict(per_forward_gemm_us={f'{c}@{t}': v for (c, t), v in sums.items()},
                            per_forward_quant_us={f'{a}@{t}': v for (a, t), v in qsums.items()}, quant_reuse=reuse,
                            complete=complete, tags={p: projs[p]['weights'] for p in timed})
-    text = '### GEMM latency\n\n' + ('\n\n'.join(parts) if parts else DASH)
-    dtext = ('### GEMM kernel time per shape, µs (CUPTI median; wN = CTA tile width picked by the tile table)\n\n' +
+    text = f'### {label}GEMM latency\n\n' + ('\n\n'.join(parts) if parts else DASH)
+    dtext = (f'### {label}GEMM kernel time per shape, µs (wN = CTA tile width picked by the tile table)\n\n' +
              table(['model', 'projection', 'out x in', 'modules', 'T'] + [GEMM_TITLES[c] for c in cfgs] +
                    ['NVFP4 quantizer', 'FourOverSix quantizer'], detail, 3)) if detail else ''
     return text, dtext, data
+
+
+CONSISTENCY = (('ours-16x64', 'fo6', 'mixed_16x64', 'stock_wA'), ('ours-256x64', 'fo6', 'mixed_256x64', 'stock_wA'),
+               ('ours-8x64', 'fo6-wB', 'n8k64_wB', 'stock_wB'), ('ours-8x64', 'fo6', 'n8k64_wB', 'stock_wA'))
+TOLERANCE_PP = 1.0
+
+
+def consistency_section(out, models, units, prefill, gdir='gemm'):
+    """GEMM vs end to end (results/paper/PROTOCOL.md, deviation 1): per model, comparison and prompt shape, the
+    per-forward GEMM time difference (FlipQuant (ours) minus the reference with the same activation quantizer; the quantizer and
+    everything else in the forward are the same) against the end-to-end CUDA-graph prefill difference (the median over
+    rounds of the per-round difference). Flagged when they differ by more than TOLERANCE_PP % of the reference prefill."""
+    rows, data, flagged = [], {}, {}
+    for model in models:
+        g = read(out / gdir / f'{model}.json')
+        pre = prefill.get(model, {})
+        if g is None or not pre:
+            continue
+        mods = {p: v['modules'] for p, v in g['projections'].items()}
+        by = {(x['config'], x['proj'], x['tokens']): x['gemm_us'] for x in g['rows']}
+        if {x['proj'] for x in g['rows']} != set(mods):
+            continue                                          # a subset of the projections: no per-forward sum
+        per_forward = lambda c, t: sum(mods[p] * by[(c, p, t)] for p in mods) / 1e3  # noqa: E731  (ms)
+        data[model], flagged[model] = [], 0
+        for ours, ref, cg, rg in CONSISTENCY:
+            if P.unit_of(ours) not in units or ours not in pre or ref not in pre:
+                continue
+            for s in P.PREFILL_SHAPES:
+                ea, eb = pre[ours].get('graph', {}).get(s), pre[ref].get('graph', {}).get(s)
+                b_, p_ = (int(v) for v in s.split('x'))
+                t = b_ * p_
+                if not ea or not eb or not all((c, pr, t) in by for c in (cg, rg) for pr in mods):
+                    continue
+                common = sorted(set(ea['rounds']) & set(eb['rounds']))
+                diffs = [ea['rounds'][r] - eb['rounds'][r] for r in common]
+                if not diffs:
+                    continue
+                d_e2e, t_ref = statistics.median(diffs), eb['ms']
+                d_gemm = per_forward(cg, t) - per_forward(rg, t)
+                gap = 100 * (d_e2e - d_gemm) / t_ref
+                flag = abs(gap) > TOLERANCE_PP
+                flagged[model] += flag
+                rec = dict(ours=ours, ref=ref, shape=s, tokens=t, e2e_ms=d_e2e, e2e_pct=100 * d_e2e / t_ref,
+                           e2e_round_pct=[100 * d / t_ref for d in diffs], gemm_ms=d_gemm, gemm_pct=100 * d_gemm / t_ref,
+                           gap_pp=gap, flag=flag)
+                data[model].append(rec)
+                rows.append([P.TITLES[model], f'{POLICY_TITLES[ours]} vs {POLICY_TITLES[ref]}', s,
+                             f"{d_e2e:+.3f} ({rec['e2e_pct']:+.1f} %) [{min(rec['e2e_round_pct']):+.1f}, {max(rec['e2e_round_pct']):+.1f}]",
+                             f"{d_gemm:+.3f} ({rec['gemm_pct']:+.1f} %)", f'{gap:+.1f}', 'FLAG' if flag else ''])
+    text = ('### GEMM vs end-to-end consistency (deviation 1)\n\n'
+            'Per-forward GEMM time difference against the end-to-end CUDA-graph prefill difference, both in ms and as '
+            f'% of the reference prefill; FLAG when they differ by more than {TOLERANCE_PP:g} % of the reference prefill '
+            '(the activation quantizer and the rest of the forward are the same on both sides).\n\n' +
+            (table(['model', 'comparison', 'batch x prompt', 'end to end, ms (%) [per-round range, %]',
+                    'GEMM per forward, ms (%)', 'gap, pp', 'check'], rows, 3) if rows else DASH))
+    summary = ('GEMM vs end-to-end consistency (deviation 1; tolerance ' + f'{TOLERANCE_PP:g} % of the reference prefill): ' +
+               '; '.join(f'{P.TITLES[m]} {n} of {len(data[m])} rows flagged' for m, n in flagged.items()) +
+               ' (appendix).') if flagged else ''
+    return text, summary, data
 
 
 def main():
@@ -374,6 +440,17 @@ def main():
     docs = {}
     prefill_all = {m: prefill_results(args.out, m) for m in args.models}
     _, gemm_detail, _ = gemm_section(args.out, args.models, list(args.units), prefill_all)     # every unit's kernel
+    check_text, check_summary, check_data = consistency_section(args.out, args.models, list(args.units), prefill_all)
+    if (args.out / 'gemm_superseded').is_dir():
+        # the fixed-order records that deviation 1 superseded, kept with their tables
+        label = 'SUPERSEDED (fixed-order measurement; results/paper/PROTOCOL.md, deviation 1): '
+        old_text, old_detail, _ = gemm_section(args.out, args.models, list(args.units), prefill_all, 'gemm_superseded', label)
+        old_check, old_summary, old_data = consistency_section(args.out, args.models, list(args.units), prefill_all,
+                                                               'gemm_superseded')
+        (tdir / 'gemm_superseded.md').write_text('\n\n'.join(
+            ['# ' + label + 'GEMM tables', old_text, old_check.replace('### GEMM vs', '### SUPERSEDED: GEMM vs'),
+             old_detail]) + '\n')
+        everything['gemm_superseded'] = dict(consistency=old_data, summary=old_summary)
     for name, units in (('main', P.MAIN_UNITS), ('appendix', P.APPENDIX_UNITS)):
         units = [u for u in units if u in args.units]
         ppl_text, ppl_data = ppl_section(args.out, args.models, units)
@@ -385,9 +462,12 @@ def main():
         gemm_text, _, gemm_data = gemm_section(args.out, args.models, units, prefill_all)
         title = ('Main tables: 8x64 and 16x64' if name == 'main' else
                  'Appendix: 256x64, eager prefill (every unit), and the per-shape GEMM detail')
-        docs[name] = '\n\n'.join(x for x in (f'# {title}', note.strip(), ppl_text, lm_text, lat_text, gemm_text, eager_text,
+        docs[name] = '\n\n'.join(x for x in (f'# {title}', note.strip(), ppl_text, lm_text, lat_text, gemm_text,
+                                             check_summary if name == 'main' else '', eager_text,
+                                             check_text if name == 'appendix' else '',
                                              gemm_detail if name == 'appendix' else '') if x) + '\n'
         everything[name] = dict(units=units, ppl=ppl_data, downstream=lm_data, prefill=lat_data, gemm=gemm_data)
+    everything['gemm_consistency'] = dict(tolerance_pp=TOLERANCE_PP, rows=check_data, summary=check_summary)
     for name, text in docs.items():
         (tdir / f'{name}.md').write_text(text)
     (tdir / 'tables.json').write_text(json.dumps(everything, indent=1, default=str) + '\n')

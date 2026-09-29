@@ -5,7 +5,8 @@
 
 One bench_gemm.py process per model (its docstring has the configurations), into <out>/gemm/<model>.json.
 - **Tokens:** T = 128 ... 8192, the prefill shapes' batch x prompt; 4x2048 is T = 8192.
-- **Kernel time:** CUPTI, the median of 20 calls.
+- **Kernel time:** CUPTI, the median of 20 calls, in each of 3 rounds with the configurations in a rotated order; the
+  median of the per-round medians (results/paper/PROTOCOL.md, deviation 1: a fixed order biased the ratios).
 - **Comparisons:**
   - TM-OPT+TC 16x64 and 256x64 (n16k64_wA through the tile table) against stock_wA;
   - TM-OPT+TC 8x64 (n8k64_wB) against stock_wB (same placement) and stock_wA;
@@ -27,6 +28,7 @@ def main():
     ap.add_argument('--tokens', default=TOKENS)
     ap.add_argument('--projections', default=None)
     ap.add_argument('--iters', type=int, default=20)
+    ap.add_argument('--rounds', type=int, default=3, help='rounds per (projection, T), rotated order (deviation 1)')
     args = P.setup(ap.parse_args())
     if args.smoke:
         args.models, args.units, args.tokens, args.projections = ['llama8b'], ['8x64', '16x64'], '128,2048', 'q_proj'
@@ -39,7 +41,7 @@ def main():
             continue
         kinds = ['fo6', 'nvfp4'] + [f'tc_{u}' for u in args.units]
         cmd = [P.PY, Path(__file__).resolve().parent / 'bench_gemm.py', '--model', model, '--tokens', args.tokens,
-               '--iters', str(args.iters), '--out', out]
+               '--iters', str(args.iters), '--rounds', str(args.rounds), '--out', out]
         for kind in kinds:
             art = P.artifact(args.out, model, kind)
             if not (art / 'artifact.json').exists():

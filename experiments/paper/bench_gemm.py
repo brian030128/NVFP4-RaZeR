@@ -8,6 +8,12 @@
 quantizer, then the FP4 GEMM with its fused epilogue). Per call, CUPTI gives each kernel's device time: the median of
 --iters calls, after 5 warm-ups (sm120/bench/common.kernel_times).
 
+**Order (results/paper/PROTOCOL.md, deviation 1).** At each (projection, T), every configuration is measured in each
+of --rounds rounds (default 3). Round r starts the configuration list at position r * len / rounds (rotated), so each
+configuration is measured early, mid and late. The reported time is the median of the per-round medians. Measured
+back-to-back in one fixed order, the same kernel ran up to 12 % slower when measured second (a clock or power state
+that grows with the GEMM's load).
+
 | configuration | kernel | weights | activations |
 |---|---|---|---|
 | stock_wA | 'auto_stock', width from the tile table | FourOverSix artifact | four_over_six_rows |
@@ -30,6 +36,7 @@ quantizer, then the FP4 GEMM with its fused epilogue). Per call, CUPTI gives eac
 import argparse
 import dataclasses
 import json
+import statistics
 import sys
 from collections import OrderedDict
 from pathlib import Path
@@ -81,6 +88,7 @@ def main():
     ap.add_argument('--tokens', default='128,256,512,1024,2048,4096,8192')
     ap.add_argument('--projections', default=None, help='comma-separated subset (default: every text projection)')
     ap.add_argument('--iters', type=int, default=20)
+    ap.add_argument('--rounds', type=int, default=3, help='rounds per (projection, T), in rotated order')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     B.require_idle()
@@ -88,6 +96,8 @@ def main():
     kernels = dict(stock=KernelSet('stock'), mixed=KernelSet('mixed'), stock_wB=Kernel.load('stock_wB'),
                    n8k64_wB=Kernel.load('n8k64_wB'))
     res = dict(status='running', gpu=B.gpu_info(), model=args.model, artifacts=arts, iters=args.iters,
+               protocol=dict(rounds=args.rounds, order='rotated: round r starts at position r * len / rounds',
+                             value='median over rounds of the per-round CUPTI median of --iters calls'),
                kernels={k: (v.sha256 if isinstance(v, Kernel) else v.describe()) for k, v in kernels.items()},
                configs={c: dict(artifact=a, kernel=k, activation_quantizer=q) for c, (a, k, q) in CONFIGS.items() if a in arts},
                projections={}, rows=[])
@@ -111,26 +121,35 @@ def main():
         n, k = res['projections'][proj]['shape']
         for t in tokens:
             x = torch.randn(t, k, generator=torch.Generator('cpu').manual_seed(n + k + t)).to('cuda', torch.bfloat16)
-            for cfg, (kind, kname, act) in CONFIGS.items():
-                if kind not in reps:
-                    continue
-                pw = reps[kind][proj]
-                pw = dataclasses.replace(pw, packed=pw.packed.cuda(), scales=pw.scales.cuda(),
-                                         bias=None if pw.bias is None else pw.bias.cuda())
+            cfgs = [c for c, (kind, _, _) in CONFIGS.items() if kind in reps]
+            per = {c: [] for c in cfgs}
+            for r in range(args.rounds):
+                shift = (r * len(cfgs) // args.rounds) % len(cfgs)
+                for pos, cfg in enumerate(cfgs[shift:] + cfgs[:shift]):
+                    kind, kname, act = CONFIGS[cfg]
+                    pw = reps[kind][proj]
+                    pw = dataclasses.replace(pw, packed=pw.packed.cuda(), scales=pw.scales.cuda(),
+                                             bias=None if pw.bias is None else pw.bias.cuda())
+                    lin = NativeLinear(pw, kernels[kname], act, name=f'{proj}@{cfg}')
+                    lin.share_input = False          # quantize on every call, as the first projection of a group does
+                    times = B.kernel_times(lambda: lin(x), iters=args.iters)
+                    by = {}
+                    for name, v in times.items():
+                        c = classify(name)
+                        by[c] = by.get(c, 0.0) + v['us']
+                    per[cfg].append(dict(round=r, position=pos, gemm_us=by.get('gemm'), quant_us=by.get('quant'),
+                                         other_us=by.get('other', 0.0),
+                                         kernels={name: round(v['us'], 3) for name, v in times.items()}))
+                    del lin
+            for cfg in cfgs:
+                kind, kname, act = CONFIGS[cfg]
                 kern = kernels[kname]
-                lin = NativeLinear(pw, kern, act, name=f'{proj}@{cfg}')
-                lin.share_input = False              # quantize on every call, as the first projection of a group does
-                times = B.kernel_times(lambda: lin(x), iters=args.iters)
-                by = {}
-                for name, v in times.items():
-                    c = classify(name)
-                    by[c] = by.get(c, 0.0) + v['us']
-                row = dict(proj=proj, out=n, inp=k, tokens=t, config=cfg, kernel=kname, act=act,
-                           width=kern.width(n, k, t) if isinstance(kern, KernelSet) else None,
-                           gemm_us=by.get('gemm'), quant_us=by.get('quant'), other_us=by.get('other', 0.0),
-                           kernels={name: round(v['us'], 3) for name, v in times.items()})
-                res['rows'].append(row)
-                del lin
+                med = lambda key: statistics.median(v[key] for v in per[cfg]) if all(v[key] is not None for v in per[cfg]) else None  # noqa: E731
+                res['rows'].append(dict(proj=proj, out=n, inp=k, tokens=t, config=cfg, kernel=kname, act=act,
+                                        width=kern.width(n, k, t) if isinstance(kern, KernelSet) else None,
+                                        gemm_us=med('gemm_us'), quant_us=med('quant_us'), other_us=med('other_us'),
+                                        rounds=[{k2: v[k2] for k2 in ('round', 'position', 'gemm_us', 'quant_us')} for v in per[cfg]],
+                                        kernels=per[cfg][-1]['kernels']))
             print(f"{args.model} {proj} T={t} " + ' '.join(f"{r['config']}={r['gemm_us']:.1f}+{r['quant_us']:.1f}us"
                                                            for r in res['rows'] if r['proj'] == proj and r['tokens'] == t), flush=True)
             B.write(args.out, res)

@@ -346,6 +346,12 @@ Times below are per model: Llama / Mistral / Phi-4 / Qwen. Sources:
 - **Command:** `$PAPER_PYTHON experiments/paper/06_gemm_latency.py`
 - **How:** each call is one NativeLinear forward (the activation quantizer, then the GEMM); CUPTI gives each
   kernel's time (median of 20).
+  - **Since deviation 1** (`results/paper/PROTOCOL.md`), every configuration is timed in each of 3 rounds.
+  - Within a (projection, T), round r starts the configuration list at position 2r (a rotated order); the value is
+    the median of the per-round medians.
+  - The fixed order used before made the same kernel up to 12 % slower when it was measured second (a clock or power
+    state).
+  - The fixed-order records are kept as `gemm_superseded/`.
 - **Configurations:**
   - stock_wA through the tile table: FourOverSix weights with the FourOverSix quantizer, and NVFP4 weights with the
     NVFP4 quantizer. NVFP4 and FourOverSix share this GEMM; only the quantizer kernel differs;
@@ -382,6 +388,10 @@ Times below are per model: Llama / Mistral / Phi-4 / Qwen. Sources:
     outside `--smoke`.
   - **GEMM per-forward sums** and ratios (16x64 and 256x64 against stock_wA; 8x64 against stock_wB and stock_wA),
     with the NVFP4-vs-FourOverSix quantizer sums.
+  - **GEMM vs end to end (deviation 1):** the per-forward GEMM time difference against the end-to-end CUDA-graph
+    prefill difference, per model, comparison and shape. A row is flagged when the two differ by more than 1 % of the
+    reference prefill time (appendix; a count in the main tables).
+  - **The superseded fixed-order GEMM tables:** `tables/gemm_superseded.md`.
 - **Missing results show as '—'.**
 - **Time:** seconds, CPU only.
 - **Smoke (measured):** 0.07 s; every section renders from the smoke outputs (`PAPER_SMOKE_OUT/tables/`), labeled
