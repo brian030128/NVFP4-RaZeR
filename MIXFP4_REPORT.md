@@ -1126,6 +1126,39 @@ Paired ΔNLL (wiki / c4):
 - **At 20 epochs the fixed joint is significantly worse than scale-only on C4.**
   No E0M3 variant tried on 1B beats KL-trained per-block NVFP4 scale search.
 
+**Smoothing the joint optimization (jobs 457998–458000; 1B, Pile 20k × 10,
+FourOverSix start).** At 20 epochs, the fixed joint's tiles flipped about 11 times
+per tile per epoch even at a near-zero tile lr. Tile logits park at 0, where Adam's
+fixed-size steps cross the threshold on every sign change of a noisy gradient.
+Three variants of the fixed joint:
+- **A:** hysteresis ±0.1 on the tile switch (`--tile-hysteresis`).
+- **B:** tile logits updated every 8 steps on the averaged gradient
+  (`--tile-update-every`).
+- **C:** a soft sigmoid relaxation of both the tile and the scale choice, with
+  exact gradients. It uses init −3, lr 0.05, τ 1 → 0.1 over 8 soft epochs, and
+  the last 2 epochs trained hard (`--param sigmoid --hard-epochs`).
+
+| 1B, Pile 20k × 10 | peak tile flips per epoch | E0M3 tiles | best dev KL (epoch) | WikiText-2 | C4 | ΔNLL vs scale-only (wiki / c4) |
+|---|---:|---:|---:|---:|---:|---|
+| scale-only | — | 0 | 0.08279 (10) | 14.024502 | 19.276232 | — |
+| fixed joint | 11.3 M | 173,718 | 0.08562 (10) | 14.039246 | 19.287723 | +0.00104±0.00168 / +0.00060±0.00131 |
+| A: hysteresis | 0.30 M | 227,394 | 0.08428 (10) | 14.097989 | 19.298500 | +0.00522±0.00177 / +0.00115±0.00139 |
+| B: averaged tile updates | 38 k | 471 | **0.08269** (10) | 14.025830 | **19.265727** | +0.00009±0.00154 / −0.00055±0.00130 |
+| C: soft relaxation | 1.15 M (hard phase) | 63,489 | 0.08399 (7) | 14.085422 | 19.356345 | +0.00433±0.00188 / +0.00414±0.00130 |
+
+Findings:
+- **All three smooth the optimization.**
+  - Hysteresis cuts tile flips 38×.
+  - Averaged updates leave almost no tile with consistent enough evidence to
+    flip, so B is effectively scale-only and ties it.
+  - The soft relaxation learns fastest early (dev KL 0.0868 at epoch 2, against
+    0.0932 for scale-only). The hard phase then brings back the churn (1.15 M
+    flips per epoch) and raises dev KL from its epoch-7 best.
+- **None beats scale-only.** Every joint variant that keeps many E0M3 tiles is worse
+  on WikiText, and the soft variant also on C4. The one that ties keeps 471 tiles.
+  Better-optimized joint training converges to the scale-only solution, consistent
+  with the exact-acceptance ceiling.
+
 **Making joint easier to train: two fixes (`--tile-lr-scale`, `--scale-grad-in-e0m3`).**
 
 Joint is harder to optimize than scale-only for two reasons:
