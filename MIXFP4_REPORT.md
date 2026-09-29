@@ -1070,6 +1070,24 @@ Findings:
 - **With a common FourOverSix start, KL-trained per-block scale search still
   matches or beats every E0M3 variant.**
 
+**Double the data (jobs 454787, 454788).**
+- **Protocol:** 20,000 Pile-val windows + 128 math/code, FourOverSix start,
+  10-epoch cosine (2,516 steps per epoch).
+- **Dev set:** the next 192 Pile windows. This is a different slice from the 10k
+  runs', so dev KL compares within this block only.
+
+| 1B, Pile 20k × 10 | E0M3 tiles | best dev KL | WikiText-2 | C4 | ΔNLL vs scale-only (wiki / c4) |
+|---|---:|---:|---:|---:|---|
+| scale 1×16 | 0 | **0.08279** | **14.024502** | **19.276232** | — |
+| fixed joint 8×64 | 173,718 (9%) | 0.08562 | 14.039246 | 19.287723 | +0.00104±0.00168 / +0.00060±0.00131 |
+
+- **The test sets tie.**
+- **Scale-only has the lower dev KL from epoch 2 on.** The fixed joint was still
+  falling by −0.002 per epoch at epoch 10.
+- **Twice the data improves scale-only by −0.00862±0.00155 (wiki) and
+  −0.00235±0.00147 (c4)** relative to the 10k FourOverSix-start run. The 20k
+  scale-only map is the best 1B result in the study.
+
 **Making joint easier to train: two fixes (`--tile-lr-scale`, `--scale-grad-in-e0m3`).**
 
 Joint is harder to optimize than scale-only for two reasons:
