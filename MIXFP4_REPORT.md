@@ -1019,6 +1019,30 @@ flipping on minibatch noise):
   (c4). C4 is 0.005 worse than with C4 calibration, the expected cost of taking
   C4 out of the calibration data.
 
+**MixFP4 itself under the same protocol (job 454353).**
+- **Arm:** E0M3-only 8×64 tiles over FourOverSix E2M1 (`--alt e0m3`), the §7
+  method.
+- **Protocol:** Pile 10k, 10-epoch cosine, same dev windows, 4 GPUs.
+
+| 1B, Pile 10k × 10 epochs | E0M3 tiles | train KL (ep 10) | best dev KL | WikiText-2 | C4 | ΔNLL vs scale-only (wiki / c4) |
+|---|---:|---:|---:|---:|---:|---|
+| scale 1×16 (plain NVFP4) | 0 | 0.05507 | **0.08762** | 14.196342 | **19.342672** | — |
+| **MixFP4 8×64** | 879,222 (46%) | 0.08168 | 0.09380 | 14.198020 | 19.460689 | +0.00012±0.00238 / **+0.00608±0.00164** |
+
+Dev KL by epoch (1 … 10):
+- **MixFP4:** 0.1008, 0.0998, 0.1004, 0.0984, 0.1000, 0.0984, 0.0989, 0.0974, 0.0962,
+  0.0938. It starts at 0.1664 (FourOverSix) rather than 0.1722 (plain NVFP4).
+- **Scale-only:** 0.1012, 0.0983, 0.0974, 0.0945, 0.0929, 0.0911, 0.0905, 0.0891,
+  0.0885, 0.0876.
+
+Findings:
+- **MixFP4's KL is well above scale-only's on both train and dev.** With the block
+  scales fixed at FourOverSix, switching 46% of tiles to E0M3 recovers much less
+  than training the per-block scale.
+- **On test it ties on WikiText and is significantly worse on C4.**
+- **With matched calibration and training, plain NVFP4 with KL-trained per-block
+  scales matches or beats MixFP4 on every metric on this model.**
+
 **Making joint easier to train: two fixes (`--tile-lr-scale`, `--scale-grad-in-e0m3`).**
 
 Joint is harder to optimize than scale-only for two reasons:
