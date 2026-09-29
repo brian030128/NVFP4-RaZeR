@@ -46,4 +46,12 @@ carry this caveat:
 
 ## Deviations (append-only)
 
-(none yet)
+1. **2026-09-29, after the timing run: a wording fix in `C2_report.py`. No measurement was repeated and no number
+   changed.**
+   - The note under the census table said every build has "the 4 x 2 arrangement" with "2 x 8 m16n8k64 atoms per
+     warp". That is true of stock_wA, stock_wB, n16k64_wA and n16k64_wA_nodisp. n8k64_wB uses the 1 x 8 arrangement,
+     with 8 x 2 atoms per warp (`sm120/mixfp4_sm120/configs.py`).
+   - Both give 16 atoms per warp per 64-K block on a 128 x 128 CTA with 8 warps, so the estimate (8,388,608) is
+     unchanged. The note now names both arrangements.
+   - **New sha256 of `C2_report.py`:** 5f8802b9e20acdff2d6e2acccd7433bf104a9366cbb9a90ccfb5174ea7be3f80. The other
+     registered files are unchanged (hashes re-checked before the run).

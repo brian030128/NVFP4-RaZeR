@@ -1,0 +1,1294 @@
+{
+ "caveat": "ncu is unavailable on this machine (not installed; counters blocked, ERR_NVGPUCTRPERM); clocks were not locked (no root), and the rotated 3-round method stands in for that; tensor-pipe counts are static SASS census counts (per-path OMMA count x loop trips), not measured counters; there are no stall reasons and no bank-conflict data; per-MMA-branch kernel numbers are historical (sm120/kernel/docs/mixed_nvfp4_report.md, RTX 5090, ncu), cited but not re-measured on this GPU.",
+ "time": {
+  "status": "complete",
+  "caveat": "ncu is unavailable on this machine (not installed; counters blocked, ERR_NVGPUCTRPERM); clocks were not locked (no root), and the rotated 3-round method stands in for that; tensor-pipe counts are static SASS census counts (per-path OMMA count x loop trips), not measured counters; there are no stall reasons and no bank-conflict data; per-MMA-branch kernel numbers are historical (sm120/kernel/docs/mixed_nvfp4_report.md, RTX 5090, ncu), cited but not re-measured on this GPU.",
+  "gpu": {
+   "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+   "driver_version": "595.71.05",
+   "power.limit": "500.00 W",
+   "power.default_limit": "600.00 W",
+   "clocks.max.sm": "3090 MHz",
+   "clocks.max.mem": "14001 MHz",
+   "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+   "persistence_mode": "Enabled",
+   "temperature.gpu": "42",
+   "utilization.gpu": "0 %",
+   "memory.used": "1754 MiB",
+   "torch": "2.9.0+cu128",
+   "torch_cuda": "12.8",
+   "triton": "3.5.0",
+   "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+   "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+   "capability": [
+    12,
+    0
+   ],
+   "sm_count": 188,
+   "utc": "2026-09-29T19:22:53+00:00"
+  },
+  "size": 4096,
+  "rounds": 3,
+  "kernels": {
+   "stock_wA": "13c13a23ed145a8ac191179b16f302f0f0ef3bb38e60d73283fbce200965418c",
+   "mixed": "be8fd62d97b231c69e64afc62f1f31fbcf4535a45759f8feb13aeadfb86fe332",
+   "nodisp": "4025f5be45a73c62eb7cf340bf836e35c3b57cd1b6e8d1a828e81df80fe58ce4"
+  },
+  "layer": "model.layers.0.self_attn.o_proj",
+  "map": "/home/dev/n16k64_campaign/paper/artifacts/llama8b_tc_16x64.mixfp4map",
+  "layer_e0m3_share": 0.04437255859375,
+  "rows": [
+   {
+    "kernel": "stock_wA",
+    "build": "stock_wA",
+    "time_us": 101.74350000000004,
+    "rounds_us": [
+     101.1840000000002,
+     101.74350000000004,
+     101.75899999999996
+    ],
+    "tflops": 1350.8376797731546
+   },
+   {
+    "kernel": "e2m1",
+    "build": "n16k64_wA",
+    "time_us": 104.78449999999998,
+    "rounds_us": [
+     104.62299999999982,
+     104.78449999999998,
+     105.37450000000013
+    ],
+    "tflops": 1311.634387452343
+   },
+   {
+    "kernel": "e0m3",
+    "build": "n16k64_wA",
+    "time_us": 109.08750000000009,
+    "rounds_us": [
+     109.08750000000009,
+     108.75199999999995,
+     109.29550000000017
+    ],
+    "tflops": 1259.8964452572466
+   },
+   {
+    "kernel": "real",
+    "build": "n16k64_wA",
+    "time_us": 105.50499999999988,
+    "rounds_us": [
+     105.40800000000036,
+     105.50499999999988,
+     106.096
+    ],
+    "tflops": 1302.6771572152993
+   },
+   {
+    "kernel": "nodisp",
+    "build": "n16k64_wA_nodisp",
+    "time_us": 102.71900000000005,
+    "rounds_us": [
+     102.71900000000005,
+     102.99149999999997,
+     102.67100000000005
+    ],
+    "tflops": 1338.0090681568156
+   }
+  ]
+ },
+ "sass": {
+  "caveat": "static SASS census, not measured counters (ncu unavailable on this machine)",
+  "kernels": {
+   "stock_wA": {
+    "config": "stock_wA",
+    "library": "/home/dev/NVFP4-RaZeR/sm120/build/stock_wA/libmixfp4_sm120_stock_wA.so",
+    "instructions": 1624,
+    "omma": 64,
+    "omma_formats": {
+     "E2M1xE2M1": 64
+    },
+    "omma_predicated": 0,
+    "warpsync": 3,
+    "brx": 0,
+    "bra": 96,
+    "blocks": 150,
+    "omma_loops": [
+     {
+      "head": "0x3240",
+      "latch": "0x35a0",
+      "blocks": 2,
+      "omma_in_body": 32,
+      "omma_per_iteration_min": 32,
+      "omma_per_iteration_max": 32,
+      "inner_back_edges": 0
+     },
+     {
+      "head": "0x2e70",
+      "latch": "0x5e00",
+      "blocks": 51,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": 32,
+      "omma_per_iteration_max": 64,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0xfc0",
+      "latch": "0x5f70",
+      "blocks": 93,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1050",
+      "latch": "0x5fd0",
+      "blocks": 95,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1190",
+      "latch": "0x6020",
+      "blocks": 96,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1310",
+      "latch": "0x6080",
+      "blocks": 96,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x13d0",
+      "latch": "0x60e0",
+      "blocks": 97,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x16e0",
+      "latch": "0x6130",
+      "blocks": 94,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 0
+     },
+     {
+      "head": "0x1740",
+      "latch": "0x6140",
+      "blocks": 93,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1840",
+      "latch": "0x6200",
+      "blocks": 92,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1c60",
+      "latch": "0x6250",
+      "blocks": 92,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2220",
+      "latch": "0x6260",
+      "blocks": 86,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2280",
+      "latch": "0x6320",
+      "blocks": 86,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2310",
+      "latch": "0x6370",
+      "blocks": 87,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x23a0",
+      "latch": "0x63c0",
+      "blocks": 88,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2ef0",
+      "latch": "0x6420",
+      "blocks": 81,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x35a0",
+      "latch": "0x6480",
+      "blocks": 81,
+      "omma_in_body": 48,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     }
+    ],
+    "opcodes": {
+     "IMAD": 117,
+     "BRA": 96,
+     "SYNCS": 87,
+     "UIADD3": 74,
+     "ISETP": 72,
+     "MOV": 72,
+     "SHF": 71,
+     "OMMA": 64,
+     "FMUL": 64,
+     "FFMA": 64,
+     "IADD": 58,
+     "LOP3": 55,
+     "UMOV": 54,
+     "LDC": 51,
+     "SEL": 50,
+     "CS2R": 37,
+     "LEA": 35,
+     "F2FP": 32,
+     "USHF": 30,
+     "ULEA": 29
+    }
+   },
+   "n16k64_wA": {
+    "config": "n16k64_wA",
+    "library": "/home/dev/NVFP4-RaZeR/sm120/build/n16k64_wA/libmixfp4_sm120_n16k64_wA.so",
+    "instructions": 4264,
+    "omma": 1024,
+    "omma_formats": {
+     "E2M1xE2M1": 512,
+     "E0M3xE2M1": 512
+    },
+    "omma_predicated": 0,
+    "warpsync": 50,
+    "brx": 0,
+    "bra": 205,
+    "blocks": 287,
+    "omma_loops": [
+     {
+      "head": "0x3230",
+      "latch": "0x9b50",
+      "blocks": 48,
+      "omma_in_body": 512,
+      "omma_per_iteration_min": 32,
+      "omma_per_iteration_max": 32,
+      "inner_back_edges": 0
+     },
+     {
+      "head": "0x2d40",
+      "latch": "0xfdf0",
+      "blocks": 145,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": 32,
+      "omma_per_iteration_max": 64,
+      "inner_back_edges": 9
+     },
+     {
+      "head": "0xfd0",
+      "latch": "0xff70",
+      "blocks": 183,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1030",
+      "latch": "0xffd0",
+      "blocks": 185,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1190",
+      "latch": "0x10020",
+      "blocks": 186,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1310",
+      "latch": "0x10080",
+      "blocks": 186,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x13d0",
+      "latch": "0x100e0",
+      "blocks": 187,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x1750",
+      "latch": "0x10140",
+      "blocks": 185,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 3
+     },
+     {
+      "head": "0x1880",
+      "latch": "0x101a0",
+      "blocks": 185,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 3
+     },
+     {
+      "head": "0x1b70",
+      "latch": "0x101f0",
+      "blocks": 185,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x2240",
+      "latch": "0x10250",
+      "blocks": 181,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x22d0",
+      "latch": "0x102b0",
+      "blocks": 183,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2360",
+      "latch": "0x10310",
+      "blocks": 185,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2db0",
+      "latch": "0x10360",
+      "blocks": 177,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x3660",
+      "latch": "0x103c0",
+      "blocks": 173,
+      "omma_in_body": 1008,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x3cd0",
+      "latch": "0x10420",
+      "blocks": 174,
+      "omma_in_body": 976,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x4370",
+      "latch": "0x10480",
+      "blocks": 174,
+      "omma_in_body": 944,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x49e0",
+      "latch": "0x104e0",
+      "blocks": 175,
+      "omma_in_body": 912,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x50b0",
+      "latch": "0x10540",
+      "blocks": 174,
+      "omma_in_body": 880,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x5710",
+      "latch": "0x105a0",
+      "blocks": 175,
+      "omma_in_body": 848,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x5da0",
+      "latch": "0x10600",
+      "blocks": 175,
+      "omma_in_body": 816,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x6400",
+      "latch": "0x10660",
+      "blocks": 176,
+      "omma_in_body": 784,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x6af0",
+      "latch": "0x106c0",
+      "blocks": 174,
+      "omma_in_body": 752,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x7150",
+      "latch": "0x10720",
+      "blocks": 175,
+      "omma_in_body": 720,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x77e0",
+      "latch": "0x10780",
+      "blocks": 175,
+      "omma_in_body": 688,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x7e40",
+      "latch": "0x107e0",
+      "blocks": 176,
+      "omma_in_body": 656,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x8500",
+      "latch": "0x10840",
+      "blocks": 175,
+      "omma_in_body": 624,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x8b60",
+      "latch": "0x108a0",
+      "blocks": 176,
+      "omma_in_body": 592,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x91f0",
+      "latch": "0x10900",
+      "blocks": 176,
+      "omma_in_body": 560,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     },
+     {
+      "head": "0x9850",
+      "latch": "0x10960",
+      "blocks": 177,
+      "omma_in_body": 528,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 10
+     }
+    ],
+    "opcodes": {
+     "OMMA": 1024,
+     "LDSM": 294,
+     "LDS": 241,
+     "BRA": 205,
+     "IMAD": 178,
+     "IADD": 176,
+     "PRMT": 169,
+     "SYNCS": 162,
+     "UIADD3": 157,
+     "LOP3": 152,
+     "SHF": 138,
+     "ISETP": 127,
+     "MOV": 69,
+     "UMOV": 67,
+     "SEL": 66,
+     "IADD3": 66,
+     "FMUL": 64,
+     "FFMA": 64,
+     "PLOP3": 52,
+     "BAR": 50
+    }
+   },
+   "n16k64_wA_nodisp": {
+    "config": "n16k64_wA_nodisp",
+    "library": "/home/dev/NVFP4-RaZeR/sm120/build/n16k64_wA_nodisp/libmixfp4_sm120_n16k64_wA_nodisp.so",
+    "instructions": 1632,
+    "omma": 64,
+    "omma_formats": {
+     "E2M1xE2M1": 64
+    },
+    "omma_predicated": 0,
+    "warpsync": 3,
+    "brx": 0,
+    "bra": 96,
+    "blocks": 150,
+    "omma_loops": [
+     {
+      "head": "0x3200",
+      "latch": "0x3580",
+      "blocks": 2,
+      "omma_in_body": 32,
+      "omma_per_iteration_min": 32,
+      "omma_per_iteration_max": 32,
+      "inner_back_edges": 0
+     },
+     {
+      "head": "0x2e60",
+      "latch": "0x5e30",
+      "blocks": 51,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": 32,
+      "omma_per_iteration_max": 64,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0xfc0",
+      "latch": "0x5fa0",
+      "blocks": 93,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1050",
+      "latch": "0x6000",
+      "blocks": 95,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1190",
+      "latch": "0x6050",
+      "blocks": 96,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1310",
+      "latch": "0x60b0",
+      "blocks": 96,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x13d0",
+      "latch": "0x6110",
+      "blocks": 97,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x16e0",
+      "latch": "0x6160",
+      "blocks": 94,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 0
+     },
+     {
+      "head": "0x1740",
+      "latch": "0x6170",
+      "blocks": 93,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1840",
+      "latch": "0x6230",
+      "blocks": 92,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1c60",
+      "latch": "0x6280",
+      "blocks": 92,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2220",
+      "latch": "0x6290",
+      "blocks": 86,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2280",
+      "latch": "0x6350",
+      "blocks": 86,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2310",
+      "latch": "0x63a0",
+      "blocks": 87,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x23a0",
+      "latch": "0x63f0",
+      "blocks": 88,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2ed0",
+      "latch": "0x6450",
+      "blocks": 81,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x3580",
+      "latch": "0x64b0",
+      "blocks": 81,
+      "omma_in_body": 48,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     }
+    ],
+    "opcodes": {
+     "IMAD": 118,
+     "BRA": 96,
+     "SYNCS": 87,
+     "UIADD3": 73,
+     "ISETP": 72,
+     "SHF": 71,
+     "MOV": 70,
+     "OMMA": 64,
+     "FMUL": 64,
+     "FFMA": 64,
+     "IADD": 56,
+     "LOP3": 55,
+     "UMOV": 54,
+     "LDC": 51,
+     "SEL": 50,
+     "CS2R": 38,
+     "LEA": 36,
+     "F2FP": 32,
+     "USHF": 29,
+     "ULEA": 29
+    }
+   },
+   "n8k64_wB": {
+    "config": "n8k64_wB",
+    "library": "/home/dev/NVFP4-RaZeR/sm120/build/n8k64_wB/libmixfp4_sm120_n8k64_wB.so",
+    "instructions": 4976,
+    "omma": 1024,
+    "omma_formats": {
+     "E2M1xE2M1": 512,
+     "E2M1xE0M3": 512
+    },
+    "omma_predicated": 0,
+    "warpsync": 51,
+    "brx": 0,
+    "bra": 190,
+    "blocks": 259,
+    "omma_loops": [
+     {
+      "head": "0x33a0",
+      "latch": "0xb640",
+      "blocks": 48,
+      "omma_in_body": 512,
+      "omma_per_iteration_min": 32,
+      "omma_per_iteration_max": 32,
+      "inner_back_edges": 0
+     },
+     {
+      "head": "0x2e20",
+      "latch": "0x12b30",
+      "blocks": 117,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": 32,
+      "omma_per_iteration_max": 64,
+      "inner_back_edges": 5
+     },
+     {
+      "head": "0xfc0",
+      "latch": "0x12c20",
+      "blocks": 155,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1020",
+      "latch": "0x12c80",
+      "blocks": 157,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1180",
+      "latch": "0x12cd0",
+      "blocks": 158,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1300",
+      "latch": "0x12d30",
+      "blocks": 158,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x13c0",
+      "latch": "0x12d90",
+      "blocks": 159,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x1740",
+      "latch": "0x12df0",
+      "blocks": 157,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 3
+     },
+     {
+      "head": "0x1870",
+      "latch": "0x12e50",
+      "blocks": 157,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 3
+     },
+     {
+      "head": "0x1b60",
+      "latch": "0x12ea0",
+      "blocks": 157,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x2230",
+      "latch": "0x12f00",
+      "blocks": 153,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x22c0",
+      "latch": "0x12f60",
+      "blocks": 155,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2350",
+      "latch": "0x12fc0",
+      "blocks": 157,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2ec0",
+      "latch": "0x13010",
+      "blocks": 149,
+      "omma_in_body": 1024,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0x3930",
+      "latch": "0x13070",
+      "blocks": 145,
+      "omma_in_body": 1008,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0x4120",
+      "latch": "0x130d0",
+      "blocks": 146,
+      "omma_in_body": 976,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0x4940",
+      "latch": "0x13130",
+      "blocks": 146,
+      "omma_in_body": 944,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0x50b0",
+      "latch": "0x13190",
+      "blocks": 147,
+      "omma_in_body": 912,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0x5880",
+      "latch": "0x131f0",
+      "blocks": 146,
+      "omma_in_body": 880,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0x60f0",
+      "latch": "0x13250",
+      "blocks": 147,
+      "omma_in_body": 848,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0x6990",
+      "latch": "0x132b0",
+      "blocks": 147,
+      "omma_in_body": 816,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0x7180",
+      "latch": "0x13310",
+      "blocks": 148,
+      "omma_in_body": 784,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0x7a00",
+      "latch": "0x13370",
+      "blocks": 146,
+      "omma_in_body": 752,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0x8270",
+      "latch": "0x133d0",
+      "blocks": 147,
+      "omma_in_body": 720,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0x8b10",
+      "latch": "0x13430",
+      "blocks": 147,
+      "omma_in_body": 688,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0x9300",
+      "latch": "0x13490",
+      "blocks": 148,
+      "omma_in_body": 656,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0x9b50",
+      "latch": "0x134f0",
+      "blocks": 147,
+      "omma_in_body": 624,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0xa340",
+      "latch": "0x13550",
+      "blocks": 148,
+      "omma_in_body": 592,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0xab60",
+      "latch": "0x135b0",
+      "blocks": 148,
+      "omma_in_body": 560,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     },
+     {
+      "head": "0xb2d0",
+      "latch": "0x13610",
+      "blocks": 149,
+      "omma_in_body": 528,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 6
+     }
+    ],
+    "opcodes": {
+     "OMMA": 1024,
+     "PRMT": 805,
+     "LDSM": 441,
+     "IADD": 277,
+     "LDS": 207,
+     "BRA": 190,
+     "IMAD": 171,
+     "SYNCS": 162,
+     "UIADD3": 149,
+     "ISETP": 116,
+     "SHF": 111,
+     "MOV": 104,
+     "LOP3": 97,
+     "UMOV": 67,
+     "SEL": 64,
+     "FMUL": 64,
+     "FFMA": 64,
+     "LEA": 56,
+     "WARPSYNC": 51,
+     "IADD3": 51
+    }
+   },
+   "stock_wB": {
+    "config": "stock_wB",
+    "library": "/home/dev/NVFP4-RaZeR/sm120/build/stock_wB/libmixfp4_sm120_stock_wB.so",
+    "instructions": 1640,
+    "omma": 64,
+    "omma_formats": {
+     "E2M1xE2M1": 64
+    },
+    "omma_predicated": 0,
+    "warpsync": 3,
+    "brx": 0,
+    "bra": 93,
+    "blocks": 146,
+    "omma_loops": [
+     {
+      "head": "0x32b0",
+      "latch": "0x3610",
+      "blocks": 2,
+      "omma_in_body": 32,
+      "omma_per_iteration_min": 32,
+      "omma_per_iteration_max": 32,
+      "inner_back_edges": 0
+     },
+     {
+      "head": "0x2ee0",
+      "latch": "0x5f40",
+      "blocks": 47,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": 32,
+      "omma_per_iteration_max": 64,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0xfc0",
+      "latch": "0x6030",
+      "blocks": 89,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1050",
+      "latch": "0x6090",
+      "blocks": 91,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1190",
+      "latch": "0x60e0",
+      "blocks": 92,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1310",
+      "latch": "0x6140",
+      "blocks": 92,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x13d0",
+      "latch": "0x61a0",
+      "blocks": 93,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x16e0",
+      "latch": "0x61f0",
+      "blocks": 90,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 0
+     },
+     {
+      "head": "0x1740",
+      "latch": "0x6200",
+      "blocks": 89,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1840",
+      "latch": "0x62c0",
+      "blocks": 88,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x1c60",
+      "latch": "0x6310",
+      "blocks": 88,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2220",
+      "latch": "0x6320",
+      "blocks": 82,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2280",
+      "latch": "0x63e0",
+      "blocks": 82,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2310",
+      "latch": "0x6430",
+      "blocks": 83,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x23a0",
+      "latch": "0x6480",
+      "blocks": 84,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 1
+     },
+     {
+      "head": "0x2f60",
+      "latch": "0x64e0",
+      "blocks": 77,
+      "omma_in_body": 64,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     },
+     {
+      "head": "0x3610",
+      "latch": "0x6540",
+      "blocks": 77,
+      "omma_in_body": 48,
+      "omma_per_iteration_min": null,
+      "omma_per_iteration_max": null,
+      "inner_back_edges": 2
+     }
+    ],
+    "opcodes": {
+     "IMAD": 116,
+     "BRA": 93,
+     "SYNCS": 87,
+     "SHF": 78,
+     "UIADD3": 74,
+     "ISETP": 68,
+     "MOV": 67,
+     "OMMA": 64,
+     "FMUL": 64,
+     "FFMA": 64,
+     "LOP3": 61,
+     "IADD": 59,
+     "UMOV": 54,
+     "LDC": 52,
+     "SEL": 51,
+     "LEA": 37,
+     "CS2R": 37,
+     "LDS": 35,
+     "F2FP": 32,
+     "USHF": 30
+    }
+   }
+  }
+ }
+}

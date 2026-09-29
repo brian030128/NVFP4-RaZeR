@@ -4,9 +4,10 @@
     PAPER_PYTHON experiments/paper_extra/C2_report.py --time C2_time.json --sass C2_sass.json [--dest ...]
 
 Every table carries the caveat (the user's condition for C2-lite).
-Tensor-pipe estimate at M = N = K = 4096 for the 128 x 128 CTA tile with 8 warps (the 4 x 2 arrangement; m16n8k64
-atoms, 2 x 8 per warp, i.e. 16 OMMAs per warp per 64-K block): CTAs x warps x (K / K per iteration) x OMMAs per
-iteration, where the SASS census gives the OMMAs per steady-state iteration on every path (32 = two 64-K blocks).
+Tensor-pipe estimate at M = N = K = 4096 for the 128 x 128 CTA tile with 8 warps (m16n8k64 atoms, 16 per warp per
+64-K block: 2 x 8 in the 4 x 2 arrangement of the stock and wA builds, 8 x 2 in n8k64_wB's 1 x 8): CTAs x warps x
+(K / K per iteration) x OMMAs per iteration, where the SASS census gives the OMMAs per steady-state iteration on every
+path (32 = two 64-K blocks).
 """
 import argparse
 import json
@@ -62,8 +63,9 @@ def main():
         md.append(f"| {cfg} | {k['instructions']} | {k['omma']} | {', '.join(f'{a} {b}' for a, b in k['omma_formats'].items())} | "
                   f"{k['omma_predicated']} | {k['warpsync']} | {k['brx']} | {per[0]} / {per[1]} | "
                   f"{'—' if est is None else f'{est:,}'} |")
-    md += ['\nThe estimate assumes 8 warps per 128 x 128 CTA (the 4 x 2 arrangement) and 128 K per steady-state iteration '
-           '(32 OMMAs = two 64-K blocks of 2 x 8 m16n8k64 atoms per warp); it equals the historical ncu count of the stock '
+    md += ['\nThe estimate assumes 8 warps per 128 x 128 CTA and 128 K per steady-state iteration (32 OMMAs = two 64-K '
+           'blocks of 16 m16n8k64 atoms per warp: 2 x 8 in the 4 x 2 warp arrangement of the stock and wA builds, 8 x 2 in '
+           'n8k64_wB\'s 1 x 8); it equals the historical ncu count of the stock '
            'kernel (8,388,608, RTX 5090). Every path through the mixed kernels\' steady-state iteration issues the same 32 '
            'OMMAs as stock, so the E0M3 tags do not change the tensor-pipe instruction count.\n',
            '## Historical: the per-MMA-branch kernel and its variants (cited, not re-measured)\n', cav,
