@@ -539,8 +539,18 @@ them, training takes about 15.5 min.
 - Trained maps elect many more E0M3 tiles: on Llama-3.1-8B, 4.5× (256×64) to
   90× (8×64) more than multi-round. The GEMM cost of heterogeneous maps is
   still unmeasured (§2).
-- Qwen3.8-27B runs were started and then stopped before finishing, so they have
-  no results. Zero-shot accuracy has not been run on trained maps.
+- Qwen3.8-27B runs (jobs 441351–441353) were stopped at epochs 16–18 of 20,
+  before their final evaluation. Their per-epoch maps were kept.
+  - The 8×64 STE map from its best dev epoch (16, dev KL 0.04124) was evaluated
+    afterwards (`--eval-map`, job 458456): **WikiText-2 7.123179, C4 10.136217**
+    with 486,926 E0M3 tiles (1.0%).
+  - Against FourOverSix: ΔNLL −0.02275±0.00341 / −0.00513±0.00097
+    (−0.1639 / −0.0521 PPL).
+  - Against the multi-round 8×64 map: −0.01148±0.00387 / −0.00117±0.00079.
+  - **There is no KL-trained scale-only control on Qwen.** On the Llama models
+    that control matches or beats trained MixFP4, so this gain cannot yet be
+    attributed to E0M3.
+- Zero-shot accuracy has not been run on trained maps.
 
 ### Control: NVFP4 block-scale search trained with the same KL loss (FourOverSix init)
 

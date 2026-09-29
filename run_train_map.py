@@ -206,6 +206,14 @@ def main():
     ap.add_argument('--scale-epochs', type=int, default=0,
                     help='--alt joint: train only the per-block scale logits for the first N epochs (tiles stay E2M1), '
                          'then let tiles flip on top')
+    ap.add_argument('--tile-hysteresis', type=float, default=0.0,
+                    help='Hard tile switch with hysteresis: E0M3 when the logit exceeds +d, back to E2M1 below -d '
+                         '(0 = plain sign); stops undecided tiles near 0 from flipping every step')
+    ap.add_argument('--tile-update-every', type=int, default=1,
+                    help='Update the tile logits every K optimizer steps with the averaged tile gradient')
+    ap.add_argument('--hard-epochs', type=int, default=0,
+                    help='--param sigmoid: train the hard (deployable) map in the last N epochs; tau anneals over the '
+                         'soft epochs before them')
     ap.add_argument('--tile-lr-scale', type=float, default=1.0,
                     help='--alt joint: learning-rate multiplier for the type-tile logits (e.g. 1/sqrt(32) at 8x64)')
     ap.add_argument('--scale-grad-in-e0m3', action='store_true',
@@ -235,6 +243,8 @@ def main():
     ap.add_argument('--resume-maps', type=Path, default=None,
                     help='Warm start from a completed run directory: its final hard maps become logits +/- --resume-margin')
     ap.add_argument('--resume-margin', type=float, default=1.0)
+    ap.add_argument('--eval-map', type=Path, default=None,
+                    help='Evaluate a saved tile map file (e.g. map_epoch016.pt) with --epochs 0')
     ap.add_argument('--greedy-rounds', type=int, default=0,
                     help='--alt joint: instead of gradient training, select tiles on frozen scales by exact acceptance '
                          '(measured calibration KL) for up to N rounds')
@@ -280,7 +290,7 @@ def main():
         import torch.distributed as dist
         dist.init_process_group('nccl', rank=rank, world_size=world, timeout=datetime.timedelta(minutes=90))
         assert args.batch % world == 0, 'batch must be divisible by the number of ranks'
-        assert args.param == 'ste' and args.accum == 1
+        assert args.accum == 1
         if not main_rank:
             sys.stdout = open(os.devnull, 'w')
     local_batch = args.batch // world
@@ -389,7 +399,7 @@ def main():
     # Candidates exactly as run_multiround.py: packed 4-bit codes + FP8 scales,
     # verified bitwise by pack(), dense BF16 fallback otherwise.
     joint = args.alt == 'joint'
-    assert not joint or args.param == 'ste', '--alt joint supports only --param ste'
+    assert not (args.greedy_rounds and args.param == 'sigmoid'), '--greedy-rounds needs --param ste'
     assert joint or (args.scale_epochs == 0 and args.stage2 == 'joint'), '--scale-epochs/--stage2 need --alt joint'
     assert args.scale_init == 'four_over_six' or args.alt != 'e0m3', '--scale-init applies to --alt scale/joint'
 
@@ -469,6 +479,17 @@ def main():
         report['resumed_from'] = dict(path=str(args.resume_maps), job_id=prev['job_id'],
                                       map_sha256=prev.get('map_sha256'), best_dev_kl=prev.get('best_dev_kl'),
                                       margin=args.resume_margin)
+    if args.eval_map:
+        # Evaluate a saved per-epoch tile map (map_epochNNN.pt: {name: bool tensor}, or bit-packed), e.g. from a
+        # run that stopped before its final evaluation. Use with --epochs 0.
+        assert args.epochs == 0 and not args.resume_maps, '--eval-map is evaluation only (--epochs 0)'
+        import numpy as np
+        for n, v in torch.load(args.eval_map, weights_only=False).items():
+            if isinstance(v, tuple):
+                bits, shape = v
+                v = torch.from_numpy(np.unpackbits(bits.numpy())[:int(np.prod(shape))].reshape(shape).astype(bool))
+            theta[n].copy_(torch.where(v.to(theta[n].device), 1., -1.))
+        report['eval_map'] = dict(path=str(args.eval_map), sha256=digest_file(args.eval_map))
     if args.resume_scale_from:
         # Warm start joint's per-block scales from a converged scale-only (--alt scale --unit 1x16) run with the
         # same --scale-init: its map (True = the `hi` candidate) becomes psi = +/- margin; tiles start at --tile-init.
@@ -511,18 +532,50 @@ def main():
         return torch.where(expand(psi[n] > 0, 1, 16), hi, lo)
 
     tau = [args.tau_start]
+    cur_epoch = [0]
+    # Hard tile state. With --tile-hysteresis d, a tile turns E0M3 only when its logit exceeds +d and turns
+    # back only below -d, so undecided tiles near 0 stop flipping every step; d = 0 is the plain sign.
+    tile_state = {n: theta[n] > 0 for n in theta}
+
+    def tmask(n):
+        return tile_state[n] if args.tile_hysteresis > 0 else theta[n] > 0
+
+    def update_tile_state():
+        if args.tile_hysteresis > 0:
+            for n in theta:
+                tile_state[n] = torch.where(theta[n] > args.tile_hysteresis, True,
+                                            torch.where(theta[n] < -args.tile_hysteresis, False, tile_state[n]))
+
+    def reset_tile_state():
+        for n in theta:
+            tile_state[n] = theta[n] > 0
+
+    def soft_now():
+        # Soft (sigmoid) relaxation is active except in the last --hard-epochs epochs, which train the hard map.
+        return args.param == 'sigmoid' and cur_epoch[0] < args.epochs - args.hard_epochs
+
+    def soft_parts(n, height):
+        """Soft E2M1 weights and soft tile mask: E = lo + sigma(psi/tau)(hi - lo) (joint) and m = sigma(theta/tau)."""
+        if joint:
+            lo, hi = scale_cands[n]
+            s = expand(torch.sigmoid(psi[n] / tau[0]), 1, 16, height)
+            e = lo.float() + s * (hi.float() - lo.float())
+        else:
+            e = base(n).float()
+        m = expand(torch.sigmoid(theta[n] / tau[0]), rows, cols, height)
+        return e, m
 
     def apply(n, hard):
-        b = e2m1(n)
-        if hard or args.param == 'ste':
+        if hard or not soft_now():
+            b = e2m1(n)
             # Bitwise the multiround decode: each element is exactly B or A.
-            modules[n].weight.copy_(torch.where(expand(theta[n] > 0, rows, cols, b.shape[0]), alt(n), b))
+            modules[n].weight.copy_(torch.where(expand(tmask(n), rows, cols, b.shape[0]), alt(n), b))
             return
-        m = expand(torch.sigmoid(theta[n] / tau[0]), rows, cols, b.shape[0])
-        modules[n].weight.copy_((b.float() + m * (alt(n).float() - b.float())).to(b.dtype))
+        e, m = soft_parts(n, modules[n].weight.shape[0])
+        modules[n].weight.copy_((e + m * (alt(n).float() - e)).to(modules[n].weight.dtype))
 
     def hard_map():
-        return {n: (t > 0) for n, t in theta.items()}
+        return {n: tmask(n).clone() for n in theta}
 
     eval_handles = []
     act_checks = [0]
@@ -570,7 +623,8 @@ def main():
         """Development KL/CE of the HARD map (monitor only); leaves the training weights in place."""
         records = dev if records is None else records
         teachers = dev_teacher if teachers is None else teachers
-        if args.param == 'sigmoid':
+        soft = soft_now()
+        if soft:
             for n in modules:
                 apply(n, True)
         eval_hooks(True)
@@ -586,7 +640,7 @@ def main():
             del lp, t
         current_batch[0] = 1
         eval_hooks(False)
-        if args.param == 'sigmoid':
+        if soft:
             for n in modules:
                 apply(n, False)
         return dict(ce=sum(ce) / len(ce), kl=sum(kl) / len(kl), ce_nll=ce, kl_values=kl)
@@ -610,7 +664,12 @@ def main():
             def backward(dy):
                 dy = dy.detach().reshape(-1, dy.shape[-1])
                 g = dy.float().T @ x.float()
-                b = e2m1(n)
+                soft = soft_now()
+                if soft:
+                    # Exact gradients of the soft weights W = E + m (A - E), E = lo + s (hi - lo).
+                    b, m_soft = soft_parts(n, g.shape[0])
+                else:
+                    b = e2m1(n)
                 d = alt(n).float() - b.float()
                 del b
                 # dLoss/dm_u = sum over tile u of G * (A - E), with G = dy^T x (E = B unless joint).
@@ -629,8 +688,10 @@ def main():
                     lo, hi = scale_cands[n]
                     if args.scale_grad_in_e0m3:
                         psi_grads[n] += reduce(g * (hi.float() - lo.float()), 1, 16)
+                    elif soft:
+                        psi_grads[n] += reduce(g * (1 - m_soft) * (hi.float() - lo.float()), 1, 16)
                     else:
-                        e2 = ~expand(theta[n] > 0, rows, cols, g.shape[0])
+                        e2 = ~expand(tmask(n), rows, cols, g.shape[0])
                         psi_grads[n] += reduce(g * e2 * (hi.float() - lo.float()), 1, 16)
             output.register_hook(backward)
         return forward
@@ -650,7 +711,7 @@ def main():
     total_steps = steps_per_epoch * args.epochs
     rng = random.Random(args.seed if world == 1 else args.seed * 1000 + rank)
 
-    if args.resume_maps or args.resume_scale_from:
+    if args.resume_maps or args.resume_scale_from or args.eval_map:
         for n in modules:
             apply(n, True)
     initial = dev_eval() if main_rank else dict(kl=float('inf'), ce=float('nan'))
@@ -690,7 +751,7 @@ def main():
     best = dict(kl=initial['kl'], epoch=0)
 
     def snapshot():
-        best['theta'] = {n: (t > 0).cpu() for n, t in theta.items()}
+        best['theta'] = {n: tmask(n).cpu() for n in theta}
         best['psi'] = {n: (t > 0).cpu() for n, t in psi.items()}
     if args.keep_best:
         snapshot()
@@ -701,11 +762,13 @@ def main():
     save_report()
     print(f'START dev CE {initial["ce"]:.6f} KL {initial["kl"]:.6f} tiles={report["tiles"]} '
           f'steps/epoch={steps_per_epoch} total={total_steps}', flush=True)
-    if args.param == 'sigmoid':
+    if soft_now():
         for n in modules:
             apply(n, False)
     step = 0
     previous = hard_map()
+    tile_acc = {n: torch.zeros_like(t) for n, t in theta.items()} if args.tile_update_every > 1 else {}
+    soft_steps = steps_per_epoch * max(args.epochs - args.hard_epochs, 1)
     previous_psi = {n: t > 0 for n, t in psi.items()}
     if args.greedy_rounds:
         # Exact-acceptance tile selection on FROZEN per-block scales (upper-bound test for 8x64 E0M3 tiles).
@@ -830,6 +893,12 @@ def main():
                 break
         args.epochs = 0   # no gradient training in this mode
     for epoch in range(args.epochs):
+        was_soft = soft_now()
+        cur_epoch[0] = epoch
+        if was_soft and not soft_now():
+            # Entering the final --hard-epochs: train the deployable hard map from here on.
+            for n in modules:
+                apply(n, True)
         t0 = time.time()
         order = list(range(len(fit)))
         rng.shuffle(order)
@@ -864,22 +933,37 @@ def main():
             scale_stage = epoch < args.scale_epochs
             train_tiles = not scale_stage
             train_scale = scale_stage or args.stage2 == 'joint'
+            soft = soft_now()
+            tile_update = args.tile_update_every <= 1 or (step + 1) % args.tile_update_every == 0
             for n, p in theta.items():
                 g = grads[n]
-                if args.param == 'sigmoid':
+                if args.tile_update_every > 1:
+                    # --tile-update-every K: tile logits step every K optimizer steps on the averaged gradient.
+                    tile_acc[n] += g
+                    if not tile_update:
+                        p.grad = None
+                        continue
+                    g = tile_acc[n] / args.tile_update_every
+                    tile_acc[n] = torch.zeros_like(g)
+                if soft:
                     s = torch.sigmoid(p / tau[0])
                     g = g * s * (1 - s) / tau[0]
                 p.grad = g.clone() if train_tiles else None
             for n, p in psi.items():
-                p.grad = psi_grads[n].clone() if train_scale else None
+                g = psi_grads[n]
+                if soft:
+                    s = torch.sigmoid(p / tau[0])
+                    g = g * s * (1 - s) / tau[0]
+                p.grad = g.clone() if train_scale else None
             opt.step()
             step += 1
-            if args.param == 'sigmoid':
-                tau[0] = args.tau_start * (args.tau_end / args.tau_start) ** (step / total_steps)
+            update_tile_state()
+            if soft:
+                tau[0] = args.tau_start * (args.tau_end / args.tau_start) ** (min(step, soft_steps) / soft_steps)
                 for n in modules:
                     apply(n, False)
             for n in modules:
-                now = theta[n] > 0
+                now = tmask(n)
                 changed = int((now != previous[n]).sum())
                 if changed:
                     flips_epoch += changed
@@ -891,11 +975,11 @@ def main():
                         scale_flips_epoch += changed_psi
                         previous_psi[n] = now_psi
                         changed += changed_psi
-                if changed and args.param == 'ste':
+                if changed and not soft:
                     apply(n, True)
         for h in handles:
             h.remove()
-        e0m3 = sum(int((t > 0).sum()) for t in theta.values())
+        e0m3 = sum(int(tmask(n).sum()) for n in theta)
         loss_sum, loss_n = sum(losses), len(losses)
         if world > 1:
             t = torch.tensor([loss_sum, float(loss_n)], dtype=torch.float64, device=device)
@@ -907,7 +991,7 @@ def main():
         if joint:
             entry['scale_flipped_blocks'] = sum(int((t > 0).sum()) for t in psi.values())
             # Scale blocks whose flipped scale is actually in effect (inside E2M1 tiles).
-            entry['scale_flipped_active'] = sum(int(((psi[n] > 0) & ~expand(theta[n] > 0, rows, cols // 16, psi[n].shape[0])).sum())
+            entry['scale_flipped_active'] = sum(int(((psi[n] > 0) & ~expand(tmask(n), rows, cols // 16, psi[n].shape[0])).sum())
                                                 for n in psi)
             entry['scale_hard_flips'] = scale_flips_epoch
         if args.param == 'sigmoid':
@@ -930,6 +1014,10 @@ def main():
         report['epochs'].append(entry)
         save_report()
         print('EPOCH ' + json.dumps({k: v for k, v in entry.items() if k != 'dev_kl_values'}), flush=True)
+    cur_epoch[0] = args.epochs   # past the soft phase: everything below evaluates the hard map
+    if args.param == 'sigmoid':
+        for n in modules:
+            apply(n, True)
     if world > 1:
         # Training is done; only rank 0 restores the best maps and evaluates. The other ranks stay alive
         # (srun would otherwise tear down the whole step when they exit) until rank 0 reaches the final barrier.
@@ -945,6 +1033,7 @@ def main():
             theta[n].copy_(torch.where(best['theta'][n].to(theta[n].device), 1., -1.))
         for n in psi:
             psi[n].copy_(torch.where(best['psi'][n].to(psi[n].device), 1., -1.))
+        reset_tile_state()
         for n in modules:
             apply(n, True)
         report['best_epoch'], report['best_dev_kl'] = best['epoch'], best['kl']
@@ -969,7 +1058,7 @@ def main():
         if not args.no_logits:
             torch.save({n: t.cpu() for n, t in psi.items()}, args.out / 'psi.pt')
         report['final_scale_flipped_active'] = sum(
-            int(((psi[n] > 0) & ~expand(theta[n] > 0, rows, cols // 16, psi[n].shape[0])).sum()) for n in psi)
+            int(((psi[n] > 0) & ~expand(tmask(n), rows, cols // 16, psi[n].shape[0])).sum()) for n in psi)
         report['scale_map_sha256'] = digest_file(args.out / 'scale_map.pt')
     report['final_dev'] = dev_eval()
     if second_dev is not None:
