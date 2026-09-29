@@ -1043,6 +1043,33 @@ Findings:
 - **With matched calibration and training, plain NVFP4 with KL-trained per-block
   scales matches or beats MixFP4 on every metric on this model.**
 
+**All arms from FourOverSix (jobs 454522, 454523, 454598, plus 454353).**
+- **Protocol:** the same Pile 10k × 10-epoch protocol with
+  `--scale-init four_over_six` for scale-only and both joint arms. Every arm,
+  including MixFP4, then starts at dev KL 0.16641.
+- **Paired test comparisons:** against the FourOverSix-start scale-only map.
+
+| 1B, all from FourOverSix | E0M3 tiles | train KL (ep 10) | best dev KL | WikiText-2 | C4 | ΔNLL vs scale-only (wiki / c4) |
+|---|---:|---:|---:|---:|---:|---|
+| scale 1×16 | 0 | 0.05450 | 0.08654 | **14.145950** | **19.321499** | — |
+| fixed joint 8×64 | 11,627 (0.6%) | 0.05528 | **0.08639** | 14.189466 | 19.332188 | +0.00307±0.00171 / +0.00055±0.00134 |
+| joint 8×64 | 560,209 (29%) | 0.06363 | 0.08976 | 14.214564 | 19.385437 | +0.00484±0.00181 / +0.00330±0.00149 |
+| MixFP4 8×64 (E0M3 only) | 879,222 (46%) | 0.08168 | 0.09380 | 14.198005 | 19.460678 | +0.00367±0.00235 / +0.00718±0.00158 |
+
+Findings:
+- **Starting from FourOverSix improves scale-only.** Relative to the plain NVFP4
+  start, dev KL is 0.08654 against 0.08762, and the ΔNLL of the NVFP4 start is
+  +0.0036±0.0018 (wiki) and +0.0011±0.0013 (c4).
+- **The fixed joint is the only arm below scale-only on dev KL, by 0.00015 (0.2%),**
+  with 0.6% E0M3 tiles. That is the size of the exact-acceptance ceiling
+  (≤ 0.0002).
+  - It does not reach the test sets: WikiText is significantly worse and C4
+    ties.
+- **The original joint and MixFP4 are worse on dev KL and on both test sets.**
+  MixFP4 is the worst on C4.
+- **With a common FourOverSix start, KL-trained per-block scale search still
+  matches or beats every E0M3 variant.**
+
 **Making joint easier to train: two fixes (`--tile-lr-scale`, `--scale-grad-in-e0m3`).**
 
 Joint is harder to optimize than scale-only for two reasons:

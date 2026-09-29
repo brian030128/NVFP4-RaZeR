@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=600G
 #SBATCH --time=04:00:00
-#SBATCH --exclude=25a-hgpn001,25a-hgpn003,25a-hgpn111,25a-hgpn150,25a-hgpn036
+#SBATCH --exclude=25a-hgpn001,25a-hgpn003,25a-hgpn111,25a-hgpn150,25a-hgpn036,25a-hgpn148
 #SBATCH --output=slurm/logs/%x_%j.out
 #SBATCH --error=slurm/logs/%x_%j.err
 # Data-parallel run_train_map.py: one rank per GPU, per-tile gradients summed across ranks each step;
@@ -22,7 +22,8 @@ cd "${SLURM_SUBMIT_DIR:?}"
 MAIN=/home/u4320956/NVFP4-RaZeR
 export REORDER_HF_HOME=$MAIN/.joblib/huggingface PYTHON=$MAIN/.joblib/llama8b/bin/python MODEL=llama8b
 source slurm/task_reorder_env.sh
-export TRAIN_MAP_DDP=1 MASTER_ADDR=$(hostname) MASTER_PORT=$((29500 + SLURM_JOB_ID % 1000))
+# Single node: bootstrap NCCL/Gloo over loopback (a node IP was unroutable on hgpn148); data moves over NVLink.
+export TRAIN_MAP_DDP=1 MASTER_ADDR=127.0.0.1 MASTER_PORT=$((29500 + SLURM_JOB_ID % 1000)) NCCL_SOCKET_IFNAME=lo GLOO_SOCKET_IFNAME=lo
 
 OUT="${1:?out}"; shift
 export PYTHON OUT
