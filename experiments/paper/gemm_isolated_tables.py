@@ -22,8 +22,8 @@ CONSISTENCY = [('ours-16x64', 'fo6', 'mixed_16x64_{v}', 'stock_wA', ('mixed_16x6
                ('ours-256x64', 'fo6', 'mixed_256x64_{v}', 'stock_wA', ('mixed_256x64', 'stock_wA')),
                ('ours-8x64', 'fo6-wB', 'n8k64_wB_{v}', 'stock_wB', ('n8k64_wB', 'stock_wB')),
                ('ours-8x64', 'fo6', 'n8k64_wB_{v}', 'stock_wA', ('n8k64_wB', 'stock_wA'))]
-METHOD = ('isolated launches, cold weights (512 MiB read-flush), CUPTI device time, median of 3 rounds x 30 '
-          'repetitions in a rotated order')
+METHOD = ('isolated launches, cold weights (distinct weight copies >= 4x L2 plus a 512 MiB read-flush before every '
+          'call), CUPTI device time, median of 3 rounds x 30 repetitions in a rotated order')
 ALT_METHOD = 'CUPTI, back-to-back calls, L2-warm, densest module'
 
 
@@ -191,20 +191,23 @@ def sections(out, models, prefill, table, read, old_dir='gemm'):
                     texts['tags'].append([P.TITLES[model], u, p, rec['projections'][p]['modules'],
                                           f"{tg['typical']['module']} ({100 * tg['typical']['e0m3_share']:.2f} %)",
                                           f"{tg['worst']['module']} ({100 * tg['worst']['e0m3_share']:.2f} %)"])
-        blocks = [b['telemetry'] for r in rec['rows'] for b in r['rounds']]
+        blocks = rec.get('blocks') or []            # one per (projection, T): every configuration and round
+        smp = rec.get('sampler') or {}
         if blocks:
-            sm = [v for b in blocks for v in b['sm_mhz']]
             cap = [b['power_cap_ms'] for b in blocks]
-            mp = [b['mean_power_w'] for b in blocks if b['mean_power_w'] is not None]
-            tele = dict(blocks=len(blocks), seconds=sum(b['seconds'] for b in blocks), sm_mhz_min=min(sm),
-                        sm_mhz_median=statistics.median(sm), sm_mhz_max=max(sm), block_mean_power_w_max=max(mp) if mp else None,
-                        block_mean_power_w_median=statistics.median(mp) if mp else None, power_cap_ms=sum(cap),
-                        blocks_with_power_cap=sum(1 for v in cap if v > 0), power_limit_w=rec.get('power_limit_w'))
+            mp = [b['mean_power_w'] for b in blocks if b.get('mean_power_w') is not None]
+            tele = dict(blocks=len(blocks), seconds=sum(b['seconds'] for b in blocks), sampler=smp,
+                        block_mean_power_w_max=max(mp) if mp else None, block_mean_power_w_median=statistics.median(mp) if mp else None,
+                        power_cap_ms=sum(cap), blocks_with_power_cap=sum(1 for v in cap if v > 0), power_limit_w=rec.get('power_limit_w'))
             d['telemetry'] = tele
+            fmt = lambda v, f='{:.0f}': DASH if v is None else f.format(v)  # noqa: E731
             texts['telemetry'].append([P.TITLES[model], tele['blocks'], f"{tele['seconds']:.0f}",
-                                       f"{tele['sm_mhz_min']} / {tele['sm_mhz_median']:.0f} / {tele['sm_mhz_max']}",
-                                       f"{tele['block_mean_power_w_median']:.0f} / {tele['block_mean_power_w_max']:.0f}",
-                                       f"{tele['power_cap_ms']:.1f} ms in {tele['blocks_with_power_cap']} blocks",
+                                       f"{fmt(smp.get('sm_mhz_min'))} / {fmt(smp.get('sm_mhz_median'))} / {fmt(smp.get('sm_mhz_max'))}",
+                                       fmt(smp.get('busy_sm_mhz_median')),
+                                       f"{fmt(tele['block_mean_power_w_median'])} / {fmt(tele['block_mean_power_w_max'])}",
+                                       fmt(smp.get('power_w_max')),
+                                       f"{tele['power_cap_ms']:.1f} ms in {tele['blocks_with_power_cap']} of {tele['blocks']} blocks; "
+                                       f"{smp.get('sw_power_cap_samples', DASH)} of {smp.get('samples', DASH)} samples",
                                        f"{tele['power_limit_w']:.0f} W"])
     res = {}
     res['main'] = ('### GEMM latency (primary; deviation 2: isolated launches, cold weights)\n\n' +
@@ -231,9 +234,13 @@ def sections(out, models, prefill, table, read, old_dir='gemm'):
     res['tags'] = ('### The map tags timed (deviation 2): per projection, the typical module (the lower median of the E0M3 '
                    'tile share) and the worst (the densest), with their E0M3 tile shares\n\n' +
                    table(['model', 'unit', 'projection', 'modules', 'typical', 'worst'], texts['tags'], 3)) if texts['tags'] else ''
-    res['telemetry'] = ('### GPU telemetry during the isolated GEMM runs (NVML, before and after every block)\n\n' +
-                        table(['model', 'blocks', 'seconds', 'SM clock min / median / max, MHz', 'block mean power median / max, W',
-                               'power-cap time', 'power limit'], texts['telemetry']) +
+    res['telemetry'] = ('### GPU telemetry during the isolated GEMM runs\n\nNVML before and after every (projection, T) '
+                        'block (its mean power from the energy counter, and the power-cap violation time); the SM clock and '
+                        'the samples with the software power cap active from the 100 ms nvidia-smi sampler ("busy": samples '
+                        'above 100 W).\n\n' +
+                        table(['model', '(projection, T) blocks', 'seconds', 'SM clock min / median / max, MHz', 'busy SM clock median, MHz',
+                               'block mean power median / max, W', 'sampled power max, W', 'power cap', 'power limit'],
+                              texts['telemetry']) +
                         '\n\nThe power limit is 500 W (the default is 600 W); changing it needs root, so it was recorded, not '
                         'changed.') if texts['telemetry'] else ''
     res['data'] = dict(models=data, tolerance_pp=TOLERANCE_PP, flagged=flagged, method=METHOD, alternative_method=ALT_METHOD)

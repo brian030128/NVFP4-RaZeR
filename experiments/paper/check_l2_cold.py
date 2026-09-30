@@ -5,18 +5,21 @@
 
 Llama-3.1-8B's gate_proj (14336x4096) and q_proj (4096x4096) at T = 128 and 2048; stock_wA (FourOverSix weights) and
 n16k64_wA (the typical 16x64 module's tags), at the tile table's widths. Every GEMM launch is isolated and timed by
-CUPTI, as in bench_gemm_isolated.py, under five conditions:
-  warm      the fresh activation is quantized, the GEMM runs once untimed on the same weights (loading them into
-            L2), then the timed GEMM
-  cold512   the registered method: read a 512 MiB buffer, then the fresh activation and its quantization, then the GEMM
-  cold1024  the same with a 1 GiB buffer
-  rotation  no flush; each repetition uses the next of K distinct copies of the weights (packed codes and scales),
-            K x size >= 4x the L2
-  event512  cold512 timed by item #3's isolated-call method instead: an event pair around the launch, no profiler
+CUPTI, as in bench_gemm_isolated.py. Conditions (PROTOCOL_GEMM_ISOLATED.md, deviation 1: the method is rotation +
+flush):
+  warm           the fresh activation is quantized, the GEMM runs once untimed on the same weights (loading them into
+                 L2), then the timed GEMM
+  rotflush512    THE METHOD: the next of K distinct copies of the weights (packed codes and placed scales; K x size >= 4x
+                 the L2), and before it a 512 MiB read-flush; then the fresh activation and its quantization, then the GEMM
+  rotflush1024   the same with a 1 GiB flush
+  cold512        recorded: the flush on one copy (the method as first registered)
+  rotation       recorded: the copies without a flush
+  event          recorded: rotflush512 timed by item #3's isolated-call method, an event pair around the launch
 3 rounds, the conditions in a rotated order, --reps repetitions each (default 50).
 PASS (registered; a failure stops deviation 2's run) for every (shape, T, kernel), on the medians:
-  cold512 >= 0.99 x warm;  |cold512 / cold1024 - 1| <= 2 %;  |cold512 / rotation - 1| <= 2 %.
-Recorded, not rules: cold512 / warm - 1 (the size of the L2 effect) and event512 - cold512 (the host enqueue gap).
+  rotflush512 >= 0.99 x warm;  |rotflush512 / rotflush1024 - 1| <= 2 %.
+Recorded, not rules: the L2 effect (rotflush512 / warm - 1), the other cold variants, and event - rotflush512 (the
+host enqueue gap).
 """
 import argparse
 import dataclasses
@@ -32,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from bench_gemm_isolated import A, B, Kernel, KernelSet, NativeLinear, Telemetry, classify, stats, tag_modules  # noqa: E402,F401
 
 SHAPES = ('gate_proj', 'q_proj')
-CONDITIONS = ('warm', 'cold512', 'cold1024', 'rotation', 'event512')
+CONDITIONS = ('warm', 'rotflush512', 'rotflush1024', 'cold512', 'rotation', 'event')
 TOL = 0.02
 
 
@@ -86,22 +89,22 @@ def main():
                                   None, lin.global_scale, gs.data_ptr(), 1.0, None, y, stream.cuda_stream)
 
                 def rep(cond, i):
-                    """One repetition; returns the event time (us) for event512, else None (CUPTI times the GEMM)."""
-                    if cond in ('cold512', 'cold1024', 'event512'):
-                        buffers[1024 if cond == 'cold1024' else 512].sum()
+                    """One repetition; returns the event time (us) for the event condition, else None (CUPTI times the GEMM)."""
+                    if cond in ('rotflush512', 'rotflush1024', 'cold512', 'event'):
+                        buffers[1024 if cond == 'rotflush1024' else 512].sum()
                         torch.cuda.synchronize()
                     x.copy_(pool[i % 2])
                     torch.cuda.synchronize()
                     q = kern.quant_rows(x, 'four_over_six_rows')
                     torch.cuda.synchronize()
-                    wp = rot[i % copies] if cond == 'rotation' else None
+                    wp = rot[i % copies] if cond in ('rotflush512', 'rotflush1024', 'rotation', 'event') else None
                     if cond == 'warm':
                         gemm(q)
                         torch.cuda.synchronize()
-                    if cond == 'event512':
+                    if cond == 'event':
                         a, b = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
                         a.record()
-                        gemm(q)
+                        gemm(q, wp)
                         b.record()
                         torch.cuda.synchronize()
                         return a.elapsed_time(b) * 1e3
@@ -113,9 +116,9 @@ def main():
                 for r in range(args.rounds):
                     shift = (r * len(CONDITIONS) // args.rounds) % len(CONDITIONS)
                     for cond in CONDITIONS[shift:] + CONDITIONS[:shift]:
-                        for i in range(3 if cond != 'rotation' else copies):      # warm-up (rotation: every copy once)
+                        for i in range(3 if cond in ('warm', 'cold512') else copies):   # warm-up (rotations: every copy once)
                             rep(cond, i)
-                        if cond == 'event512':
+                        if cond == 'event':
                             per[cond] += [rep(cond, i) for i in range(args.reps)]
                             continue
                         with profile(activities=[ProfilerActivity.CUDA]) as prof:
@@ -130,21 +133,21 @@ def main():
                             raise SystemExit(f'{proj} T={t} {kind} {cond}: {len(d)} GEMM launches profiled, expected {args.reps}')
                         per[cond] += d
                 med = {c: statistics.median(v) for c, v in per.items()}
-                rules = dict(cold_not_faster_than_warm=med['cold512'] >= 0.99 * med['warm'],
-                             flush_1gib_agrees=abs(med['cold512'] / med['cold1024'] - 1) <= TOL,
-                             rotation_agrees=abs(med['cold512'] / med['rotation'] - 1) <= TOL)
+                rules = dict(cold_not_faster_than_warm=med['rotflush512'] >= 0.99 * med['warm'],
+                             flush_1gib_agrees=abs(med['rotflush512'] / med['rotflush1024'] - 1) <= TOL)
                 case = dict(proj=proj, out=n, inp=k, tokens=t, kind=kind, module=name, e0m3_tiles=tiles, kernel=kern.cfg.name,
                             rotation_copies=copies, rotation_bytes=copies * size, stats={c: stats(v) for c, v in per.items()},
-                            cold_vs_warm_pct=100 * (med['cold512'] / med['warm'] - 1),
-                            cold512_vs_cold1024_pct=100 * (med['cold512'] / med['cold1024'] - 1),
-                            cold512_vs_rotation_pct=100 * (med['cold512'] / med['rotation'] - 1),
-                            event_minus_cupti_us=med['event512'] - med['cold512'], rules=rules, passed=all(rules.values()))
+                            cold_vs_warm_pct=100 * (med['rotflush512'] / med['warm'] - 1),
+                            rotflush512_vs_rotflush1024_pct=100 * (med['rotflush512'] / med['rotflush1024'] - 1),
+                            rotflush512_vs_cold512_pct=100 * (med['rotflush512'] / med['cold512'] - 1),
+                            rotflush512_vs_rotation_pct=100 * (med['rotflush512'] / med['rotation'] - 1),
+                            event_minus_cupti_us=med['event'] - med['rotflush512'], rules=rules, passed=all(rules.values()))
                 res['cases'].append(case)
                 if not case['passed']:
                     failed.append(f'{proj} T={t} {kind}: {rules}')
-                print(f"{proj} T={t} {kind}: warm {med['warm']:.1f} cold512 {med['cold512']:.1f} cold1024 {med['cold1024']:.1f} "
-                      f"rotation {med['rotation']:.1f} event512 {med['event512']:.1f} us; cold vs warm {case['cold_vs_warm_pct']:+.1f} %; "
-                      f"{'PASS' if case['passed'] else 'FAIL'}", flush=True)
+                print(f"{proj} T={t} {kind}: warm {med['warm']:.1f} rotflush512 {med['rotflush512']:.1f} rotflush1024 "
+                      f"{med['rotflush1024']:.1f} cold512 {med['cold512']:.1f} rotation {med['rotation']:.1f} event {med['event']:.1f} us; "
+                      f"cold vs warm {case['cold_vs_warm_pct']:+.1f} %; {'PASS' if case['passed'] else 'FAIL'}", flush=True)
                 B.write(args.out, res)
             del rot, lin
     res['gpu_end'] = B.gpu_info()

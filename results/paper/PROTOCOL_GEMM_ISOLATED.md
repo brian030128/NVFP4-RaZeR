@@ -151,4 +151,51 @@ its launches, net of the reuse measured in step 05.
 
 ## Deviations (append-only)
 
-(none yet)
+1. **2026-09-30, after step 1 failed: the cold-cache method becomes rotation + flush, and the telemetry is fixed.**
+   - **Step 1 as registered failed on 2 of 8 cases.**
+     - **The record:** `gemm_isolated/l2_check_v1_failed.json`, 3 rounds × 50; medians [IQR], µs.
+     - **The failing cases:** Llama q_proj at T = 2048. There, the rotation over distinct weight copies was slower than
+       the 512 MiB flush on one copy:
+       - stock_wA: 52.2 [52.0, 52.5] vs 50.0 [49.8, 50.2] (−4.3 %);
+       - n16k64_wA: 55.4 [55.0, 55.7] vs 54.2 [53.8, 56.0] (−2.1 %).
+     - **The other 6 cases passed.** The 512 MiB and 1 GiB flushes agreed within 1.3 % everywhere. Cold vs warm was
+       +42–45 % at gate_proj T = 128 and +7–12 % at q_proj T = 2048.
+     - **Item #3's event pair** added 27–38 µs of host enqueue gap per call.
+     - **The run stopped there;** no model was timed. A smoke run of the benchmark itself had passed: 18 of 18 outputs
+       bitwise equal to NativeLinear's forward, and the launch counts right.
+   - **A diagnostic** (approved; a diagnostic, not a result) on the two failing cases, 3 rounds × 50, medians [IQR], µs.
+     Script: `experiments/paper/diagnose_cold_cache.py`; record: `gemm_isolated/diagnostic_cold.json`.
+
+     | kernel | flush, one copy | rotation, no flush | rotation + flush | flush, then 2 ms idle |
+     |---|---:|---:|---:|---:|
+     | stock_wA | 50.2 [49.9, 50.5] | 51.4 [51.1, 51.7] | 50.0 [49.8, 50.3] | 50.9 [50.2, 51.5] |
+     | n16k64_wA | 54.2 [53.8, 56.0] | 55.3 [55.0, 55.6] | 53.9 [53.6, 55.7] | 54.8 [54.1, 55.5] |
+
+     - **Reading: H2, the state the flush leaves (clock or power), not H3, address diversity.**
+       - Rotation + flush equals the flush alone.
+       - An idle gap after the flush moves the time toward the rotation.
+   - **Decision** (the user, relayed by nvfp4-razer-c9, before the diagnostic's outcome): the registered method becomes
+     rotation + flush.
+     - Every call uses the next of K distinct copies of the configuration's weights (packed codes and placed scales;
+       K × size ≥ 4× L2), and a 512 MiB read-flush runs before it.
+     - The reason: it is the most deployment-like under either hypothesis. A forward reads a different allocation per
+       layer, on a busy GPU. Under H2, the reading above, it equals the flush alone.
+   - **Step 1's amended pass rule,** per case, on the medians:
+     - rotation + flush (512 MiB) ≥ 0.99 × warm;
+     - rotation + flush (512 MiB) within 2 % of rotation + a 1 GiB flush.
+     - Recorded, not rules: the flush on one copy, the rotation without a flush, and item #3's event clock.
+     - Step 1 is re-run with the amended method. If it passes, the full run follows with no further confirmation; if it
+       fails, the run stops and is reported.
+   - **Telemetry fix** (approved). NVML's energy and power readings do not update within the 10–100 ms
+     per-configuration blocks: the smoke gave a mean power of 0.0 W.
+     - NVML snapshots are now also taken per (projection, T) block, one to a few seconds long.
+     - A mean power is computed only over at least 0.5 s with a changed energy counter.
+     - The 100 ms nvidia-smi sampler is summarized into the record: the SM clock, the power, and the samples with the
+       software power cap active.
+   - **06b's skip rule:** the step-1 record must have *passed* to be skipped. The failed record had status "complete".
+   - **New sha256:**
+     - `bench_gemm_isolated.py` c41c4133c9b24e5a500536347414dd0158c55d58dc458006013e2ab8e5e55e88;
+     - `check_l2_cold.py` a42026d8446c955e0b27a19468fd234b17ad90f3ce6a693ab4b0098f2bd364b5;
+     - `gemm_isolated_tables.py` da45e223c5121b87447c5b76c8166599dc9160ff055d88c1bd19421b03506aa3;
+     - `06b_gemm_isolated.py` 66d8141ca44d00961edbc4e854cf62587968bee072a067cdbb1f5b11dba1bd24;
+     - `diagnose_cold_cache.py` b4c2ccfc5081195390f7e8b0f2b67d8359ba9b6bbbe09cd59ee05f06715d65f7 (new).

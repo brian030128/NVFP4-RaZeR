@@ -9,8 +9,10 @@ measurement of 20 back-to-back calls on L2-resident weights of the densest modul
 alternative method.
 
 **One repetition.** Every timed kernel is launched on an idle GPU (synchronized before; nothing queued):
-  1. flush: a reduction reads a --flush-mib buffer (default 512 MiB, 4x the 128 MiB L2); synchronize. The read evicts
-     the weights from L2 and leaves clean lines, so the GEMM's misses cause no write-backs;
+  1. cold weights (deviation 1 of the protocol: rotation + flush): every call uses the next of K distinct copies of the
+     configuration's weights (packed codes and placed scales; K x size >= 4x the L2), and before it a reduction reads a
+     --flush-mib buffer (default 512 MiB, 4x the 128 MiB L2); synchronize. The read evicts L2 and leaves clean lines,
+     so the GEMM's misses cause no write-backs;
   2. a fresh activation: a seeded BF16 input [T, in] is copied from a pool of two into the input buffer; synchronize;
   3. TIMED: the activation quantizer (Kernel.quant_rows, the kernel sm120_linear launches); synchronize;
   4. TIMED: the GEMM with its fused epilogue (Kernel.gemm_ptr, the kernel sm120_linear launches), reading its weights
@@ -28,11 +30,15 @@ FourOverSix and NVFP4 have no tags: the projection's first module.
   - before timing, each configuration's output at each (projection, T) equals NativeLinear's fused forward bitwise;
   - every profiled block holds exactly --reps GEMM and --reps quantizer launches;
   - no other compute process on the GPU at any block (NVML).
-**Telemetry:** NVML before and after every block: SM clock, power, energy, the cumulative power-cap violation time and
-the clock-event reasons. A 100 ms nvidia-smi sampler runs over the whole process (<out>.telemetry.csv).
+**Telemetry:** NVML before and after every block and every (projection, T): SM clock, power, energy (the mean power
+over each (projection, T)), the cumulative power-cap violation time and the clock-event reasons. A 100 ms nvidia-smi
+sampler runs over the whole process (<out>.telemetry.csv), summarized into the record at the end.
 """
 import argparse
+import csv
 import dataclasses
+import json
+import math
 import statistics
 import subprocess
 import sys
@@ -138,8 +144,9 @@ class Telemetry:
     @staticmethod
     def block(a, b):
         dt = b['t'] - a['t']
+        de = b['energy_mj'] - a['energy_mj']      # NVML's energy counter updates too slowly for blocks under ~0.5 s
         return dict(seconds=dt, sm_mhz=[a['sm_mhz'], b['sm_mhz']], power_w=[a['power_w'], b['power_w']],
-                    mean_power_w=(b['energy_mj'] - a['energy_mj']) / 1e3 / dt if dt > 0 else None,
+                    mean_power_w=de / 1e3 / dt if de > 0 and dt >= 0.5 else None,
                     power_cap_ms=(b['power_cap_ns'] - a['power_cap_ns']) / 1e6, temp_c=[a['temp_c'], b['temp_c']],
                     reasons_after=b['reasons'])
 
@@ -148,6 +155,25 @@ class Telemetry:
             self.proc.terminate()
             self.proc.wait()
             self.csv.close()
+
+    @staticmethod
+    def summarize(csv_path):
+        """The sampler's SM clock and power over the run, and how many samples had the software power cap active."""
+        def num(v, f):
+            try:
+                return f(v.strip())
+            except ValueError:
+                return None
+        rows = [r for r in list(csv.reader(open(csv_path)))[1:] if len(r) >= 8]
+        pairs = [(num(r[1], int), num(r[3], float)) for r in rows]
+        sm = [a for a, _ in pairs if a is not None]
+        pw = [b for _, b in pairs if b is not None]
+        cap = sum(1 for r in rows if r[6].strip() == 'Active')
+        busy = [a for a, b in pairs if a is not None and b is not None and b > 100]
+        return dict(samples=len(rows), sm_mhz_min=min(sm), sm_mhz_median=statistics.median(sm), sm_mhz_max=max(sm),
+                    busy_samples=len(busy), busy_sm_mhz_median=statistics.median(busy) if busy else None,
+                    busy_sm_mhz_min=min(busy) if busy else None, power_w_max=max(pw), power_w_median=statistics.median(pw),
+                    sw_power_cap_samples=cap) if sm and pw else dict(samples=len(rows))
 
 
 def stats(v):
@@ -169,11 +195,15 @@ def main():
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     B.require_idle()
-    tel = Telemetry(Path(str(args.out) + '.telemetry.csv'))
+    csv_path = Path(str(args.out) + '.telemetry.csv')
+    tel = Telemetry(csv_path)
     try:
         run(args, tel)
     finally:
         tel.close()
+    res = json.loads(args.out.read_text())
+    res['sampler'] = Telemetry.summarize(csv_path)
+    B.write(args.out, res)
 
 
 def run(args, tel):
@@ -191,7 +221,7 @@ def run(args, tel):
                kernels={k: (v.sha256 if isinstance(v, Kernel) else v.describe()) for k, v in kernels.items()},
                configs={c: dict(artifact=CONFIGS[c][0], tags=CONFIGS[c][1], kernel=CONFIGS[c][2], activation_quantizer=CONFIGS[c][3])
                         for c in cfgs},
-               projections={}, rows=[], checks=dict(bitwise=[], counts_ok=True, other_processes=[]))
+               projections={}, rows=[], blocks=[], checks=dict(bitwise=[], counts_ok=True, other_processes=[]))
     if args.flush_mib * 2 ** 20 < 4 * res['l2_bytes']:
         raise SystemExit(f'--flush-mib {args.flush_mib} is below 4x the L2 ({res["l2_bytes"]} bytes)')
     tags, pw = {}, {}
@@ -217,13 +247,18 @@ def run(args, tel):
     stream = torch.cuda.current_stream()
     for proj in projs:
         n, k = res['projections'][proj]['shape']
-        lins = {}
+        lins, copies, counter = {}, {}, {}
         for c in cfgs:
             kind, variant, kname, act = CONFIGS[c]
             w = pw[(kind, variant, proj)]
             w = dataclasses.replace(w, packed=w.packed.cuda(), scales=w.scales.cuda(), bias=None if w.bias is None else w.bias.cuda())
             lins[c] = NativeLinear(w, kernels[kname], act, name=f'{proj}@{c}')
             lins[c].share_input = False
+            # rotation: distinct copies of the weights, K x size >= 4x L2; each call uses the next one
+            size = lins[c].packed.numel() + lins[c].sf.numel()
+            copies[c] = [(lins[c].packed.clone(), lins[c].sf.clone()) for _ in range(math.ceil(4 * res['l2_bytes'] / size) + 1)]
+            counter[c] = 0
+        res['projections'][proj]['rotation_copies'] = {c: len(copies[c]) for c in cfgs}
         for t in tokens:
             g = torch.Generator('cpu').manual_seed(n + k + t)
             pool = [torch.randn(t, k, generator=g).to('cuda', torch.bfloat16) for _ in range(2)]
@@ -239,13 +274,15 @@ def run(args, tel):
                 def quant(kern=kern, act=lin.act_kind):
                     return kern.quant_rows(x, act)
 
-                def gemm(q, kern=kern, lin=lin, y=y, bptr=bptr):
+                def gemm(q, kern=kern, lin=lin, y=y, bptr=bptr, c=c):
                     xp, xsf, gs = q
+                    wp, wsf = copies[c][counter[c] % len(copies[c])]
+                    counter[c] += 1
                     if lin.weights_on_a:
-                        kern.gemm_ptr(lin.packed.data_ptr(), lin.sf.data_ptr(), xp.data_ptr(), xsf.data_ptr(), n, t, k,
+                        kern.gemm_ptr(wp.data_ptr(), wsf.data_ptr(), xp.data_ptr(), xsf.data_ptr(), n, t, k,
                                       None, lin.global_scale, gs.data_ptr(), 1.0, bptr, y, stream.cuda_stream)
                     else:
-                        kern.gemm_ptr(xp.data_ptr(), xsf.data_ptr(), lin.packed.data_ptr(), lin.sf.data_ptr(), t, n, k,
+                        kern.gemm_ptr(xp.data_ptr(), xsf.data_ptr(), wp.data_ptr(), wsf.data_ptr(), t, n, k,
                                       gs.data_ptr(), 1.0, None, lin.global_scale, bptr, y, stream.cuda_stream)
                     return y
                 fns[c] = (quant, gemm, kern)
@@ -276,6 +313,7 @@ def run(args, tel):
                 torch.cuda.synchronize()
                 return a.elapsed_time(b) * 1e3 if timed else None
 
+            block_before = tel.snap()
             for r in range(args.rounds):
                 shift = (r * len(cfgs) // args.rounds) % len(cfgs)
                 for pos, c in enumerate(cfgs[shift:] + cfgs[:shift]):
@@ -305,6 +343,7 @@ def run(args, tel):
                                           f'launches profiled, expected {args.reps}')
                     per[c].append(dict(round=r, position=pos, gemm_us=kt['gemm'], quant_us=kt['quant'], event_us=ev,
                                        telemetry=Telemetry.block(before, after)))
+            res['blocks'].append(dict(proj=proj, tokens=t, **Telemetry.block(block_before, tel.snap())))
             for c in cfgs:
                 kind, variant, kname, act = CONFIGS[c]
                 kern = fns[c][2]
@@ -323,7 +362,7 @@ def run(args, tel):
                                                            if r['proj'] == proj and r['tokens'] == t), flush=True)
             del pool, x, ys, fns
             B.write(args.out, res)
-        del lins
+        del lins, copies
     res['kernel_sets_after'] = {k: v.describe() for k, v in kernels.items() if isinstance(v, KernelSet)}
     res['gpu_end'] = B.gpu_info()
     res['status'] = 'complete'
