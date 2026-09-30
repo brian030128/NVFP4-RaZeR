@@ -95,3 +95,22 @@ Let Δ(X) = t(all-E0M3)/t(all-E2M1) − 1 for kernel X, in a given mode.
 - It waits until the user has installed Nsight Compute and enabled counters (relayed by nvfp4-razer-c9).
 - It will be appended here as an amendment, with its tool version and metric list, before it runs.
 - The metrics: at least `ncu_rtx5090.json`'s, for stock / nodisp / all-E2M1 / all-E0M3 / random50 at 4096³.
+
+## Deviations
+
+1. **Test A was first run with `--iters 64`** instead of the script's default 4096. I underestimated how fast the loop
+   runs: each launch took 12.8 µs.
+   - That run's "sustained" mode was host-bound (332 W, the power cap never engaged), so it cannot speak to H3.
+   - Its isolated result agrees with the re-run (every site within ±0.2 % of site 0).
+   - Test A was re-run with the default 4096 iterations (`test_a.json`); the first run is kept as
+     `test_a_iters64_hostbound.json`. The conclusions use the re-run.
+2. **Test B/C's back-to-back (`b2b`) mode is contaminated by the run order.** Each configuration's b2b block followed
+   the previous configuration's 2 s sustained block, which runs at the 500 W cap.
+   - So the b2b times are hot-start times, and noisier: e0m3 vs e2m1 +9.2 % b2b, against +4.2 % isolated and +4.0 %
+     sustained.
+   - The findings use the isolated and sustained modes. The b2b numbers are recorded, not used.
+3. **Test D (ncu) is cancelled.** The node cannot enable counters (no reboot, no SYS_ADMIN; relayed by nvfp4-razer-c9),
+   so it is not needed for the verdicts (`FINDINGS.md`).
+   - Noted per the coordinator: the RTX 5090 ncu record, taken at ncu's base-clock lock, shows all-E0M3 slower than
+     all-E2M1 on the same SM design: 4096³ 186.05 vs 173.06 µs (+7.5 %), 14336x4096 T = 2048 281.60 vs 263.55 µs
+     (+6.8 %). That survives fixed clocks, consistent with H2 rather than H3.
