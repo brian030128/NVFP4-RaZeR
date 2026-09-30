@@ -187,3 +187,357 @@ FlipQuant (ours) & -- & 9.68 & 9.68 & 9.73 \\
 
 Re-run references equal to the Parts 2-3 fake (c) records, window by window: {'bf16': True, 'nvfp4': True, 'fo6': True, 'tc-8x64': True, 'tc-16x64': True, 'tc-256x64': True}
 
+## Mistral-7B-v0.3
+
+### Primary (a): degradation when coarsened, R@g − R@1x16
+
+| rule | g | WikiText-2 | C4 |
+|---|---|---:|---:|
+| IF4 (Cook et al.) | 8x64 | +0.0025 ± 0.0011 * | +0.0017 ± 0.0013 * |
+| IF4 (Cook et al.) | 16x64 | +0.0040 ± 0.0012 * | +0.0023 ± 0.0012 * |
+| IF4 (Cook et al.) | 256x64 | +0.0035 ± 0.0011 * | +0.0029 ± 0.0009 * |
+| MixFP4 (Zou et al.) | 8x64 | +0.0041 ± 0.0011 * | +0.0025 ± 0.0009 * |
+| MixFP4 (Zou et al.) | 16x64 | +0.0050 ± 0.0011 * | +0.0031 ± 0.0009 * |
+| MixFP4 (Zou et al.) | 256x64 | +0.0038 ± 0.0012 * | +0.0028 ± 0.0010 * |
+| MixFP4 (Zou et al.) + FourOverSix | 8x64 | +0.0017 ± 0.0011 * | +0.0016 ± 0.0011 * |
+| MixFP4 (Zou et al.) + FourOverSix | 16x64 | +0.0024 ± 0.0012 * | +0.0021 ± 0.0008 * |
+| MixFP4 (Zou et al.) + FourOverSix | 256x64 | +0.0040 ± 0.0011 * | +0.0023 ± 0.0012 * |
+
+### Primary (b): gain over the rule's own base, R@g − base
+
+Base: each rule's own E2M1 candidate everywhere with FourOverSix activations (e2m1 for IF4, e2m1z for MixFP4 (Zou et al.): NVFP4 weights); FourOverSix for MixFP4 (Zou et al.) + FourOverSix. The same FourOverSix activations everywhere.
+
+| rule | base | g | WikiText-2 | C4 |
+|---|---|---|---:|---:|
+| IF4 (Cook et al.) | NVFP4 weights + FourOverSix act. | 1x16 | -0.0055 ± 0.0012 * | -0.0031 ± 0.0011 * |
+| IF4 (Cook et al.) | NVFP4 weights + FourOverSix act. | 8x64 | -0.0029 ± 0.0014 * | -0.0014 ± 0.0016 |
+| IF4 (Cook et al.) | NVFP4 weights + FourOverSix act. | 16x64 | -0.0015 ± 0.0015 * | -0.0008 ± 0.0015 |
+| IF4 (Cook et al.) | NVFP4 weights + FourOverSix act. | 256x64 | -0.0020 ± 0.0014 * | -0.0002 ± 0.0012 |
+| MixFP4 (Zou et al.) | NVFP4 weights (MixFP4 (Zou et al.) E2M1) + FourOverSix act. | 1x16 | -0.0057 ± 0.0014 * | -0.0033 ± 0.0011 * |
+| MixFP4 (Zou et al.) | NVFP4 weights (MixFP4 (Zou et al.) E2M1) + FourOverSix act. | 8x64 | -0.0016 ± 0.0013 * | -0.0008 ± 0.0011 |
+| MixFP4 (Zou et al.) | NVFP4 weights (MixFP4 (Zou et al.) E2M1) + FourOverSix act. | 16x64 | -0.0008 ± 0.0014 | -0.0002 ± 0.0012 |
+| MixFP4 (Zou et al.) | NVFP4 weights (MixFP4 (Zou et al.) E2M1) + FourOverSix act. | 256x64 | -0.0020 ± 0.0013 * | -0.0004 ± 0.0012 |
+| MixFP4 (Zou et al.) + FourOverSix | FourOverSix | 1x16 | -0.0033 ± 0.0011 * | -0.0025 ± 0.0012 * |
+| MixFP4 (Zou et al.) + FourOverSix | FourOverSix | 8x64 | -0.0016 ± 0.0009 * | -0.0009 ± 0.0009 |
+| MixFP4 (Zou et al.) + FourOverSix | FourOverSix | 16x64 | -0.0009 ± 0.0010 | -0.0004 ± 0.0010 |
+| MixFP4 (Zou et al.) + FourOverSix | FourOverSix | 256x64 | +0.0007 ± 0.0009 | -0.0001 ± 0.0008 |
+
+### Primary (c): FlipQuant (ours; TM-OPT+TC maps) against the rule at the same tile, tc@g − R@g
+
+| rule | g | WikiText-2 | C4 |
+|---|---|---:|---:|
+| IF4 (Cook et al.) | 8x64 | -0.0063 ± 0.0014 * | -0.0056 ± 0.0015 * |
+| IF4 (Cook et al.) | 16x64 | -0.0078 ± 0.0013 * | -0.0061 ± 0.0012 * |
+| IF4 (Cook et al.) | 256x64 | -0.0073 ± 0.0013 * | -0.0055 ± 0.0011 * |
+| MixFP4 (Zou et al.) | 8x64 | -0.0076 ± 0.0012 * | -0.0065 ± 0.0012 * |
+| MixFP4 (Zou et al.) | 16x64 | -0.0085 ± 0.0013 * | -0.0071 ± 0.0011 * |
+| MixFP4 (Zou et al.) | 256x64 | -0.0074 ± 0.0012 * | -0.0055 ± 0.0011 * |
+| MixFP4 (Zou et al.) + FourOverSix | 8x64 | -0.0043 ± 0.0011 * | -0.0049 ± 0.0010 * |
+| MixFP4 (Zou et al.) + FourOverSix | 16x64 | -0.0051 ± 0.0011 * | -0.0053 ± 0.0009 * |
+| MixFP4 (Zou et al.) + FourOverSix | 256x64 | -0.0067 ± 0.0010 * | -0.0043 ± 0.0011 * |
+
+`*` = |Δ| > 2 SE.
+
+### Primary (d): how much of the 1x16 gain over FourOverSix survives at the tile
+
+gain_g = NLL(FourOverSix) − NLL(R@g), ± 2 SE (positive = better than FourOverSix); retained = gain_g / gain_1x16 with a 95 % paired bootstrap interval over windows. No fraction where R@1x16 is not better than FourOverSix by 2 SE.
+
+| rule | corpus | gain 1x16 | g | gain_g | retained [95 %] |
+|---|---|---:|---|---:|---:|
+| IF4 (Cook et al.) | WikiText-2 | +0.0021 ± 0.0011 | 8x64 | -0.0004 ± 0.0014 | -19 % [-142, 36] |
+| IF4 (Cook et al.) | WikiText-2 | +0.0021 ± 0.0011 | 16x64 | -0.0019 ± 0.0014 | -87 % [-268, -18] |
+| IF4 (Cook et al.) | WikiText-2 | +0.0021 ± 0.0011 | 256x64 | -0.0013 ± 0.0013 | -62 % [-214, -2] |
+| IF4 (Cook et al.) | C4 | +0.0019 ± 0.0012 | 8x64 | +0.0002 ± 0.0019 | 9 % [-159, 86] |
+| IF4 (Cook et al.) | C4 | +0.0019 ± 0.0012 | 16x64 | -0.0004 ± 0.0018 | -22 % [-237, 57] |
+| IF4 (Cook et al.) | C4 | +0.0019 ± 0.0012 | 256x64 | -0.0010 ± 0.0013 | -56 % [-294, 8] |
+| MixFP4 (Zou et al.) | WikiText-2 | +0.0024 ± 0.0011 | 8x64 | -0.0018 ± 0.0012 | -73 % [-199, -19] |
+| MixFP4 (Zou et al.) | WikiText-2 | +0.0024 ± 0.0011 | 16x64 | -0.0026 ± 0.0013 | -107 % [-267, -43] |
+| MixFP4 (Zou et al.) | WikiText-2 | +0.0024 ± 0.0011 | 256x64 | -0.0014 ± 0.0013 | -58 % [-185, -3] |
+| MixFP4 (Zou et al.) | C4 | +0.0017 ± 0.0014 | 8x64 | -0.0007 ± 0.0013 | -43 % [-315, 21] |
+| MixFP4 (Zou et al.) | C4 | +0.0017 ± 0.0014 | 16x64 | -0.0013 ± 0.0014 | -77 % [-447, 4] |
+| MixFP4 (Zou et al.) | C4 | +0.0017 ± 0.0014 | 256x64 | -0.0011 ± 0.0014 | -63 % [-399, 13] |
+| MixFP4 (Zou et al.) + FourOverSix | WikiText-2 | +0.0033 ± 0.0011 | 8x64 | +0.0016 ± 0.0009 | 49 % [23, 79] |
+| MixFP4 (Zou et al.) + FourOverSix | WikiText-2 | +0.0033 ± 0.0011 | 16x64 | +0.0009 ± 0.0010 | 27 % [-4, 55] |
+| MixFP4 (Zou et al.) + FourOverSix | WikiText-2 | +0.0033 ± 0.0011 | 256x64 | -0.0007 ± 0.0009 | -22 % [-62, 5] |
+| MixFP4 (Zou et al.) + FourOverSix | C4 | +0.0025 ± 0.0012 | 8x64 | +0.0009 ± 0.0009 | 35 % [-1, 68] |
+| MixFP4 (Zou et al.) + FourOverSix | C4 | +0.0025 ± 0.0012 | 16x64 | +0.0004 ± 0.0010 | 17 % [-31, 46] |
+| MixFP4 (Zou et al.) + FourOverSix | C4 | +0.0025 ± 0.0012 | 256x64 | +0.0001 ± 0.0008 | 6 % [-29, 35] |
+
+### Mechanism: within-tile mixing of each rule's 1x16 choices
+
+Tiles whose 16-blocks disagree at 1x16 (some prefer E2M1, some the uniform grid), % of tiles; in brackets, the mean minority share inside those tiles, %.
+
+| rule | tile | all | q_proj | k_proj | v_proj | o_proj | gate_proj | up_proj | down_proj |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| IF4 (Cook et al.) | 8x64 | 100.0 (37.4) | 100.0 (37.8) | 100.0 (38.3) | 100.0 (38.5) | 100.0 (36.8) | 100.0 (37.3) | 100.0 (37.4) | 100.0 (37.6) |
+| IF4 (Cook et al.) | 16x64 | 100.0 (38.0) | 100.0 (38.4) | 100.0 (39.1) | 100.0 (39.3) | 100.0 (37.2) | 100.0 (37.8) | 100.0 (37.9) | 100.0 (38.1) |
+| IF4 (Cook et al.) | 256x64 | 100.0 (38.1) | 100.0 (38.8) | 100.0 (39.7) | 100.0 (39.7) | 100.0 (37.3) | 100.0 (37.9) | 100.0 (38.0) | 100.0 (38.3) |
+| MixFP4 (Zou et al.) | 8x64 | 100.0 (37.3) | 100.0 (37.7) | 100.0 (38.2) | 100.0 (38.4) | 100.0 (36.7) | 100.0 (37.1) | 100.0 (37.3) | 100.0 (37.4) |
+| MixFP4 (Zou et al.) | 16x64 | 100.0 (37.8) | 100.0 (38.3) | 100.0 (39.0) | 100.0 (39.2) | 100.0 (37.1) | 100.0 (37.7) | 100.0 (37.8) | 100.0 (38.0) |
+| MixFP4 (Zou et al.) | 256x64 | 100.0 (38.0) | 100.0 (38.7) | 100.0 (39.6) | 100.0 (39.5) | 100.0 (37.2) | 100.0 (37.8) | 100.0 (37.9) | 100.0 (38.1) |
+| MixFP4 (Zou et al.) + FourOverSix | 8x64 | 100.0 (42.4) | 100.0 (42.2) | 100.0 (42.2) | 100.0 (42.3) | 100.0 (42.2) | 100.0 (42.4) | 100.0 (42.4) | 100.0 (42.5) |
+| MixFP4 (Zou et al.) + FourOverSix | 16x64 | 100.0 (44.2) | 100.0 (44.0) | 100.0 (44.0) | 100.0 (44.1) | 100.0 (43.9) | 100.0 (44.2) | 100.0 (44.2) | 100.0 (44.3) |
+| MixFP4 (Zou et al.) + FourOverSix | 256x64 | 100.0 (46.4) | 100.0 (46.6) | 100.0 (47.1) | 100.0 (47.0) | 100.0 (45.7) | 100.0 (46.3) | 100.0 (46.5) | 100.0 (46.6) |
+
+### Every policy: PPL; ΔNLL vs FourOverSix and vs NVFP4 (paper row); installed-weight squared error
+
+| policy | uniform share | PPL WikiText-2 | PPL C4 | ΔNLL vs FourOverSix, WikiText-2 | C4 | vs NVFP4, WikiText-2 | C4 | weight error vs FourOverSix | vs NVFP4 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| BF16 | — | 5.3182 | 7.8306 | -0.0374 ± 0.0013 | -0.0299 ± 0.0025 | -0.0428 ± 0.0015 | -0.0332 ± 0.0021 | -100.0 % | -100.0 % |
+| NVFP4 | — | 5.5508 | 8.0949 | +0.0054 ± 0.0012 | +0.0033 ± 0.0011 | +0.0000 ± 0.0000 | +0.0000 ± 0.0000 | +19.2 % | +0.0 % |
+| FourOverSix | — | 5.5210 | 8.0681 | +0.0000 ± 0.0000 | +0.0000 ± 0.0000 | -0.0054 ± 0.0012 | -0.0033 ± 0.0011 | +0.0 % | -16.1 % |
+| NVFP4 weights + FourOverSix act. | — | 5.5395 | 8.0780 | +0.0034 ± 0.0011 | +0.0012 ± 0.0009 | -0.0020 ± 0.0009 | -0.0021 ± 0.0007 | +19.2 % | +0.0 % |
+| NVFP4 weights (MixFP4 (Zou et al.) E2M1) + FourOverSix act. | — | 5.5395 | 8.0805 | +0.0033 ± 0.0012 | +0.0015 ± 0.0009 | -0.0020 ± 0.0009 | -0.0018 ± 0.0006 | +19.2 % | +0.0 % |
+| FlipQuant (ours) 8x64 | 2.49 % | 5.4886 | 8.0216 | -0.0059 ± 0.0009 | -0.0058 ± 0.0009 | -0.0113 ± 0.0013 | -0.0091 ± 0.0010 | +0.1 % | -16.1 % |
+| FlipQuant (ours) 16x64 | 3.29 % | 5.4882 | 8.0221 | -0.0060 ± 0.0010 | -0.0057 ± 0.0011 | -0.0113 ± 0.0014 | -0.0090 ± 0.0009 | +0.1 % | -16.1 % |
+| FlipQuant (ours) 256x64 | 9.98 % | 5.4881 | 8.0325 | -0.0060 ± 0.0010 | -0.0044 ± 0.0009 | -0.0114 ± 0.0012 | -0.0077 ± 0.0010 | +0.2 % | -16.0 % |
+| IF4 (Cook et al.) 1x16 | 61.83 % | 5.5092 | 8.0531 | -0.0021 ± 0.0011 | -0.0019 ± 0.0012 | -0.0075 ± 0.0013 | -0.0052 ± 0.0010 | -17.7 % | -31.0 % |
+| IF4 (Cook et al.) 8x64 | 90.96 % | 5.5232 | 8.0667 | +0.0004 ± 0.0014 | -0.0002 ± 0.0019 | -0.0050 ± 0.0014 | -0.0035 ± 0.0015 | +0.5 % | -15.7 % |
+| IF4 (Cook et al.) 16x64 | 96.01 % | 5.5312 | 8.0714 | +0.0019 ± 0.0014 | +0.0004 ± 0.0018 | -0.0035 ± 0.0015 | -0.0029 ± 0.0014 | +1.0 % | -15.3 % |
+| IF4 (Cook et al.) 256x64 | 99.25 % | 5.5283 | 8.0765 | +0.0013 ± 0.0013 | +0.0010 ± 0.0013 | -0.0041 ± 0.0015 | -0.0023 ± 0.0013 | +1.4 % | -15.0 % |
+| MixFP4 (Zou et al.) 1x16 | 61.97 % | 5.5078 | 8.0541 | -0.0024 ± 0.0011 | -0.0017 ± 0.0014 | -0.0078 ± 0.0013 | -0.0051 ± 0.0011 | -17.6 % | -30.9 % |
+| MixFP4 (Zou et al.) 8x64 | 91.06 % | 5.5307 | 8.0741 | +0.0018 ± 0.0012 | +0.0007 ± 0.0013 | -0.0036 ± 0.0014 | -0.0026 ± 0.0011 | +0.5 % | -15.7 % |
+| MixFP4 (Zou et al.) 16x64 | 96.05 % | 5.5351 | 8.0789 | +0.0026 ± 0.0013 | +0.0013 ± 0.0014 | -0.0028 ± 0.0014 | -0.0020 ± 0.0011 | +1.0 % | -15.3 % |
+| MixFP4 (Zou et al.) 256x64 | 99.26 % | 5.5286 | 8.0769 | +0.0014 ± 0.0013 | +0.0011 ± 0.0014 | -0.0040 ± 0.0013 | -0.0022 ± 0.0013 | +1.4 % | -15.0 % |
+| MixFP4 (Zou et al.) + FourOverSix 1x16 | 53.41 % | 5.5028 | 8.0482 | -0.0033 ± 0.0011 | -0.0025 ± 0.0012 | -0.0087 ± 0.0013 | -0.0058 ± 0.0010 | -20.2 % | -33.0 % |
+| MixFP4 (Zou et al.) + FourOverSix 8x64 | 47.69 % | 5.5120 | 8.0612 | -0.0016 ± 0.0009 | -0.0009 ± 0.0009 | -0.0070 ± 0.0012 | -0.0042 ± 0.0012 | -3.7 % | -19.2 % |
+| MixFP4 (Zou et al.) + FourOverSix 16x64 | 46.06 % | 5.5161 | 8.0648 | -0.0009 ± 0.0010 | -0.0004 ± 0.0010 | -0.0063 ± 0.0012 | -0.0037 ± 0.0010 | -2.5 % | -18.3 % |
+| MixFP4 (Zou et al.) + FourOverSix 256x64 | 35.52 % | 5.5249 | 8.0669 | +0.0007 ± 0.0009 | -0.0001 ± 0.0008 | -0.0047 ± 0.0012 | -0.0035 ± 0.0012 | -0.5 % | -16.6 % |
+
+### Uniform-format share of the weights by projection, %
+
+| policy | all | q_proj | k_proj | v_proj | o_proj | gate_proj | up_proj | down_proj |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| IF4 (Cook et al.) 1x16 | 61.83 | 60.99 | 60.12 | 59.75 | 62.68 | 62.08 | 61.97 | 61.71 |
+| IF4 (Cook et al.) 8x64 | 90.96 | 86.80 | 81.97 | 85.06 | 93.11 | 91.12 | 92.09 | 91.31 |
+| IF4 (Cook et al.) 16x64 | 96.01 | 91.62 | 86.31 | 90.61 | 97.07 | 96.18 | 97.27 | 96.60 |
+| IF4 (Cook et al.) 256x64 | 99.25 | 95.82 | 90.20 | 95.51 | 98.49 | 99.96 | 100.00 | 99.92 |
+| MixFP4 (Zou et al.) 1x16 | 61.97 | 61.11 | 60.23 | 59.88 | 62.79 | 62.23 | 62.10 | 61.87 |
+| MixFP4 (Zou et al.) 8x64 | 91.06 | 86.88 | 82.06 | 85.18 | 93.17 | 91.21 | 92.17 | 91.45 |
+| MixFP4 (Zou et al.) 16x64 | 96.05 | 91.64 | 86.38 | 90.68 | 97.08 | 96.23 | 97.30 | 96.68 |
+| MixFP4 (Zou et al.) 256x64 | 99.26 | 95.85 | 90.22 | 95.47 | 98.50 | 99.96 | 100.00 | 99.91 |
+| MixFP4 (Zou et al.) + FourOverSix 1x16 | 53.41 | 52.55 | 51.74 | 51.30 | 54.21 | 53.68 | 53.52 | 53.30 |
+| MixFP4 (Zou et al.) + FourOverSix 8x64 | 47.69 | 44.11 | 39.66 | 38.89 | 53.00 | 48.42 | 48.19 | 47.16 |
+| MixFP4 (Zou et al.) + FourOverSix 16x64 | 46.06 | 41.88 | 36.50 | 35.26 | 53.66 | 46.72 | 46.64 | 45.30 |
+| MixFP4 (Zou et al.) + FourOverSix 256x64 | 35.52 | 26.37 | 12.63 | 16.35 | 63.25 | 34.73 | 36.33 | 33.19 |
+| FlipQuant (ours) 8x64 | 2.49 | 3.02 | 3.22 | 4.15 | 3.34 | 2.15 | 2.32 | 2.43 |
+| FlipQuant (ours) 16x64 | 3.29 | 3.87 | 4.26 | 5.59 | 4.33 | 2.82 | 3.09 | 3.27 |
+| FlipQuant (ours) 256x64 | 9.98 | 10.50 | 12.96 | 17.03 | 13.23 | 8.49 | 9.51 | 10.15 |
+
+Blocks with a zero (underflowed) E4M3 scale, which become all-zero blocks: 0 in every arm.
+
+### Paper table (WikiText-2): `A_table_mistral7b_wiki.tex`
+
+```latex
+% Mistral-7B-v0.3, WikiText-2 perplexity, fake (c) simulator (results/paper_extra/A). FlipQuant (ours) here is simulated (fake (c)) and so differs slightly from the native main-table numbers.
+\begin{tabular}{lcccc}
+\toprule
+Method & 1x16 & 8x64 & 16x64 & 256x64 \\
+\midrule
+IF4 (Cook et al.) & 5.51 & 5.52 & 5.53 & 5.53 \\
+MixFP4 (Zou et al.) & 5.51 & 5.53 & 5.54 & 5.53 \\
+MixFP4 (Zou et al.) + FourOverSix (our variant) & 5.50 & 5.51 & 5.52 & 5.52 \\
+FlipQuant (ours) & -- & 5.49 & 5.49 & 5.49 \\
+\midrule
+\multicolumn{5}{l}{\footnotesize Reference: NVFP4 5.55, NVFP4 weights + FourOverSix act. 5.54, FourOverSix 5.52, BF16 5.32} \\
+\bottomrule
+\end{tabular}
+```
+
+### Paper table (C4): `A_table_mistral7b_c4.tex`
+
+```latex
+% Mistral-7B-v0.3, C4 perplexity, fake (c) simulator (results/paper_extra/A). FlipQuant (ours) here is simulated (fake (c)) and so differs slightly from the native main-table numbers.
+\begin{tabular}{lcccc}
+\toprule
+Method & 1x16 & 8x64 & 16x64 & 256x64 \\
+\midrule
+IF4 (Cook et al.) & 8.05 & 8.07 & 8.07 & 8.08 \\
+MixFP4 (Zou et al.) & 8.05 & 8.07 & 8.08 & 8.08 \\
+MixFP4 (Zou et al.) + FourOverSix (our variant) & 8.05 & 8.06 & 8.06 & 8.07 \\
+FlipQuant (ours) & -- & 8.02 & 8.02 & 8.03 \\
+\midrule
+\multicolumn{5}{l}{\footnotesize Reference: NVFP4 8.09, NVFP4 weights + FourOverSix act. 8.08, FourOverSix 8.07, BF16 7.83} \\
+\bottomrule
+\end{tabular}
+```
+
+Re-run references equal to the Parts 2-3 fake (c) records, window by window: {'bf16': True, 'nvfp4': True, 'fo6': True, 'tc-8x64': True, 'tc-16x64': True, 'tc-256x64': True}
+
+## Phi-4
+
+### Primary (a): degradation when coarsened, R@g − R@1x16
+
+| rule | g | WikiText-2 | C4 |
+|---|---|---:|---:|
+| IF4 (Cook et al.) | 8x64 | +0.0036 ± 0.0015 * | +0.0039 ± 0.0010 * |
+| IF4 (Cook et al.) | 16x64 | +0.0031 ± 0.0017 * | +0.0035 ± 0.0010 * |
+| IF4 (Cook et al.) | 256x64 | +0.0041 ± 0.0017 * | +0.0038 ± 0.0009 * |
+| MixFP4 (Zou et al.) | 8x64 | +0.0048 ± 0.0017 * | +0.0042 ± 0.0009 * |
+| MixFP4 (Zou et al.) | 16x64 | +0.0042 ± 0.0016 * | +0.0043 ± 0.0009 * |
+| MixFP4 (Zou et al.) | 256x64 | +0.0057 ± 0.0017 * | +0.0042 ± 0.0010 * |
+| MixFP4 (Zou et al.) + FourOverSix | 8x64 | +0.0038 ± 0.0017 * | +0.0021 ± 0.0010 * |
+| MixFP4 (Zou et al.) + FourOverSix | 16x64 | +0.0042 ± 0.0017 * | +0.0018 ± 0.0010 * |
+| MixFP4 (Zou et al.) + FourOverSix | 256x64 | +0.0048 ± 0.0017 * | +0.0030 ± 0.0010 * |
+
+### Primary (b): gain over the rule's own base, R@g − base
+
+Base: each rule's own E2M1 candidate everywhere with FourOverSix activations (e2m1 for IF4, e2m1z for MixFP4 (Zou et al.): NVFP4 weights); FourOverSix for MixFP4 (Zou et al.) + FourOverSix. The same FourOverSix activations everywhere.
+
+| rule | base | g | WikiText-2 | C4 |
+|---|---|---|---:|---:|
+| IF4 (Cook et al.) | NVFP4 weights + FourOverSix act. | 1x16 | -0.0049 ± 0.0016 * | -0.0040 ± 0.0011 * |
+| IF4 (Cook et al.) | NVFP4 weights + FourOverSix act. | 8x64 | -0.0013 ± 0.0017 | -0.0002 ± 0.0012 |
+| IF4 (Cook et al.) | NVFP4 weights + FourOverSix act. | 16x64 | -0.0019 ± 0.0020 | -0.0005 ± 0.0012 |
+| IF4 (Cook et al.) | NVFP4 weights + FourOverSix act. | 256x64 | -0.0009 ± 0.0019 | -0.0002 ± 0.0012 |
+| MixFP4 (Zou et al.) | NVFP4 weights (MixFP4 (Zou et al.) E2M1) + FourOverSix act. | 1x16 | -0.0043 ± 0.0016 * | -0.0043 ± 0.0011 * |
+| MixFP4 (Zou et al.) | NVFP4 weights (MixFP4 (Zou et al.) E2M1) + FourOverSix act. | 8x64 | +0.0005 ± 0.0019 | -0.0001 ± 0.0012 |
+| MixFP4 (Zou et al.) | NVFP4 weights (MixFP4 (Zou et al.) E2M1) + FourOverSix act. | 16x64 | -0.0001 ± 0.0018 | -0.0000 ± 0.0012 |
+| MixFP4 (Zou et al.) | NVFP4 weights (MixFP4 (Zou et al.) E2M1) + FourOverSix act. | 256x64 | +0.0014 ± 0.0019 | -0.0001 ± 0.0012 |
+| MixFP4 (Zou et al.) + FourOverSix | FourOverSix | 1x16 | -0.0019 ± 0.0015 * | -0.0025 ± 0.0010 * |
+| MixFP4 (Zou et al.) + FourOverSix | FourOverSix | 8x64 | +0.0019 ± 0.0017 * | -0.0004 ± 0.0010 |
+| MixFP4 (Zou et al.) + FourOverSix | FourOverSix | 16x64 | +0.0023 ± 0.0017 * | -0.0007 ± 0.0010 |
+| MixFP4 (Zou et al.) + FourOverSix | FourOverSix | 256x64 | +0.0029 ± 0.0017 * | +0.0005 ± 0.0010 |
+
+### Primary (c): FlipQuant (ours; TM-OPT+TC maps) against the rule at the same tile, tc@g − R@g
+
+| rule | g | WikiText-2 | C4 |
+|---|---|---:|---:|
+| IF4 (Cook et al.) | 8x64 | -0.0087 ± 0.0019 * | -0.0061 ± 0.0012 * |
+| IF4 (Cook et al.) | 16x64 | -0.0081 ± 0.0019 * | -0.0048 ± 0.0012 * |
+| IF4 (Cook et al.) | 256x64 | -0.0064 ± 0.0022 * | -0.0041 ± 0.0012 * |
+| MixFP4 (Zou et al.) | 8x64 | -0.0114 ± 0.0021 * | -0.0064 ± 0.0011 * |
+| MixFP4 (Zou et al.) | 16x64 | -0.0107 ± 0.0021 * | -0.0055 ± 0.0012 * |
+| MixFP4 (Zou et al.) | 256x64 | -0.0096 ± 0.0021 * | -0.0044 ± 0.0011 * |
+| MixFP4 (Zou et al.) + FourOverSix | 8x64 | -0.0096 ± 0.0017 * | -0.0045 ± 0.0010 * |
+| MixFP4 (Zou et al.) + FourOverSix | 16x64 | -0.0099 ± 0.0020 * | -0.0033 ± 0.0009 * |
+| MixFP4 (Zou et al.) + FourOverSix | 256x64 | -0.0079 ± 0.0020 * | -0.0034 ± 0.0010 * |
+
+`*` = |Δ| > 2 SE.
+
+### Primary (d): how much of the 1x16 gain over FourOverSix survives at the tile
+
+gain_g = NLL(FourOverSix) − NLL(R@g), ± 2 SE (positive = better than FourOverSix); retained = gain_g / gain_1x16 with a 95 % paired bootstrap interval over windows. No fraction where R@1x16 is not better than FourOverSix by 2 SE.
+
+| rule | corpus | gain 1x16 | g | gain_g | retained [95 %] |
+|---|---|---:|---|---:|---:|
+| IF4 (Cook et al.) | WikiText-2 | +0.0026 ± 0.0017 | 8x64 | -0.0010 ± 0.0018 | -37 % [-237, 22] |
+| IF4 (Cook et al.) | WikiText-2 | +0.0026 ± 0.0017 | 16x64 | -0.0004 ± 0.0019 | -17 % [-173, 43] |
+| IF4 (Cook et al.) | WikiText-2 | +0.0026 ± 0.0017 | 256x64 | -0.0014 ± 0.0019 | -54 % [-268, 13] |
+| IF4 (Cook et al.) | C4 | +0.0026 ± 0.0010 | 8x64 | -0.0012 ± 0.0012 | -46 % [-128, -3] |
+| IF4 (Cook et al.) | C4 | +0.0026 ± 0.0010 | 16x64 | -0.0009 ± 0.0012 | -33 % [-112, 8] |
+| IF4 (Cook et al.) | C4 | +0.0026 ± 0.0010 | 256x64 | -0.0012 ± 0.0013 | -44 % [-134, 0] |
+| MixFP4 (Zou et al.) | WikiText-2 | +0.0011 ± 0.0016 | 8x64 | -0.0037 ± 0.0019 | no fraction: the 1x16 gain is not significant |
+| MixFP4 (Zou et al.) | WikiText-2 | +0.0011 ± 0.0016 | 16x64 | -0.0031 ± 0.0019 | no fraction: the 1x16 gain is not significant |
+| MixFP4 (Zou et al.) | WikiText-2 | +0.0011 ± 0.0016 | 256x64 | -0.0045 ± 0.0019 | no fraction: the 1x16 gain is not significant |
+| MixFP4 (Zou et al.) | C4 | +0.0027 ± 0.0010 | 8x64 | -0.0015 ± 0.0011 | -54 % [-136, -12] |
+| MixFP4 (Zou et al.) | C4 | +0.0027 ± 0.0010 | 16x64 | -0.0016 ± 0.0012 | -58 % [-150, -12] |
+| MixFP4 (Zou et al.) | C4 | +0.0027 ± 0.0010 | 256x64 | -0.0015 ± 0.0012 | -53 % [-139, -9] |
+| MixFP4 (Zou et al.) + FourOverSix | WikiText-2 | +0.0019 ± 0.0015 | 8x64 | -0.0019 ± 0.0017 | -99 % [-576, -6] |
+| MixFP4 (Zou et al.) + FourOverSix | WikiText-2 | +0.0019 ± 0.0015 | 16x64 | -0.0023 ± 0.0017 | -118 % [-662, -17] |
+| MixFP4 (Zou et al.) + FourOverSix | WikiText-2 | +0.0019 ± 0.0015 | 256x64 | -0.0029 ± 0.0017 | -150 % [-777, -42] |
+| MixFP4 (Zou et al.) + FourOverSix | C4 | +0.0025 ± 0.0010 | 8x64 | +0.0004 ± 0.0010 | 17 % [-31, 51] |
+| MixFP4 (Zou et al.) + FourOverSix | C4 | +0.0025 ± 0.0010 | 16x64 | +0.0007 ± 0.0010 | 28 % [-12, 62] |
+| MixFP4 (Zou et al.) + FourOverSix | C4 | +0.0025 ± 0.0010 | 256x64 | -0.0005 ± 0.0010 | -20 % [-82, 15] |
+
+### Mechanism: within-tile mixing of each rule's 1x16 choices
+
+Tiles whose 16-blocks disagree at 1x16 (some prefer E2M1, some the uniform grid), % of tiles; in brackets, the mean minority share inside those tiles, %.
+
+| rule | tile | all | q_proj | k_proj | v_proj | o_proj | gate_proj | up_proj | down_proj |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| IF4 (Cook et al.) | 8x64 | 100.0 (36.6) | — | — | — | 100.0 (36.5) | — | — | 100.0 (36.9) |
+| IF4 (Cook et al.) | 16x64 | 100.0 (37.1) | — | — | — | 100.0 (36.9) | — | — | 100.0 (37.4) |
+| IF4 (Cook et al.) | 256x64 | 100.0 (37.2) | — | — | — | 100.0 (37.0) | — | — | 100.0 (37.5) |
+| MixFP4 (Zou et al.) | 8x64 | 100.0 (36.5) | — | — | — | 100.0 (36.3) | — | — | 100.0 (36.7) |
+| MixFP4 (Zou et al.) | 16x64 | 100.0 (36.9) | — | — | — | 100.0 (36.7) | — | — | 100.0 (37.2) |
+| MixFP4 (Zou et al.) | 256x64 | 100.0 (37.0) | — | — | — | 100.0 (36.8) | — | — | 100.0 (37.3) |
+| MixFP4 (Zou et al.) + FourOverSix | 8x64 | 100.0 (42.1) | — | — | — | 100.0 (42.0) | — | — | 100.0 (42.2) |
+| MixFP4 (Zou et al.) + FourOverSix | 16x64 | 100.0 (43.8) | — | — | — | 100.0 (43.7) | — | — | 100.0 (44.0) |
+| MixFP4 (Zou et al.) + FourOverSix | 256x64 | 100.0 (45.5) | — | — | — | 100.0 (45.3) | — | — | 100.0 (45.8) |
+
+### Every policy: PPL; ΔNLL vs FourOverSix and vs NVFP4 (paper row); installed-weight squared error
+
+| policy | uniform share | PPL WikiText-2 | PPL C4 | ΔNLL vs FourOverSix, WikiText-2 | C4 | vs NVFP4, WikiText-2 | C4 | weight error vs FourOverSix | vs NVFP4 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| BF16 | — | 6.4615 | 10.3098 | -0.0307 ± 0.0020 | -0.0228 ± 0.0014 | -0.0362 ± 0.0026 | -0.0262 ± 0.0016 | -100.0 % | -100.0 % |
+| NVFP4 | — | 6.6998 | 10.5834 | +0.0056 ± 0.0017 | +0.0034 ± 0.0010 | +0.0000 ± 0.0000 | +0.0000 ± 0.0000 | +19.5 % | +0.0 % |
+| FourOverSix | — | 6.6627 | 10.5473 | +0.0000 ± 0.0000 | +0.0000 ± 0.0000 | -0.0056 ± 0.0017 | -0.0034 ± 0.0010 | +0.0 % | -16.4 % |
+| NVFP4 weights + FourOverSix act. | — | 6.6780 | 10.5618 | +0.0023 ± 0.0016 | +0.0014 ± 0.0009 | -0.0033 ± 0.0013 | -0.0020 ± 0.0007 | +19.6 % | +0.0 % |
+| NVFP4 weights (MixFP4 (Zou et al.) E2M1) + FourOverSix act. | — | 6.6839 | 10.5642 | +0.0032 ± 0.0015 | +0.0016 ± 0.0010 | -0.0024 ± 0.0014 | -0.0018 ± 0.0008 | +19.5 % | +0.0 % |
+| FlipQuant (ours) 8x64 | 1.57 % | 6.6115 | 10.4955 | -0.0077 ± 0.0014 | -0.0049 ± 0.0009 | -0.0133 ± 0.0019 | -0.0083 ± 0.0012 | -0.0 % | -16.4 % |
+| FlipQuant (ours) 16x64 | 2.16 % | 6.6118 | 10.5056 | -0.0077 ± 0.0015 | -0.0040 ± 0.0008 | -0.0132 ± 0.0020 | -0.0074 ± 0.0011 | -0.0 % | -16.4 % |
+| FlipQuant (ours) 256x64 | 6.35 % | 6.6293 | 10.5162 | -0.0050 ± 0.0015 | -0.0030 ± 0.0008 | -0.0106 ± 0.0020 | -0.0064 ± 0.0010 | -0.0 % | -16.4 % |
+| IF4 (Cook et al.) 1x16 | 62.84 % | 6.6451 | 10.5195 | -0.0026 ± 0.0017 | -0.0026 ± 0.0010 | -0.0082 ± 0.0018 | -0.0061 ± 0.0011 | -18.3 % | -31.6 % |
+| IF4 (Cook et al.) 8x64 | 94.35 % | 6.6692 | 10.5602 | +0.0010 ± 0.0018 | +0.0012 ± 0.0012 | -0.0046 ± 0.0019 | -0.0022 ± 0.0012 | -1.1 % | -17.3 % |
+| IF4 (Cook et al.) 16x64 | 98.34 % | 6.6656 | 10.5565 | +0.0004 ± 0.0019 | +0.0009 ± 0.0012 | -0.0051 ± 0.0021 | -0.0025 ± 0.0011 | -0.8 % | -17.0 % |
+| IF4 (Cook et al.) 256x64 | 99.65 % | 6.6721 | 10.5597 | +0.0014 ± 0.0019 | +0.0012 ± 0.0013 | -0.0041 ± 0.0021 | -0.0022 ± 0.0012 | -0.7 % | -16.9 % |
+| MixFP4 (Zou et al.) 1x16 | 63.01 % | 6.6551 | 10.5184 | -0.0011 ± 0.0016 | -0.0027 ± 0.0010 | -0.0067 ± 0.0018 | -0.0062 ± 0.0011 | -18.2 % | -31.5 % |
+| MixFP4 (Zou et al.) 8x64 | 94.50 % | 6.6872 | 10.5630 | +0.0037 ± 0.0019 | +0.0015 ± 0.0011 | -0.0019 ± 0.0021 | -0.0019 ± 0.0012 | -1.2 % | -17.3 % |
+| MixFP4 (Zou et al.) 16x64 | 98.39 % | 6.6830 | 10.5641 | +0.0031 ± 0.0019 | +0.0016 ± 0.0012 | -0.0025 ± 0.0021 | -0.0018 ± 0.0013 | -0.9 % | -17.1 % |
+| MixFP4 (Zou et al.) 256x64 | 99.65 % | 6.6930 | 10.5627 | +0.0045 ± 0.0019 | +0.0015 ± 0.0012 | -0.0010 ± 0.0022 | -0.0020 ± 0.0012 | -0.7 % | -17.0 % |
+| MixFP4 (Zou et al.) + FourOverSix 1x16 | 54.44 % | 6.6499 | 10.5211 | -0.0019 ± 0.0015 | -0.0025 ± 0.0010 | -0.0075 ± 0.0018 | -0.0059 ± 0.0012 | -20.7 % | -33.7 % |
+| MixFP4 (Zou et al.) + FourOverSix 8x64 | 54.67 % | 6.6753 | 10.5427 | +0.0019 ± 0.0017 | -0.0004 ± 0.0010 | -0.0037 ± 0.0020 | -0.0038 ± 0.0011 | -4.4 % | -20.1 % |
+| MixFP4 (Zou et al.) + FourOverSix 16x64 | 55.95 % | 6.6778 | 10.5399 | +0.0023 ± 0.0017 | -0.0007 ± 0.0010 | -0.0033 ± 0.0019 | -0.0041 ± 0.0011 | -3.3 % | -19.1 % |
+| MixFP4 (Zou et al.) + FourOverSix 256x64 | 68.59 % | 6.6819 | 10.5525 | +0.0029 ± 0.0017 | +0.0005 ± 0.0010 | -0.0027 ± 0.0021 | -0.0029 ± 0.0011 | -1.4 % | -17.5 % |
+
+### Uniform-format share of the weights by projection, %
+
+| policy | all | q_proj | k_proj | v_proj | o_proj | gate_proj | up_proj | down_proj |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| IF4 (Cook et al.) 1x16 | 62.84 | — | — | — | 63.01 | — | — | 62.54 |
+| IF4 (Cook et al.) 8x64 | 94.35 | — | — | — | 95.07 | — | — | 94.02 |
+| IF4 (Cook et al.) 16x64 | 98.34 | — | — | — | 98.82 | — | — | 98.22 |
+| IF4 (Cook et al.) 256x64 | 99.65 | — | — | — | 99.87 | — | — | 99.79 |
+| MixFP4 (Zou et al.) 1x16 | 63.01 | — | — | — | 63.23 | — | — | 62.74 |
+| MixFP4 (Zou et al.) 8x64 | 94.50 | — | — | — | 95.31 | — | — | 94.15 |
+| MixFP4 (Zou et al.) 16x64 | 98.39 | — | — | — | 98.90 | — | — | 98.26 |
+| MixFP4 (Zou et al.) 256x64 | 99.65 | — | — | — | 99.87 | — | — | 99.79 |
+| MixFP4 (Zou et al.) + FourOverSix 1x16 | 54.44 | — | — | — | 54.69 | — | — | 54.14 |
+| MixFP4 (Zou et al.) + FourOverSix 8x64 | 54.67 | — | — | — | 56.28 | — | — | 52.70 |
+| MixFP4 (Zou et al.) + FourOverSix 16x64 | 55.95 | — | — | — | 58.23 | — | — | 53.11 |
+| MixFP4 (Zou et al.) + FourOverSix 256x64 | 68.59 | — | — | — | 76.10 | — | — | 58.47 |
+| FlipQuant (ours) 8x64 | 1.57 | — | — | — | 1.89 | — | — | 1.54 |
+| FlipQuant (ours) 16x64 | 2.16 | — | — | — | 2.61 | — | — | 2.13 |
+| FlipQuant (ours) 256x64 | 6.35 | — | — | — | 7.68 | — | — | 6.48 |
+
+Blocks with a zero (underflowed) E4M3 scale, which become all-zero blocks: 0 in every arm.
+
+### Paper table (WikiText-2): `A_table_phi4_wiki.tex`
+
+```latex
+% Phi-4, WikiText-2 perplexity, fake (c) simulator (results/paper_extra/A). FlipQuant (ours) here is simulated (fake (c)) and so differs slightly from the native main-table numbers.
+\begin{tabular}{lcccc}
+\toprule
+Method & 1x16 & 8x64 & 16x64 & 256x64 \\
+\midrule
+IF4 (Cook et al.) & 6.65 & 6.67 & 6.67 & 6.67 \\
+MixFP4 (Zou et al.) & 6.66 & 6.69 & 6.68 & 6.69 \\
+MixFP4 (Zou et al.) + FourOverSix (our variant) & 6.65 & 6.68 & 6.68 & 6.68 \\
+FlipQuant (ours) & -- & 6.61 & 6.61 & 6.63 \\
+\midrule
+\multicolumn{5}{l}{\footnotesize Reference: NVFP4 6.70, NVFP4 weights + FourOverSix act. 6.68, FourOverSix 6.66, BF16 6.46} \\
+\bottomrule
+\end{tabular}
+```
+
+### Paper table (C4): `A_table_phi4_c4.tex`
+
+```latex
+% Phi-4, C4 perplexity, fake (c) simulator (results/paper_extra/A). FlipQuant (ours) here is simulated (fake (c)) and so differs slightly from the native main-table numbers.
+\begin{tabular}{lcccc}
+\toprule
+Method & 1x16 & 8x64 & 16x64 & 256x64 \\
+\midrule
+IF4 (Cook et al.) & 10.52 & 10.56 & 10.56 & 10.56 \\
+MixFP4 (Zou et al.) & 10.52 & 10.56 & 10.56 & 10.56 \\
+MixFP4 (Zou et al.) + FourOverSix (our variant) & 10.52 & 10.54 & 10.54 & 10.55 \\
+FlipQuant (ours) & -- & 10.50 & 10.51 & 10.52 \\
+\midrule
+\multicolumn{5}{l}{\footnotesize Reference: NVFP4 10.58, NVFP4 weights + FourOverSix act. 10.56, FourOverSix 10.55, BF16 10.31} \\
+\bottomrule
+\end{tabular}
+```
+
+Re-run references equal to the Parts 2-3 fake (c) records, window by window: {'bf16': True, 'nvfp4': True, 'fo6': True, 'tc-8x64': True, 'tc-16x64': True, 'tc-256x64': True}
+
