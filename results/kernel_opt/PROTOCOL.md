@@ -477,3 +477,64 @@ A′. The hashes and time are in
     The width is in parentheses.
   - With cold weights, small T is closer to memory-bound, so the registered M1″ may show less. These numbers are not
     results.
+
+## Amendment 4: re-tune the tile tables with the deviation-2 method
+
+Written 2026-09-30, after A′'s adoption (2b60b01) and before any GPU run of the re-tune. The hashes and time are in
+`registration_4.json`.
+
+The user approved it, relayed by the coordinator: "Tile-table re-tune with the deviation-2 method (cold, isolated), done
+identically for the mixed rows (also used by mixed256) and the stock rows, so the comparison stays fair. Gates: the
+width-equivalence tests. M1: full T list, 4 models, 16x64 and 256x64 vs stock_wA, new tables vs current tables.
+Report the cells whose width changed and their effect."
+
+**Why.**
+- The `mixed` and `stock` rows of `sm120/configs/<gpu>.json` date from the paper run (2026-09-28). They were measured
+  as CUPTI over back-to-back calls on L2-warm weights: 20 calls, one pass.
+- M1′ and M1″ (cold, isolated) show that the width choice matters at mid T.
+  - At T = 128 the table runs Llama/Mistral q, o and down (4096x4096, 4096x14336) at width 32 where stock runs 64.
+    These cells are +6.6 to +11 % vs stock, and they keep 256x64 at +3.6 % there after A′.
+  - At T = 512 it runs k and v at 32 where stock runs 64: +5 to +7.5 %.
+- The warm tuning's same-width gaps differ from M1's cold ones by up to 5× (e.g. +20 % vs +4 % in the same cell).
+- A family's widths are bitwise interchangeable (tests/test_select.py), so any table is output-neutral.
+
+**What changes.**
+- **`sm120/bench/tune_tiles.py`** gains backward-compatible `--rounds R` / `--iters I` (with `--cold`): R rotated rounds
+  × I isolated launches per width, taking the median of the per-round medians. The defaults (1, 20) are the earlier
+  `--cold`.
+- **One tuning run** (`--families mixed,stock --cold --rounds 3 --iters 30`) covers both families in the same process,
+  with the same method, the same shapes (every Linear shape of the four models) and the same buckets (1 … 8192).
+  - Builds: `SM120_BUILD_DIR` = `build_freq`. These are #2's builds, the 16x64 path; its stock builds have
+    `sm120/build`'s SASS (G1′).
+  - Mixed tags: the tuner's rule (per projection, the module with the most E0M3 tiles), from the paper artifacts' 16x64
+    maps. Those maps are byte-identical to the ones the current table used.
+  - Output: `results/kernel_opt/retune/tables/<gpu>.json`, plus the raw file with the per-round values. The tracked
+    table is unchanged until adoption.
+  - `mixed256` reads the `mixed` rows (`select.TABLE_FAMILY`), so it gets the new rows too.
+- **`check_model_logits.py`** gains `--before-table` / `--after-table` and `--unit fo6`, and records both sets' widths.
+- **New scripts:** `bench_ab_retune.py`, `abR_report.py`, `run_retune.sh`.
+
+**Gates** (a failure stops the re-tune):
+- **GW1:** `pytest sm120/tests/test_select.py` with `SM120_BUILD_DIR` = `build_freq`, and again with `build_A1`, all
+  passing. It checks that every family's widths are bitwise equal, and batch invariance.
+- **GW2:** `check_model_logits.py` on all 4 models × 5 shapes. The logits must be bitwise equal between the current and
+  the new table for:
+  - 16x64 on set:mixed (`build_freq`);
+  - 256x64 on set:mixed256 (`build_A1`);
+  - FourOverSix on set:stock (`sm120/build`).
+- **In M1‴:** every new-table call's output equals its current-table call's bitwise on the timed operands.
+
+**Measurement M1‴ (`bench_ab_retune.py`):** the deviation-2 method, all four models, every projection, tokens 1 … 8192
+(the 12 counts).
+- Configurations, each under the current and the new table:
+  - stock_wA;
+  - 16x64, typical and worst (set:mixed from `build_freq`);
+  - 256x64, typical and worst (set:mixed256 from `build_A1`).
+- Reported by `abR_report.py`:
+  - per unit, new vs current, as per-forward sums with the round ranges;
+  - 16x64 and 256x64 vs stock_wA, with both on the current table → both on the new table;
+  - every (projection, T) cell whose width changed, with its time change.
+- **Adoption** is proposed, not automatic: replace the tracked table's `mixed` and `stock` rows with the new ones if no
+  unit's per-forward sum regresses beyond its round range at any (model, T). The result is reported either way.
+
+**Before registration:** there was no GPU run of the re-tune.

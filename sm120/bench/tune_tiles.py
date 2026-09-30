@@ -23,6 +23,10 @@ kernel-opt additions:
   results/paper/PROTOCOL_GEMM_ISOLATED.md, instead of CUPTI over back-to-back calls on L2-warm weights.
 - --update: merge the timed families into the existing table and raw files; every other family's entries (and the
   top-level meta) are kept byte for byte; the new families' meta goes under meta['families'].
+- --rounds R / --iters I (kernel-opt re-tune, amendment 4): with --cold, every width is timed in each of R rounds, the
+  width order rotated between rounds, with I isolated launches per width and round; the value is the median over the
+  rounds of the per-round medians (R = 3, I = 30 is the deviation-2 method's repetition). The defaults (1, 20) are the
+  earlier --cold measurement. The per-round values go to the raw file under 'us_rounds'.
 """
 import argparse
 import datetime
@@ -93,6 +97,8 @@ def main():
     ap.add_argument('--families', default='mixed,stock')
     ap.add_argument('--cold', action='store_true', help='isolated launches on cold weights (see the docstring)')
     ap.add_argument('--update', action='store_true', help='merge into the existing table (see the docstring)')
+    ap.add_argument('--rounds', type=int, default=1, help='with --cold: rotated rounds per width (see the docstring)')
+    ap.add_argument('--iters', type=int, default=20, help='with --cold: isolated launches per width and round')
     ap.add_argument('--out-dir', default=str(S.TABLE_DIR))
     ap.add_argument('--allow-busy', action='store_true')
     args = ap.parse_args()
@@ -122,14 +128,17 @@ def main():
                 tags8[f'{n}x{k}'] = dict(model=model, proj=proj, source=source8, module=entry[1] if entry else None,
                                          e0m3_tiles=entry[2] if entry else 0,
                                          tiles=int(entry[0].numel()) if entry else -(-n // 8) * (k // 64))
+    if args.rounds > 1 and not args.cold:
+        raise SystemExit('--rounds needs --cold')
     table = {f: {} for f in fams}
     raw = {f: {} for f in fams}
+    raw_rounds = {f: {} for f in fams}
     for (n, k), mask in shapes.items():
         for t in S.BUCKETS:
             for f, ks in fams.items():
                 m, tb = {'mixed': (mask, (16, 64)), 'mixed_wB': (shapes8.get((n, k)), (8, 64))}.get(f, (None, None))
                 op = operands(n, k, t, m, tb if m is not None else None, seed=n + k + t)
-                times = {}
+                times, launches = {}, {}
                 for w, kern in ks.kernels.items():
                     if kern.weight_operand == 0:
                         launch = lambda wp, wsf, kern=kern: kern.gemm(wp, wsf, op['xp'], op['xsf'], n, t, k,  # noqa: E731
@@ -137,9 +146,18 @@ def main():
                     else:
                         launch = lambda wp, wsf, kern=kern: kern.gemm(op['xp'], op['xsf'], wp, wsf, t, n, k,  # noqa: E731
                                                                      scale_m=op['gsx'], scale_n_default=op['gsw'], check=False)
-                    if args.cold:
-                        times[w] = cold_us(launch, op['wp'], op['wsf'])
-                    else:
+                    launches[w] = launch
+                if args.cold:
+                    ws, per = list(launches), {}
+                    for r in range(args.rounds):
+                        shift = (r * len(ws) // args.rounds) % len(ws)
+                        for w in ws[shift:] + ws[:shift]:
+                            per.setdefault(w, []).append(cold_us(launches[w], op['wp'], op['wsf'], iters=args.iters))
+                    times = {w: statistics.median(per[w]) for w in ws}
+                    if args.rounds > 1:
+                        raw_rounds[f].setdefault(f'{n}x{k}', {})[str(t)] = {str(w): [round(v, 2) for v in per[w]] for w in ws}
+                else:
+                    for w, launch in launches.items():
                         fn = lambda launch=launch: launch(op['wp'], op['wsf'])  # noqa: E731
                         times[w] = sum(v['us'] for v in B.kernel_times(fn, iters=20).values())
                 best = min(times, key=times.get)
@@ -157,6 +175,9 @@ def main():
     if 'mixed_wB' in fams:
         meta['tags_mixed_wB'] = tags8
     meta['method'] = 'cold isolated launches (--cold)' if args.cold else 'CUPTI over back-to-back calls'
+    if args.cold and (args.rounds, args.iters) != (1, 20):
+        meta['method'] += (f', {args.rounds} rotated rounds x {args.iters} launches per width, the median of the '
+                           f'per-round medians')
     if args.update:
         old = json.loads((out / f'{slug}.json').read_text())
         old_raw = json.loads((out / f'{slug}.raw.json').read_text())
@@ -164,12 +185,15 @@ def main():
             old[f], old_raw['us'][f] = table[f], raw[f]
             old['meta'].setdefault('families', {})[f] = meta
             old_raw['meta'].setdefault('families', {})[f] = meta
+            if args.rounds > 1:
+                old_raw.setdefault('us_rounds', {})[f] = raw_rounds[f]
         (out / f'{slug}.json').write_text(json.dumps(old, indent=1, sort_keys=True) + '\n')
         (out / f'{slug}.raw.json').write_text(json.dumps(old_raw, indent=1, sort_keys=True) + '\n')
         print('updated', out / f'{slug}.json', 'families', list(fams))
         return
     (out / f'{slug}.json').write_text(json.dumps(dict(meta=meta, **table), indent=1, sort_keys=True) + '\n')
-    (out / f'{slug}.raw.json').write_text(json.dumps(dict(meta=meta, us=raw), indent=1, sort_keys=True) + '\n')
+    raw_file = dict(meta=meta, us=raw, **(dict(us_rounds=raw_rounds) if args.rounds > 1 else {}))
+    (out / f'{slug}.raw.json').write_text(json.dumps(raw_file, indent=1, sort_keys=True) + '\n')
     print('wrote', out / f'{slug}.json')
 
 
