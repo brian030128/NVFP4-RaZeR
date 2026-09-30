@@ -6,6 +6,9 @@ Diagnostics on branch kernel-opt, 2026-09-30; not registered measurements. No ke
 
 **Inputs:**
 - the paper run's TM-OPT+TC maps for Llama-3.1-8B, Mistral-7B-v0.3, Phi-4 and Qwen3.8-27B;
+  - **Correction (2026-09-30 18:10 UTC):** the first version expanded the 256x64 maps by 16 a second time, although the
+    map files already store them as 16-row granules. Its 256x64 rows used a distorted mask. The rows here are
+    recomputed; the conclusions are unchanged.
 - units 16x64, 256x64 (executed by n16k64_wA as 16-row granules) and 8x64 (the n8k64_wB family);
 - each kernel's granules, CTA weight panels, warp spans and per-(warp, k_tile) 4-bit dispatch patterns, as its TiledMma
   lays them out (script docstring).
@@ -21,7 +24,7 @@ Diagnostics on branch kernel-opt, 2026-09-30; not registered measurements. No ke
 | unit | E0M3 tiles | modules with no E0M3 tile | all-E2M1 CTA panels (map / best perm) | all-E2M1 warp spans (map / best perm) | (warp, k_tile) patterns: all-E2M1 / single-granule / 2+ granules / all-E0M3 | taken branches per (warp, k_tile) |
 |---|---:|---:|---:|---:|---:|---:|
 | 16x64 | 1.6–3.3 % | 0.0 % | 0.0–0.2 % / 13–26 % | 3.6–10.2 % / 13.5–26.4 % | 87.7–93.9 / 5.9–11.5 / 0.2–0.8 / 0.00 % | 0.06–0.13 |
-| 256x64 | 4.1–9.8 % | 0.0–0.5 % | 0.2–6.7 % (already clustered) | 0.2–6.7 % | 81.7–92.1 / 0.0 / 7.7–17.0 / 0.2–1.3 % | 0.16–0.39 |
+| 256x64 | 4.1–10.0 % | 0.0 % | 0.6–7.0 % (already clustered) | 0.6–7.0 % | 81.2–92.0 / 0.0 / 7.8–17.6 / 0.2–1.2 % | 0.16–0.40 |
 | 8x64 | 1.3–2.5 % | 0.0 % | 0.0–0.5 % / 20–32 % | 7.2–14.5 % / 20.7–32.6 % | 90.5–95.0 / 4.9–9.0 / 0.1–0.5 / 0.00 % | 0.05–0.10 |
 
 **Reading:**
@@ -29,7 +32,7 @@ Diagnostics on branch kernel-opt, 2026-09-30; not registered measurements. No ke
   density (e.g. Llama 16x64: 88.9 % vs 88.8 % all-E2M1 k_tiles). No panel over the full K is clean.
 - **256x64 maps are clustered by construction.** A 256-row tile covers both granules of a warp, so only patterns 0, 5,
   10 and 15 occur.
-- **All-E0M3 per-(warp, k_tile) patterns are practically absent:** 0.00 % at 16x64 and 8x64, 0.2–1.3 % at 256x64.
+- **All-E0M3 per-(warp, k_tile) patterns are practically absent:** 0.00 % at 16x64 and 8x64, 0.2–1.2 % at 256x64.
 
 **Latency ceilings** (from the measured dispatch costs):
 - The fixed cost with every k_tile all-E2M1 is +2.0–2.6 % over the no-dispatch build (C2, C3, and e0m3/test_bc +2.5 %).
@@ -37,17 +40,17 @@ Diagnostics on branch kernel-opt, 2026-09-30; not registered measurements. No ke
 
 | skip level | work it could cover | ceiling |
 |---|---|---|
-| module (run a no-dispatch kernel) | ≤ 0.5 % of FLOPs | ≈ 0.01 % |
-| CTA panel over the full K | ≤ 0.5 % (16x64, 8x64), ≤ 6.7 % (256x64) | ≤ 0.2 % |
+| module (run a no-dispatch kernel) | 0.0 % of FLOPs | ≈ 0 |
+| CTA panel over the full K | ≤ 0.5 % (16x64, 8x64), ≤ 7.0 % (256x64) | ≤ 0.2 % |
 | the same after an output-channel permutation (needs an output gather) | 13–32 % | ≤ 0.8 %, minus the gather |
 | warp span over the full K | 4–15 % | ≤ 0.4 % |
 | per (warp, k_tile), i.e. today's granularity: a pattern-0 fast path | 82–95 % of k_tiles | up to about 2 % if the fixed cost is the tree's compares; less if it is the flag reads (to be measured by #2) |
-| fewer taken branches for the non-zero patterns | 5–18 % of k_tiles | ≤ 0.15 % (16x64, 8x64), ≤ 0.4 % (256x64) |
+| fewer taken branches for the non-zero patterns | 5–19 % of k_tiles | ≤ 0.15 % (16x64, 8x64), ≤ 0.4 % (256x64) |
 
 **So only the per-k_tile level can pay.** #2's design follows from the histogram:
 - test pattern 0 first (1 compare, fall-through);
 - then the existing tree unchanged, so every other pattern keeps its taken-branch count plus one jump.
-- A second test for all-E0M3 would add a compare to the 5–18 % non-zero patterns, to help 0–1.3 %, so it is not done.
+- A second test for all-E0M3 would add a compare to the 5–19 % non-zero patterns, to help 0–1.2 %, so it is not done.
 
 ## D4: where the 8x64 end-to-end excess goes (`experiments/kernel_opt/diag_e2e_split.py`, `d4_e2e_split_llama8b.json`)
 

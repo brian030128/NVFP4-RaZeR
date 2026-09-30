@@ -5,7 +5,8 @@
 
 For the FlipQuant (ours) TM-OPT+TC maps of the paper run (/home/dev/n16k64_campaign/paper/artifacts/<model>_tc_<unit>
 .mixfp4map; Llama-3.1-8B, Mistral-7B-v0.3, Phi-4, Qwen3.8-27B) at 16x64, 256x64 (executed as 16x64 granules by
-n16k64_wA: every 256x64 tile is 16 identical 16-row granules) and 8x64 (n8k64_wB family).
+n16k64_wA: every 256x64 tile is 16 identical 16-row granules; the map files store them that way) and 8x64 (n8k64_wB
+family).
 
 Granules and spans, as the kernels execute them (from their TiledMma; sm120/kernel/src/mixed_nvfp4_gemm.cu):
 - weights on A (n16k64_wA, 4x2 warps): a granule is 16 weight rows x 64 K. A CTA's weight panel is 128 rows (8 granule
@@ -158,8 +159,9 @@ def main():
             for mod in header['modules']:
                 mask = masks[mod['name']].numpy().astype(bool)
                 n, k = mod['weight_shape']
-                if unit == '256x64':                       # executed as 16-row granules: 16 per 256-row tile
-                    mask = np.repeat(mask, 16, axis=0)[:-(-n // 16)]
+                # the 256x64 maps are stored as 16x64 granules already (policy 'TM-OPT+TC 256x64 as 16x64 granules'):
+                # their masks need no expansion
+                assert mask.shape[0] == -(-n // tb[0]), (mod['name'], mask.shape, tb)
                 flops = n * k
                 density = float(mask.mean())
                 rand = rng.random(mask.shape) < density

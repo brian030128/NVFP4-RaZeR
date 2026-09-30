@@ -76,11 +76,12 @@ def read_module(art, meta, name):
                           m['e0m3_tiles'])
 
 
-def real_modules(model, unit='8x64'):
-    """[(label, PackedWeight)]: per distinct shape, the densest and the lower-median module of the TC artifact."""
+def real_modules(model, unit='8x64', tile=(8, 64)):
+    """[(label, PackedWeight)]: per distinct shape, the densest and the lower-median module of the TC artifact.
+    The artifacts store their tags at the executing kernel's granule (the 256x64 maps as 16x64 granules)."""
     art = ARTIFACTS / f'{model}_tc_{unit}'
     meta = json.loads((art / 'artifact.json').read_text())
-    assert tuple(meta['type_block']) == tuple(int(v) for v in unit.split('x')), meta['type_block']
+    assert tuple(meta['type_block']) == tuple(tile), (unit, meta['type_block'])
     by = collections.OrderedDict()
     for i, m in enumerate(meta['modules']):
         by.setdefault(tuple(m['shape']), []).append((m['e0m3_tiles'], i, m['name']))
@@ -179,7 +180,7 @@ def main():
     work, seen = [], set()
     for model in args.models.split(','):
         for unit in fam['units']:
-            real, wsha = real_modules(model, unit)
+            real, wsha = real_modules(model, unit, fam['tile'])
             res['artifacts'][f'{model} {unit}'] = dict(path=str(ARTIFACTS / f'{model}_tc_{unit}'), weights_sha256=wsha)
             for label, pw in real:
                 work.append((label, pw, True))

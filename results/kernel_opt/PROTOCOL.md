@@ -286,3 +286,18 @@ not named here applies unchanged.
   (scratch `quick_freq.py`). Outputs were bitwise equal.
 - freq vs default: all-E2M1 +0.5 % (the rounds overlap), real map −1.2 %, all-E0M3 +1.6 % (the added jump).
 - This suggests the fixed dispatch cost is not the tree's compares. M1′ and C2′ decide.
+
+**Deviation 1 to amendment 2 (2026-09-30 18:12 UTC): the weights-on-A bitwise gate failed on a script assertion.**
+- G4′ `--family wA` stopped 4 s after starting, before any comparison. `real_modules` asserted that the 256x64
+  artifacts declare a 256x64 granule, but they store their tags as 16x64 granules (policy "TM-OPT+TC 256x64 as 16x64
+  granules").
+- The assertion now checks the family's granule (16x64 for weights on A, 8x64 for weights on B). Nothing else in the
+  script changed.
+- The chain resumes at G4′ (`experiments/kernel_opt/run_opt2_resume.sh`). The gates already passed (G3′ self-tests,
+  G1′, G1′/G2′ SASS, G3′ pytest) stand.
+- **The same misreading affected the dispatch-skip ceiling analysis** (f2297dc): it expanded the 256x64 masks by 16 a
+  second time. Recomputed in `results/kernel_opt/dispatch` (correction noted there), the 256x64 figures quoted in this
+  amendment's "Why" change only slightly:
+  - all-E0M3 patterns are at most 1.2 % (not 1.3 %);
+  - non-zero patterns are 5–19 % (not 5–18 %).
+  - The design is unaffected.
