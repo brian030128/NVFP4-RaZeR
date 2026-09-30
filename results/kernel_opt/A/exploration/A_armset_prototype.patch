@@ -1,0 +1,956 @@
+diff --git a/experiments/kernel_opt/abA_report.py b/experiments/kernel_opt/abA_report.py
+new file mode 100644
+index 0000000..d4ff344
+--- /dev/null
++++ b/experiments/kernel_opt/abA_report.py
+@@ -0,0 +1,104 @@
++#!/usr/bin/env python3
++"""Kernel-opt amendment 4 (A) report: M1 per-forward GEMM sums and the C2 4096^3 breakdown.
++
++    python experiments/kernel_opt/abA_report.py [--src /home/dev/n16k64_campaign/kernel_opt/A] [--out-dir results/kernel_opt/A]
++
++M1: per model and T, the per-forward GEMM sum (sum over projections of modules x median time) of every configuration of
++bench_abA_isolated.py; the spread is the range over the 3 rounds of the same sum from each round's medians. Reported:
++A (after) vs today's path (before) per tag variant, and 16x64 vs stock_wA before -> after; that every call ran at the
++same width before and after. C2: c2_armset.py's medians and contrasts per mode.
++"""
++import argparse
++import json
++from pathlib import Path
++
++REPO = Path(__file__).resolve().parents[2]
++MODELS = ('llama8b', 'mistral7b', 'phi4', 'qwen27b')
++NAMES = dict(llama8b='Llama-3.1-8B', mistral7b='Mistral-7B-v0.3', phi4='Phi-4', qwen27b='Qwen3.8-27B')
++
++
++def pct(a, b):
++    return 100 * (a / b - 1)
++
++
++def sums(rec):
++    projs = rec['projections']
++    by = {(r['config'], r['proj'], r['tokens']): r for r in rec['rows']}
++    tokens = sorted({r['tokens'] for r in rec['rows']})
++    cfgs = sorted({r['config'] for r in rec['rows']})
++    nr = len(rec['rows'][0]['rounds'])
++    s, rr = {}, {}
++    for t in tokens:
++        for c in cfgs:
++            s[(c, t)] = sum(projs[p]['modules'] * by[(c, p, t)]['gemm_us'] for p in projs)
++            rr[(c, t)] = [sum(projs[p]['modules'] * by[(c, p, t)]['rounds'][i]['gemm_us'] for p in projs) for i in range(nr)]
++    widths_equal = all(by[(f'A_16x64_{v}', p, t)]['width'] == by[(f'mixed_16x64_{v}', p, t)]['width']
++                       for v in ('typical', 'worst') for p in projs for t in tokens)
++    return s, rr, tokens, widths_equal
++
++
++def main():
++    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
++    ap.add_argument('--src', type=Path, default=Path('/home/dev/n16k64_campaign/kernel_opt/A'))
++    ap.add_argument('--out-dir', type=Path, default=REPO / 'results' / 'kernel_opt' / 'A')
++    args = ap.parse_args()
++    md, data = [], dict(gemm={}, c2=None)
++    md.append("## M1: per-forward GEMM time of the 16x64 maps, A (arm subset) vs today's path, deviation-2 method\n")
++    for model in MODELS:
++        path = args.src / 'gemm' / f'{model}.json'
++        if not path.exists():
++            continue
++        rec = json.loads(path.read_text())
++        if rec.get('status') != 'complete':
++            md.append(f'{model}: {rec.get("status")}\n')
++            continue
++        s, rr, tokens, weq = sums(rec)
++        ok = all(c['equal'] for c in rec['checks']['bitwise'])
++        md.append(f"### {NAMES[model]}\n\nChecks: {len(rec['checks']['bitwise'])} bitwise ok={ok}, counts ok="
++                  f"{rec['checks']['counts_ok']}, other processes {len(rec['checks']['other_processes'])}; every call at "
++                  f"the same width before and after: {weq}.\n")
++        md.append('| T | after vs before, typical [rounds] | after vs before, worst | 16x64 vs stock_wA, typical: '
++                  'before → after | worst: before → after |')
++        md.append('|---|---|---|---|---|')
++        rows = []
++        for t in tokens:
++            row = dict(model=model, tokens=t)
++            for v in ('typical', 'worst'):
++                bb, aa = (f'mixed_16x64_{v}', t), (f'A_16x64_{v}', t)
++                row[f'{v}_after_vs_before_pct'] = pct(s[aa], s[bb])
++                per = [pct(x, y) for x, y in zip(rr[aa], rr[bb])]
++                row[f'{v}_after_vs_before_range'] = [min(per), max(per)]
++                row[f'{v}_before_vs_stock_wA_pct'] = pct(s[bb], s[('stock_wA', t)])
++                row[f'{v}_after_vs_stock_wA_pct'] = pct(s[aa], s[('stock_wA', t)])
++            rows.append(row)
++            lo, hi = row['typical_after_vs_before_range']
++            md.append(f"| {t} | {row['typical_after_vs_before_pct']:+.2f} % [{lo:+.2f}, {hi:+.2f}] | "
++                      f"{row['worst_after_vs_before_pct']:+.2f} % | {row['typical_before_vs_stock_wA_pct']:+.1f} → "
++                      f"{row['typical_after_vs_stock_wA_pct']:+.1f} % | {row['worst_before_vs_stock_wA_pct']:+.1f} → "
++                      f"{row['worst_after_vs_stock_wA_pct']:+.1f} % |")
++        md.append('')
++        data['gemm'][model] = dict(rows=rows, sums={f'{c}@{t}': v for (c, t), v in s.items()}, widths_equal=weq,
++                                   bitwise_ok=ok, sampler=rec.get('sampler'))
++    c2p = args.src / 'c2_armset.json'
++    if c2p.exists():
++        c2 = json.loads(c2p.read_text())
++        data['c2'] = c2
++        md.append("## C2: 4096³ breakdown (µs, medians of 3 rotated rounds)\n")
++        md.append(f"Checks: {c2['checks']}\n")
++        names = list(next(iter(c2['modes'].values())).keys())
++        md.append('| configuration | ' + ' | '.join(c2['modes']) + ' |')
++        md.append('|---|' + '---:|' * len(c2['modes']))
++        for nm in names:
++            md.append(f'| {nm} | ' + ' | '.join(f"{c2['modes'][m][nm]['us']:.1f}" for m in c2['modes']) + ' |')
++        md.append('')
++        for m, sm in c2.get('summary', {}).items():
++            md.append(f'- **{m}:** ' + '; '.join(f'{k} {v:+.2f} %' for k, v in sm.items()))
++        md.append('')
++    args.out_dir.mkdir(parents=True, exist_ok=True)
++    (args.out_dir / 'abA.json').write_text(json.dumps(data, indent=1) + '\n')
++    (args.out_dir / 'abA_tables.md').write_text('\n'.join(md) + '\n')
++    print('\n'.join(md))
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/experiments/kernel_opt/bench_abA_isolated.py b/experiments/kernel_opt/bench_abA_isolated.py
+new file mode 100644
+index 0000000..45f2024
+--- /dev/null
++++ b/experiments/kernel_opt/bench_abA_isolated.py
+@@ -0,0 +1,76 @@
++#!/usr/bin/env python3
++"""Kernel-opt amendment 4 (A, arm-subset dispatch for 16x64 maps), measurement M1: GEMM time, today's path vs A.
++
++    python experiments/kernel_opt/bench_abA_isolated.py --model llama8b --a-root DIR \
++        --artifact fo6=ART --artifact tc_16x64=ART --out JSON
++
++The deviation-2 method, exactly as bench_ab_isolated.py (whose run() this calls): isolated launches, cold weights by
++rotation + a 512 MiB read-flush, CUPTI, 3 rotated rounds x 30 repetitions, typical and worst tags, telemetry, the
++registered checks, and each after configuration's output bitwise equal to its before configuration's on the timed
++operands. Configurations (activation quantizer FourOverSix everywhere):
++  stock_wA                   FourOverSix on 'auto_stock' (sm120/build): the reference
++  mixed_16x64_{v}            TM-OPT+TC 16x64 on KernelSet('mixed') from sm120/build: today's path (before)
++  A_16x64_{v}                the same maps on KernelSet('mixedA') from --a-root: the arm-subset builds, with the
++                             'mixed' tile-table rows, so each call runs at the same width as before (after)
++"""
++import argparse
++import json
++import sys
++from collections import OrderedDict
++from pathlib import Path
++
++REPO = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(REPO / 'experiments' / 'kernel_opt'))
++sys.path.insert(0, str(REPO / 'experiments' / 'paper'))
++sys.path.insert(0, str(REPO / 'sm120'))
++sys.path.insert(0, str(REPO / 'sm120' / 'bench'))
++import bench_ab_isolated as AB  # noqa: E402
++import bench_gemm_isolated as G  # noqa: E402
++import common as B  # noqa: E402
++from mixfp4_sm120.select import KernelSet  # noqa: E402
++
++Q = 'four_over_six_rows'
++CONFIGS = OrderedDict(stock_wA=('fo6', 'first', 'stock', Q))
++for v in ('typical', 'worst'):
++    CONFIGS[f'mixed_16x64_{v}'] = ('tc_16x64', v, 'mixed', Q)
++    CONFIGS[f'A_16x64_{v}'] = ('tc_16x64', v, 'mixedA', Q)
++PAIRS = [(f'mixed_16x64_{v}', f'A_16x64_{v}') for v in ('typical', 'worst')]
++
++
++def main():
++    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
++    ap.add_argument('--model', required=True)
++    ap.add_argument('--artifact', action='append', required=True, metavar='KIND=DIR')
++    ap.add_argument('--a-root', required=True, help='build directory of the A builds')
++    ap.add_argument('--tokens', default=','.join(map(str, AB.TOKENS)))
++    ap.add_argument('--projections', default=None)
++    ap.add_argument('--configs', default=None)
++    ap.add_argument('--reps', type=int, default=30)
++    ap.add_argument('--warmup', type=int, default=3)
++    ap.add_argument('--rounds', type=int, default=3)
++    ap.add_argument('--flush-mib', type=int, default=512)
++    ap.add_argument('--out', type=Path, required=True)
++    args = ap.parse_args()
++    args.after_root = args.a_root
++    B.require_idle()
++    kernels = dict(stock=KernelSet('stock'), mixed=KernelSet('mixed'), mixedA=KernelSet('mixedA', build_root=args.a_root))
++    paper = REPO / 'sm120' / 'build'
++    for name, root in (('stock', paper), ('mixed', paper), ('mixedA', Path(args.a_root))):
++        assert all(Path(k.path).parent.parent == root for k in kernels[name].kernels.values()), name
++    for w, k in kernels['mixedA'].kernels.items():
++        assert 'MIXFP4_ARM_SET' in k.cfg.defines and tuple(k.type_block) == (16, 64), k.cfg.name
++    assert kernels['mixedA'].table == kernels['mixed'].table, "'mixedA' does not use the 'mixed' tile-table rows"
++    csv_path = Path(str(args.out) + '.telemetry.csv')
++    tel = G.Telemetry(csv_path)
++    try:
++        AB.run(args, tel, CONFIGS=CONFIGS, kernels=kernels, pairs=PAIRS)
++    finally:
++        tel.close()
++    res = json.loads(args.out.read_text())
++    res['sampler'] = G.Telemetry.summarize(csv_path)
++    res['suite'] = 'kernel-opt amendment 4 (A)'
++    B.write(args.out, res)
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/experiments/kernel_opt/c2_armset.py b/experiments/kernel_opt/c2_armset.py
+new file mode 100644
+index 0000000..27b023a
+--- /dev/null
++++ b/experiments/kernel_opt/c2_armset.py
+@@ -0,0 +1,163 @@
++#!/usr/bin/env python3
++"""Kernel-opt amendment 4 (A), measurement C2: the 4096^3 breakdown, today's n16k64_wA vs the arm-subset n16k64_wA_A.
++
++    python experiments/kernel_opt/c2_armset.py --a-root DIR --out JSON
++
++Operands as C2 (experiments/paper_extra/C2_time.py) and C2' (c2_freq.py): weights N(0, 0.02) seed 4096, 4096 tokens
++N(0, 1) FourOverSix per token. Tags (16x64 granules; pattern = the joint 4-bit (warp, k_tile) pattern, bit g + 2 kb):
++  e2m1   all E2M1: pattern 0 everywhere (the fixed cost)
++  p1     granule 0 E0M3 on k_block 0 only: pattern 1 everywhere (a dedicated single-granule arm)
++  p3     both granules E0M3 on k_block 0: pattern 3 everywhere (the fallback, unless the arm set has 3)
++  p5     granule 0 E0M3 on both k_blocks: pattern 5 everywhere (the fallback)
++  real   model.layers.0.self_attn.o_proj of the Llama-3.1-8B TC 16x64 map
++  e0m3   all E0M3: pattern 15 everywhere
++Configurations (GEMM only, the 128-wide builds):
++  stock_wA, nodisp                  C2's references (sm120/build)
++  default_{tag}                     n16k64_wA from sm120/build: today's path (16 arms)
++  A_{tag}                           n16k64_wA_A from --a-root (the arm subset plus one exact fallback), the same weights
++Modes, one after the other (as c2_freq.py): b2b (C2's method: CUPTI over 20 back-to-back calls), isolated (15 single
++calls after a 50 ms idle gap each, CUPTI), sustained (back-to-back for 2 s, CUDA events over the last half, NVML); 3
++rotated rounds each, the median of the per-round medians.
++Check before timing: every A configuration's output equals its default's bitwise.
++"""
++import argparse
++import statistics
++import sys
++import time
++from pathlib import Path
++
++import torch
++from torch.profiler import ProfilerActivity, profile
++
++REPO = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(REPO / 'experiments' / 'kernel_opt'))
++sys.path.insert(0, str(REPO / 'sm120'))
++sys.path.insert(0, str(REPO / 'sm120' / 'bench'))
++import common as B  # noqa: E402
++from c2_freq import Sampler, gemm_times  # noqa: E402
++from kernel import place  # noqa: E402
++from mixfp4_sm120 import mapio  # noqa: E402
++from mixfp4_sm120 import numerics as N  # noqa: E402
++from mixfp4_sm120.lib import Kernel  # noqa: E402
++
++LAYER = 'model.layers.0.self_attn.o_proj'
++MAP = Path('/home/dev/n16k64_campaign/paper/artifacts/llama8b_tc_16x64.mixfp4map')
++TAGS = ('e2m1', 'p1', 'p3', 'p5', 'real', 'e0m3')
++
++
++def main():
++    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
++    ap.add_argument('--a-root', required=True)
++    ap.add_argument('--rounds', type=int, default=3)
++    ap.add_argument('--out', type=Path, required=True)
++    args = ap.parse_args()
++    B.require_idle()
++    n = k = t = 4096
++    g = torch.Generator('cpu').manual_seed(4096)
++    w = (torch.randn(n, k, generator=g) * 0.02).cuda().bfloat16()
++    x = torch.randn(t, k, generator=g).cuda().bfloat16()
++    xn, xsb, gsx = N.quantize_act(x, 'four_over_six_rows')
++    xp, xsf = N.pack_nibbles(xn), place(xsb, k)
++    header, masks, _ = mapio.read_map(MAP)
++    assert tuple(header['type_block']) == (16, 64), header['type_block']
++    grid = (n // 16, k // 64)
++    real = masks[LAYER]
++    assert tuple(real.shape) == grid
++    blk = torch.arange(grid[0])[:, None] % 8           # 16-row block in its 128-row panel: warp w owns blocks w, w + 4
++    kbl = torch.arange(grid[1])[None, :] % 2           # k_block in its k_tile
++
++    def wt(kind, mask=None):
++        wn, wsb, gsw = N.quantize_weight(w, kind, mask, (16, 64) if mask is not None else None)
++        return N.pack_nibbles(wn), place(wsb, k), float(gsw)
++    K = dict(stock_wA=Kernel.load('stock_wA'), nodisp=Kernel.load('n16k64_wA_nodisp'), default=Kernel.load('n16k64_wA'),
++             A=Kernel.load('n16k64_wA_A', build_root=args.a_root))
++    paper = REPO / 'sm120' / 'build'
++    for kk in ('stock_wA', 'nodisp', 'default'):
++        assert Path(K[kk].path).parent.parent == paper, K[kk].path
++    assert 'MIXFP4_ARM_SET' in K['A'].cfg.defines and tuple(K['A'].type_block) == (16, 64)
++    maps = dict(e2m1=torch.zeros(grid, dtype=torch.bool), p1=((blk < 4) & (kbl == 0)).expand(grid).clone(),
++                p3=(kbl == 0).expand(grid).clone(), p5=(blk < 4).expand(grid).clone(), real=real,
++                e0m3=torch.ones(grid, dtype=torch.bool))
++    tags = {tg: wt('map', m) for tg, m in maps.items()}
++    cfgs = [('stock_wA', 'stock_wA', wt('nvfp4')), ('nodisp', 'nodisp', wt('four_over_six'))]
++    for tg in TAGS:
++        cfgs += [(f'default_{tg}', 'default', tags[tg]), (f'A_{tg}', 'A', tags[tg])]
++
++    def call(kk, wts):
++        wp, wsf, gsw = wts
++        kern = K[kk]
++        return lambda: kern.gemm(wp, wsf, xp, xsf, n, t, k, scale_m_default=gsw, scale_n=gsx, check=False)
++    calls = {name: call(kk, wts) for name, kk, wts in cfgs}
++    res = dict(protocol="results/kernel_opt/PROTOCOL.md, amendment 4 (A, C2)", gpu=B.gpu_info(), size=4096,
++               arm_set=K['A'].cfg.defines['MIXFP4_ARM_SET'],
++               real_map=dict(file=str(MAP), layer=LAYER, e0m3_granules=int(real.sum()), granules=real.numel()),
++               kernels={kk: dict(sha256=v.sha256, root=str(Path(v.path).parent.parent)) for kk, v in K.items()},
++               checks={}, modes={})
++    for tg in TAGS:
++        ya, yb = calls[f'default_{tg}'](), calls[f'A_{tg}']()
++        torch.cuda.synchronize()
++        ok = bool(torch.equal(ya.view(torch.int16), yb.view(torch.int16)))
++        res['checks'][f'A_{tg} == default_{tg}'] = ok
++        if not ok:
++            B.write(args.out, res)
++            raise SystemExit(f'A_{tg} differs from default_{tg}')
++    names = [c[0] for c in cfgs]
++    for mode in ('b2b', 'isolated', 'sustained'):
++        per = {nm: [] for nm in names}
++        tel = {nm: [] for nm in names}
++        for r in range(args.rounds):
++            shift = (r * len(names) // args.rounds) % len(names)
++            for nm in names[shift:] + names[:shift]:
++                fn = calls[nm]
++                fn()
++                torch.cuda.synchronize()
++                if mode == 'b2b':
++                    with profile(activities=[ProfilerActivity.CUDA]) as prof:
++                        for _ in range(20):
++                            fn()
++                        torch.cuda.synchronize()
++                    per[nm].append(statistics.median(gemm_times(prof)))
++                elif mode == 'isolated':
++                    iso = []
++                    for _ in range(15):
++                        time.sleep(0.05)
++                        with profile(activities=[ProfilerActivity.CUDA]) as prof:
++                            fn()
++                            torch.cuda.synchronize()
++                        iso += gemm_times(prof)
++                    per[nm].append(statistics.median(iso))
++                else:
++                    evs = []
++                    with Sampler() as smp:
++                        t0 = time.time()
++                        half, end = t0 + 1.0, t0 + 2.0
++                        while time.time() < end:
++                            e0_, e1_ = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
++                            e0_.record()
++                            fn()
++                            e1_.record()
++                            evs.append((time.time(), e0_, e1_))
++                            if len(evs) % 64 == 0:
++                                torch.cuda.synchronize()
++                        torch.cuda.synchronize()
++                    per[nm].append(statistics.median(a.elapsed_time(b) * 1e3 for (tt, a, b) in evs if tt >= half))
++                    tel[nm].append(smp.summary(half))
++                print(f'{mode} r{r} {nm:14s} {per[nm][-1]:8.1f} us', flush=True)
++        res['modes'][mode] = {nm: dict(us=statistics.median(per[nm]), rounds=per[nm], telemetry=tel[nm]) for nm in names}
++        B.write(args.out, res)
++    summ = {}
++    for mode, d in res['modes'].items():
++        u = {nm: v['us'] for nm, v in d.items()}
++        summ[mode] = {**{f'A vs default, {tg}': 100 * (u[f'A_{tg}'] / u[f'default_{tg}'] - 1) for tg in TAGS},
++                      **{f'{kk}_{tg} vs nodisp': 100 * (u[f'{kk}_{tg}'] / u['nodisp'] - 1) for kk in ('default', 'A') for tg in TAGS},
++                      **{f'{kk}_{tg} vs stock_wA': 100 * (u[f'{kk}_{tg}'] / u['stock_wA'] - 1) for kk in ('default', 'A') for tg in TAGS},
++                      'nodisp vs stock_wA': 100 * (u['nodisp'] / u['stock_wA'] - 1)}
++    res['summary'] = summ
++    res['status'] = 'complete'
++    B.write(args.out, res)
++    for mode, s in summ.items():
++        print(mode, ' '.join(f'{k_}={v:+.2f}%' for k_, v in s.items() if 'A vs default' in k_))
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/experiments/kernel_opt/run_A.sh b/experiments/kernel_opt/run_A.sh
+new file mode 100644
+index 0000000..a217707
+--- /dev/null
++++ b/experiments/kernel_opt/run_A.sh
+@@ -0,0 +1,36 @@
++#!/bin/bash
++# kernel-opt amendment 4 (A): gates G3, G1/G2, pytest, G4, G5, then M1 and C2 (results/kernel_opt/PROTOCOL.md); stops at the
++# first failure. build_A holds `build.py --all` from the A sources (CPU, before registration).
++set -e
++cd /home/dev/NVFP4-RaZeR
++unset SM120_BUILD_DIR PYTORCH_CUDA_ALLOC_CONF
++export CUDA_HOME=/home/dev/.conda/envs/mixfp4-cuda131 HF_HOME=/home/dev/.cache/huggingface HF_HUB_OFFLINE=1 \
++       PYTHONPATH=/home/dev/NVFP4-RaZeR/sm120:/home/dev/NVFP4-RaZeR PYTHONDONTWRITEBYTECODE=1
++PY=/home/dev/.conda/envs/n16k64/bin/python
++KO=/home/dev/n16k64_campaign/kernel_opt
++BA=$KO/build_A
++OUT=$KO/A
++R=results/kernel_opt/A
++A=/home/dev/n16k64_campaign/paper/artifacts
++NEW=n16k64_wA_A,n16k64_wA_A_n64,n16k64_wA_A_n32,n16k64_wA_A_n16
++mkdir -p $R $OUT/logs $OUT/gemm
++log() { echo "$(date -u +%Y-%m-%dT%H:%M:%S+00:00) $*" >> $OUT/commands.log; }
++step() { local name=$1; shift; log "START $name"; set +e; "$@" > $OUT/logs/$name.log 2>&1; local rc=$?; set -e; log "END $name rc=$rc"; [ $rc -eq 0 ] || { log "STOP: $name failed"; exit 1; }; }
++log "BEGIN A gates and measurements at $(git rev-parse HEAD)"
++step G3_selftest env SM120_BUILD_DIR=$BA $PY sm120/build.py --selftest \
++     --config n16k64_wA_A --config n16k64_wA_A_n64 --config n16k64_wA_A_n32 --config n16k64_wA_A_n16
++step G1_G2_sass $PY experiments/kernel_opt/check_sass.py --after-root $BA --tmopt-root $KO/build_tmopt --new $NEW \
++     --before-roots $KO/build,$KO/build_e0m3,$KO/build_A1 --out $R/g1_g2_sass.json
++step G3_pytest env SM120_BUILD_DIR=$BA SM120_REF_BUILD_DIR=/home/dev/NVFP4-RaZeR/sm120/build $PY -m pytest \
++     sm120/tests/test_gemm.py sm120/tests/test_select.py sm120/tests/test_g32.py -rs -p no:cacheprovider -v
++step G4_bitwise_A $PY experiments/kernel_opt/check_bitwise.py --family wA --build-root $BA --candidates $NEW \
++     --set mixedA --out $R/g4_bitwise_A.json
++step G5_logits_16x64 $PY experiments/kernel_opt/check_model_logits.py --unit 16x64 --before set:mixed --after set:mixedA \
++     --after-root $BA --out $R/g5_logits_16x64.json
++log "GATES PASSED"
++for m in llama8b mistral7b phi4 qwen27b; do
++  step M1_$m $PY experiments/kernel_opt/bench_abA_isolated.py --model $m --a-root $BA \
++       --artifact fo6=$A/${m}_fo6 --artifact tc_16x64=$A/${m}_tc_16x64 --out $OUT/gemm/$m.json
++done
++step C2_armset $PY experiments/kernel_opt/c2_armset.py --a-root $BA --out $OUT/c2_armset.json
++log "DONE A gates and measurements"
+diff --git a/sm120/build.py b/sm120/build.py
+index 93bea41..274d8b0 100644
+--- a/sm120/build.py
++++ b/sm120/build.py
+@@ -174,6 +174,15 @@ def resource_usage(cuobjdump, binary):
+     return kernels
+ 
+ 
++def expect_sites(cfg):
++    """Patcher arguments for a configuration whose sites are unbalanced by design (kernel-opt A, MIXFP4_ARM_SET): the
++    exact expected census replaces the patcher's equal-counts check. Balanced configurations keep the upstream call."""
++    exp = cfg.expected_census
++    if exp is None or len(set(exp.values())) == 1:
++        return []
++    return ['--expect-sites', ','.join(f'{k}={v}' for k, v in sorted(exp.items()))]
++
++
+ def patch(cfg, tc, lib):
+     unpatched = Path(f'{lib}.unpatched')
+     if not cfg.patch:
+@@ -182,7 +191,8 @@ def patch(cfg, tc, lib):
+             raise BuildError(f'{cfg.name}: a mixed configuration with a format granule must be patched')
+         shutil.copy2(unpatched, lib)
+         return dict(patched=False, census_unpatched=pre, census_patched=pre, patcher_log='')
+-    log = run([sys.executable, PATCHER, '--cuobjdump', tc['cuobjdump'], '--allow-missing-sites', unpatched, lib])
++    log = run([sys.executable, PATCHER, '--cuobjdump', tc['cuobjdump'], '--allow-missing-sites', *expect_sites(cfg),
++               unpatched, lib])
+     m = re.search(r'per-site counts: (.*)', log)
+     if not m:
+         raise BuildError(f'patcher reported no census:\n{log}')
+@@ -313,7 +323,8 @@ def run_selftest(cfg, tc, out):
+            KERNEL / 'src' / 'mixed_nvfp4_gemm.cu', '-o', f'{exe}.unpatched',
+            '-lcudadevrt', '-lcudart_static', '-lrt', '-lpthread', '-ldl', '-lgomp']
+     run(cmd)
+-    plog = run([sys.executable, PATCHER, '--cuobjdump', tc['cuobjdump'], '--allow-missing-sites', f'{exe}.unpatched', exe])
++    plog = run([sys.executable, PATCHER, '--cuobjdump', tc['cuobjdump'], '--allow-missing-sites', *expect_sites(cfg),
++                f'{exe}.unpatched', exe])
+     m = re.search(r'per-site counts: (.*)', plog)
+     exe_sites = {int(k): int(v) for k, v in re.findall(r'site (\d+)=(\d+)', m.group(1))} if m else None
+     tag = 'randa' if cfg.weight_operand == 0 else 'randb'
+diff --git a/sm120/kernel/LOCAL_CHANGES.md b/sm120/kernel/LOCAL_CHANGES.md
+index d94e4a3..a333fc1 100644
+--- a/sm120/kernel/LOCAL_CHANGES.md
++++ b/sm120/kernel/LOCAL_CHANGES.md
+@@ -2,9 +2,9 @@
+ 
+ Upstream: `https://github.com/brian030128/mixfp4` at `7b3ab34ebc4a31b396a27fa6aea3650259714cf9`
+ (the content of `mixfp4-main.zip`). `VENDORED.json` lists the upstream SHA-256 of every vendored
+-file *before* modification. Two files are modified, `src/mixed_nvfp4_gemm.cu` and (since the
+-`kernel-opt` branch) `src/collective/sm120_blockscaled_mma_tma_mixed.hpp`; the exact diff of both is
+-`LOCAL_CHANGES.patch`. Every change is a compile-time hook that is inactive unless its macro is
++file *before* modification. Three files are modified, `src/mixed_nvfp4_gemm.cu`, (since the
++`kernel-opt` branch) `src/collective/sm120_blockscaled_mma_tma_mixed.hpp` and (since kernel-opt A)
++`scripts/patch_mixed_nvfp4_gemm.py`; the exact diff of all three is `LOCAL_CHANGES.patch`. Every change is a compile-time hook that is inactive unless its macro is
+ defined (or, for the collective, unless the CTA tile's M is below 128, which no upstream build
+ uses), so a build without them is the upstream kernel (the upstream self-test driver built by
+ `sm120/build.py --selftest` is compiled from this file with the hooks off). Every existing
+@@ -21,10 +21,12 @@ configuration rebuilt from the kernel-opt sources has the same patched and unpat
+ | `MIXFP4_PINGPONG=1` (kernel-opt) | CUTLASS's ping-pong kernel schedule (4 MMA warps, two consumer warp groups on alternating tiles) instead of the builder's default cooperative one (8 MMA warps) | the cooperative kernel static_asserts a CTA tile M >= 128, so the narrow-M builds need ping-pong, with a 4-warp arrangement (`MIXFP4_ATOM_M * MIXFP4_ATOM_N == 4`; the narrow builds use 1x4 and a 64-wide N tile, which keeps n8k64_wB's per-warp dispatch of 2 n-atoms x 2 k-blocks). |
+ | `MIXFP4_DISPATCH_FREQ=1` (kernel-opt #2) | in the collective's `dispatch_pattern`: test the all-E2M1 pattern (0) first -- one compare, its arm on the fall-through path -- and only otherwise enter the unchanged tree | 82-95 % of the paper maps' (warp, k_tile) patterns are 0 (`results/kernel_opt/dispatch`), which the balanced tree charges log2(arms) compares. Every arm computes exactly as before (gates G1'-G5', results/kernel_opt/PROTOCOL.md amendment 2). Unset, the dispatch is the upstream one (identical SASS). Built with `build.py --define MIXFP4_DISPATCH_FREQ=1` into a separate build directory. |
+ | `MIXFP4_ARM_XOR=<mask>` (kernel-opt, diagnostic only) | in the collective's `dispatch_pattern`: the arm tree is searched on `pattern ^ mask` and the leaf at position L runs pattern L ^ mask's arm | the E0M3 investigation's test B (`results/kernel_opt/e0m3/`): with mask 15 the all-E0M3 arm gets the all-fall-through path that the all-E2M1 arm has by default, to see whether E0M3's cost follows the code position. Every arm computes exactly as before. Unset (0), the dispatch is the upstream one (identical SASS). Used only by the never-deployed `*_xor` builds. |
++| `MIXFP4_ARM_SET=<mask>` (kernel-opt A) | in the collective's pipelined joint-K-A mainloop (`MIXFP4_PIPE_FLAGS`): only the joint patterns whose bit is set get a specialized k_tile arm -- pattern 0 tested first (one compare, the fall-through path), then membership (one shift and test), then a tree over the other members -- and every other pattern runs ONE exact fallback arm that dispatches each k_block on its own flags among the same per-k_block blobs (a `bar.warp.sync` in each k_block arm keeps ptxas from if-converting them into predicated OMMAs, which the build rejects) | in the 16x64 maps patterns 0, 1, 2, 4 and 8 are 99.2-99.8 % of all (warp, k_tile)s, so 11 of the 16 arms are code the kernel almost never runs. Every MMA keeps its format, operands and order (bitwise equal; gates of kernel-opt A). Unset, the dispatch is the upstream one (identical SASS). |
++| patcher `--expect-sites` (kernel-opt A) | `scripts/patch_mixed_nvfp4_gemm.py`: an optional exact per-site OMMA census that replaces the check that all present sites have equal counts | an arm subset's sites are unbalanced by design (e.g. {0: 384, 1: 192} for arms 0/1/2/4/8 plus the fallback), so the invariant becomes exact equality with the census the configuration derives from its arm set (`configs.py` `expected_census`). `sm120/build.py` passes it only for such configurations; every other build's patcher call is the upstream one. |
+ | collective, narrow M (kernel-opt) | in `sm120_blockscaled_mma_tma_mixed.hpp`, only when the CTA tile's M < 128: the SFA smem tile and TMA box cover the whole 128-row scale-factor block (`TileShapeSFA`), the producer loads the block that holds the CTA's rows (`broadcast_m`), and the consumer reads its M sub-tile (`m % (128/M)`) | the mirror of the collective's existing narrow-N handling of SFB (`TileShapeSFB`, `broadcast_n`): the scale-factor layout's indivisible unit is a 128-row block. For M >= 128 every type is the upstream one (identical SASS, gate G1). |
+ 
+ The mainloop collective (`src/collective/*`) is modified only by the narrow-M path, the pattern-0-first
+-dispatch option and the diagnostic arm permutation above; the MMA atom, the blob/PTX generators and the
+-SASS patcher are unmodified. `sm120/build.py` runs `scripts/gen_mixed_mma_blob.py` from a copy in the build
++dispatch option, the arm-subset option and the diagnostic arm permutation above, and the SASS patcher only by
++`--expect-sites`; the MMA atom and the blob/PTX generators are unmodified. `sm120/build.py` runs `scripts/gen_mixed_mma_blob.py` from a copy in the build
+ directory, so the generated header never overwrites `src/collective/mixed_mma_blob_generated.hpp`
+ (which is kept as the upstream committed default and is shadowed by include order).
+diff --git a/sm120/kernel/LOCAL_CHANGES.patch b/sm120/kernel/LOCAL_CHANGES.patch
+index 4d789d9..0b4a3bd 100644
+--- a/sm120/kernel/LOCAL_CHANGES.patch
++++ b/sm120/kernel/LOCAL_CHANGES.patch
+@@ -170,7 +170,7 @@
+ +#endif  // !MIXFP4_NO_SELFTEST
+ --- upstream/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
+ +++ sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
+-@@ -184,15 +184,48 @@
++@@ -184,14 +184,98 @@
+  // barriers, so ptxas leaves these as real branches rather than if-converting them.
+  template <int Lo, int Hi, class Body>
+  CUTLASS_DEVICE void
+@@ -212,17 +212,67 @@
+ +  if constexpr (Lo == 0 && Hi > 0) {
+ +    if (pattern == 0u) { body(cute::C<0>{}); }
+ +    else               { dispatch_pattern_tree<Lo, Hi>(pattern, body); }
+-   }
+++  }
+ +  else {
+ +    dispatch_pattern_tree<Lo, Hi>(pattern, body);
+ +  }
+ +#else
+ +  dispatch_pattern_tree<Lo, Hi>(pattern, body);
+ +#endif
+++}
+++
+++// [NVFP4-RaZeR local hook, kernel-opt A; see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_ARM_SET=<mask>: only the patterns
+++// whose bit is set in <mask> get a specialized k_tile arm; every other pattern runs ONE exact fallback arm, which
+++// dispatches each k_block on that k_block's own flags among the same per-k_block blobs. So every MMA keeps its format,
+++// its operands and its accumulator order. Pattern 0 (all-E2M1) must be in the set and is tested first (one compare, the
+++// fall-through path); a non-zero pattern is then tested for membership (one shift and test) and found among the other
+++// members by a balanced tree. Unset, the dispatch is the upstream one (dispatch_pattern).
+++template <uint32_t kSet>
+++constexpr int arm_set_count() {
+++  int n = 0;
+++  for (int p = 0; p < 32; ++p) { n += int((kSet >> p) & 1u); }
+++  return n;
+++}
+++template <uint32_t kSet, int N>
+++constexpr int arm_set_member() {              // the N-th member (ascending) of kSet
+++  int n = 0;
+++  for (int p = 0; p < 32; ++p) {
+++    if ((kSet >> p) & 1u) { if (n == N) { return p; } ++n; }
+++  }
+++  return -1;
+++}
+++template <uint32_t kSet, int I, int J, class Body>
+++CUTLASS_DEVICE void
+++dispatch_arm_members(uint32_t pattern, Body&& body) {   // pattern is known to be one of members I..J
+++  if constexpr (I == J) {
+++    body(cute::C<arm_set_member<kSet, I>()>{});
+++  }
+++  else {
+++    constexpr int M = I + (J - I) / 2;
+++    if (pattern <= uint32_t(arm_set_member<kSet, M>())) { dispatch_arm_members<kSet, I, M>(pattern, body); }
+++    else                                                { dispatch_arm_members<kSet, M + 1, J>(pattern, body); }
+++  }
+++}
+++template <uint32_t kSet, class Body, class Fallback>
+++CUTLASS_DEVICE void
+++dispatch_arm_set(uint32_t pattern, Body&& body, Fallback&& fallback) {
+++  static_assert((kSet & 1u) != 0u, "MIXFP4_ARM_SET must give pattern 0 (all-E2M1) an arm");
+++  constexpr uint32_t kRest = kSet & ~1u;
+++  if (pattern == 0u) {
+++    body(cute::C<0>{});
+++  }
+++  else {
+++    if constexpr (kRest != 0u) {
+++      if ((kRest >> pattern) & 1u) { dispatch_arm_members<kRest, 0, arm_set_count<kRest>() - 1>(pattern, body); }
+++      else                         { fallback(pattern); }
+++    }
+++    else {
+++      fallback(pattern);
+++    }
++   }
+  }
+  
+- // Pattern bit layout: A granule flags occupy bits [0, AGranules), B granule flags follow in
+-@@ -349,11 +382,27 @@
++@@ -349,11 +433,27 @@
+  
+    // SmemLayoutAtomSFA and SmemLayoutAtomSFB are for whole CTA tiles. We add the number of pipeline stages here.
+    // The number of pipeline stages is the same as the number of pipeline stages from AB Load <-> MainLoop
+@@ -251,7 +301,7 @@
+    using SmemLayoutSFB_ = decltype(make_layout(
+      append(shape(SmemLayoutAtomSFB{}), Int<DispatchPolicy::Stages>{}),
+      append(stride(SmemLayoutAtomSFB{}), size(filter_zeros(SmemLayoutAtomSFB{})))
+-@@ -466,7 +515,7 @@
++@@ -466,7 +566,7 @@
+          GmemTiledCopySFA{},
+          make_tensor(static_cast<ElementSF const*>(nullptr), LayoutSFA{}),
+          SmemLayoutSFA{}(_,_,cute::Int<0>{}),
+@@ -260,7 +310,7 @@
+          _1{}));  // No programmatic multicast
+  
+  
+-@@ -527,7 +576,7 @@
++@@ -527,7 +627,7 @@
+          GmemTiledCopySFA{},
+          tensor_sfa,
+          SmemLayoutSFA{}(_,_,cute::Int<0>{}),
+@@ -269,7 +319,7 @@
+          _1{}); // No programmatic multicast
+  
+      typename Params::TMA_SFB tma_load_sfb = make_tma_copy<uint16_t>(
+-@@ -800,7 +849,20 @@
++@@ -800,7 +900,20 @@
+          make_stride(_0{}, size<1>(TileShapeSFB{}) / size<1>(TileShape{})));
+        Tensor gA =   gA_mkl(_,_,m_coord,_,l_coord);                                                    // (BLK_M,BLK_K,k)
+        Tensor gB =   gB_nkl(_,_,n_coord,_,l_coord);                                                    // (BLK_N,BLK_K,k)
+@@ -291,7 +341,7 @@
+        Tensor gSFB = gSFB_nkl(_,_,broadcast_n(n_coord),_,l_coord);                                     // (BLK_N,BLK_K,k)
+  
+        // Partition source and destination tensors for tma copies
+-@@ -884,7 +946,17 @@
++@@ -884,7 +997,17 @@
+  
+      Tensor sA = make_tensor(make_smem_ptr(shared_tensors.smem_A.begin()), SmemLayoutA{});         // (BLK_M,BLK_K,PIPE)
+      Tensor sB = make_tensor(make_smem_ptr(shared_tensors.smem_B.begin()), SmemLayoutB{});         // (BLK_N,BLK_K,PIPE)
+@@ -310,3 +360,123 @@
+      Tensor sSFB = [&]() {
+        if constexpr (size<1>(TileShape{}) >= 128) {
+          return make_tensor(make_smem_ptr(shared_tensors.smem_SFB.begin()), SmemLayoutSFB{});  // (BLK_N,BLK_K,PIPE)
++@@ -1679,6 +1802,79 @@
++       });
++     };
++ 
+++#if defined(MIXFP4_ARM_SET)
+++    // kernel-opt A: the arms of MIXFP4_ARM_SET, and one fallback for every other pattern. The fallback is the same
+++    // k_tile body with each k_block's MMAs chosen at run time from its own flags (kAGran bits) among the per-k_block
+++    // blobs -- gemm_kblock with a joint pattern that carries only that k_block's bits, which is all it reads. The
+++    // `bar.warp.sync` in each k_block arm keeps ptxas from if-converting the small arms into predicated OMMAs (the
+++    // split-K path's measured failure); the build rejects predicated OMMAs, so a miss would fail loudly.
+++#if defined(MIXFP4_DISPATCH_FREQ) && MIXFP4_DISPATCH_FREQ
+++#error "MIXFP4_ARM_SET already tests pattern 0 first; do not combine it with MIXFP4_DISPATCH_FREQ"
+++#endif
+++    static_assert(kBDisp == 0 && (MIXFP4_ARM_SET >> kNumArms) == 0u, "MIXFP4_ARM_SET: B pinned, patterns < kNumArms");
+++    auto gemm_kblock_rt = [&](uint32_t pattern, auto k_block) {
+++      constexpr int kKb = decltype(k_block)::value;
+++      uint32_t const bits = (pattern >> (kKb * kAGran)) & ((1u << kAGran) - 1u);
+++      mixfp4_detail::dispatch_pattern_tree<0, (1 << kAGran) - 1>(bits, [&](auto c) {
+++        asm volatile("bar.warp.sync -1;");
+++        gemm_kblock(C<(int(decltype(c)::value) << (kKb * kAGran))>{}, k_block);
+++      });
+++    };
+++    auto k_tile_body_pipe_fb = [&](uint32_t pattern) {
+++      for_each(make_int_sequence<K_BLOCK_MAX>{}, [&] (auto k_block) {
+++        auto k_block_next = ((k_block + 1) == K_BLOCK_MAX) ? 0 : (k_block + 1);
+++
+++        if (k_block == K_BLOCK_MAX - 1) {
+++          cutlass::arch::NamedBarrier::sync(
+++            thr_size(tiled_mma), cutlass::arch::ReservedNamedBarriers::Sm120MainloopBarrier);
+++          pipeline.consumer_release(smem_pipe_read);
+++          ++smem_pipe_read;
+++          read_stage   = smem_pipe_read.index();
+++          tCsA_stage   = tCsA(_,_,_,read_stage);
+++          tCsB_stage   = tCsB(_,_,_,read_stage);
+++          tCsSFA_stage = tCsSFA(_,_,_,read_stage);
+++          tCsSFB_stage = tCsSFB(_,_,_,read_stage);
+++          pipeline.consumer_wait(smem_pipe_read);
+++        }
+++
+++        copy_kblock(k_block_next);
+++
+++        if (k_block == K_BLOCK_MAX - 1) {
+++          pattern_next = next_pattern();
+++        }
+++
+++        gemm_kblock_rt(pattern, k_block);
+++      });
+++    };
+++    auto k_tile_tail_body_fb = [&](uint32_t pattern) {
+++      for_each(make_int_sequence<K_BLOCK_MAX>{}, [&] (auto k_block) {
+++
+++        auto k_block_next = ((k_block + 1) == K_BLOCK_MAX) ? 0 : (k_block + 1);
+++
+++        if (k_block == K_BLOCK_MAX - 1) {
+++          cutlass::arch::NamedBarrier::sync(
+++          thr_size(tiled_mma), cutlass::arch::ReservedNamedBarriers::Sm120MainloopBarrier);
+++          // UNLOCK smem_pipe_read, done _computing_ on it
+++          pipeline.consumer_release(smem_pipe_read);
+++          ++smem_pipe_read;
+++        }
+++
+++        if (k_block_next > 0) {
+++          copy_kblock(k_block_next);
+++        }
+++        gemm_kblock_rt(pattern, k_block);
+++
+++      });
+++    };
+++
+++    CUTLASS_PRAGMA_NO_UNROLL
+++    for ( ; k_tile_count > 1; --k_tile_count) {
+++      mixfp4_detail::dispatch_arm_set<uint32_t(MIXFP4_ARM_SET)>(pattern_cur, k_tile_body_pipe, k_tile_body_pipe_fb);
+++      pattern_cur = pattern_next;
+++    } // k_tile_count
+++
+++    mixfp4_detail::dispatch_arm_set<uint32_t(MIXFP4_ARM_SET)>(pattern_cur, k_tile_tail_body, k_tile_tail_body_fb);
+++#else
++     CUTLASS_PRAGMA_NO_UNROLL
++     for ( ; k_tile_count > 1; --k_tile_count) {
++       mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(pattern_cur, k_tile_body_pipe);
++@@ -1687,6 +1883,7 @@
++ 
++     // The last body already computed the tail's arm.
++     mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(pattern_cur, k_tile_tail_body);
+++#endif
++ #elif defined(MIXFP4_DISPATCH_PER_CTA) && MIXFP4_DISPATCH_PER_CTA
++     // ---------------------------------------------------------------------------------------
++     // ONE dispatch for the whole CTA: the entire k-loop lives inside each arm.
++--- upstream/scripts/patch_mixed_nvfp4_gemm.py
+++++ sm120/kernel/scripts/patch_mixed_nvfp4_gemm.py
++@@ -184,6 +184,13 @@
++              "operand is pinned to E2M1 (-DMIXFP4_A_ALL_E2M1=1), which makes the two E0M3-on-A "
++              "sites unreachable, so the kernel contains only sites 0 and 2. Equal counts among "
++              "the sites that ARE present is still required.")
+++    # [NVFP4-RaZeR local change, kernel-opt A; see sm120/kernel/LOCAL_CHANGES.md]
+++    parser.add_argument(
+++        "--expect-sites", default=None,
+++        help="per-site OMMA counts the build must emit, as SITE=COUNT[,SITE=COUNT...]. Replaces the equal-counts "
+++             "check for kernels whose specialized arms cover only a subset of the patterns (MIXFP4_ARM_SET): their "
+++             "sites are unbalanced by design, so the invariant becomes exact equality with the counts the "
+++             "configuration derives from its arm set.")
++     args = parser.parse_args()
++ 
++     data = bytearray(args.baseline.read_bytes())
++@@ -205,7 +212,14 @@
++                 f"expected all four dispatch sites to be present, got {sorted(counts)}. If one "
++                 f"operand is pinned to E2M1 this is expected -- pass --allow-missing-sites.")
++         print(f"note: only sites {sorted(counts)} are present (--allow-missing-sites)")
++-    if len(set(counts.values())) != 1:
+++    if args.expect_sites:
+++        want = {int(k): int(v) for k, v in (kv.split("=") for kv in args.expect_sites.split(","))}
+++        if dict(counts) != want:
+++            raise RuntimeError(
+++                f"per-site OMMA counts {dict(counts)} != expected {want} -- ptxas may have tail-merged or "
+++                "duplicated an arm; do not proceed without re-verifying"
+++            )
+++    elif len(set(counts.values())) != 1:
++         raise RuntimeError(
++             f"the four sites should emit equal numbers of OMMAs, got {dict(counts)} -- ptxas may "
++             "have tail-merged or duplicated an arm; do not proceed without re-verifying"
+diff --git a/sm120/kernel/scripts/patch_mixed_nvfp4_gemm.py b/sm120/kernel/scripts/patch_mixed_nvfp4_gemm.py
+index 0f05333..7393fea 100755
+--- a/sm120/kernel/scripts/patch_mixed_nvfp4_gemm.py
++++ b/sm120/kernel/scripts/patch_mixed_nvfp4_gemm.py
+@@ -184,6 +184,13 @@ def main() -> int:
+              "operand is pinned to E2M1 (-DMIXFP4_A_ALL_E2M1=1), which makes the two E0M3-on-A "
+              "sites unreachable, so the kernel contains only sites 0 and 2. Equal counts among "
+              "the sites that ARE present is still required.")
++    # [NVFP4-RaZeR local change, kernel-opt A; see sm120/kernel/LOCAL_CHANGES.md]
++    parser.add_argument(
++        "--expect-sites", default=None,
++        help="per-site OMMA counts the build must emit, as SITE=COUNT[,SITE=COUNT...]. Replaces the equal-counts "
++             "check for kernels whose specialized arms cover only a subset of the patterns (MIXFP4_ARM_SET): their "
++             "sites are unbalanced by design, so the invariant becomes exact equality with the counts the "
++             "configuration derives from its arm set.")
+     args = parser.parse_args()
+ 
+     data = bytearray(args.baseline.read_bytes())
+@@ -205,7 +212,14 @@ def main() -> int:
+                 f"expected all four dispatch sites to be present, got {sorted(counts)}. If one "
+                 f"operand is pinned to E2M1 this is expected -- pass --allow-missing-sites.")
+         print(f"note: only sites {sorted(counts)} are present (--allow-missing-sites)")
+-    if len(set(counts.values())) != 1:
++    if args.expect_sites:
++        want = {int(k): int(v) for k, v in (kv.split("=") for kv in args.expect_sites.split(","))}
++        if dict(counts) != want:
++            raise RuntimeError(
++                f"per-site OMMA counts {dict(counts)} != expected {want} -- ptxas may have tail-merged or "
++                "duplicated an arm; do not proceed without re-verifying"
++            )
++    elif len(set(counts.values())) != 1:
+         raise RuntimeError(
+             f"the four sites should emit equal numbers of OMMAs, got {dict(counts)} -- ptxas may "
+             "have tail-merged or duplicated an arm; do not proceed without re-verifying"
+diff --git a/sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp b/sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
+index 466739d..e22e304 100644
+--- a/sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
++++ b/sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
+@@ -228,6 +228,57 @@ dispatch_pattern(uint32_t pattern, Body&& body) {
+ #endif
+ }
+ 
++// [NVFP4-RaZeR local hook, kernel-opt A; see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_ARM_SET=<mask>: only the patterns
++// whose bit is set in <mask> get a specialized k_tile arm; every other pattern runs ONE exact fallback arm, which
++// dispatches each k_block on that k_block's own flags among the same per-k_block blobs. So every MMA keeps its format,
++// its operands and its accumulator order. Pattern 0 (all-E2M1) must be in the set and is tested first (one compare, the
++// fall-through path); a non-zero pattern is then tested for membership (one shift and test) and found among the other
++// members by a balanced tree. Unset, the dispatch is the upstream one (dispatch_pattern).
++template <uint32_t kSet>
++constexpr int arm_set_count() {
++  int n = 0;
++  for (int p = 0; p < 32; ++p) { n += int((kSet >> p) & 1u); }
++  return n;
++}
++template <uint32_t kSet, int N>
++constexpr int arm_set_member() {              // the N-th member (ascending) of kSet
++  int n = 0;
++  for (int p = 0; p < 32; ++p) {
++    if ((kSet >> p) & 1u) { if (n == N) { return p; } ++n; }
++  }
++  return -1;
++}
++template <uint32_t kSet, int I, int J, class Body>
++CUTLASS_DEVICE void
++dispatch_arm_members(uint32_t pattern, Body&& body) {   // pattern is known to be one of members I..J
++  if constexpr (I == J) {
++    body(cute::C<arm_set_member<kSet, I>()>{});
++  }
++  else {
++    constexpr int M = I + (J - I) / 2;
++    if (pattern <= uint32_t(arm_set_member<kSet, M>())) { dispatch_arm_members<kSet, I, M>(pattern, body); }
++    else                                                { dispatch_arm_members<kSet, M + 1, J>(pattern, body); }
++  }
++}
++template <uint32_t kSet, class Body, class Fallback>
++CUTLASS_DEVICE void
++dispatch_arm_set(uint32_t pattern, Body&& body, Fallback&& fallback) {
++  static_assert((kSet & 1u) != 0u, "MIXFP4_ARM_SET must give pattern 0 (all-E2M1) an arm");
++  constexpr uint32_t kRest = kSet & ~1u;
++  if (pattern == 0u) {
++    body(cute::C<0>{});
++  }
++  else {
++    if constexpr (kRest != 0u) {
++      if ((kRest >> pattern) & 1u) { dispatch_arm_members<kRest, 0, arm_set_count<kRest>() - 1>(pattern, body); }
++      else                         { fallback(pattern); }
++    }
++    else {
++      fallback(pattern);
++    }
++  }
++}
++
+ // Pattern bit layout: A granule flags occupy bits [0, AGranules), B granule flags follow in
+ // bits [AGranules, AGranules + BGranules).
+ template <int AGranules, int AAtomsPerGranule>
+@@ -1751,6 +1802,79 @@ struct CollectiveMma<
+       });
+     };
+ 
++#if defined(MIXFP4_ARM_SET)
++    // kernel-opt A: the arms of MIXFP4_ARM_SET, and one fallback for every other pattern. The fallback is the same
++    // k_tile body with each k_block's MMAs chosen at run time from its own flags (kAGran bits) among the per-k_block
++    // blobs -- gemm_kblock with a joint pattern that carries only that k_block's bits, which is all it reads. The
++    // `bar.warp.sync` in each k_block arm keeps ptxas from if-converting the small arms into predicated OMMAs (the
++    // split-K path's measured failure); the build rejects predicated OMMAs, so a miss would fail loudly.
++#if defined(MIXFP4_DISPATCH_FREQ) && MIXFP4_DISPATCH_FREQ
++#error "MIXFP4_ARM_SET already tests pattern 0 first; do not combine it with MIXFP4_DISPATCH_FREQ"
++#endif
++    static_assert(kBDisp == 0 && (MIXFP4_ARM_SET >> kNumArms) == 0u, "MIXFP4_ARM_SET: B pinned, patterns < kNumArms");
++    auto gemm_kblock_rt = [&](uint32_t pattern, auto k_block) {
++      constexpr int kKb = decltype(k_block)::value;
++      uint32_t const bits = (pattern >> (kKb * kAGran)) & ((1u << kAGran) - 1u);
++      mixfp4_detail::dispatch_pattern_tree<0, (1 << kAGran) - 1>(bits, [&](auto c) {
++        asm volatile("bar.warp.sync -1;");
++        gemm_kblock(C<(int(decltype(c)::value) << (kKb * kAGran))>{}, k_block);
++      });
++    };
++    auto k_tile_body_pipe_fb = [&](uint32_t pattern) {
++      for_each(make_int_sequence<K_BLOCK_MAX>{}, [&] (auto k_block) {
++        auto k_block_next = ((k_block + 1) == K_BLOCK_MAX) ? 0 : (k_block + 1);
++
++        if (k_block == K_BLOCK_MAX - 1) {
++          cutlass::arch::NamedBarrier::sync(
++            thr_size(tiled_mma), cutlass::arch::ReservedNamedBarriers::Sm120MainloopBarrier);
++          pipeline.consumer_release(smem_pipe_read);
++          ++smem_pipe_read;
++          read_stage   = smem_pipe_read.index();
++          tCsA_stage   = tCsA(_,_,_,read_stage);
++          tCsB_stage   = tCsB(_,_,_,read_stage);
++          tCsSFA_stage = tCsSFA(_,_,_,read_stage);
++          tCsSFB_stage = tCsSFB(_,_,_,read_stage);
++          pipeline.consumer_wait(smem_pipe_read);
++        }
++
++        copy_kblock(k_block_next);
++
++        if (k_block == K_BLOCK_MAX - 1) {
++          pattern_next = next_pattern();
++        }
++
++        gemm_kblock_rt(pattern, k_block);
++      });
++    };
++    auto k_tile_tail_body_fb = [&](uint32_t pattern) {
++      for_each(make_int_sequence<K_BLOCK_MAX>{}, [&] (auto k_block) {
++
++        auto k_block_next = ((k_block + 1) == K_BLOCK_MAX) ? 0 : (k_block + 1);
++
++        if (k_block == K_BLOCK_MAX - 1) {
++          cutlass::arch::NamedBarrier::sync(
++          thr_size(tiled_mma), cutlass::arch::ReservedNamedBarriers::Sm120MainloopBarrier);
++          // UNLOCK smem_pipe_read, done _computing_ on it
++          pipeline.consumer_release(smem_pipe_read);
++          ++smem_pipe_read;
++        }
++
++        if (k_block_next > 0) {
++          copy_kblock(k_block_next);
++        }
++        gemm_kblock_rt(pattern, k_block);
++
++      });
++    };
++
++    CUTLASS_PRAGMA_NO_UNROLL
++    for ( ; k_tile_count > 1; --k_tile_count) {
++      mixfp4_detail::dispatch_arm_set<uint32_t(MIXFP4_ARM_SET)>(pattern_cur, k_tile_body_pipe, k_tile_body_pipe_fb);
++      pattern_cur = pattern_next;
++    } // k_tile_count
++
++    mixfp4_detail::dispatch_arm_set<uint32_t(MIXFP4_ARM_SET)>(pattern_cur, k_tile_tail_body, k_tile_tail_body_fb);
++#else
+     CUTLASS_PRAGMA_NO_UNROLL
+     for ( ; k_tile_count > 1; --k_tile_count) {
+       mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(pattern_cur, k_tile_body_pipe);
+@@ -1759,6 +1883,7 @@ struct CollectiveMma<
+ 
+     // The last body already computed the tail's arm.
+     mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(pattern_cur, k_tile_tail_body);
++#endif
+ #elif defined(MIXFP4_DISPATCH_PER_CTA) && MIXFP4_DISPATCH_PER_CTA
+     // ---------------------------------------------------------------------------------------
+     // ONE dispatch for the whole CTA: the entire k-loop lives inside each arm.
+diff --git a/sm120/mixfp4_sm120/configs.py b/sm120/mixfp4_sm120/configs.py
+index 3efec3e..08e5819 100644
+--- a/sm120/mixfp4_sm120/configs.py
++++ b/sm120/mixfp4_sm120/configs.py
+@@ -155,6 +155,33 @@ CONFIGS = {c.name: c for c in [
+         'n8k64_wB_xor', 'mixed', 1, (8, 64), dict(_B8X64, SM120_BIAS_ON_N=1, MIXFP4_ARM_XOR=15), _B8X64_GEN,
+         expected_census={0: 512, 2: 512},
+         description='Diagnostic: n8k64_wB with the dispatch arms permuted (all-E0M3 on the fall-through path).'),
++    KernelConfig(
++        'n16k64_wA_as2', 'mixed', 0, (16, 64), dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_ARM_SET=0x1),
++        _WT_AS_A_GEN, expected_census={0: 192, 1: 128},
++        description="kernel-opt A (exploration): n16k64_wA with arms for patterns [0] and one exact per-k_block fallback."),
++    KernelConfig(
++        'n16k64_wA_as6', 'mixed', 0, (16, 64), dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_ARM_SET=0x117),
++        _WT_AS_A_GEN, expected_census={0: 384, 1: 192},
++        description="kernel-opt A (exploration): n16k64_wA with arms for patterns [0, 1, 2, 4, 8] and one exact per-k_block fallback."),
++    KernelConfig(
++        'n16k64_wA_as8', 'mixed', 0, (16, 64), dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_ARM_SET=0x111f),
++        _WT_AS_A_GEN, expected_census={0: 448, 1: 256},
++        description="kernel-opt A (exploration): n16k64_wA with arms for patterns [0, 1, 2, 3, 4, 8, 12] and one exact per-k_block fallback."),
++    KernelConfig(
++        'n16k64_wA_as6_n64', 'mixed', 0, (16, 64),
++        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_TILE_N=64, MIXFP4_B_ATOMS_PER_GRANULE=4, MIXFP4_ARM_SET=0x117),
++        dict(_WT_AS_A_GEN, MMA_N=4, B_ATOMS=4), expected_census={0: 192, 1: 96},
++        description="kernel-opt A (exploration): n16k64_wA_as6 with a 128 x 64 CTA tile."),
++    KernelConfig(
++        'n16k64_wA_as6_n32', 'mixed', 0, (16, 64),
++        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_TILE_N=32, MIXFP4_B_ATOMS_PER_GRANULE=2, MIXFP4_ARM_SET=0x117),
++        dict(_WT_AS_A_GEN, MMA_N=2, B_ATOMS=2), expected_census={0: 96, 1: 48},
++        description="kernel-opt A (exploration): n16k64_wA_as6 with a 128 x 32 CTA tile."),
++    KernelConfig(
++        'n16k64_wA_as6_n16', 'mixed', 0, (16, 64),
++        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_TILE_N=16, MIXFP4_B_ATOMS_PER_GRANULE=1, MIXFP4_LDSM_B=2, MIXFP4_ARM_SET=0x117),
++        dict(_WT_AS_A_GEN, MMA_N=1, B_ATOMS=1), expected_census={0: 48, 1: 24},
++        description="kernel-opt A (exploration): n16k64_wA_as6 with a 128 x 16 CTA tile."),
+     KernelConfig(
+         'n16k64_wA_nodisp', 'mixed', 0, None,
+         dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_NO_DISPATCH=1, MIXFP4_PIPE_FLAGS=0), _WT_AS_A_GEN,
+diff --git a/sm120/tests/test_gemm.py b/sm120/tests/test_gemm.py
+index 8e6da19..192c8f9 100644
+--- a/sm120/tests/test_gemm.py
++++ b/sm120/tests/test_gemm.py
+@@ -20,7 +20,9 @@ from mixfp4_sm120.lib import Kernel, sf_buffer_size, sf_offset_formula
+ pytestmark = pytest.mark.gpu
+ 
+ MIXED = ['n16k64_wA', 'n16k64_wA_8x1', 'n16k64_wA_n64', 'n16k64_wA_n32', 'n16k64_wA_n16', 'n8k64_wB',
+-         'n8k64_wB_m64', 'n8k64_wB_m32', 'n8k64_wB_m16', 'n8k64_wB_n64']
++         'n8k64_wB_m64', 'n8k64_wB_m32', 'n8k64_wB_m16', 'n8k64_wB_n64',
++         # kernel-opt A: the arm-subset builds (random maps exercise every joint pattern, the fallback's included)
++         'n16k64_wA_A', 'n16k64_wA_A_n64', 'n16k64_wA_A_n32', 'n16k64_wA_A_n16']
+ 
+ 
+ def linear_gemm(kern, wp, wsf, gs_w, xp, xsf, gs_x, n, t, k, **kw):
