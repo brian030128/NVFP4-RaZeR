@@ -27,6 +27,10 @@ kernel-opt additions:
   width order rotated between rounds, with I isolated launches per width and round; the value is the median over the
   rounds of the per-round medians (R = 3, I = 30 is the deviation-2 method's repetition). The defaults (1, 20) are the
   earlier --cold measurement. The per-round values go to the raw file under 'us_rounds'.
+- --act-warm (kernel-opt amendment 4b): with --cold, the activation quantizer (the kernel's own, FourOverSix rows) runs
+  after the flush and before each timed GEMM, which then reads those fresh activations. Only the weights are cold,
+  as in inference and in the deviation-2 M1 (whose harness quantizes after the flush); without it the flush also
+  evicts the activations, which inflates small-T times by 1-2.6 us and re-ranks the widths (results/kernel_opt/retune).
 """
 import argparse
 import datetime
@@ -62,9 +66,10 @@ def map_masks(path, rows=16):
 _FLUSH = []
 
 
-def cold_us(launch, wp, wsf, iters=20, warmup=3):
+def cold_us(launch, wp, wsf, iters=20, warmup=3, act=None):
     """Median CUPTI time of isolated launches on cold weights: each call runs on the next of K copies of the weight
-    operand (K x size >= 4x L2) after a 512 MiB read-flush, synchronized before and after."""
+    operand (K x size >= 4x L2) after a 512 MiB read-flush, synchronized before and after. act (--act-warm): a callable
+    run after the flush, untimed, whose result is passed to launch as its third argument (the fresh activations)."""
     if not _FLUSH:
         _FLUSH.append(torch.ones(512 * 2 ** 20 // 4, dtype=torch.float32, device='cuda'))
     l2 = torch.cuda.get_device_properties(0).L2_cache_size
@@ -73,7 +78,12 @@ def cold_us(launch, wp, wsf, iters=20, warmup=3):
     def one(i):
         _FLUSH[0].sum()
         torch.cuda.synchronize()
-        launch(*copies[i % len(copies)])
+        if act is None:
+            launch(*copies[i % len(copies)])
+        else:
+            a = act()
+            torch.cuda.synchronize()
+            launch(*copies[i % len(copies)], a)
         torch.cuda.synchronize()
     for i in range(warmup):
         one(i)
@@ -99,6 +109,7 @@ def main():
     ap.add_argument('--update', action='store_true', help='merge into the existing table (see the docstring)')
     ap.add_argument('--rounds', type=int, default=1, help='with --cold: rotated rounds per width (see the docstring)')
     ap.add_argument('--iters', type=int, default=20, help='with --cold: isolated launches per width and round')
+    ap.add_argument('--act-warm', action='store_true', help='with --cold: quantize the activations after the flush')
     ap.add_argument('--out-dir', default=str(S.TABLE_DIR))
     ap.add_argument('--allow-busy', action='store_true')
     args = ap.parse_args()
@@ -128,8 +139,8 @@ def main():
                 tags8[f'{n}x{k}'] = dict(model=model, proj=proj, source=source8, module=entry[1] if entry else None,
                                          e0m3_tiles=entry[2] if entry else 0,
                                          tiles=int(entry[0].numel()) if entry else -(-n // 8) * (k // 64))
-    if args.rounds > 1 and not args.cold:
-        raise SystemExit('--rounds needs --cold')
+    if (args.rounds > 1 or args.act_warm) and not args.cold:
+        raise SystemExit('--rounds / --act-warm need --cold')
     table = {f: {} for f in fams}
     raw = {f: {} for f in fams}
     raw_rounds = {f: {} for f in fams}
@@ -138,9 +149,17 @@ def main():
             for f, ks in fams.items():
                 m, tb = {'mixed': (mask, (16, 64)), 'mixed_wB': (shapes8.get((n, k)), (8, 64))}.get(f, (None, None))
                 op = operands(n, k, t, m, tb if m is not None else None, seed=n + k + t)
-                times, launches = {}, {}
+                times, launches, acts = {}, {}, {}
                 for w, kern in ks.kernels.items():
-                    if kern.weight_operand == 0:
+                    if args.act_warm:
+                        acts[w] = lambda kern=kern: kern.quant_rows(op['x'], 'four_over_six_rows')
+                        if kern.weight_operand == 0:
+                            launch = lambda wp, wsf, q, kern=kern: kern.gemm(wp, wsf, q[0], q[1], n, t, k,  # noqa: E731
+                                                                            scale_m_default=op['gsw'], scale_n=q[2], check=False)
+                        else:
+                            launch = lambda wp, wsf, q, kern=kern: kern.gemm(q[0], q[1], wp, wsf, t, n, k,  # noqa: E731
+                                                                            scale_m=q[2], scale_n_default=op['gsw'], check=False)
+                    elif kern.weight_operand == 0:
                         launch = lambda wp, wsf, kern=kern: kern.gemm(wp, wsf, op['xp'], op['xsf'], n, t, k,  # noqa: E731
                                                                      scale_m_default=op['gsw'], scale_n=op['gsx'], check=False)
                     else:
@@ -152,7 +171,8 @@ def main():
                     for r in range(args.rounds):
                         shift = (r * len(ws) // args.rounds) % len(ws)
                         for w in ws[shift:] + ws[:shift]:
-                            per.setdefault(w, []).append(cold_us(launches[w], op['wp'], op['wsf'], iters=args.iters))
+                            per.setdefault(w, []).append(cold_us(launches[w], op['wp'], op['wsf'], iters=args.iters,
+                                                                 act=acts.get(w)))
                     times = {w: statistics.median(per[w]) for w in ws}
                     if args.rounds > 1:
                         raw_rounds[f].setdefault(f'{n}x{k}', {})[str(t)] = {str(w): [round(v, 2) for v in per[w]] for w in ws}
@@ -178,6 +198,8 @@ def main():
     if args.cold and (args.rounds, args.iters) != (1, 20):
         meta['method'] += (f', {args.rounds} rotated rounds x {args.iters} launches per width, the median of the '
                            f'per-round medians')
+    if args.act_warm:
+        meta['method'] += ', activations quantized after the flush (--act-warm)'
     if args.update:
         old = json.loads((out / f'{slug}.json').read_text())
         old_raw = json.loads((out / f'{slug}.raw.json').read_text())

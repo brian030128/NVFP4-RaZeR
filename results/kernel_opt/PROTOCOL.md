@@ -538,3 +538,35 @@ Report the cells whose width changed and their effect."
   unit's per-forward sum regresses beyond its round range at any (model, T). The result is reported either way.
 
 **Before registration:** there was no GPU run of the re-tune.
+
+**Amendment 4's result (2026-09-30 22:20 UTC):** every gate passed, but M1‴ showed regressions beyond the round range.
+- They were at T = 32–64 on every unit, and for stock at T = 128: 9 to 16 (model, T) cells per unit.
+- There were also gains at T = 256 and T = 1024.
+- So the new rows are not adopted, and the tracked table is unchanged (`results/kernel_opt/retune/REPORT.md`).
+- A disclosed diagnostic (`results/kernel_opt/retune/diag/`) found the cause. `tune_tiles.py --cold` flushes L2 and
+  then runs the GEMM on activations quantized before the flush, so they are cold. M1 and inference quantize after
+  the flush, so they are warm.
+  - The tuner's order adds 1.0–2.6 µs at small T and re-ranks the widths.
+  - M1's order reproduces M1's times and the current table's choices at those cells.
+
+## Amendment 4b: the re-tune with the activations warm
+
+Written 2026-09-30, after amendment 4's result and before any GPU run of 4b, except the smoke test disclosed below.
+Hashes: `registration_4b.json`. It is the same re-tune the user approved, measured under the deviation-2 method's
+actual condition.
+
+**What changes from amendment 4:**
+- `tune_tiles.py --act-warm`: with `--cold`, the kernel's activation quantizer (FourOverSix rows) runs after the flush
+  and before each timed GEMM, which reads those fresh activations. Only the weights are cold.
+- The tuning run adds `--act-warm`. Everything else of amendment 4 is unchanged: both families in one run, 3 rotated
+  rounds × 30, `build_freq`, the paper artifacts' 16x64 tags.
+- The chain (`run_retune_b.sh`) writes to `results/kernel_opt/retune/b` and `/home/dev/n16k64_campaign/kernel_opt/retune_b`.
+
+**Gates, M1‴, reporting and the adoption criterion:** exactly amendment 4's, with the 4b table as "new". The current
+table is still the tracked one.
+
+**Before registration (disclosed):** the new option was smoke-tested once on Llama-3.1-8B's shapes, stock family, 1
+round × 8, into a scratch directory.
+- It reproduced M1's times and choices at the diagnostic's cells. For example, stock 4096x4096 at T = 64: width 32,
+  8.70 µs.
+- Nothing from it is used.
