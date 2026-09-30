@@ -10,6 +10,8 @@ registered checks are those of experiments/paper/bench_gemm_isolated.py (results
 helpers this script imports. The differences:
 - configurations (CONFIGS): the 8x64 maps on the current n8k64_wB (sm120/build, "before") and on the width-selecting
   weights-on-B set 'auto_wB' loaded from --after-root ("after"), with FourOverSix on the stock sets as references;
+  with --opt1-table, also on optimization 1's set ('auto_wB1': the widths 16/32/64/128 and the table optimization 1
+  tuned), to attribute a later optimization's change;
 - tokens: decode-sized counts too (TOKENS);
 - each row records the build the call ran (and, for a set, the width).
 """
@@ -42,6 +44,8 @@ CONFIGS = OrderedDict(
     stock_wB=('fo6', 'first', 'stock_wB', 'four_over_six_rows'),
     n8k64_wB_typical=('tc_8x64', 'typical', 'n8k64_wB', 'four_over_six_rows'),
     n8k64_wB_worst=('tc_8x64', 'worst', 'n8k64_wB', 'four_over_six_rows'),
+    auto_wB1_typical=('tc_8x64', 'typical', 'auto_wB1', 'four_over_six_rows'),
+    auto_wB1_worst=('tc_8x64', 'worst', 'auto_wB1', 'four_over_six_rows'),
     auto_wB_typical=('tc_8x64', 'typical', 'auto_wB', 'four_over_six_rows'),
     auto_wB_worst=('tc_8x64', 'worst', 'auto_wB', 'four_over_six_rows'))
 TOKENS = (1, 4, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
@@ -52,6 +56,7 @@ def main():
     ap.add_argument('--model', required=True)
     ap.add_argument('--artifact', action='append', required=True, metavar='KIND=DIR')
     ap.add_argument('--after-root', required=True, help='build directory of the kernel-opt builds')
+    ap.add_argument('--opt1-table', default=None, help="optimization 1's tile table (adds the auto_wB1 configurations)")
     ap.add_argument('--tokens', default=','.join(map(str, TOKENS)))
     ap.add_argument('--projections', default=None)
     ap.add_argument('--configs', default=None)
@@ -78,12 +83,18 @@ def run(args, tel):
     arts = dict(spec.split('=', 1) for spec in args.artifact)
     kernels = dict(stock=KernelSet('stock'), stock_wB=Kernel.load('stock_wB'), n8k64_wB=Kernel.load('n8k64_wB'),
                    auto_wB=KernelSet('mixed_wB', build_root=args.after_root))
+    if args.opt1_table:
+        kernels['auto_wB1'] = KernelSet('mixed_wB', build_root=args.after_root, widths=(16, 32, 64, 128),
+                                        table=args.opt1_table)
     before_root = REPO / 'sm120' / 'build'
     for name in ('stock_wB', 'n8k64_wB'):
         assert Path(kernels[name].path).parent.parent == before_root, kernels[name].path
     assert all(Path(k.path).parent.parent == before_root for k in kernels['stock'].kernels.values())
-    assert all(Path(k.path).parent.parent == Path(args.after_root) for k in kernels['auto_wB'].kernels.values())
-    cfgs = [c for c, (kind, *_) in CONFIGS.items() if kind in arts and (not args.configs or c in args.configs.split(','))]
+    for name in ('auto_wB', 'auto_wB1'):
+        if name in kernels:
+            assert all(Path(k.path).parent.parent == Path(args.after_root) for k in kernels[name].kernels.values())
+    cfgs = [c for c, (kind, _, kname, _) in CONFIGS.items() if kind in arts and kname in kernels
+            and (not args.configs or c in args.configs.split(','))]
     res = dict(status='running', gpu=B.gpu_info(), power_limit_w=tel.power_limit_w(),
                l2_bytes=torch.cuda.get_device_properties(0).L2_cache_size, model=args.model, artifacts=arts,
                after_root=args.after_root,
@@ -171,8 +182,8 @@ def run(args, tel):
                     raise G.CheckFailed(f'{proj} T={t} {c}: the isolated GEMM differs from NativeLinear')
                 ys[c] = y
             # kernel-opt: before and after must give the same output bits on the same tags (G4 on the timed operands)
-            for v in ('typical', 'worst'):
-                a, b = f'n8k64_wB_{v}', f'auto_wB_{v}'
+            for v, b in ((v, f'{s}_{v}') for v in ('typical', 'worst') for s in ('auto_wB', 'auto_wB1')):
+                a = f'n8k64_wB_{v}'
                 if a in ys and b in ys:
                     ok = bool(torch.equal(ys[a].view(torch.int16), ys[b].view(torch.int16)))
                     res['checks']['bitwise'].append(dict(proj=proj, tokens=t, config=f'{b} == {a}', equal=ok))

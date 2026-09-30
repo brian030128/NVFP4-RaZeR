@@ -10,6 +10,11 @@ tiles versus SMs, so the choice is looked up in a per-GPU table measured on the 
 All widths of one family execute the same MMA instruction sequence per output element (verified
 bitwise, tests/test_select.py), so the selection never changes a result -- the output of a token
 does not depend on how many other tokens are in the batch.
+
+Keys: an int is the CTA tile's token width, and the fallback rule uses only those. A string key
+'<tokens>x<weights>' names an alternative build whose token width is taken by another key but whose
+weight extent is narrower (kernel-opt: 'mixed_wB' '128x64', a cooperative 128 x 64 tile); only the
+table selects it.
 """
 import json
 import math
@@ -24,7 +29,7 @@ FAMILIES = {
     'mixed': {16: 'n16k64_wA_n16', 32: 'n16k64_wA_n32', 64: 'n16k64_wA_n64', 128: 'n16k64_wA'},
     'stock': {16: 'stock_wA_n16', 32: 'stock_wA_n32', 64: 'stock_wA_n64', 128: 'stock_wA'},
     # weights on B (8x64 maps): the width is the CTA tile's M, i.e. again the tokens (kernel-opt)
-    'mixed_wB': {16: 'n8k64_wB_m16', 32: 'n8k64_wB_m32', 64: 'n8k64_wB_m64', 128: 'n8k64_wB'},
+    'mixed_wB': {16: 'n8k64_wB_m16', 32: 'n8k64_wB_m32', 64: 'n8k64_wB_m64', 128: 'n8k64_wB', '128x64': 'n8k64_wB_n64'},
 }
 TABLE_DIR = Path(__file__).resolve().parents[1] / 'configs'
 BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
@@ -41,6 +46,15 @@ def bucket(t):
     return BUCKETS[-1]
 
 
+def key_order(w):
+    """Sort key for a family's keys: the int token widths in order, then the string alternatives."""
+    return (0, w, '') if isinstance(w, int) else (1, 0, str(w))
+
+
+def parse_key(w):
+    return int(w) if isinstance(w, int) or str(w).isdigit() else str(w)
+
+
 def fallback_width(t):
     """Rule used for shapes the table does not cover: the narrowest width holding all tokens."""
     return min(128, max(16, 1 << max(0, math.ceil(math.log2(max(t, 1))))))
@@ -54,8 +68,8 @@ class KernelSet:
         if widths is not None:
             names = {w: n for w, n in names.items() if w in widths}
         self.family = family
-        self.kernels = {w: Kernel.load(n, build_root=build_root) for w, n in sorted(names.items())}
-        ref = self.kernels[max(self.kernels)]
+        self.kernels = {w: Kernel.load(n, build_root=build_root) for w, n in sorted(names.items(), key=lambda i: key_order(i[0]))}
+        ref = self.kernels[max(w for w in self.kernels if isinstance(w, int))]
         for k in self.kernels.values():
             if (k.weight_operand, k.type_block, k.d_colmajor) != (ref.weight_operand, ref.type_block, ref.d_colmajor):
                 raise ValueError(f'{k.cfg.name} is not interchangeable with {ref.cfg.name}')
@@ -71,7 +85,7 @@ class KernelSet:
                 table = path
         if table is not None:
             data = json.loads(Path(table).read_text()) if not isinstance(table, dict) else table
-            self.table = {tuple(int(v) for v in key.split('x')): {int(b): int(w) for b, w in row.items()}
+            self.table = {tuple(int(v) for v in key.split('x')): {int(b): parse_key(w) for b, w in row.items()}
                           for key, row in data.get(family, {}).items()}
             self.table_source = str(table) if not isinstance(table, dict) else 'dict'
         self.stats = {}
@@ -92,4 +106,4 @@ class KernelSet:
 
     def describe(self):
         return dict(family=self.family, kernels=self.sha256, table=self.table_source, table_shapes=len(self.table),
-                    calls_by_width=dict(sorted(self.stats.items())))
+                    calls_by_width=dict(sorted(self.stats.items(), key=lambda i: key_order(i[0]))))

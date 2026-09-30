@@ -28,7 +28,7 @@ sys.path.insert(0, str(REPO / 'sm120' / 'bench'))
 import common as B  # noqa: E402  (sm120/bench/common.py)
 from mixfp4_sm120 import model as NM  # noqa: E402
 from mixfp4_sm120.lib import Kernel  # noqa: E402
-from mixfp4_sm120.select import KernelSet  # noqa: E402
+from mixfp4_sm120.select import KernelSet, key_order  # noqa: E402
 
 ARTIFACTS = Path('/home/dev/n16k64_campaign/paper/artifacts')
 SHAPES = ('1x1', '1x16', '1x100', '1x2048', '4x512')
@@ -85,7 +85,7 @@ def main():
             rec[label] = dict(install=dict(kernel=rep.kernel, kernel_sha256=rep.kernel_sha256, native_modules=len(rep.native)),
                               native_called=called, native=len(nat))
             if label == 'after':
-                rec['after']['calls_by_width'] = dict(sorted(after.stats.items()))
+                rec['after']['calls_by_width'] = {str(w): c for w, c in sorted(after.stats.items(), key=lambda i: key_order(i[0]))}
             ok &= called == len(nat) == len(rep.native)
         for s in SHAPES:
             a, b = logits['before'][s], logits['after'][s]

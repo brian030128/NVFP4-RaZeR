@@ -33,6 +33,7 @@ sys.path.insert(0, str(REPO / 'sm120'))
 sys.path.insert(0, str(REPO / 'sm120' / 'bench'))
 import common as B  # noqa: E402
 from mixfp4_sm120 import model as NM  # noqa: E402
+from mixfp4_sm120.select import key_order  # noqa: E402  (int widths, then string alternatives)
 
 
 def load(name, path):
@@ -103,7 +104,7 @@ def main():
         entry['peak_gib'] = torch.cuda.max_memory_allocated() / 2 ** 30
         if nat:
             ks = next(iter(nat.values())).kernel_set
-            entry['decode_widths'] = (sorted({ks.width(m.out_features, m.in_features, b) for m in nat.values()})
+            entry['decode_widths'] = (sorted({ks.width(m.out_features, m.in_features, b) for m in nat.values()}, key=key_order)
                                       if ks is not None else next(iter(nat.values())).kernel.cfg.name)
         torch.cuda.empty_cache()
         print(args.label, spec, json.dumps(entry), flush=True)

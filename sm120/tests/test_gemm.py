@@ -20,7 +20,7 @@ from mixfp4_sm120.lib import Kernel, sf_buffer_size, sf_offset_formula
 pytestmark = pytest.mark.gpu
 
 MIXED = ['n16k64_wA', 'n16k64_wA_8x1', 'n16k64_wA_n64', 'n16k64_wA_n32', 'n16k64_wA_n16', 'n8k64_wB',
-         'n8k64_wB_m64', 'n8k64_wB_m32', 'n8k64_wB_m16']
+         'n8k64_wB_m64', 'n8k64_wB_m32', 'n8k64_wB_m16', 'n8k64_wB_n64']
 
 
 def linear_gemm(kern, wp, wsf, gs_w, xp, xsf, gs_x, n, t, k, **kw):

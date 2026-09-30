@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Kernel-opt report for optimization 1: before vs after from M1 (GEMM), M2 (prefill) and M3 (decode).
 
-    python experiments/kernel_opt/ab_report.py [--out-dir results/kernel_opt]
+    python experiments/kernel_opt/ab_report.py [--out-dir results/kernel_opt] [--src DIR] [--tag ab1]
 
 Protocol: results/kernel_opt/PROTOCOL.md. Reads KERNEL_OPT_OUT (/home/dev/n16k64_campaign/kernel_opt):
 gemm/<model>.json (bench_ab_isolated.py), e2e/prefill/<model>/<policy>/round<r>.json (bench_prefill.py) and
-e2e/decode/<model>/<policy>/round<r>.json (bench_decode.py). Writes <out-dir>/ab1.json, ab1_gemm.csv, ab1_prefill.csv,
-ab1_decode.csv and ab1_tables.md.
+e2e/decode/<model>/<policy>/round<r>.json (bench_decode.py); --src overrides it. Writes <out-dir>/<tag>.json,
+<tag>_gemm.csv, <tag>_prefill.csv, <tag>_decode.csv and <tag>_tables.md (tag default ab1). When the GEMM records hold
+optimization 1's set ('auto_wB1', amendment 1), the M1 table adds it and the later set's change against it.
 - M1: per-forward GEMM sums as step 06 / deviation 2: Σ over projections of (modules × median GEMM time). The spread
   is the range over the 3 rounds of the same quantity computed from each round's medians.
 - M2 / M3: per (model, shape or setting, policy), the median over rounds of each process's median; the spread of a
@@ -34,8 +35,8 @@ def fmt(v, digits=1):
     return '—' if v is None else f'{v:+.{digits}f} %'
 
 
-def gemm_section(model):
-    path = SRC / 'gemm' / f'{model}.json'
+def gemm_section(model, src):
+    path = src / 'gemm' / f'{model}.json'
     if not path.exists():
         return None
     rec = json.loads(path.read_text())
@@ -69,14 +70,20 @@ def gemm_section(model):
             for ref in ('stock_wA', 'stock_wB'):
                 row[f'before_vs_{ref}_{v}_pct'] = pct(s[b], s[f'{ref}@{t}'])
                 row[f'after_vs_{ref}_{v}_pct'] = pct(s[a], s[f'{ref}@{t}'])
+            o1 = f'auto_wB1_{v}@{t}'
+            if o1 in s:
+                per1 = [pct(x, y) for x, y in zip(rr[a], rr[o1])]
+                row[f'after_vs_opt1_{v}_pct'] = pct(s[a], s[o1])
+                row[f'after_vs_opt1_{v}_range'] = [min(per1), max(per1)]
+                row[f'opt1_vs_stock_wA_{v}_pct'] = pct(s[o1], s[f'stock_wA@{t}'])
         rows.append(row)
     out['rows'] = rows
     return out
 
 
-def e2e_section(what, model, key):
+def e2e_section(what, model, key, src):
     """{shape: {policy: dict(median, rounds=[...])}} of the per-process medians."""
-    base = SRC / 'e2e' / what / model
+    base = src / 'e2e' / what / model
     if not base.exists():
         return None
     res = {}
@@ -117,13 +124,15 @@ def ratio_range(a, b):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--out-dir', type=Path, default=REPO / 'results' / 'kernel_opt')
+    ap.add_argument('--src', type=Path, default=SRC)
+    ap.add_argument('--tag', default='ab1')
     args = ap.parse_args()
-    data = dict(source=str(SRC), gemm={}, prefill={}, decode={})
+    data = dict(source=str(args.src), gemm={}, prefill={}, decode={})
     md = []
     gcsv, pcsv, dcsv = [], [], []
     md.append('## M1: per-forward GEMM time (isolated launches, cold weights; µs)\n')
     for model in MODELS:
-        g = gemm_section(model)
+        g = gemm_section(model, args.src)
         if g is None:
             continue
         data['gemm'][model] = g
@@ -133,6 +142,21 @@ def main():
         md.append('| T | stock_wA | stock_wB | 8x64 before (typ.) | 8x64 after (typ.) | after vs before (typ.) [round range] '
                   '| after vs before (worst) | vs stock_wA: before → after (typ.) | vs stock_wB: before → after (typ.) |')
         md.append('|---|---|---|---|---|---|---|---|---|')
+        if 'after_vs_opt1_typical_pct' in g['rows'][0]:
+            md.append('')
+            md.append('Against optimization 1\'s set (auto_wB1, typical tags):\n')
+            md.append('| T | optimization 1 | after | after vs optimization 1 [round range] | vs stock_wA: optimization 1 → after |')
+            md.append('|---|---|---|---|---|')
+            for r in g['rows']:
+                lo, hi = r['after_vs_opt1_typical_range']
+                md.append(f"| {r['tokens']} | {r['auto_wB1_typical_us']:.1f} | {r['auto_wB_typical_us']:.1f} | "
+                          f"{fmt(r['after_vs_opt1_typical_pct'])} [{lo:+.1f}, {hi:+.1f}] | "
+                          f"{fmt(r['opt1_vs_stock_wA_typical_pct'])} → {fmt(r['after_vs_stock_wA_typical_pct'])} |")
+            md.append('')
+            md.append('Against the original n8k64_wB:\n')
+            md.append('| T | stock_wA | stock_wB | 8x64 before (typ.) | 8x64 after (typ.) | after vs before (typ.) [round range] '
+                      '| after vs before (worst) | vs stock_wA: before → after (typ.) | vs stock_wB: before → after (typ.) |')
+            md.append('|---|---|---|---|---|---|---|---|---|')
         for r in g['rows']:
             lo, hi = r['after_vs_before_typical_range']
             md.append(f"| {r['tokens']} | {r['stock_wA_us']:.1f} | {r['stock_wB_us']:.1f} | {r['n8k64_wB_typical_us']:.1f} | "
@@ -149,7 +173,7 @@ def main():
     for what, key, unit in (('prefill', 'ms', 'ms per forward, CUDA graph'), ('decode', 'ms_per_token', 'ms per token')):
         md.append(f'## {"M2: prefill" if what == "prefill" else "M3: decode"} ({unit}; median over rounds)\n')
         for model in MODELS:
-            sec = e2e_section(what, model, key)
+            sec = e2e_section(what, model, key, args.src)
             if not sec:
                 continue
             data[what][model] = sec
@@ -201,8 +225,8 @@ def main():
                               f"{fmt(r['tps_after_vs_fo6_pct'])} |")
                 md.append('')
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    (args.out_dir / 'ab1.json').write_text(json.dumps(data, indent=1) + '\n')
-    for name, rows in (('ab1_gemm.csv', gcsv), ('ab1_prefill.csv', pcsv), ('ab1_decode.csv', dcsv)):
+    (args.out_dir / f'{args.tag}.json').write_text(json.dumps(data, indent=1) + '\n')
+    for name, rows in ((f'{args.tag}_gemm.csv', gcsv), (f'{args.tag}_prefill.csv', pcsv), (f'{args.tag}_decode.csv', dcsv)):
         if rows:
             keys = list(dict.fromkeys(k for r in rows for k in r))
             with open(args.out_dir / name, 'w', newline='') as f:
@@ -210,7 +234,7 @@ def main():
                 w.writeheader()
                 for r in rows:
                     w.writerow({k: (json.dumps(v) if isinstance(v, (list, dict)) else v) for k, v in r.items()})
-    (args.out_dir / 'ab1_tables.md').write_text('\n'.join(md) + '\n')
+    (args.out_dir / f'{args.tag}_tables.md').write_text('\n'.join(md) + '\n')
     print('\n'.join(md))
 
 

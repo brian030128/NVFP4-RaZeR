@@ -131,6 +131,20 @@ CONFIGS = {c.name: c for c in [
         dict(_B8X64_GEN, MMA_M=1, A_ATOMS=1),
         expected_census={0: 64, 2: 64},
         description='n8k64_wB with a 16 x 64 CTA tile (ping-pong, 1x4 warps): small-T kernel.'),
+    # Narrow WEIGHT tiles with the weights on B (kernel-opt 1b): a cooperative 128 (tokens) x 64 (weights)
+    # tile, the weights-on-B mirror of stock_wA_n64 / n16k64_wA_n64. At mid token counts (T ~ 128-1024)
+    # the 128 x 128 tile leaves most SMs idle (e.g. T = 256, out = 4096: 64 CTAs); halving the weight
+    # extent doubles the CTAs while keeping all 8 MMA warps of the cooperative kernel (the ping-pong
+    # narrow-M builds above have 4). 2x4 warps: each warp owns 64 tokens x 16 weight columns (4 m-atoms,
+    # 2 n-atoms), the same per-warp shape and 16-arm dispatch as n8k64_wB_m64, so the same per-output
+    # MMA sequence (bitwise equal to n8k64_wB).
+    KernelConfig(
+        'n8k64_wB_n64', 'mixed', 1, (8, 64),
+        dict(_B8X64, SM120_BIAS_ON_N=1, MIXFP4_TILE_N=64, MIXFP4_ATOM_M=2, MIXFP4_ATOM_N=4, MIXFP4_PERM_N=64,
+             MIXFP4_A_ATOMS_PER_GRANULE=4),
+        dict(_B8X64_GEN, MMA_M=4, A_ATOMS=4),
+        expected_census={0: 256, 2: 256},
+        description='n8k64_wB with a 128 x 64 CTA tile (cooperative, 2x4 warps): mid-T kernel.'),
     KernelConfig(
         'n16k64_wA_nodisp', 'mixed', 0, None,
         dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_NO_DISPATCH=1, MIXFP4_PIPE_FLAGS=0), _WT_AS_A_GEN,

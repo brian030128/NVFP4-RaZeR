@@ -137,3 +137,62 @@ is a result:
   shapes (scratch `quick_ab.py`);
 - a 750-comparison bitwise check on 7 shapes with none, all and random tags and real Llama/Qwen TC maps (scratch
   `bitwise_wB.py`). All 750 were equal.
+
+---
+
+## Amendment 1 (optimization 1b): a cooperative 128 × 64 weights-on-B tile for mid T
+
+Written 2026-09-30 after optimization 1's results (`REPORT.md`, 540e1da), before any registered GPU run of 1b. The hashes
+and time are in `registration_1b.json`. Everything of optimization 1 not named here applies unchanged.
+
+**Why.** After optimization 1, M1 still shows +18…+26 % GEMM overhead against stock_wA at T = 256, and +10…+15 % at
+T = 512. The cause is the CTA count.
+- At T = 256, Llama's down_proj runs 64 CTAs of 128 × 128 on 188 SMs: 52.3 µs, against stock_wA's cooperative
+  128 × 64 tile at 32.9 µs.
+- Optimization 1's ping-pong 64 × 64 build is slower there (59.0 µs): it runs 4 MMA warps per tile instead of 8.
+
+**What changes.**
+- **New build `n8k64_wB_n64`** (`sm120/mixfp4_sm120/configs.py`), using existing macros only (no kernel source changes):
+  - the cooperative schedule (8 MMA warps) with a 128 (tokens) × 64 (weights) × 128 CTA tile;
+  - 2x4 warps: each warp owns 64 tokens × 16 weight columns (4 m-atoms, 2 n-atoms). That is the per-warp shape, blob
+    and 16-arm dispatch of `n8k64_wB_m64`, so each output has the same MMA sequence;
+  - `MIXFP4_PERM_N=64`; expected census {0: 256, 2: 256}.
+- **`KernelSet('mixed_wB')`** gains this build under the string key `'128x64'`. Only the table selects it; the fallback
+  rule uses the int token widths only.
+  - `select.py` adds `key_order` and `parse_key`.
+  - The two consumers that sort width keys (`experiments/paper_extra/bench_decode.py`, `check_model_logits.py`) now
+    sort with `key_order`. For int keys the order is unchanged.
+- **The `mixed_wB` table rows are re-tuned** over the five builds with optimization 1's method:
+  `tune_tiles.py --families mixed_wB --cold --update`, synthetic operands, the TC 8x64 maps' densest-module tags.
+  - The `mixed` and `stock` rows and the table's top-level meta stay byte for byte.
+  - Optimization 1's table is kept as `opt1/table_opt1.json`.
+
+**Gates.** They are optimization 1's, re-run on the changed set, and a failure stops the work:
+- **G1:** all configurations other than the four narrow ones and `n8k64_wB_n64` keep their before-build SASS. Checked by
+  `check_sass.py` against `sm120/build` and the tm-opt-source builds; the four narrow ones are treated as new.
+- **G2:** `n8k64_wB_n64`'s census, with no predicated OMMA.
+- **G3:** `build.py --selftest` for `n8k64_wB_n64`, then `pytest sm120/tests/test_gemm.py sm120/tests/test_select.py`
+  with the after builds (`n8k64_wB_n64` is in MIXED; test_select runs the family with the new key).
+- **G4:** `check_bitwise.py --candidates n8k64_wB_n64 --set mixed_wB`, with the re-tuned table.
+- **G5:** `check_model_logits.py` with the re-tuned table.
+
+**Measurements.** Optimization 1's methods, with outputs under `/home/dev/n16k64_campaign/kernel_opt/opt1b/`:
+- **M1:** `bench_ab_isolated.py --opt1-table results/kernel_opt/opt1/table_opt1.json`. It adds optimization 1's set
+  (`auto_wB1`) to the configurations: stock_wA, stock_wB, n8k64_wB (before), auto_wB1 (optimization 1) and auto_wB (1b),
+  typical and worst tags.
+- **M2:** `ab_e2e.py --what prefill --out <opt1b>/e2e`. The policies are optimization 1's; ours-8x64-opt is now the 1b
+  set.
+- **M3, decode:** run only if the re-tuned table changes a choice at the decode buckets (T ≤ 16) of a shape of Llama,
+  Mistral or Phi-4. Otherwise decode executes the same builds as optimization 1's M3, and those records stand. The
+  table diff decides, and it is recorded.
+- **Report:** `ab_report.py --src <opt1b> --tag ab1b`. It adds the 1b set's change against optimization 1's set to
+  the tables.
+
+**Before registration (disclosed, not results).** Exploratory, as the feasibility check:
+- `n8k64_wB_n64` (2x4) was built, and so was a 1x8 variant: one n-atom per warp, a 4-arm dispatch, and
+  `MIXFP4_LDSM_B=2`, since the default x4 LDSM fails CuTe's copy assert.
+- A quick isolated cold CUPTI timing on 6 shapes × 6 token counts (scratch `quick_ab2.py`):
+  - 0 of 144 outputs differed from sm120/build's n8k64_wB;
+  - the 2x4 build beat the 1x8 one in 32 of 36 cells;
+  - the 1x8 build would have been the best choice in 1 cell, by 0.6 %.
+- The 1x8 variant was dropped and is not in `configs.py`.
