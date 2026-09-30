@@ -184,15 +184,36 @@ namespace mixfp4_detail {
 // barriers, so ptxas leaves these as real branches rather than if-converting them.
 template <int Lo, int Hi, class Body>
 CUTLASS_DEVICE void
-dispatch_pattern(uint32_t pattern, Body&& body) {
+dispatch_pattern_tree(uint32_t pattern, Body&& body) {
   if constexpr (Lo == Hi) {
     body(cute::C<Lo>{});
   }
   else {
     constexpr int Mid = Lo + (Hi - Lo) / 2;
-    if (pattern <= uint32_t(Mid)) { dispatch_pattern<Lo, Mid>(pattern, body); }
-    else                          { dispatch_pattern<Mid + 1, Hi>(pattern, body); }
+    if (pattern <= uint32_t(Mid)) { dispatch_pattern_tree<Lo, Mid>(pattern, body); }
+    else                          { dispatch_pattern_tree<Mid + 1, Hi>(pattern, body); }
   }
+}
+
+// [NVFP4-RaZeR local hook, diagnostic only; see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_ARM_XOR=<mask> permutes
+// where each pattern's arm sits in the branch tree: the tree is searched on (pattern ^ mask) and the leaf at position
+// L runs the arm of pattern L ^ mask. Every arm computes exactly as before; only its code position (and so which
+// branches are taken to reach it) changes. mask = arms - 1 puts the all-E0M3 arm on the all-fall-through path that
+// the all-E2M1 arm has by default. Unset (0), this is the upstream dispatch. The E0M3 investigation's test B.
+#ifndef MIXFP4_ARM_XOR
+#define MIXFP4_ARM_XOR 0
+#endif
+template <int Lo, int Hi, class Body>
+CUTLASS_DEVICE void
+dispatch_pattern(uint32_t pattern, Body&& body) {
+#if MIXFP4_ARM_XOR
+  static_assert(Lo == 0 && ((Hi + 1) & Hi) == 0 && (MIXFP4_ARM_XOR & ~Hi) == 0, "MIXFP4_ARM_XOR needs a power-of-two arm count");
+  dispatch_pattern_tree<Lo, Hi>(pattern ^ uint32_t(MIXFP4_ARM_XOR), [&](auto c) {
+    body(cute::C<(decltype(c)::value ^ MIXFP4_ARM_XOR)>{});
+  });
+#else
+  dispatch_pattern_tree<Lo, Hi>(pattern, body);
+#endif
 }
 
 // Pattern bit layout: A granule flags occupy bits [0, AGranules), B granule flags follow in

@@ -145,6 +145,16 @@ CONFIGS = {c.name: c for c in [
         dict(_B8X64_GEN, MMA_M=4, A_ATOMS=4),
         expected_census={0: 256, 2: 256},
         description='n8k64_wB with a 128 x 64 CTA tile (cooperative, 2x4 warps): mid-T kernel.'),
+    # E0M3 investigation, test B (diagnostic only, never deployed): the same kernels with the dispatch tree's arm
+    # positions permuted by MIXFP4_ARM_XOR = arms - 1, which puts the all-E0M3 arm on the all-fall-through path.
+    KernelConfig(
+        'n16k64_wA_xor', 'mixed', 0, (16, 64), dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_ARM_XOR=15), _WT_AS_A_GEN,
+        expected_census={0: 512, 1: 512},
+        description='Diagnostic: n16k64_wA with the dispatch arms permuted (all-E0M3 on the fall-through path).'),
+    KernelConfig(
+        'n8k64_wB_xor', 'mixed', 1, (8, 64), dict(_B8X64, SM120_BIAS_ON_N=1, MIXFP4_ARM_XOR=15), _B8X64_GEN,
+        expected_census={0: 512, 2: 512},
+        description='Diagnostic: n8k64_wB with the dispatch arms permuted (all-E0M3 on the fall-through path).'),
     KernelConfig(
         'n16k64_wA_nodisp', 'mixed', 0, None,
         dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_NO_DISPATCH=1, MIXFP4_PIPE_FLAGS=0), _WT_AS_A_GEN,

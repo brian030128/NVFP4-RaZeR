@@ -196,3 +196,12 @@ T = 512. The cause is the CTA count.
   - the 2x4 build beat the 1x8 one in 32 of 36 cells;
   - the 1x8 build would have been the best choice in 1 cell, by 0.6 %.
 - The 1x8 variant was dropped and is not in `configs.py`.
+
+**Note to amendment 1 (disclosed, 2026-09-30 16:23 UTC): M3 deferred by user request.**
+- The user paused 1b, relayed by nvfp4-razer-c9, before its decode measurement.
+- The orchestrator (`run_measurements.sh`, `ab_e2e.py`) was stopped during Qwen prefill round 4. The prefill process
+  already running was left to finish.
+- The remaining Qwen prefill processes ran as `ab_e2e.py --what prefill`, with the same settings and checks.
+- No decode process was started, so no partial decode record exists.
+- M3 will be run later as a decode-only run (`ab_e2e.py --what decode`, the same policies, settings, rotation and
+  output directory), when the user says start. 1b is not reported as done until then.
