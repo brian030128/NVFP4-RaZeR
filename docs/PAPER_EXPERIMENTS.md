@@ -372,6 +372,31 @@ Times below are per model: Llama / Mistral / Phi-4 / Qwen. Sources:
   - Step 05 recorded the reuse exactly as expected: k/v reuse q's quantization, up reuses gate's (4 quantizer
     launches per Llama layer for 7 GEMMs).
 
+### 06b — Experiment 3.2, primary since deviation 2: GEMM latency, isolated and cold (`06b_gemm_isolated.py`, worker `bench_gemm_isolated.py`)
+
+- **Why:** step 06 times 20 back-to-back calls on L2-resident weights of the densest module. That can inflate the
+  overheads. Deviation 2 (`results/paper/PROTOCOL_GEMM_ISOLATED.md`) makes this the primary GEMM table; step 06 stays
+  as the alternative method.
+- **Command:** `$PAPER_PYTHON experiments/paper/06b_gemm_isolated.py` (`--smoke`: Llama q_proj, T = 128 and 2048).
+- **Step 1, registered:** `check_l2_cold.py` verifies the cold-cache method on Llama's gate_proj and q_proj, at T = 128
+  and 2048. Only a passed record is skipped.
+- **How:** every timed kernel is launched on an idle GPU and timed by CUPTI. Each repetition runs:
+  - the next of K distinct weight copies (K × size ≥ 4× L2);
+  - a 512 MiB read-flush;
+  - a fresh BF16 activation;
+  - the quantizer (timed);
+  - the GEMM (timed).
+  There are 3 rounds in rotated order, 30 repetitions each.
+- **Configurations:** stock_wA (FourOverSix and NVFP4 weights), stock_wB, n16k64_wA 16x64 and 256x64, n8k64_wB 8x64.
+  The FlipQuant (ours) maps are timed with two modules' tags per projection: the typical (lower median E0M3 share)
+  and the worst (densest).
+- **Checks:** before timing, every configuration's output equals NativeLinear's forward bitwise. Every profiled block
+  has the right launch counts. No other process runs on the GPU.
+- **Telemetry:** NVML per block and per (projection, T); a 100 ms nvidia-smi sampler.
+- **Output:** `<out>/gemm_isolated/<model>.json` (+ `.telemetry.csv`) and `l2_check.json`.
+- **Time (measured, 2026-09-30):** step 1 27 s; Llama 2.3 min, Mistral 2.4 min, Phi-4 2.4 min, Qwen 5.4 min.
+  **≈ 13 min in all.**
+
 ### 07 — tables (`07_tables.py`)
 
 - **Purpose:** `<out>/tables/main.md` (8x64 and 16x64), `appendix.md` (256x64 and the per-shape GEMM detail) and
@@ -388,8 +413,14 @@ Times below are per model: Llama / Mistral / Phi-4 / Qwen. Sources:
     outside `--smoke`.
   - **GEMM per-forward sums** and ratios (16x64 and 256x64 against stock_wA; 8x64 against stock_wB and stock_wA),
     with the NVFP4-vs-FourOverSix quantizer sums.
-  - **GEMM vs end to end (deviation 1):** the per-forward GEMM time difference against the end-to-end CUDA-graph
-    prefill difference, per model, comparison and shape. A row is flagged when the two differ by more than 1 % of the
+    - **Since deviation 2** they come from step 06b, with the typical and worst tags.
+    - The main tables add the old / new / end-to-end overheads side by side.
+    - The appendix adds the per-shape detail (median [IQR]), the tags timed and the telemetry.
+    - It also carries step 06's tables and consistency check, labelled "ALTERNATIVE METHOD (CUPTI, back-to-back
+      calls, L2-warm, densest module)".
+  - **GEMM vs end to end (deviation 1; since deviation 2 from step 06b, typical tags primary, worst also shown):** the
+    per-forward GEMM time difference against the end-to-end CUDA-graph prefill difference, per model, comparison and
+    shape. A row is flagged when the two differ by more than 1 % of the
     reference prefill time (appendix; a count in the main tables).
   - **The superseded fixed-order GEMM tables:** `tables/gemm_superseded.md`.
 - **Missing results show as '—'.**

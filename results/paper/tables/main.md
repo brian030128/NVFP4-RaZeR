@@ -199,110 +199,222 @@ FlipQuant (ours) / reference − 1, same activation quantizer; paired within rou
 | 1x8192 | +2.5 % [+2.3, +2.7] | +2.4 % [+2.3, +2.5] | +2.3 % [+2.2, +2.5] | +2.4 % [+2.3, +2.6] | +0.8 % [+0.7, +1.0] | +0.7 % [+0.7, +0.8] |
 | 4x2048 | +2.8 % [+2.6, +2.9] | +2.8 % [+2.7, +2.8] | +2.6 % [+2.4, +2.7] | +2.7 % [+2.5, +2.7] | +1.0 % [+0.8, +1.1] | +0.8 % [+0.8, +1.0] |
 
-### GEMM latency
+### GEMM latency (primary; deviation 2: isolated launches, cold weights)
 
-#### Llama-3.1-8B: GEMM kernel time per forward, µs (every quantized text Linear; CUPTI median of 20, median of 3 rounds in rotated order)
+#### Llama-3.1-8B: GEMM kernel time per forward, µs (every quantized text Linear; isolated launches, cold weights (distinct weight copies >= 4x L2 plus a 512 MiB read-flush before every call), CUPTI device time, median of 3 rounds x 30 repetitions in a rotated order)
 
-| T | stock wA (NVFP4, FourOverSix) | stock wB | FlipQuant (ours) 16x64 (n16k64_wA) | FlipQuant (ours) 8x64 (n8k64_wB) | FlipQuant (ours) 16x64 (n16k64_wA) vs stock wA (NVFP4, FourOverSix) | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wB | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wA (NVFP4, FourOverSix) |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| 128 | 2864 | 4416 | 3134 | 4868 | +9.4 % | +10.3 % | +70.0 % |
-| 256 | 4140 | 5377 | 4358 | 5941 | +5.3 % | +10.5 % | +43.5 % |
-| 512 | 6138 | 6518 | 6458 | 7342 | +5.2 % | +12.6 % | +19.6 % |
-| 1024 | 11694 | 11872 | 12182 | 13219 | +4.2 % | +11.3 % | +13.0 % |
-| 2048 | 20523 | 20440 | 21468 | 22811 | +4.6 % | +11.6 % | +11.1 % |
-| 4096 | 42378 | 42292 | 44243 | 47566 | +4.4 % | +12.5 % | +12.2 % |
-| 8192 | 82090 | 81712 | 86035 | 92217 | +4.8 % | +12.9 % | +12.3 % |
+| T | stock wA | stock wB | FlipQuant (ours) 16x64, typical | FlipQuant (ours) 16x64, worst | FlipQuant (ours) 8x64, typical | FlipQuant (ours) 8x64, worst |
+|---|---:|---:|---:|---:|---:|---:|
+| 128 | 3530 | 4991 | 3689 | 3691 | 5490 | 5546 |
+| 256 | 4542 | 5750 | 4687 | 4711 | 6383 | 6464 |
+| 512 | 7006 | 7369 | 7396 | 7474 | 8545 | 8665 |
+| 1024 | 13548 | 13590 | 13980 | 13996 | 14773 | 14873 |
+| 2048 | 23381 | 23241 | 24226 | 24383 | 25618 | 25866 |
+| 4096 | 45939 | 45622 | 47599 | 47894 | 49995 | 50469 |
+| 8192 | 87666 | 87212 | 91048 | 91522 | 96509 | 97558 |
 
-FourOverSix and NVFP4 run the same stock GEMM (stock wA); their activation quantizers differ (supplementary):
+Overheads against the same-placement stock kernel (and 8x64 against stock wA):
 
-| T | NVFP4 quantizer, µs / forward | FourOverSix quantizer, µs / forward | FourOverSix vs NVFP4 |
+| T | FlipQuant (ours) 16x64, typical vs stock wA | FlipQuant (ours) 16x64, worst vs stock wA | FlipQuant (ours) 8x64, typical vs stock wB | FlipQuant (ours) 8x64, worst vs stock wB | FlipQuant (ours) 8x64, typical vs stock wA | FlipQuant (ours) 8x64, worst vs stock wA |
+|---|---:|---:|---:|---:|---:|---:|
+| 128 | +4.5 % | +4.6 % | +10.0 % | +11.1 % | +55.5 % | +57.1 % |
+| 256 | +3.2 % | +3.7 % | +11.0 % | +12.4 % | +40.5 % | +42.3 % |
+| 512 | +5.6 % | +6.7 % | +16.0 % | +17.6 % | +22.0 % | +23.7 % |
+| 1024 | +3.2 % | +3.3 % | +8.7 % | +9.4 % | +9.0 % | +9.8 % |
+| 2048 | +3.6 % | +4.3 % | +10.2 % | +11.3 % | +9.6 % | +10.6 % |
+| 4096 | +3.6 % | +4.3 % | +9.6 % | +10.6 % | +8.8 % | +9.9 % |
+| 8192 | +3.9 % | +4.4 % | +10.7 % | +11.9 % | +10.1 % | +11.3 % |
+
+The activation quantizer per forward, µs (isolated launches; FourOverSix and NVFP4 share the stock GEMM):
+
+| T | NVFP4 quantizer | FourOverSix quantizer | FourOverSix vs NVFP4 |
 |---|---:|---:|---:|
-| 128 | 796 | 712 | -10.6 % |
-| 256 | 968 | 889 | -8.1 % |
-| 512 | 1631 | 1493 | -8.5 % |
-| 1024 | 2442 | 2800 | +14.7 % |
-| 2048 | 4213 | 4621 | +9.7 % |
-| 4096 | 8718 | 9135 | +4.8 % |
-| 8192 | 16808 | 17939 | +6.7 % |
+| 128 | 799 | 714 | -10.6 % |
+| 256 | 960 | 879 | -8.4 % |
+| 512 | 1589 | 1446 | -9.0 % |
+| 1024 | 2441 | 2760 | +13.1 % |
+| 2048 | 4253 | 4597 | +8.1 % |
+| 4096 | 8517 | 9320 | +9.4 % |
+| 8192 | 17057 | 18108 | +6.2 % |
 
 Quantizer launches net of the reuse measured in step 05.
 
-#### Mistral-7B-v0.3: GEMM kernel time per forward, µs (every quantized text Linear; CUPTI median of 20, median of 3 rounds in rotated order)
+#### Mistral-7B-v0.3: GEMM kernel time per forward, µs (every quantized text Linear; isolated launches, cold weights (distinct weight copies >= 4x L2 plus a 512 MiB read-flush before every call), CUPTI device time, median of 3 rounds x 30 repetitions in a rotated order)
 
-| T | stock wA (NVFP4, FourOverSix) | stock wB | FlipQuant (ours) 16x64 (n16k64_wA) | FlipQuant (ours) 8x64 (n8k64_wB) | FlipQuant (ours) 16x64 (n16k64_wA) vs stock wA (NVFP4, FourOverSix) | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wB | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wA (NVFP4, FourOverSix) |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| 128 | 2863 | 4419 | 3142 | 4882 | +9.7 % | +10.5 % | +70.5 % |
-| 256 | 4140 | 5380 | 4357 | 5938 | +5.2 % | +10.4 % | +43.4 % |
-| 512 | 6114 | 6429 | 6370 | 7310 | +4.2 % | +13.7 % | +19.6 % |
-| 1024 | 11696 | 11900 | 12203 | 13248 | +4.3 % | +11.3 % | +13.3 % |
-| 2048 | 20578 | 20489 | 21496 | 22844 | +4.5 % | +11.5 % | +11.0 % |
-| 4096 | 42485 | 42341 | 44325 | 47487 | +4.3 % | +12.2 % | +11.8 % |
-| 8192 | 82192 | 81770 | 86064 | 92206 | +4.7 % | +12.8 % | +12.2 % |
+| T | stock wA | stock wB | FlipQuant (ours) 16x64, typical | FlipQuant (ours) 16x64, worst | FlipQuant (ours) 8x64, typical | FlipQuant (ours) 8x64, worst |
+|---|---:|---:|---:|---:|---:|---:|
+| 128 | 3532 | 4992 | 3688 | 3696 | 5492 | 5550 |
+| 256 | 4544 | 5749 | 4690 | 4718 | 6372 | 6445 |
+| 512 | 7017 | 7376 | 7393 | 7456 | 8572 | 8663 |
+| 1024 | 13571 | 13647 | 13992 | 13986 | 14807 | 14850 |
+| 2048 | 23308 | 23208 | 24339 | 24440 | 25563 | 25774 |
+| 4096 | 46132 | 45796 | 47736 | 47933 | 50565 | 50882 |
+| 8192 | 88048 | 87598 | 91512 | 92013 | 96956 | 97865 |
 
-FourOverSix and NVFP4 run the same stock GEMM (stock wA); their activation quantizers differ (supplementary):
+Overheads against the same-placement stock kernel (and 8x64 against stock wA):
 
-| T | NVFP4 quantizer, µs / forward | FourOverSix quantizer, µs / forward | FourOverSix vs NVFP4 |
+| T | FlipQuant (ours) 16x64, typical vs stock wA | FlipQuant (ours) 16x64, worst vs stock wA | FlipQuant (ours) 8x64, typical vs stock wB | FlipQuant (ours) 8x64, worst vs stock wB | FlipQuant (ours) 8x64, typical vs stock wA | FlipQuant (ours) 8x64, worst vs stock wA |
+|---|---:|---:|---:|---:|---:|---:|
+| 128 | +4.4 % | +4.6 % | +10.0 % | +11.2 % | +55.5 % | +57.1 % |
+| 256 | +3.2 % | +3.8 % | +10.8 % | +12.1 % | +40.2 % | +41.8 % |
+| 512 | +5.3 % | +6.3 % | +16.2 % | +17.5 % | +22.2 % | +23.4 % |
+| 1024 | +3.1 % | +3.1 % | +8.5 % | +8.8 % | +9.1 % | +9.4 % |
+| 2048 | +4.4 % | +4.9 % | +10.1 % | +11.1 % | +9.7 % | +10.6 % |
+| 4096 | +3.5 % | +3.9 % | +10.4 % | +11.1 % | +9.6 % | +10.3 % |
+| 8192 | +3.9 % | +4.5 % | +10.7 % | +11.7 % | +10.1 % | +11.2 % |
+
+The activation quantizer per forward, µs (isolated launches; FourOverSix and NVFP4 share the stock GEMM):
+
+| T | NVFP4 quantizer | FourOverSix quantizer | FourOverSix vs NVFP4 |
 |---|---:|---:|---:|
-| 128 | 796 | 711 | -10.7 % |
-| 256 | 968 | 889 | -8.2 % |
-| 512 | 1638 | 1494 | -8.8 % |
-| 1024 | 2446 | 2801 | +14.5 % |
-| 2048 | 4221 | 4625 | +9.6 % |
-| 4096 | 8736 | 9154 | +4.8 % |
-| 8192 | 16846 | 17961 | +6.6 % |
+| 128 | 799 | 714 | -10.7 % |
+| 256 | 959 | 881 | -8.2 % |
+| 512 | 1590 | 1449 | -8.9 % |
+| 1024 | 2443 | 2762 | +13.1 % |
+| 2048 | 4253 | 4605 | +8.3 % |
+| 4096 | 8532 | 9363 | +9.7 % |
+| 8192 | 17199 | 18259 | +6.2 % |
 
 Quantizer launches net of the reuse measured in step 05.
 
-#### Phi-4: GEMM kernel time per forward, µs (every quantized text Linear; CUPTI median of 20, median of 3 rounds in rotated order)
+#### Phi-4: GEMM kernel time per forward, µs (every quantized text Linear; isolated launches, cold weights (distinct weight copies >= 4x L2 plus a 512 MiB read-flush before every call), CUPTI device time, median of 3 rounds x 30 repetitions in a rotated order)
 
-| T | stock wA (NVFP4, FourOverSix) | stock wB | FlipQuant (ours) 16x64 (n16k64_wA) | FlipQuant (ours) 8x64 (n8k64_wB) | FlipQuant (ours) 16x64 (n16k64_wA) vs stock wA (NVFP4, FourOverSix) | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wB | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wA (NVFP4, FourOverSix) |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| 128 | 3825 | 5335 | 4193 | 5804 | +9.6 % | +8.8 % | +51.7 % |
-| 256 | 5885 | 6565 | 6060 | 7257 | +3.0 % | +10.5 % | +23.3 % |
-| 512 | 10644 | 10636 | 11127 | 11951 | +4.5 % | +12.4 % | +12.3 % |
-| 1024 | 20642 | 20549 | 21492 | 23051 | +4.1 % | +12.2 % | +11.7 % |
-| 2048 | 42106 | 41904 | 43636 | 46253 | +3.6 % | +10.4 % | +9.8 % |
-| 4096 | 80234 | 79773 | 83342 | 88880 | +3.9 % | +11.4 % | +10.8 % |
-| 8192 | 172136 | 169746 | 179062 | 191103 | +4.0 % | +12.6 % | +11.0 % |
+| T | stock wA | stock wB | FlipQuant (ours) 16x64, typical | FlipQuant (ours) 16x64, worst | FlipQuant (ours) 8x64, typical | FlipQuant (ours) 8x64, worst |
+|---|---:|---:|---:|---:|---:|---:|
+| 128 | 5650 | 6692 | 5739 | 5754 | 7146 | 7162 |
+| 256 | 7004 | 7629 | 7284 | 7279 | 8276 | 8294 |
+| 512 | 11965 | 11960 | 12431 | 12449 | 13259 | 13275 |
+| 1024 | 22951 | 22891 | 23769 | 23816 | 25057 | 25098 |
+| 2048 | 45412 | 45164 | 46966 | 46986 | 49318 | 49515 |
+| 4096 | 85608 | 85278 | 88480 | 88625 | 93510 | 93745 |
+| 8192 | 168158 | 167707 | 173787 | 174258 | 184532 | 185022 |
 
-FourOverSix and NVFP4 run the same stock GEMM (stock wA); their activation quantizers differ (supplementary):
+Overheads against the same-placement stock kernel (and 8x64 against stock wA):
 
-| T | NVFP4 quantizer, µs / forward | FourOverSix quantizer, µs / forward | FourOverSix vs NVFP4 |
+| T | FlipQuant (ours) 16x64, typical vs stock wA | FlipQuant (ours) 16x64, worst vs stock wA | FlipQuant (ours) 8x64, typical vs stock wB | FlipQuant (ours) 8x64, worst vs stock wB | FlipQuant (ours) 8x64, typical vs stock wA | FlipQuant (ours) 8x64, worst vs stock wA |
+|---|---:|---:|---:|---:|---:|---:|
+| 128 | +1.6 % | +1.8 % | +6.8 % | +7.0 % | +26.5 % | +26.7 % |
+| 256 | +4.0 % | +3.9 % | +8.5 % | +8.7 % | +18.2 % | +18.4 % |
+| 512 | +3.9 % | +4.0 % | +10.9 % | +11.0 % | +10.8 % | +10.9 % |
+| 1024 | +3.6 % | +3.8 % | +9.5 % | +9.6 % | +9.2 % | +9.4 % |
+| 2048 | +3.4 % | +3.5 % | +9.2 % | +9.6 % | +8.6 % | +9.0 % |
+| 4096 | +3.4 % | +3.5 % | +9.7 % | +9.9 % | +9.2 % | +9.5 % |
+| 8192 | +3.3 % | +3.6 % | +10.0 % | +10.3 % | +9.7 % | +10.0 % |
+
+The activation quantizer per forward, µs (isolated launches; FourOverSix and NVFP4 share the stock GEMM):
+
+| T | NVFP4 quantizer | FourOverSix quantizer | FourOverSix vs NVFP4 |
 |---|---:|---:|---:|
-| 128 | 1114 | 1040 | -6.7 % |
-| 256 | 1960 | 1719 | -12.3 % |
-| 512 | 3174 | 2883 | -9.2 % |
-| 1024 | 4368 | 5090 | +16.5 % |
-| 2048 | 8227 | 8833 | +7.4 % |
-| 4096 | 14365 | 15251 | +6.2 % |
-| 8192 | 27330 | 29832 | +9.2 % |
+| 128 | 1102 | 1030 | -6.5 % |
+| 256 | 1706 | 1519 | -11.0 % |
+| 512 | 2688 | 2381 | -11.4 % |
+| 1024 | 3908 | 4661 | +19.3 % |
+| 2048 | 6906 | 7637 | +10.6 % |
+| 4096 | 14267 | 15135 | +6.1 % |
+| 8192 | 28636 | 29432 | +2.8 % |
 
 Quantizer launches net of the reuse measured in step 05.
 
-#### Qwen3.8-27B: GEMM kernel time per forward, µs (every quantized text Linear; CUPTI median of 20, median of 3 rounds in rotated order)
+#### Qwen3.8-27B: GEMM kernel time per forward, µs (every quantized text Linear; isolated launches, cold weights (distinct weight copies >= 4x L2 plus a 512 MiB read-flush before every call), CUPTI device time, median of 3 rounds x 30 repetitions in a rotated order)
 
-| T | stock wA (NVFP4, FourOverSix) | stock wB | FlipQuant (ours) 16x64 (n16k64_wA) | FlipQuant (ours) 8x64 (n8k64_wB) | FlipQuant (ours) 16x64 (n16k64_wA) vs stock wA (NVFP4, FourOverSix) | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wB | FlipQuant (ours) 8x64 (n8k64_wB) vs stock wA (NVFP4, FourOverSix) |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| 128 | 7843 | 11817 | 8740 | 12922 | +11.4 % | +9.3 % | +64.8 % |
-| 256 | 12064 | 14595 | 12577 | 16132 | +4.3 % | +10.5 % | +33.7 % |
-| 512 | 18696 | 20018 | 19850 | 22686 | +6.2 % | +13.3 % | +21.3 % |
-| 1024 | 37601 | 38308 | 38907 | 42720 | +3.5 % | +11.5 % | +13.6 % |
-| 2048 | 75558 | 75958 | 78620 | 84201 | +4.1 % | +10.9 % | +11.4 % |
-| 4096 | 145093 | 144284 | 150826 | 161076 | +4.0 % | +11.6 % | +11.0 % |
-| 8192 | 288063 | 286921 | 299740 | 321524 | +4.1 % | +12.1 % | +11.6 % |
+| T | stock wA | stock wB | FlipQuant (ours) 16x64, typical | FlipQuant (ours) 16x64, worst | FlipQuant (ours) 8x64, typical | FlipQuant (ours) 8x64, worst |
+|---|---:|---:|---:|---:|---:|---:|
+| 128 | 11121 | 14386 | 11354 | 11427 | 15359 | 15476 |
+| 256 | 13904 | 16356 | 14491 | 14629 | 18079 | 18254 |
+| 512 | 23417 | 24725 | 24559 | 24687 | 27263 | 27497 |
+| 1024 | 43770 | 44681 | 45320 | 45616 | 48848 | 49278 |
+| 2048 | 83233 | 83511 | 85739 | 86362 | 90699 | 91457 |
+| 4096 | 156793 | 156084 | 162090 | 162826 | 170945 | 172322 |
+| 8192 | 302944 | 302163 | 313015 | 314246 | 331739 | 334554 |
 
-FourOverSix and NVFP4 run the same stock GEMM (stock wA); their activation quantizers differ (supplementary):
+Overheads against the same-placement stock kernel (and 8x64 against stock wA):
 
-| T | NVFP4 quantizer, µs / forward | FourOverSix quantizer, µs / forward | FourOverSix vs NVFP4 |
+| T | FlipQuant (ours) 16x64, typical vs stock wA | FlipQuant (ours) 16x64, worst vs stock wA | FlipQuant (ours) 8x64, typical vs stock wB | FlipQuant (ours) 8x64, worst vs stock wB | FlipQuant (ours) 8x64, typical vs stock wA | FlipQuant (ours) 8x64, worst vs stock wA |
+|---|---:|---:|---:|---:|---:|---:|
+| 128 | +2.1 % | +2.8 % | +6.8 % | +7.6 % | +38.1 % | +39.2 % |
+| 256 | +4.2 % | +5.2 % | +10.5 % | +11.6 % | +30.0 % | +31.3 % |
+| 512 | +4.9 % | +5.4 % | +10.3 % | +11.2 % | +16.4 % | +17.4 % |
+| 1024 | +3.5 % | +4.2 % | +9.3 % | +10.3 % | +11.6 % | +12.6 % |
+| 2048 | +3.0 % | +3.8 % | +8.6 % | +9.5 % | +9.0 % | +9.9 % |
+| 4096 | +3.4 % | +3.8 % | +9.5 % | +10.4 % | +9.0 % | +9.9 % |
+| 8192 | +3.3 % | +3.7 % | +9.8 % | +10.7 % | +9.5 % | +10.4 % |
+
+The activation quantizer per forward, µs (isolated launches; FourOverSix and NVFP4 share the stock GEMM):
+
+| T | NVFP4 quantizer | FourOverSix quantizer | FourOverSix vs NVFP4 |
 |---|---:|---:|---:|
-| 128 | 1756 | 1639 | -6.7 % |
-| 256 | 2807 | 2524 | -10.1 % |
-| 512 | 4944 | 4490 | -9.2 % |
-| 1024 | 6450 | 7585 | +17.6 % |
-| 2048 | 12822 | 13770 | +7.4 % |
-| 4096 | 23182 | 24592 | +6.1 % |
-| 8192 | 43429 | 46694 | +7.5 % |
+| 128 | 1755 | 1639 | -6.6 % |
+| 256 | 2717 | 2419 | -10.9 % |
+| 512 | 4219 | 3779 | -10.4 % |
+| 1024 | 6265 | 7413 | +18.3 % |
+| 2048 | 11216 | 12310 | +9.8 % |
+| 4096 | 22900 | 24412 | +6.6 % |
+| 8192 | 46134 | 47871 | +3.8 % |
 
 Quantizer launches net of the reuse measured in step 05.
 
-GEMM vs end-to-end consistency (deviation 1; tolerance 1 % of the reference prefill): Llama-3.1-8B 16 of 32 rows flagged; Mistral-7B-v0.3 22 of 32 rows flagged; Phi-4 16 of 32 rows flagged; Qwen3.8-27B 5 of 32 rows flagged (appendix).
+### GEMM overheads: old method, new method, end to end
+
+#### Llama-3.1-8B: overhead against the same-placement stock kernel, three ways
+
+GEMM per forward, CUPTI, back-to-back calls, L2-warm, densest module (old step 06); GEMM per forward, isolated and cold (new, typical / worst tags); and the end-to-end CUDA-graph prefill (FlipQuant (ours) vs FourOverSix with the same placement, the median over rounds of the per-round ratio).
+
+| batch x prompt | 16x64: GEMM, old | 16x64: GEMM, new typical | 16x64: GEMM, new worst | 16x64: end to end | 8x64 (wB): GEMM, old | 8x64 (wB): GEMM, new typical | 8x64 (wB): GEMM, new worst | 8x64 (wB): end to end |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1x128 | +9.4 % | +4.5 % | +4.6 % | +1.5 % | +10.3 % | +10.0 % | +11.1 % | +3.8 % |
+| 1x256 | +5.3 % | +3.2 % | +3.7 % | +1.4 % | +10.5 % | +11.0 % | +12.4 % | +4.1 % |
+| 1x512 | +5.2 % | +5.6 % | +6.7 % | +3.5 % | +12.6 % | +16.0 % | +17.6 % | +9.1 % |
+| 1x1024 | +4.2 % | +3.2 % | +3.3 % | +2.4 % | +11.3 % | +8.7 % | +9.4 % | +5.8 % |
+| 1x2048 | +4.6 % | +3.6 % | +4.3 % | +1.8 % | +11.6 % | +10.2 % | +11.3 % | +5.1 % |
+| 1x4096 | +4.4 % | +3.6 % | +4.3 % | +2.0 % | +12.5 % | +9.6 % | +10.6 % | +4.9 % |
+| 1x8192 | +4.8 % | +3.9 % | +4.4 % | +1.4 % | +12.9 % | +10.7 % | +11.9 % | +3.8 % |
+| 4x2048 | +4.8 % | +3.9 % | +4.4 % | +1.7 % | +12.9 % | +10.7 % | +11.9 % | +4.6 % |
+
+#### Mistral-7B-v0.3: overhead against the same-placement stock kernel, three ways
+
+GEMM per forward, CUPTI, back-to-back calls, L2-warm, densest module (old step 06); GEMM per forward, isolated and cold (new, typical / worst tags); and the end-to-end CUDA-graph prefill (FlipQuant (ours) vs FourOverSix with the same placement, the median over rounds of the per-round ratio).
+
+| batch x prompt | 16x64: GEMM, old | 16x64: GEMM, new typical | 16x64: GEMM, new worst | 16x64: end to end | 8x64 (wB): GEMM, old | 8x64 (wB): GEMM, new typical | 8x64 (wB): GEMM, new worst | 8x64 (wB): end to end |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1x128 | +9.7 % | +4.4 % | +4.6 % | +1.6 % | +10.5 % | +10.0 % | +11.2 % | +4.0 % |
+| 1x256 | +5.2 % | +3.2 % | +3.8 % | +1.3 % | +10.4 % | +10.8 % | +12.1 % | +4.4 % |
+| 1x512 | +4.2 % | +5.3 % | +6.3 % | +4.1 % | +13.7 % | +16.2 % | +17.5 % | +8.0 % |
+| 1x1024 | +4.3 % | +3.1 % | +3.1 % | +2.8 % | +11.3 % | +8.5 % | +8.8 % | +7.6 % |
+| 1x2048 | +4.5 % | +4.4 % | +4.9 % | +2.0 % | +11.5 % | +10.1 % | +11.1 % | +5.7 % |
+| 1x4096 | +4.3 % | +3.5 % | +3.9 % | +1.7 % | +12.2 % | +10.4 % | +11.1 % | +5.5 % |
+| 1x8192 | +4.7 % | +3.9 % | +4.5 % | +1.5 % | +12.8 % | +10.7 % | +11.7 % | +4.3 % |
+| 4x2048 | +4.7 % | +3.9 % | +4.5 % | +1.8 % | +12.8 % | +10.7 % | +11.7 % | +5.2 % |
+
+#### Phi-4: overhead against the same-placement stock kernel, three ways
+
+GEMM per forward, CUPTI, back-to-back calls, L2-warm, densest module (old step 06); GEMM per forward, isolated and cold (new, typical / worst tags); and the end-to-end CUDA-graph prefill (FlipQuant (ours) vs FourOverSix with the same placement, the median over rounds of the per-round ratio).
+
+| batch x prompt | 16x64: GEMM, old | 16x64: GEMM, new typical | 16x64: GEMM, new worst | 16x64: end to end | 8x64 (wB): GEMM, old | 8x64 (wB): GEMM, new typical | 8x64 (wB): GEMM, new worst | 8x64 (wB): end to end |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1x128 | +9.6 % | +1.6 % | +1.8 % | +0.8 % | +8.8 % | +6.8 % | +7.0 % | +2.9 % |
+| 1x256 | +3.0 % | +4.0 % | +3.9 % | +2.7 % | +10.5 % | +8.5 % | +8.7 % | +4.2 % |
+| 1x512 | +4.5 % | +3.9 % | +4.0 % | +2.4 % | +12.4 % | +10.9 % | +11.0 % | +6.1 % |
+| 1x1024 | +4.1 % | +3.6 % | +3.8 % | +2.1 % | +12.2 % | +9.5 % | +9.6 % | +5.5 % |
+| 1x2048 | +3.6 % | +3.4 % | +3.5 % | +1.9 % | +10.4 % | +9.2 % | +9.6 % | +5.5 % |
+| 1x4096 | +3.9 % | +3.4 % | +3.5 % | +1.7 % | +11.4 % | +9.7 % | +9.9 % | +5.2 % |
+| 1x8192 | +4.0 % | +3.3 % | +3.6 % | +1.6 % | +12.6 % | +10.0 % | +10.3 % | +4.3 % |
+| 4x2048 | +4.0 % | +3.3 % | +3.6 % | +1.7 % | +12.6 % | +10.0 % | +10.3 % | +4.9 % |
+
+#### Qwen3.8-27B: overhead against the same-placement stock kernel, three ways
+
+GEMM per forward, CUPTI, back-to-back calls, L2-warm, densest module (old step 06); GEMM per forward, isolated and cold (new, typical / worst tags); and the end-to-end CUDA-graph prefill (FlipQuant (ours) vs FourOverSix with the same placement, the median over rounds of the per-round ratio).
+
+| batch x prompt | 16x64: GEMM, old | 16x64: GEMM, new typical | 16x64: GEMM, new worst | 16x64: end to end | 8x64 (wB): GEMM, old | 8x64 (wB): GEMM, new typical | 8x64 (wB): GEMM, new worst | 8x64 (wB): end to end |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1x128 | +11.4 % | +2.1 % | +2.8 % | +0.2 % | +9.3 % | +6.8 % | +7.6 % | +0.9 % |
+| 1x256 | +4.3 % | +4.2 % | +5.2 % | +0.6 % | +10.5 % | +10.5 % | +11.6 % | +1.5 % |
+| 1x512 | +6.2 % | +4.9 % | +5.4 % | +1.1 % | +13.3 % | +10.3 % | +11.2 % | +2.5 % |
+| 1x1024 | +3.5 % | +3.5 % | +4.2 % | +1.2 % | +11.5 % | +9.3 % | +10.3 % | +2.8 % |
+| 1x2048 | +4.1 % | +3.0 % | +3.8 % | +1.1 % | +10.9 % | +8.6 % | +9.5 % | +3.0 % |
+| 1x4096 | +4.0 % | +3.4 % | +3.8 % | +1.0 % | +11.6 % | +9.5 % | +10.4 % | +2.7 % |
+| 1x8192 | +4.1 % | +3.3 % | +3.7 % | +0.8 % | +12.1 % | +9.8 % | +10.7 % | +2.3 % |
+| 4x2048 | +4.1 % | +3.3 % | +3.7 % | +1.0 % | +12.1 % | +9.8 % | +10.7 % | +2.6 % |
+
+GEMM vs end-to-end consistency (deviation 2; isolated, cold GEMM; tolerance 1 % of the reference prefill): Llama-3.1-8B 16 (typical) / 12 (worst) of 32 rows flagged; Mistral-7B-v0.3 18 (typical) / 16 (worst) of 32 rows flagged; Phi-4 15 (typical) / 15 (worst) of 32 rows flagged; Qwen3.8-27B 6 (typical) / 4 (worst) of 32 rows flagged (appendix).
+
+The GEMM tables of the alternative method (CUPTI, back-to-back calls, L2-warm, densest module; step 06, deviation 1) are in the appendix. ALTERNATIVE METHOD (CUPTI, back-to-back calls, L2-warm, densest module; step 06): GEMM vs end-to-end consistency (deviation 1; tolerance 1 % of the reference prefill): Llama-3.1-8B 16 of 32 rows flagged; Mistral-7B-v0.3 22 of 32 rows flagged; Phi-4 16 of 32 rows flagged; Qwen3.8-27B 5 of 32 rows flagged (appendix).

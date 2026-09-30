@@ -199,3 +199,20 @@ its launches, net of the reuse measured in step 05.
      - `gemm_isolated_tables.py` da45e223c5121b87447c5b76c8166599dc9160ff055d88c1bd19421b03506aa3;
      - `06b_gemm_isolated.py` 66d8141ca44d00961edbc4e854cf62587968bee072a067cdbb1f5b11dba1bd24;
      - `diagnose_cold_cache.py` b4c2ccfc5081195390f7e8b0f2b67d8359ba9b6bbbe09cd59ee05f06715d65f7 (new).
+
+   **Follow-up, 2026-09-30 06:36 UTC: step 1 re-run and passed; the full run done** (after 46a35a1).
+   - **Step 1 with the amended method:** 8 of 8 cases passed (`gemm_isolated/l2_check.json`).
+     - Rotation + 512 MiB flush agrees with rotation + a 1 GiB flush within 1.3 %, and with the flush on one copy
+       within 0.7 %.
+     - Cold vs warm: +42–44 % (gate_proj, T = 128), +4–6 % (q_proj, T = 128), 0 % (gate_proj, T = 2048), +7–15 %
+       (q_proj, T = 2048).
+     - Item #3's event pair adds 24–31 µs of host enqueue gap per call.
+   - **The run:** 06:23–06:36 UTC, four processes, all exited 0.
+   - **Registered checks:** every one passed. 1,890 of 1,890 (projection, T, configuration) outputs are bitwise equal to
+     NativeLinear's forward; every profiled block has the right launch counts; no other compute process ran.
+   - **The power cap was active** in 3 of 28 (projection, T) blocks on Phi-4 (2.9 s: gate_up_proj at T = 4096 and 8192,
+     down_proj at 8192) and in 2 of 84 on Qwen (0.6 s: gate_proj and up_proj at 8192). It hit every configuration of
+     those blocks alike; the rotated order spreads it.
+   - **Results:** tables regenerated (`tables/main.md`, `appendix.md`, `tables.json`); records in `gemm_isolated/`.
+   - **`docs/PAPER_EXPERIMENTS.md`** (registered by the paper protocol) gained a 06b section, and its step-07 GEMM
+     bullets were updated. Documentation only.

@@ -1,0 +1,571 @@
+{
+ "status": "complete",
+ "gpu": {
+  "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "driver_version": "595.71.05",
+  "power.limit": "500.00 W",
+  "power.default_limit": "600.00 W",
+  "clocks.max.sm": "3090 MHz",
+  "clocks.max.mem": "14001 MHz",
+  "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+  "persistence_mode": "Enabled",
+  "temperature.gpu": "42",
+  "utilization.gpu": "0 %",
+  "memory.used": "4 MiB",
+  "torch": "2.9.0+cu128",
+  "torch_cuda": "12.8",
+  "triton": "3.5.0",
+  "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+  "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "capability": [
+   12,
+   0
+  ],
+  "sm_count": 188,
+  "utc": "2026-09-30T06:16:40+00:00"
+ },
+ "power_limit_w": 500.0,
+ "l2_bytes": 134217728,
+ "reps": 50,
+ "rounds": 3,
+ "tolerance": 0.02,
+ "cases": [
+  {
+   "proj": "gate_proj",
+   "out": 14336,
+   "inp": 4096,
+   "tokens": 128,
+   "kind": "fo6",
+   "module": "model.layers.0.mlp.gate_proj",
+   "e0m3_tiles": 0,
+   "kernel": "stock_wA",
+   "rotation_copies": 18,
+   "rotation_bytes": 594542592,
+   "stats": {
+    "warm": {
+     "median": 16.480000000000473,
+     "q1": 16.415999999999258,
+     "q3": 16.543999999999897,
+     "min": 16.22400000000016,
+     "max": 16.70400000000018,
+     "n": 150
+    },
+    "cold512": {
+     "median": 23.8070000000007,
+     "q1": 23.74399999999946,
+     "q3": 23.87199999999939,
+     "min": 23.648000000001048,
+     "max": 24.159999999999854,
+     "n": 150
+    },
+    "cold1024": {
+     "median": 23.807999999997264,
+     "q1": 23.743999999998778,
+     "q3": 23.91175000000203,
+     "min": 23.679000000000087,
+     "max": 24.190999999998894,
+     "n": 150
+    },
+    "rotation": {
+     "median": 23.838999999999942,
+     "q1": 23.774999999999636,
+     "q3": 23.934999999999945,
+     "min": 23.64800000000014,
+     "max": 24.256000000000313,
+     "n": 150
+    },
+    "event512": {
+     "median": 50.4320003092289,
+     "q1": 49.92000013589859,
+     "q3": 51.207998767495155,
+     "min": 48.54400083422661,
+     "max": 52.41600051522255,
+     "n": 150
+    }
+   },
+   "cold_vs_warm_pct": 44.45995145631076,
+   "cold512_vs_cold1024_pct": -0.004200268802778684,
+   "cold512_vs_rotation_pct": -0.13423381852948335,
+   "event_minus_cupti_us": 26.6250003092282,
+   "rules": {
+    "cold_not_faster_than_warm": true,
+    "flush_1gib_agrees": true,
+    "rotation_agrees": true
+   },
+   "passed": true
+  },
+  {
+   "proj": "gate_proj",
+   "out": 14336,
+   "inp": 4096,
+   "tokens": 2048,
+   "kind": "fo6",
+   "module": "model.layers.0.mlp.gate_proj",
+   "e0m3_tiles": 0,
+   "kernel": "stock_wA",
+   "rotation_copies": 18,
+   "rotation_bytes": 594542592,
+   "stats": {
+    "warm": {
+     "median": 186.41299999999865,
+     "q1": 185.78899999999976,
+     "q3": 187.11699999999905,
+     "min": 184.15700000000106,
+     "max": 201.85299999999916,
+     "n": 150
+    },
+    "cold512": {
+     "median": 187.40450000000146,
+     "q1": 186.58899999999994,
+     "q3": 188.29299999999967,
+     "min": 184.53999999999996,
+     "max": 201.21299999999974,
+     "n": 150
+    },
+    "cold1024": {
+     "median": 185.3724999999995,
+     "q1": 184.66875000000073,
+     "q3": 185.89300000000185,
+     "min": 183.00499999999738,
+     "max": 198.14100000000008,
+     "n": 150
+    },
+    "rotation": {
+     "median": 187.61250000000064,
+     "q1": 187.14900000000011,
+     "q3": 188.06100000000015,
+     "min": 184.4449999999997,
+     "max": 203.644,
+     "n": 150
+    },
+    "event512": {
+     "median": 219.13599967956543,
+     "q1": 218.4239961206913,
+     "q3": 220.61599791049957,
+     "min": 216.06400609016418,
+     "max": 266.2079930305481,
+     "n": 150
+    }
+   },
+   "cold_vs_warm_pct": 0.5318835059801685,
+   "cold512_vs_cold1024_pct": 1.0961712228092058,
+   "cold512_vs_rotation_pct": -0.11086681324494752,
+   "event_minus_cupti_us": 31.731499679563967,
+   "rules": {
+    "cold_not_faster_than_warm": true,
+    "flush_1gib_agrees": true,
+    "rotation_agrees": true
+   },
+   "passed": true
+  },
+  {
+   "proj": "gate_proj",
+   "out": 14336,
+   "inp": 4096,
+   "tokens": 128,
+   "kind": "tc_16x64",
+   "module": "model.layers.19.mlp.gate_proj",
+   "e0m3_tiles": 1206,
+   "kernel": "n16k64_wA",
+   "rotation_copies": 18,
+   "rotation_bytes": 594542592,
+   "stats": {
+    "warm": {
+     "median": 16.863999999999578,
+     "q1": 16.76800000000003,
+     "q3": 16.927999999999884,
+     "min": 16.60699999999997,
+     "max": 17.278999999999996,
+     "n": 150
+    },
+    "cold512": {
+     "median": 23.90400000000227,
+     "q1": 23.840000000000146,
+     "q3": 24.039749999999515,
+     "min": 23.77600000000166,
+     "max": 25.759000000001834,
+     "n": 150
+    },
+    "cold1024": {
+     "median": 23.903000000002066,
+     "q1": 23.840000000000146,
+     "q3": 24.031999999999243,
+     "min": 23.774999999997817,
+     "max": 25.375,
+     "n": 150
+    },
+    "rotation": {
+     "median": 23.936000000000092,
+     "q1": 23.90299999999968,
+     "q3": 24.06399999999951,
+     "min": 23.77599999999984,
+     "max": 24.416000000000054,
+     "n": 150
+    },
+    "event512": {
+     "median": 51.04000121355057,
+     "q1": 50.07200129330158,
+     "q3": 54.27199974656105,
+     "min": 49.15200173854828,
+     "max": 94.2080020904541,
+     "n": 150
+    }
+   },
+   "cold_vs_warm_pct": 41.745730550301644,
+   "cold512_vs_cold1024_pct": 0.004183575284288921,
+   "cold512_vs_rotation_pct": -0.13368983956308922,
+   "event_minus_cupti_us": 27.136001213548298,
+   "rules": {
+    "cold_not_faster_than_warm": true,
+    "flush_1gib_agrees": true,
+    "rotation_agrees": true
+   },
+   "passed": true
+  },
+  {
+   "proj": "gate_proj",
+   "out": 14336,
+   "inp": 4096,
+   "tokens": 2048,
+   "kind": "tc_16x64",
+   "module": "model.layers.19.mlp.gate_proj",
+   "e0m3_tiles": 1206,
+   "kernel": "n16k64_wA",
+   "rotation_copies": 18,
+   "rotation_bytes": 594542592,
+   "stats": {
+    "warm": {
+     "median": 195.4045000000001,
+     "q1": 194.6440000000007,
+     "q3": 196.14100000000002,
+     "min": 191.8040000000001,
+     "max": 208.95699999999852,
+     "n": 150
+    },
+    "cold512": {
+     "median": 193.8209999999981,
+     "q1": 192.94900000000098,
+     "q3": 195.54899999999952,
+     "min": 191.58100000000013,
+     "max": 209.8209999999999,
+     "n": 150
+    },
+    "cold1024": {
+     "median": 192.39650000000074,
+     "q1": 191.5809999999983,
+     "q3": 193.54899999999998,
+     "min": 190.42799999999988,
+     "max": 207.1009999999951,
+     "n": 150
+    },
+    "rotation": {
+     "median": 193.11699999999928,
+     "q1": 192.2450000000008,
+     "q3": 193.8530000000003,
+     "min": 188.9250000000011,
+     "max": 206.716,
+     "n": 150
+    },
+    "event512": {
+     "median": 231.4240038394928,
+     "q1": 230.93599453568459,
+     "q3": 232.9919934272766,
+     "min": 228.67199778556824,
+     "max": 280.86400032043457,
+     "n": 150
+    }
+   },
+   "cold_vs_warm_pct": -0.8103702831828374,
+   "cold512_vs_cold1024_pct": 0.7403980841633517,
+   "cold512_vs_rotation_pct": 0.3645458452641748,
+   "event_minus_cupti_us": 37.603003839494704,
+   "rules": {
+    "cold_not_faster_than_warm": true,
+    "flush_1gib_agrees": true,
+    "rotation_agrees": true
+   },
+   "passed": true
+  },
+  {
+   "proj": "q_proj",
+   "out": 4096,
+   "inp": 4096,
+   "tokens": 128,
+   "kind": "fo6",
+   "module": "model.layers.0.self_attn.q_proj",
+   "e0m3_tiles": 0,
+   "kernel": "stock_wA_n64",
+   "rotation_copies": 58,
+   "rotation_bytes": 547356672,
+   "stats": {
+    "warm": {
+     "median": 9.246999999999389,
+     "q1": 9.21599999999944,
+     "q3": 9.248000000000047,
+     "min": 9.182999999999993,
+     "max": 9.311999999999898,
+     "n": 150
+    },
+    "cold512": {
+     "median": 9.775499999999738,
+     "q1": 9.66399999999885,
+     "q3": 9.888000000001284,
+     "min": 9.53599999999983,
+     "max": 10.11200000000099,
+     "n": 150
+    },
+    "cold1024": {
+     "median": 9.760000000002037,
+     "q1": 9.66400000000067,
+     "q3": 9.88799999999901,
+     "min": 9.534999999999854,
+     "max": 10.175000000000182,
+     "n": 150
+    },
+    "rotation": {
+     "median": 9.79099999999994,
+     "q1": 9.687500000000455,
+     "q3": 9.895749999999992,
+     "min": 9.567000000000007,
+     "max": 10.111999999999853,
+     "n": 150
+    },
+    "event512": {
+     "median": 37.79200091958046,
+     "q1": 37.50399872660637,
+     "q3": 38.24800066649914,
+     "min": 36.41600161790848,
+     "max": 43.39199885725975,
+     "n": 150
+    }
+   },
+   "cold_vs_warm_pct": 5.715367146105588,
+   "cold512_vs_cold1024_pct": 0.15881147538625573,
+   "cold512_vs_rotation_pct": -0.15830865080381784,
+   "event_minus_cupti_us": 28.01650091958072,
+   "rules": {
+    "cold_not_faster_than_warm": true,
+    "flush_1gib_agrees": true,
+    "rotation_agrees": true
+   },
+   "passed": true
+  },
+  {
+   "proj": "q_proj",
+   "out": 4096,
+   "inp": 4096,
+   "tokens": 2048,
+   "kind": "fo6",
+   "module": "model.layers.0.self_attn.q_proj",
+   "e0m3_tiles": 0,
+   "kernel": "stock_wA",
+   "rotation_copies": 58,
+   "rotation_bytes": 547356672,
+   "stats": {
+    "warm": {
+     "median": 46.59099999999944,
+     "q1": 46.46299999999974,
+     "q3": 46.71900000000005,
+     "min": 46.207000000000335,
+     "max": 54.399000000000115,
+     "n": 150
+    },
+    "cold512": {
+     "median": 49.983000000000175,
+     "q1": 49.82299999999941,
+     "q3": 50.238999999998214,
+     "min": 49.05500000000029,
+     "max": 55.93500000000131,
+     "n": 150
+    },
+    "cold1024": {
+     "median": 49.3595000000023,
+     "q1": 49.11900000000014,
+     "q3": 49.599000000000274,
+     "min": 48.35099999999875,
+     "max": 55.998999999999796,
+     "n": 150
+    },
+    "rotation": {
+     "median": 52.20699999999988,
+     "q1": 51.95899999999915,
+     "q3": 52.54324999999997,
+     "min": 48.60799999999995,
+     "max": 53.694999999999936,
+     "n": 150
+    },
+    "event512": {
+     "median": 77.03999802470207,
+     "q1": 76.51200145483017,
+     "q3": 77.77600176632404,
+     "min": 75.29599964618683,
+     "max": 122.81599640846252,
+     "n": 150
+    }
+   },
+   "cold_vs_warm_pct": 7.280376038292324,
+   "cold512_vs_cold1024_pct": 1.2631813531292835,
+   "cold512_vs_rotation_pct": -4.259965138773936,
+   "event_minus_cupti_us": 27.056998024701898,
+   "rules": {
+    "cold_not_faster_than_warm": true,
+    "flush_1gib_agrees": true,
+    "rotation_agrees": false
+   },
+   "passed": false
+  },
+  {
+   "proj": "q_proj",
+   "out": 4096,
+   "inp": 4096,
+   "tokens": 128,
+   "kind": "tc_16x64",
+   "module": "model.layers.21.self_attn.q_proj",
+   "e0m3_tiles": 541,
+   "kernel": "n16k64_wA_n32",
+   "rotation_copies": 58,
+   "rotation_bytes": 547356672,
+   "stats": {
+    "warm": {
+     "median": 10.784000000000049,
+     "q1": 10.751999999999498,
+     "q3": 10.847999999999956,
+     "min": 10.623999999999796,
+     "max": 10.976000000000113,
+     "n": 150
+    },
+    "cold512": {
+     "median": 10.976000000000568,
+     "q1": 10.911000000000058,
+     "q3": 11.040000000000873,
+     "min": 10.65599999999904,
+     "max": 11.296000000000276,
+     "n": 150
+    },
+    "cold1024": {
+     "median": 10.944000000003143,
+     "q1": 10.880000000001019,
+     "q3": 11.038999999999987,
+     "min": 10.719999999997526,
+     "max": 11.231999999999971,
+     "n": 150
+    },
+    "rotation": {
+     "median": 10.943499999999858,
+     "q1": 10.847749999999905,
+     "q3": 11.008000000000209,
+     "min": 10.655999999999949,
+     "max": 11.391999999999825,
+     "n": 150
+    },
+    "event512": {
+     "median": 44.38399896025658,
+     "q1": 44.120000675320625,
+     "q3": 44.680001214146614,
+     "min": 43.327998369932175,
+     "max": 85.40800213813782,
+     "n": 150
+    }
+   },
+   "cold_vs_warm_pct": 1.7804154302718755,
+   "cold512_vs_cold1024_pct": 0.2923976607950962,
+   "cold512_vs_rotation_pct": 0.29697994243806924,
+   "event_minus_cupti_us": 33.40799896025601,
+   "rules": {
+    "cold_not_faster_than_warm": true,
+    "flush_1gib_agrees": true,
+    "rotation_agrees": true
+   },
+   "passed": true
+  },
+  {
+   "proj": "q_proj",
+   "out": 4096,
+   "inp": 4096,
+   "tokens": 2048,
+   "kind": "tc_16x64",
+   "module": "model.layers.21.self_attn.q_proj",
+   "e0m3_tiles": 541,
+   "kernel": "n16k64_wA",
+   "rotation_copies": 58,
+   "rotation_bytes": 547356672,
+   "stats": {
+    "warm": {
+     "median": 48.57500000000073,
+     "q1": 48.38300000000049,
+     "q3": 48.98375000000004,
+     "min": 47.90399999999863,
+     "max": 62.55899999999997,
+     "n": 150
+    },
+    "cold512": {
+     "median": 54.22350000000097,
+     "q1": 53.783000000000584,
+     "q3": 55.975000000000364,
+     "min": 52.89499999999998,
+     "max": 63.230999999999995,
+     "n": 150
+    },
+    "cold1024": {
+     "median": 54.44799999999668,
+     "q1": 52.991000000001804,
+     "q3": 55.39099999999689,
+     "min": 52.03100000000086,
+     "max": 61.34300000000076,
+     "n": 150
+    },
+    "rotation": {
+     "median": 55.39099999999962,
+     "q1": 55.03899999999953,
+     "q3": 55.67925000000014,
+     "min": 52.12700000000041,
+     "max": 59.583000000000084,
+     "n": 150
+    },
+    "event512": {
+     "median": 89.08800035715103,
+     "q1": 87.79999800026417,
+     "q3": 89.95999954640865,
+     "min": 85.4400023818016,
+     "max": 135.3600025177002,
+     "n": 150
+    }
+   },
+   "cold_vs_warm_pct": 11.628409675759466,
+   "cold512_vs_cold1024_pct": -0.412320011746492,
+   "cold512_vs_rotation_pct": -2.107743135163942,
+   "event_minus_cupti_us": 34.864500357150064,
+   "rules": {
+    "cold_not_faster_than_warm": true,
+    "flush_1gib_agrees": true,
+    "rotation_agrees": false
+   },
+   "passed": false
+  }
+ ],
+ "gpu_end": {
+  "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "driver_version": "595.71.05",
+  "power.limit": "500.00 W",
+  "power.default_limit": "600.00 W",
+  "clocks.max.sm": "3090 MHz",
+  "clocks.max.mem": "14001 MHz",
+  "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+  "persistence_mode": "Enabled",
+  "temperature.gpu": "49",
+  "utilization.gpu": "26 %",
+  "memory.used": "3038 MiB",
+  "torch": "2.9.0+cu128",
+  "torch_cuda": "12.8",
+  "triton": "3.5.0",
+  "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+  "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "capability": [
+   12,
+   0
+  ],
+  "sm_count": 188,
+  "utc": "2026-09-30T06:17:00+00:00"
+ },
+ "passed": false
+}
