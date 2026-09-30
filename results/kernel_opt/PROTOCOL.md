@@ -301,3 +301,45 @@ not named here applies unchanged.
   - all-E0M3 patterns are at most 1.2 % (not 1.3 %);
   - non-zero patterns are 5–19 % (not 5–18 %).
   - The design is unaffected.
+
+## Amendment 2b (#2's M2′): end-to-end CUDA-graph prefill, default vs MIXFP4_DISPATCH_FREQ
+
+Written 2026-09-30 after M1′ and C2′ finished (18:43 UTC) and before any M2′ run. The hashes and time are in
+`registration_2b.json`. The coordinator relayed "finish #2 as registered … e2e only if it beats noise".
+
+**Why M2′ runs.** Amendment 2 made M2′ conditional on a per-forward GEMM gain of ≥ 1 % for a unit at T ≥ 128 in M1′.
+The typical tags meet it (`results/kernel_opt/opt2/ab2_tables.md`):
+- 8x64: 20 (model, T) cells at T = 256 … 8192, on all four models; −1.00 to −1.55 %.
+- 256x64: Llama-3.1-8B T = 256, Phi-4 T = 128, Qwen3.8-27B T = 256 and 512; −1.07 to −1.40 %.
+- 16x64: Qwen3.8-27B T = 256; −1.09 %.
+- In every one of these 25 cells the per-round range excludes 0; the least negative single round is −0.77 %.
+
+**What runs.** `experiments/kernel_opt/ab2_e2e.py` runs the paper's per-process script `bench_prefill.py`
+unchanged. It uses M2's checks (`ab_e2e.prefill_check`) and a build check per policy.
+- **Policies:** each unit before and after, and one reference.
+
+  | policy | map | kernel set | build directory | role |
+  |---|---|---|---|---|
+  | ours-16x64 | TC 16x64 | `auto` | `sm120/build` | before |
+  | ours-16x64-freq | TC 16x64 | `auto` | `build_freq` | after |
+  | ours-256x64 | TC 256x64 | `auto` | `sm120/build` | before |
+  | ours-256x64-freq | TC 256x64 | `auto` | `build_freq` | after |
+  | ours-8x64-opt | TC 8x64 | `auto_wB` | kernel-opt `build` (optimization 1b) | before |
+  | ours-8x64-freq | TC 8x64 | `auto_wB` | `build_freq` | after |
+  | fo6 | FourOverSix | `auto_stock` | `sm120/build` | the deployment reference |
+
+  - `auto` is the `mixed` set.
+  - The tile table is `sm120/configs`' (unchanged), so before and after choose the same widths.
+- **Shapes:** all four models at the paper's prompt shapes (1x128 … 1x8192 and 4x2048), 7 repetitions.
+- **Rounds:** 5, with the policy list rotated by r − 1 in round r. This is 140 processes, about 4 h.
+- **Checks** (a failure stops the run):
+  - the graph's logits equal eager's bitwise at every shape;
+  - every library a process loaded is a build of its policy's directory, by sha256;
+  - the `build_freq` builds carry `MIXFP4_DISPATCH_FREQ=1`.
+- **Reported** by `ab2_e2e_report.py`, per model and shape (the M2 convention):
+  - the median over rounds of each process's median;
+  - after vs before per unit, with the range over rounds pairing round r of both policies;
+  - both vs fo6.
+  - No significance claims beyond the round range. Earlier prefill runs varied by about 1 % per process (D1b), which
+    is the size of the effect expected here: M1′'s 0.4–1.5 % GEMM gains, diluted by the non-GEMM share.
+- **Adoption is unchanged:** #2 is adopted on kernel-opt because G1′–G5′ passed. M2′ reports its speed.
