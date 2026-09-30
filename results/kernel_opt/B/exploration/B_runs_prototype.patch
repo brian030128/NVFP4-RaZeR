@@ -1,0 +1,1442 @@
+diff --git a/experiments/kernel_opt/abB_report.py b/experiments/kernel_opt/abB_report.py
+new file mode 100644
+index 0000000..e79f79c
+--- /dev/null
++++ b/experiments/kernel_opt/abB_report.py
+@@ -0,0 +1,106 @@
++#!/usr/bin/env python3
++"""Kernel-opt amendment 5 (B) report: M1 per-forward GEMM sums and the C2 4096^3 breakdown.
++
++    python experiments/kernel_opt/abB_report.py [--src /home/dev/n16k64_campaign/kernel_opt/B] [--out-dir results/kernel_opt/B]
++
++M1: per model and T, the per-forward GEMM sum (sum over projections of modules x median time) of every configuration of
++bench_abB_isolated.py; the spread is the range over the 3 rounds of the same sum from each round's medians. Reported:
++B vs the best current path per unit and tag variant (16x64: run tables vs #2's freq builds; 256x64: run tables vs A'),
++each unit vs stock_wA before -> after, and that every call ran at the same width before and after. C2: c2_runs.py's
++medians and contrasts per mode.
++"""
++import argparse
++import json
++from pathlib import Path
++
++REPO = Path(__file__).resolve().parents[2]
++MODELS = ('llama8b', 'mistral7b', 'phi4', 'qwen27b')
++NAMES = dict(llama8b='Llama-3.1-8B', mistral7b='Mistral-7B-v0.3', phi4='Phi-4', qwen27b='Qwen3.8-27B')
++UNITS = (('16x64', 'freq_16x64', 'B_16x64'), ('256x64', 'g32_256x64', 'B_256x64'))
++
++
++def pct(a, b):
++    return 100 * (a / b - 1)
++
++
++def sums(rec):
++    projs = rec['projections']
++    by = {(r['config'], r['proj'], r['tokens']): r for r in rec['rows']}
++    tokens = sorted({r['tokens'] for r in rec['rows']})
++    cfgs = sorted({r['config'] for r in rec['rows']})
++    nr = len(rec['rows'][0]['rounds'])
++    s, rr = {}, {}
++    for t in tokens:
++        for c in cfgs:
++            s[(c, t)] = sum(projs[p]['modules'] * by[(c, p, t)]['gemm_us'] for p in projs)
++            rr[(c, t)] = [sum(projs[p]['modules'] * by[(c, p, t)]['rounds'][i]['gemm_us'] for p in projs) for i in range(nr)]
++    widths_equal = all(by[(f'{a}_{v}', p, t)]['width'] == by[(f'{b}_{v}', p, t)]['width']
++                       for _, b, a in UNITS for v in ('typical', 'worst') for p in projs for t in tokens)
++    return s, rr, tokens, widths_equal
++
++
++def main():
++    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
++    ap.add_argument('--src', type=Path, default=Path('/home/dev/n16k64_campaign/kernel_opt/B'))
++    ap.add_argument('--out-dir', type=Path, default=REPO / 'results' / 'kernel_opt' / 'B')
++    args = ap.parse_args()
++    md, data = ["## M1: per-forward GEMM time, B (run tables) vs the best current path, deviation-2 method\n"], dict(gemm={}, c2=None)
++    for model in MODELS:
++        path = args.src / 'gemm' / f'{model}.json'
++        if not path.exists():
++            continue
++        rec = json.loads(path.read_text())
++        if rec.get('status') != 'complete':
++            md.append(f'{model}: {rec.get("status")}\n')
++            continue
++        s, rr, tokens, weq = sums(rec)
++        ok = all(c['equal'] for c in rec['checks']['bitwise'])
++        md.append(f"### {NAMES[model]}\n\nChecks: {len(rec['checks']['bitwise'])} bitwise ok={ok}, counts ok="
++                  f"{rec['checks']['counts_ok']}, other processes {len(rec['checks']['other_processes'])}; every call at "
++                  f"the same width before and after: {weq}.\n")
++        md.append('| T | ' + ' | '.join(f'{u} B vs current, typical [rounds] | {u} worst' for u, _, _ in UNITS)
++                  + ' | 16x64 vs stock_wA: current → B | 256x64 vs stock_wA: current → B |')
++        md.append('|---|' + '---|---|' * len(UNITS) + '---|---|')
++        rows = []
++        for t in tokens:
++            row, cells = dict(model=model, tokens=t), []
++            for u, b, a in UNITS:
++                for v in ('typical', 'worst'):
++                    bb, aa = (f'{b}_{v}', t), (f'{a}_{v}', t)
++                    row[f'{u}_{v}_B_vs_current_pct'] = pct(s[aa], s[bb])
++                    per = [pct(x, y) for x, y in zip(rr[aa], rr[bb])]
++                    row[f'{u}_{v}_B_vs_current_range'] = [min(per), max(per)]
++                    row[f'{u}_{v}_current_vs_stock_pct'] = pct(s[bb], s[('stock_wA', t)])
++                    row[f'{u}_{v}_B_vs_stock_pct'] = pct(s[aa], s[('stock_wA', t)])
++                lo, hi = row[f'{u}_typical_B_vs_current_range']
++                cells.append(f"{row[f'{u}_typical_B_vs_current_pct']:+.2f} % [{lo:+.2f}, {hi:+.2f}] | "
++                             f"{row[f'{u}_worst_B_vs_current_pct']:+.2f} %")
++            rows.append(row)
++            md.append(f'| {t} | ' + ' | '.join(cells) + ' | ' + ' | '.join(
++                f"{row[f'{u}_typical_current_vs_stock_pct']:+.1f} → {row[f'{u}_typical_B_vs_stock_pct']:+.1f} %" for u, _, _ in UNITS) + ' |')
++        md.append('')
++        data['gemm'][model] = dict(rows=rows, sums={f'{c}@{t}': v for (c, t), v in s.items()}, widths_equal=weq,
++                                   bitwise_ok=ok, sampler=rec.get('sampler'))
++    c2p = args.src / 'c2_runs.json'
++    if c2p.exists():
++        c2 = json.loads(c2p.read_text())
++        data['c2'] = c2
++        md.append("## C2: 4096³ breakdown (µs, medians of 3 rotated rounds)\n")
++        md.append(f"Checks: {c2['checks']}\n\nRuns per warp: {c2.get('runs')}\n")
++        names = list(next(iter(c2['modes'].values())).keys())
++        md.append('| configuration | ' + ' | '.join(c2['modes']) + ' |')
++        md.append('|---|' + '---:|' * len(c2['modes']))
++        for nm in names:
++            md.append(f'| {nm} | ' + ' | '.join(f"{c2['modes'][m][nm]['us']:.1f}" for m in c2['modes']) + ' |')
++        md.append('')
++        for m, sm in c2.get('summary', {}).items():
++            md.append(f'- **{m}:** ' + '; '.join(f'{k} {v:+.2f} %' for k, v in sm.items()))
++        md.append('')
++    args.out_dir.mkdir(parents=True, exist_ok=True)
++    (args.out_dir / 'abB.json').write_text(json.dumps(data, indent=1) + '\n')
++    (args.out_dir / 'abB_tables.md').write_text('\n'.join(md) + '\n')
++    print('\n'.join(md))
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/experiments/kernel_opt/bench_abB_isolated.py b/experiments/kernel_opt/bench_abB_isolated.py
+new file mode 100644
+index 0000000..957e718
+--- /dev/null
++++ b/experiments/kernel_opt/bench_abB_isolated.py
+@@ -0,0 +1,90 @@
++#!/usr/bin/env python3
++"""Kernel-opt amendment 5 (B, per-warp run tables), measurement M1: GEMM time, the best current paths vs B.
++
++    python experiments/kernel_opt/bench_abB_isolated.py --model llama8b --b-root DIR --freq-root DIR --a1-root DIR \
++        [--table JSON] --artifact fo6=ART --artifact tc_16x64=ART --artifact tc_256x64=ART --out JSON
++
++The deviation-2 method, exactly as bench_ab_isolated.py (whose run() this calls, with each NativeLinear's run table
++passed to the timed GEMM): isolated launches, cold weights by rotation + a 512 MiB read-flush, CUPTI, 3 rotated rounds
++x 30 repetitions, typical and worst tags, telemetry, the registered checks, and each after configuration's output
++bitwise equal to its before configuration's on the timed operands. Every set uses --table (default: the GPU's table),
++so each call runs at the same width before and after. Configurations (activation quantizer FourOverSix everywhere):
++  stock_wA                   FourOverSix on KernelSet('stock') from sm120/build
++  freq_16x64_{v}             TM-OPT+TC 16x64 on KernelSet('mixed') from --freq-root: #2, the best current 16x64 path
++  B_16x64_{v}                the same maps on KernelSet('mixed_rt') from --b-root (run tables)
++  g32_256x64_{v}             TM-OPT+TC 256x64 on KernelSet('mixed256') from --a1-root: A', the adopted 256x64 path
++  B_256x64_{v}               the same maps on KernelSet('mixed256_rt') from --b-root (run tables)
++"""
++import argparse
++import json
++import sys
++from collections import OrderedDict
++from pathlib import Path
++
++REPO = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(REPO / 'experiments' / 'kernel_opt'))
++sys.path.insert(0, str(REPO / 'experiments' / 'paper'))
++sys.path.insert(0, str(REPO / 'sm120'))
++sys.path.insert(0, str(REPO / 'sm120' / 'bench'))
++import bench_ab_isolated as AB  # noqa: E402
++import bench_gemm_isolated as G  # noqa: E402
++import common as B  # noqa: E402
++from mixfp4_sm120 import select as S  # noqa: E402
++from mixfp4_sm120.select import KernelSet  # noqa: E402
++
++Q = 'four_over_six_rows'
++CONFIGS = OrderedDict(stock_wA=('fo6', 'first', 'stock', Q))
++for v in ('typical', 'worst'):
++    CONFIGS[f'freq_16x64_{v}'] = ('tc_16x64', v, 'mixed', Q)
++    CONFIGS[f'B_16x64_{v}'] = ('tc_16x64', v, 'mixed_rt', Q)
++    CONFIGS[f'g32_256x64_{v}'] = ('tc_256x64', v, 'mixed256', Q)
++    CONFIGS[f'B_256x64_{v}'] = ('tc_256x64', v, 'mixed256_rt', Q)
++PAIRS = ([(f'freq_16x64_{v}', f'B_16x64_{v}') for v in ('typical', 'worst')]
++         + [(f'g32_256x64_{v}', f'B_256x64_{v}') for v in ('typical', 'worst')])
++
++
++def main():
++    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
++    ap.add_argument('--model', required=True)
++    ap.add_argument('--artifact', action='append', required=True, metavar='KIND=DIR')
++    ap.add_argument('--b-root', required=True)
++    ap.add_argument('--freq-root', required=True)
++    ap.add_argument('--a1-root', required=True)
++    ap.add_argument('--table', default=None, help="tile table for every set (default: the GPU's table)")
++    ap.add_argument('--tokens', default=','.join(map(str, AB.TOKENS)))
++    ap.add_argument('--projections', default=None)
++    ap.add_argument('--configs', default=None)
++    ap.add_argument('--reps', type=int, default=30)
++    ap.add_argument('--warmup', type=int, default=3)
++    ap.add_argument('--rounds', type=int, default=3)
++    ap.add_argument('--flush-mib', type=int, default=512)
++    ap.add_argument('--out', type=Path, required=True)
++    args = ap.parse_args()
++    args.after_root = args.b_root
++    B.require_idle()
++    table = args.table or S.TABLE_DIR / f'{S.gpu_slug()}.json'
++    kernels = dict(stock=KernelSet('stock', table=table), mixed=KernelSet('mixed', build_root=args.freq_root, table=table),
++                   mixed_rt=KernelSet('mixed_rt', build_root=args.b_root, table=table),
++                   mixed256=KernelSet('mixed256', build_root=args.a1_root, table=table),
++                   mixed256_rt=KernelSet('mixed256_rt', build_root=args.b_root, table=table))
++    roots = dict(stock=REPO / 'sm120' / 'build', mixed=Path(args.freq_root), mixed_rt=Path(args.b_root),
++                 mixed256=Path(args.a1_root), mixed256_rt=Path(args.b_root))
++    for name, ks in kernels.items():
++        assert all(Path(k.path).parent.parent == roots[name] for k in ks.kernels.values()), name
++        assert ks.runs == name.endswith('_rt'), name
++    assert all(k.manifest.get('extra_defines', {}).get('MIXFP4_DISPATCH_FREQ') == 1 for k in kernels['mixed'].kernels.values())
++    csv_path = Path(str(args.out) + '.telemetry.csv')
++    tel = G.Telemetry(csv_path)
++    try:
++        AB.run(args, tel, CONFIGS=CONFIGS, kernels=kernels, pairs=PAIRS)
++    finally:
++        tel.close()
++    res = json.loads(args.out.read_text())
++    res['sampler'] = G.Telemetry.summarize(csv_path)
++    res['suite'] = 'kernel-opt amendment 5 (B)'
++    res['table'] = str(table)
++    B.write(args.out, res)
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/experiments/kernel_opt/bench_ab_isolated.py b/experiments/kernel_opt/bench_ab_isolated.py
+index 152fa40..83058f8 100644
+--- a/experiments/kernel_opt/bench_ab_isolated.py
++++ b/experiments/kernel_opt/bench_ab_isolated.py
+@@ -168,8 +168,10 @@ def run(args, tel, CONFIGS=CONFIGS, kernels=None, pairs=None):
+                     wp, wsf = copies[c][counter[c] % len(copies[c])]
+                     counter[c] += 1
+                     if lin.weights_on_a:
++                        # kernel-opt B: a run-table build gets the weight's table (None for every other build)
+                         kern.gemm_ptr(wp.data_ptr(), wsf.data_ptr(), xp.data_ptr(), xsf.data_ptr(), n, t, k,
+-                                      None, lin.global_scale, gs.data_ptr(), 1.0, bptr, y, stream.cuda_stream)
++                                      None, lin.global_scale, gs.data_ptr(), 1.0, bptr, y, stream.cuda_stream,
++                                      runs=getattr(lin, 'runs', None))
+                     else:
+                         kern.gemm_ptr(xp.data_ptr(), xsf.data_ptr(), wp.data_ptr(), wsf.data_ptr(), t, n, k,
+                                       gs.data_ptr(), 1.0, None, lin.global_scale, bptr, y, stream.cuda_stream)
+diff --git a/experiments/kernel_opt/c2_runs.py b/experiments/kernel_opt/c2_runs.py
+new file mode 100644
+index 0000000..bd6c15d
+--- /dev/null
++++ b/experiments/kernel_opt/c2_runs.py
+@@ -0,0 +1,188 @@
++#!/usr/bin/env python3
++"""Kernel-opt amendment 5 (B), measurement C2: the 4096^3 breakdown, the per-k_tile dispatch vs per-warp run tables.
++
++    python experiments/kernel_opt/c2_runs.py --b-root DIR --freq-root DIR --a1-root DIR --out JSON
++
++Operands as C2 / C2' / C2'': weights N(0, 0.02) seed 4096, 4096 tokens N(0, 1) FourOverSix per token.
++16x64 tags (the joint (warp, k_tile) pattern is bit g + 2 kb):
++  e2m1     all E2M1 (pattern 0 everywhere: the fixed cost)
++  real     model.layers.0.self_attn.o_proj of the Llama-3.1-8B TC 16x64 map (typical)
++  densest  the Llama-3.1-8B o_proj with the most E0M3 tiles (worst tags)
++  p1 / p5  pattern 1 / 5 everywhere (one run per warp, a non-zero arm)
++  alt      patterns 0 and 1 alternating along K (a run per k_tile: the table's worst case)
++  e0m3     all E0M3
++256x64 tags: all E2M1, the real 256x64 map of the same layer, all E0M3.
++Configurations (GEMM only, the 128-wide builds):
++  stock_wA, nodisp                  C2's references (sm120/build)
++  default_{tag}, freq_{tag}         n16k64_wA from sm120/build (16 arms) and from --freq-root (#2)
++  B_{tag}                           n16k64_wA_rt from --b-root with the weight's run table
++  g32_{tag}, B256_{tag}             n16k64_wA_g32 from --a1-root (A') and n16k64_wA_g32_rt with its table (256x64 tags)
++Modes as c2_freq.py: b2b, isolated, sustained; 3 rotated rounds each.
++Check before timing: every B / freq output equals its default's (and B256's its g32's) bitwise.
++"""
++import argparse
++import statistics
++import sys
++import time
++from pathlib import Path
++
++import torch
++from torch.profiler import ProfilerActivity, profile
++
++REPO = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(REPO / 'experiments' / 'kernel_opt'))
++sys.path.insert(0, str(REPO / 'sm120'))
++sys.path.insert(0, str(REPO / 'sm120' / 'bench'))
++import common as B  # noqa: E402
++from c2_freq import Sampler, gemm_times  # noqa: E402
++from mixfp4_sm120 import mapio  # noqa: E402
++from mixfp4_sm120 import numerics as N  # noqa: E402
++from mixfp4_sm120 import runs as RT  # noqa: E402
++from mixfp4_sm120.lib import Kernel  # noqa: E402
++from mixfp4_sm120.linear import place_scales as place  # noqa: E402
++
++LAYER = 'model.layers.0.self_attn.o_proj'
++ART = Path('/home/dev/n16k64_campaign/paper/artifacts')
++TAGS16 = ('e2m1', 'real', 'densest', 'p1', 'p5', 'alt', 'e0m3')
++TAGS256 = ('e2m1', 'real', 'e0m3')
++
++
++def main():
++    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
++    ap.add_argument('--b-root', required=True)
++    ap.add_argument('--freq-root', required=True)
++    ap.add_argument('--a1-root', required=True)
++    ap.add_argument('--rounds', type=int, default=3)
++    ap.add_argument('--out', type=Path, required=True)
++    args = ap.parse_args()
++    B.require_idle()
++    n = k = t = 4096
++    g = torch.Generator('cpu').manual_seed(4096)
++    w = (torch.randn(n, k, generator=g) * 0.02).cuda().bfloat16()
++    x = torch.randn(t, k, generator=g).cuda().bfloat16()
++    xn, xsb, gsx = N.quantize_act(x, 'four_over_six_rows')
++    xp, xsf = N.pack_nibbles(xn), place(xsb, k)
++    h16, m16, _ = mapio.read_map(ART / 'llama8b_tc_16x64.mixfp4map')
++    _, m256, _ = mapio.read_map(ART / 'llama8b_tc_256x64.mixfp4map')
++    grid = (n // 16, k // 64)
++    blk = torch.arange(grid[0])[:, None] % 8
++    kbl = torch.arange(grid[1])[None, :] % 2
++    ktl = torch.arange(grid[1])[None, :] // 2
++    dense = max((m for m in h16['modules'] if m['name'].endswith('o_proj')), key=lambda m: m['selected'])
++    maps16 = dict(e2m1=torch.zeros(grid, dtype=torch.bool), real=m16[LAYER], densest=m16[dense['name']],
++                  p1=((blk < 4) & (kbl == 0)).expand(grid).clone(), p5=(blk < 4).expand(grid).clone(),
++                  alt=((blk < 4) & (kbl == 0) & (ktl % 2 == 1)).expand(grid).clone(), e0m3=torch.ones(grid, dtype=torch.bool))
++    maps256 = dict(e2m1=torch.zeros(grid, dtype=torch.bool), real=m256[LAYER], e0m3=torch.ones(grid, dtype=torch.bool))
++    K = dict(stock=Kernel.load('stock_wA'), nodisp=Kernel.load('n16k64_wA_nodisp'), default=Kernel.load('n16k64_wA'),
++             freq=Kernel.load('n16k64_wA', build_root=args.freq_root), B=Kernel.load('n16k64_wA_rt', build_root=args.b_root),
++             g32=Kernel.load('n16k64_wA_g32', build_root=args.a1_root),
++             B256=Kernel.load('n16k64_wA_g32_rt', build_root=args.b_root))
++    assert K['B'].runs and K['B256'].runs and not K['default'].runs
++
++    def wt(kind, mask=None):
++        wn, wsb, gsw = N.quantize_weight(w, kind, mask, (16, 64) if mask is not None else None)
++        return N.pack_nibbles(wn), place(wsb, k), float(gsw), wsb
++
++    def call(kk, wts, runs=None):
++        wp, wsf, gsw, _ = wts
++        kern = K[kk]
++        return lambda: kern.gemm(wp, wsf, xp, xsf, n, t, k, scale_m_default=gsw, scale_n=gsx, check=False, runs=runs)
++    calls, pairs, info = {}, [], {}
++    calls['stock_wA'] = call('stock', wt('nvfp4'))
++    calls['nodisp'] = call('nodisp', wt('four_over_six'))
++    for tg, m in maps16.items():
++        wts = wt('map', m)
++        table = RT.build(wts[3], n, k, K['B'].runs_geometry).cuda()
++        info[f'16x64 {tg}'] = dict(e0m3_tiles=int(m.sum()), max_runs_per_warp=int(table[:, 0].max()),
++                                   mean_runs_per_warp=float(table[:, 0].float().mean()))
++        for kk in ('default', 'freq'):
++            calls[f'{kk}_{tg}'] = call(kk, wts)
++        calls[f'B_{tg}'] = call('B', wts, table)
++        pairs += [(f'default_{tg}', f'freq_{tg}'), (f'default_{tg}', f'B_{tg}')]
++    for tg, m in maps256.items():
++        wts = wt('map', m)
++        table = RT.build(wts[3], n, k, K['B256'].runs_geometry).cuda()
++        info[f'256x64 {tg}'] = dict(e0m3_tiles=int(m.sum()), max_runs_per_warp=int(table[:, 0].max()),
++                                    mean_runs_per_warp=float(table[:, 0].float().mean()))
++        calls[f'g32_{tg}'] = call('g32', wts)
++        calls[f'B256_{tg}'] = call('B256', wts, table)
++        pairs.append((f'g32_{tg}', f'B256_{tg}'))
++    res = dict(protocol="results/kernel_opt/PROTOCOL.md, amendment 5 (B, C2)", gpu=B.gpu_info(), size=4096,
++               densest_module=dense['name'], runs=info,
++               kernels={kk: dict(sha256=v.sha256, root=str(Path(v.path).parent.parent)) for kk, v in K.items()},
++               checks={}, modes={})
++    for a, b in pairs:
++        ya, yb = calls[a](), calls[b]()
++        torch.cuda.synchronize()
++        ok = bool(torch.equal(ya.view(torch.int16), yb.view(torch.int16)))
++        res['checks'][f'{b} == {a}'] = ok
++        if not ok:
++            B.write(args.out, res)
++            raise SystemExit(f'{b} differs from {a}')
++    names = list(calls)
++    for mode in ('b2b', 'isolated', 'sustained'):
++        per = {nm: [] for nm in names}
++        tel = {nm: [] for nm in names}
++        for r in range(args.rounds):
++            shift = (r * len(names) // args.rounds) % len(names)
++            for nm in names[shift:] + names[:shift]:
++                fn = calls[nm]
++                fn()
++                torch.cuda.synchronize()
++                if mode == 'b2b':
++                    with profile(activities=[ProfilerActivity.CUDA]) as prof:
++                        for _ in range(20):
++                            fn()
++                        torch.cuda.synchronize()
++                    per[nm].append(statistics.median(gemm_times(prof)))
++                elif mode == 'isolated':
++                    iso = []
++                    for _ in range(15):
++                        time.sleep(0.05)
++                        with profile(activities=[ProfilerActivity.CUDA]) as prof:
++                            fn()
++                            torch.cuda.synchronize()
++                        iso += gemm_times(prof)
++                    per[nm].append(statistics.median(iso))
++                else:
++                    evs = []
++                    with Sampler() as smp:
++                        t0 = time.time()
++                        half, end = t0 + 1.0, t0 + 2.0
++                        while time.time() < end:
++                            e0_, e1_ = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
++                            e0_.record()
++                            fn()
++                            e1_.record()
++                            evs.append((time.time(), e0_, e1_))
++                            if len(evs) % 64 == 0:
++                                torch.cuda.synchronize()
++                        torch.cuda.synchronize()
++                    per[nm].append(statistics.median(a.elapsed_time(b) * 1e3 for (tt, a, b) in evs if tt >= half))
++                    tel[nm].append(smp.summary(half))
++                print(f'{mode} r{r} {nm:16s} {per[nm][-1]:8.1f} us', flush=True)
++        res['modes'][mode] = {nm: dict(us=statistics.median(per[nm]), rounds=per[nm], telemetry=tel[nm]) for nm in names}
++        B.write(args.out, res)
++    summ = {}
++    for mode, d in res['modes'].items():
++        u = {nm: v['us'] for nm, v in d.items()}
++        s = {}
++        for tg in TAGS16:
++            s[f'B vs default, {tg}'] = 100 * (u[f'B_{tg}'] / u[f'default_{tg}'] - 1)
++            s[f'B vs freq, {tg}'] = 100 * (u[f'B_{tg}'] / u[f'freq_{tg}'] - 1)
++            s[f'B_{tg} vs nodisp'] = 100 * (u[f'B_{tg}'] / u['nodisp'] - 1)
++            s[f'B_{tg} vs stock_wA'] = 100 * (u[f'B_{tg}'] / u['stock_wA'] - 1)
++        for tg in TAGS256:
++            s[f'B256 vs g32, {tg}'] = 100 * (u[f'B256_{tg}'] / u[f'g32_{tg}'] - 1)
++            s[f'B256_{tg} vs stock_wA'] = 100 * (u[f'B256_{tg}'] / u['stock_wA'] - 1)
++        s['nodisp vs stock_wA'] = 100 * (u['nodisp'] / u['stock_wA'] - 1)
++        summ[mode] = s
++    res['summary'] = summ
++    res['status'] = 'complete'
++    B.write(args.out, res)
++    for mode, s in summ.items():
++        print(mode, ' '.join(f'{k_}={v:+.2f}%' for k_, v in s.items() if k_.startswith('B vs default') or k_.startswith('B256 vs')))
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/experiments/kernel_opt/run_B.sh b/experiments/kernel_opt/run_B.sh
+new file mode 100755
+index 0000000..fd320eb
+--- /dev/null
++++ b/experiments/kernel_opt/run_B.sh
+@@ -0,0 +1,47 @@
++#!/bin/bash
++# kernel-opt amendment 5 (B, per-warp run tables): gates G3, G1/G2, pytest, G4 (16x64 and 256x64), G5 (16x64 and 256x64),
++# then M1 and C2 (results/kernel_opt/PROTOCOL.md); stops at the first failure. build_Bg holds `build.py --all` from the B
++# sources (CPU, before registration). TABLE is the tile table every set uses (the adopted one).
++set -e
++cd /home/dev/NVFP4-RaZeR
++unset SM120_BUILD_DIR PYTORCH_CUDA_ALLOC_CONF
++export CUDA_HOME=/home/dev/.conda/envs/mixfp4-cuda131 HF_HOME=/home/dev/.cache/huggingface HF_HUB_OFFLINE=1 \
++       PYTHONPATH=/home/dev/NVFP4-RaZeR/sm120:/home/dev/NVFP4-RaZeR PYTHONDONTWRITEBYTECODE=1
++PY=/home/dev/.conda/envs/n16k64/bin/python
++KO=/home/dev/n16k64_campaign/kernel_opt
++BG=$KO/build_Bg
++FREQ=$KO/build_freq
++A1=$KO/build_A1
++OUT=$KO/B
++R=results/kernel_opt/B
++A=/home/dev/n16k64_campaign/paper/artifacts
++TABLE=${TABLE:-/home/dev/NVFP4-RaZeR/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.json}
++RT16=n16k64_wA_rt,n16k64_wA_rt_n64,n16k64_wA_rt_n32,n16k64_wA_rt_n16
++RT32=n16k64_wA_g32_rt,n16k64_wA_g32_rt_n64,n16k64_wA_g32_rt_n32,n16k64_wA_g32_rt_n16
++mkdir -p $R $OUT/logs $OUT/gemm
++log() { echo "$(date -u +%Y-%m-%dT%H:%M:%S+00:00) $*" >> $OUT/commands.log; }
++step() { local name=$1; shift; log "START $name"; set +e; "$@" > $OUT/logs/$name.log 2>&1; local rc=$?; set -e; log "END $name rc=$rc"; [ $rc -eq 0 ] || { log "STOP: $name failed"; exit 1; }; }
++log "BEGIN B gates and measurements at $(git rev-parse HEAD), table $TABLE"
++step G3_selftest env SM120_BUILD_DIR=$BG $PY sm120/build.py --selftest \
++     --config n16k64_wA_rt --config n16k64_wA_rt_n64 --config n16k64_wA_rt_n32 --config n16k64_wA_rt_n16 \
++     --config n16k64_wA_g32_rt --config n16k64_wA_g32_rt_n64 --config n16k64_wA_g32_rt_n32 --config n16k64_wA_g32_rt_n16
++step G1_G2_sass $PY experiments/kernel_opt/check_sass.py --after-root $BG --tmopt-root $KO/build_tmopt --new $RT16,$RT32 \
++     --before-roots $KO/build,$KO/build_e0m3,$A1 --out $R/g1_g2_sass.json
++step G3_pytest env SM120_BUILD_DIR=$BG SM120_REF_BUILD_DIR=/home/dev/NVFP4-RaZeR/sm120/build SM120_REF_A1_DIR=$A1 $PY -m pytest \
++     sm120/tests/test_gemm.py sm120/tests/test_select.py sm120/tests/test_g32.py sm120/tests/test_runs.py -rs -p no:cacheprovider -v
++step G4_bitwise_16x64 $PY experiments/kernel_opt/check_bitwise.py --family wA --build-root $BG --candidates $RT16 \
++     --set mixed_rt --out $R/g4_bitwise_16x64.json
++step G4_bitwise_256x64 $PY experiments/kernel_opt/check_bitwise.py --family g32 --build-root $BG --candidates $RT32 \
++     --set mixed256_rt --out $R/g4_bitwise_256x64.json
++step G5_logits_16x64 $PY experiments/kernel_opt/check_model_logits.py --unit 16x64 --before set:mixed --after set:mixed_rt \
++     --after-root $BG --out $R/g5_logits_16x64.json
++step G5_logits_256x64 $PY experiments/kernel_opt/check_model_logits.py --unit 256x64 --before set:mixed256 --before-root $A1 \
++     --after set:mixed256_rt --after-root $BG --out $R/g5_logits_256x64.json
++log "GATES PASSED"
++for m in llama8b mistral7b phi4 qwen27b; do
++  step M1_$m $PY experiments/kernel_opt/bench_abB_isolated.py --model $m --b-root $BG --freq-root $FREQ --a1-root $A1 \
++       --table $TABLE --artifact fo6=$A/${m}_fo6 --artifact tc_16x64=$A/${m}_tc_16x64 --artifact tc_256x64=$A/${m}_tc_256x64 \
++       --out $OUT/gemm/$m.json
++done
++step C2_runs $PY experiments/kernel_opt/c2_runs.py --b-root $BG --freq-root $FREQ --a1-root $A1 --out $OUT/c2_runs.json
++log "DONE B gates and measurements"
+diff --git a/sm120/csrc/mixfp4_sm120.cu b/sm120/csrc/mixfp4_sm120.cu
+index 8f749a3..fd68a9c 100644
+--- a/sm120/csrc/mixfp4_sm120.cu
++++ b/sm120/csrc/mixfp4_sm120.cu
+@@ -178,6 +178,8 @@ struct Call {
+   void const *bias;
+   int splits = 1;          // Stream-K builds only
+   int decomposition = 0;   // 0 heuristic, 1 data-parallel, 2 split-K, 3 stream-K
++  void const *runs = nullptr;   // kernel-opt B (MIXFP4_RUNS builds): the per-warp run table, or nullptr
++  int runs_stride = 0;
+ };
+ 
+ typename Gemm::Arguments make_arguments(Call const &c) {
+@@ -193,7 +195,11 @@ typename Gemm::Arguments make_arguments(Call const &c) {
+       cutlass::gemm::GemmUniversalMode::kGemm,
+       {c.m, c.n, c.k, 1},
+       {static_cast<DataA const *>(c.a), stride_a, static_cast<DataB const *>(c.b), stride_b,
+-       static_cast<SF const *>(c.sfa), layout_sfa, static_cast<SF const *>(c.sfb), layout_sfb},
++       static_cast<SF const *>(c.sfa), layout_sfa, static_cast<SF const *>(c.sfb), layout_sfb
++#if defined(MIXFP4_RUNS) && MIXFP4_RUNS
++       , static_cast<uint16_t const *>(c.runs), c.runs_stride
++#endif
++      },
+       {{},  // fusion arguments, filled below
+        // The EVT never reads C (no source node), but the epilogue's TMA descriptor for C is built
+        // regardless, so it is given D's valid address.
+@@ -231,6 +237,21 @@ typename Gemm::Arguments make_arguments(Call const &c) {
+   return args;
+ }
+ 
++int gemm_call(Call const &c, void *workspace, size_t workspace_size, void *stream) {
++  auto args = make_arguments(c);
++  if (Gemm::get_workspace_size(args) > workspace_size) { return -1000; }
++  Gemm gemm_op;
++  cutlass::Status status = gemm_op.can_implement(args);
++  if (status != cutlass::Status::kSuccess) { return -2000 - int(status); }
++  status = gemm_op.initialize(args, workspace, static_cast<cudaStream_t>(stream));
++  if (status != cutlass::Status::kSuccess) { return -3000 - int(status); }
++  status = gemm_op.run(static_cast<cudaStream_t>(stream));
++  if (status != cutlass::Status::kSuccess) { return -4000 - int(status); }
++  cudaError_t err = cudaGetLastError();
++  if (err != cudaSuccess) { return -5000 - int(err); }
++  return 0;
++}
++
+ #ifndef SM120_CONFIG_NAME
+ #define SM120_CONFIG_NAME "unnamed"
+ #endif
+@@ -288,6 +309,10 @@ int sm120_describe(char *out, int capacity) {
+   int streamk = 0;
+ #if defined(SM120_STREAMK) && SM120_STREAMK
+   streamk = 1;
++#endif
++  int runs = 0;
++#if defined(MIXFP4_RUNS) && MIXFP4_RUNS
++  runs = 1;
+ #endif
+   using TM = typename Gemm::GemmKernel::CollectiveMainloop::TiledMma;
+   int const atom_m = int(size<1>(typename TM::ThrLayoutVMNK{}));
+@@ -301,11 +326,11 @@ int sm120_describe(char *out, int capacity) {
+       "\"granule_a\":[%d,%d],\"granule_b\":[%d,%d],\"pinned_e2m1\":[%d,%d],"
+       "\"blobgen_mma_mn\":[%d,%d],\"d_colmajor\":%d,\"bias_on_n\":%d,\"mainloop_stages\":%d,"
+       "\"shared_storage_bytes\":%d,\"cutlass_version\":\"%d.%d.%d\",\"epilogue\":\"bf16((s_m*s_n)*acc+bias)\","
+-      "\"stream_k\":%d}",
++      "\"stream_k\":%d,\"runs\":%d}",
+       SM120_CONFIG_NAME, stock, int(size<0>(ThreadBlockShape{})), int(size<1>(ThreadBlockShape{})),
+       int(size<2>(ThreadBlockShape{})), atom_m, atom_n, a_rows, a_k, b_cols, b_k, pin_a, pin_b,
+       blob_mma_m, blob_mma_n, d_colmajor, bias_on_n, stages, smem, CUTLASS_MAJOR, CUTLASS_MINOR,
+-      CUTLASS_PATCH, streamk);
++      CUTLASS_PATCH, streamk, runs);
+   if (out != nullptr && capacity > 0) {
+     int const n = len < capacity - 1 ? len : capacity - 1;
+     for (int i = 0; i < n; ++i) { out[i] = buf[i]; }
+@@ -389,6 +414,12 @@ int sm120_gemm(void const *a, void const *sfa, void const *b, void const *sfb, v
+                float const *scale_n, float scale_n_default,
+                void const *bias, int splits, int decomposition,
+                void *workspace, size_t workspace_size, void *stream);
++int sm120_gemm_runs(void const *a, void const *sfa, void const *b, void const *sfb, void *d,
++                    int m, int n, int k,
++                    float const *scale_m, float scale_m_default,
++                    float const *scale_n, float scale_n_default,
++                    void const *bias, void const *runs, int runs_stride,
++                    void *workspace, size_t workspace_size, void *stream);
+ 
+ // One native Linear: quantize x [T, K] into the given buffers, then y = x W^T (+ bias) through
+ // whichever operand this build puts the weights on. y is the row-major [T, N] bf16 output.
+@@ -416,18 +447,35 @@ int sm120_gemm(void const *a, void const *sfa, void const *b, void const *sfb, v
+   if (splits != 1 || decomposition != 0) { return -6000; }   // not a Stream-K build
+ #endif
+   Call c{a, sfa, b, sfb, d, m, n, k, scale_m, scale_n, scale_m_default, scale_n_default, bias, splits, decomposition};
+-  auto args = make_arguments(c);
+-  if (Gemm::get_workspace_size(args) > workspace_size) { return -1000; }
+-  Gemm gemm_op;
+-  cutlass::Status status = gemm_op.can_implement(args);
+-  if (status != cutlass::Status::kSuccess) { return -2000 - int(status); }
+-  status = gemm_op.initialize(args, workspace, static_cast<cudaStream_t>(stream));
+-  if (status != cutlass::Status::kSuccess) { return -3000 - int(status); }
+-  status = gemm_op.run(static_cast<cudaStream_t>(stream));
+-  if (status != cutlass::Status::kSuccess) { return -4000 - int(status); }
+-  cudaError_t err = cudaGetLastError();
+-  if (err != cudaSuccess) { return -5000 - int(err); }
+-  return 0;
++  return gemm_call(c, workspace, workspace_size, stream);
+ }
+ 
++// kernel-opt B: sm120_gemm with the per-weight run table (see the collective's MIXFP4_RUNS hook); weights on A only.
++int sm120_gemm_runs(void const *a, void const *sfa, void const *b, void const *sfb, void *d,
++                    int m, int n, int k,
++                    float const *scale_m, float scale_m_default,
++                    float const *scale_n, float scale_n_default,
++                    void const *bias, void const *runs, int runs_stride,
++                    void *workspace, size_t workspace_size, void *stream) {
++#if !(defined(MIXFP4_RUNS) && MIXFP4_RUNS)
++  if (runs != nullptr) { return -7000; }   // not a run-table build
++#endif
++  Call c{a, sfa, b, sfb, d, m, n, k, scale_m, scale_n, scale_m_default, scale_n_default, bias, 1, 0, runs, runs_stride};
++  return gemm_call(c, workspace, workspace_size, stream);
++}
++
++// sm120_linear with the run table (weights on A).
++int sm120_linear_runs(void const *x, int64_t x_stride, int T, int K, int mode, void *x_packed, void *x_sf, void *x_gs,
++                      void const *w_packed, void const *w_sf, float gs_w, void const *bias, int N, void *y,
++                      void const *runs, int runs_stride, void *workspace, size_t workspace_size, void *stream) {
++#if defined(SM120_BIAS_ON_N) && SM120_BIAS_ON_N
++  if (runs != nullptr) { return -7001; }   // run tables are for weights on A
++#endif
++  int rc = sm120_quant_rows(x, x_stride, T, K, mode, x_packed, x_sf, x_gs, stream);
++  if (rc != 0 || T == 0) { return rc; }
++  return sm120_gemm_runs(w_packed, w_sf, x_packed, x_sf, y, N, T, K, nullptr, gs_w, static_cast<float const *>(x_gs),
++                         1.0f, bias, runs, runs_stride, workspace, workspace_size, stream);
++}
++
++
+ }  // extern "C"
+diff --git a/sm120/kernel/LOCAL_CHANGES.md b/sm120/kernel/LOCAL_CHANGES.md
+index d94e4a3..1095a89 100644
+--- a/sm120/kernel/LOCAL_CHANGES.md
++++ b/sm120/kernel/LOCAL_CHANGES.md
+@@ -21,10 +21,11 @@ configuration rebuilt from the kernel-opt sources has the same patched and unpat
+ | `MIXFP4_PINGPONG=1` (kernel-opt) | CUTLASS's ping-pong kernel schedule (4 MMA warps, two consumer warp groups on alternating tiles) instead of the builder's default cooperative one (8 MMA warps) | the cooperative kernel static_asserts a CTA tile M >= 128, so the narrow-M builds need ping-pong, with a 4-warp arrangement (`MIXFP4_ATOM_M * MIXFP4_ATOM_N == 4`; the narrow builds use 1x4 and a 64-wide N tile, which keeps n8k64_wB's per-warp dispatch of 2 n-atoms x 2 k-blocks). |
+ | `MIXFP4_DISPATCH_FREQ=1` (kernel-opt #2) | in the collective's `dispatch_pattern`: test the all-E2M1 pattern (0) first -- one compare, its arm on the fall-through path -- and only otherwise enter the unchanged tree | 82-95 % of the paper maps' (warp, k_tile) patterns are 0 (`results/kernel_opt/dispatch`), which the balanced tree charges log2(arms) compares. Every arm computes exactly as before (gates G1'-G5', results/kernel_opt/PROTOCOL.md amendment 2). Unset, the dispatch is the upstream one (identical SASS). Built with `build.py --define MIXFP4_DISPATCH_FREQ=1` into a separate build directory. |
+ | `MIXFP4_ARM_XOR=<mask>` (kernel-opt, diagnostic only) | in the collective's `dispatch_pattern`: the arm tree is searched on `pattern ^ mask` and the leaf at position L runs pattern L ^ mask's arm | the E0M3 investigation's test B (`results/kernel_opt/e0m3/`): with mask 15 the all-E0M3 arm gets the all-fall-through path that the all-E2M1 arm has by default, to see whether E0M3's cost follows the code position. Every arm computes exactly as before. Unset (0), the dispatch is the upstream one (identical SASS). Used only by the never-deployed `*_xor` builds. |
++| `MIXFP4_RUNS=1` (kernel-opt B) | the collective's `Arguments`/`Params` gain `ptr_runs` / `runs_stride` (a per-warp run table; `nullptr` keeps the per-k_tile dispatch), and the pipelined joint-K-A mainloop, given a table, dispatches once per RUN of equal patterns along K and loops the unchanged k_tile body inside the arm, with the tail body closing the last run; the warp's row of the table is (CTA m tile, the warp's M index in the TiledMma) | the per-k_tile dispatch reads 2-4 flags and walks a tree every k_tile, and the kernels are issue-bound (A′ halved that work and halved the fixed cost); in the 16x64 maps 88-94 % of k_tiles are pattern 0, in long runs. The table is built by `mixfp4_sm120/runs.py` from the same tags, so every k_tile executes the MMAs of its own pattern (bitwise equal; gates of kernel-opt B). Both paths are compiled (the census doubles). Unset, the collective is the upstream one (identical SASS). |
+ | collective, narrow M (kernel-opt) | in `sm120_blockscaled_mma_tma_mixed.hpp`, only when the CTA tile's M < 128: the SFA smem tile and TMA box cover the whole 128-row scale-factor block (`TileShapeSFA`), the producer loads the block that holds the CTA's rows (`broadcast_m`), and the consumer reads its M sub-tile (`m % (128/M)`) | the mirror of the collective's existing narrow-N handling of SFB (`TileShapeSFB`, `broadcast_n`): the scale-factor layout's indivisible unit is a 128-row block. For M >= 128 every type is the upstream one (identical SASS, gate G1). |
+ 
+ The mainloop collective (`src/collective/*`) is modified only by the narrow-M path, the pattern-0-first
+-dispatch option and the diagnostic arm permutation above; the MMA atom, the blob/PTX generators and the
++dispatch option, the run-table option and the diagnostic arm permutation above; the MMA atom, the blob/PTX generators and the
+ SASS patcher are unmodified. `sm120/build.py` runs `scripts/gen_mixed_mma_blob.py` from a copy in the build
+ directory, so the generated header never overwrites `src/collective/mixed_mma_blob_generated.hpp`
+ (which is kept as the upstream committed default and is shadowed by include order).
+diff --git a/sm120/kernel/LOCAL_CHANGES.patch b/sm120/kernel/LOCAL_CHANGES.patch
+index 4d789d9..85f2dc3 100644
+--- a/sm120/kernel/LOCAL_CHANGES.patch
++++ b/sm120/kernel/LOCAL_CHANGES.patch
+@@ -170,7 +170,7 @@
+ +#endif  // !MIXFP4_NO_SELFTEST
+ --- upstream/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
+ +++ sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
+-@@ -184,15 +184,48 @@
++@@ -184,17 +184,50 @@
+  // barriers, so ptxas leaves these as real branches rather than if-converting them.
+  template <int Lo, int Hi, class Body>
+  CUTLASS_DEVICE void
+@@ -185,9 +185,9 @@
+ -    else                          { dispatch_pattern<Mid + 1, Hi>(pattern, body); }
+ +    if (pattern <= uint32_t(Mid)) { dispatch_pattern_tree<Lo, Mid>(pattern, body); }
+ +    else                          { dispatch_pattern_tree<Mid + 1, Hi>(pattern, body); }
+-+  }
+-+}
+-+
++   }
++ }
++ 
+ +// [NVFP4-RaZeR local hook, diagnostic only; see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_ARM_XOR=<mask> permutes
+ +// where each pattern's arm sits in the branch tree: the tree is searched on (pattern ^ mask) and the leaf at position
+ +// L runs the arm of pattern L ^ mask. Every arm computes exactly as before; only its code position (and so which
+@@ -212,16 +212,18 @@
+ +  if constexpr (Lo == 0 && Hi > 0) {
+ +    if (pattern == 0u) { body(cute::C<0>{}); }
+ +    else               { dispatch_pattern_tree<Lo, Hi>(pattern, body); }
+-   }
+++  }
+ +  else {
+ +    dispatch_pattern_tree<Lo, Hi>(pattern, body);
+ +  }
+ +#else
+ +  dispatch_pattern_tree<Lo, Hi>(pattern, body);
+ +#endif
+- }
+- 
+++}
+++
+  // Pattern bit layout: A granule flags occupy bits [0, AGranules), B granule flags follow in
++ // bits [AGranules, AGranules + BGranules).
++ template <int AGranules, int AAtomsPerGranule>
+ @@ -349,11 +382,27 @@
+  
+    // SmemLayoutAtomSFA and SmemLayoutAtomSFB are for whole CTA tiles. We add the number of pipeline stages here.
+@@ -251,7 +253,20 @@
+    using SmemLayoutSFB_ = decltype(make_layout(
+      append(shape(SmemLayoutAtomSFB{}), Int<DispatchPolicy::Stages>{}),
+      append(stride(SmemLayoutAtomSFB{}), size(filter_zeros(SmemLayoutAtomSFB{})))
+-@@ -466,7 +515,7 @@
++@@ -443,6 +492,12 @@
++     LayoutSFA layout_SFA{};
++     ElementSF const* ptr_SFB{nullptr};
++     LayoutSFB layout_SFB{};
+++#if defined(MIXFP4_RUNS) && MIXFP4_RUNS
+++    // [NVFP4-RaZeR local hook, kernel-opt B; see sm120/kernel/LOCAL_CHANGES.md] the per-warp run table (see mma());
+++    // nullptr runs the per-k_tile dispatch.
+++    uint16_t const* ptr_runs{nullptr};
+++    int runs_stride{0};
+++#endif
++   };
++ 
++   // Device side kernel params
++@@ -466,7 +521,7 @@
+          GmemTiledCopySFA{},
+          make_tensor(static_cast<ElementSF const*>(nullptr), LayoutSFA{}),
+          SmemLayoutSFA{}(_,_,cute::Int<0>{}),
+@@ -260,7 +275,18 @@
+          _1{}));  // No programmatic multicast
+  
+  
+-@@ -527,7 +576,7 @@
++@@ -486,6 +541,10 @@
++     uint32_t tma_transaction_bytes = TmaTransactionBytes;
++     uint32_t tma_transaction_bytes_mk = TmaTransactionBytesMK;
++     uint32_t tma_transaction_bytes_nk = TmaTransactionBytesNK;
+++#if defined(MIXFP4_RUNS) && MIXFP4_RUNS
+++    uint16_t const* ptr_runs = nullptr;
+++    int runs_stride = 0;
+++#endif
++   };
++ 
++   //
++@@ -527,7 +586,7 @@
+          GmemTiledCopySFA{},
+          tensor_sfa,
+          SmemLayoutSFA{}(_,_,cute::Int<0>{}),
+@@ -269,7 +295,18 @@
+          _1{}); // No programmatic multicast
+  
+      typename Params::TMA_SFB tma_load_sfb = make_tma_copy<uint16_t>(
+-@@ -800,7 +849,20 @@
++@@ -547,6 +606,10 @@
++       TmaTransactionBytes,
++       TmaTransactionBytesMK,
++       TmaTransactionBytesNK
+++#if defined(MIXFP4_RUNS) && MIXFP4_RUNS
+++      , args.ptr_runs,
+++      args.runs_stride
+++#endif
++     };
++   }
++ 
++@@ -800,7 +863,20 @@
+          make_stride(_0{}, size<1>(TileShapeSFB{}) / size<1>(TileShape{})));
+        Tensor gA =   gA_mkl(_,_,m_coord,_,l_coord);                                                    // (BLK_M,BLK_K,k)
+        Tensor gB =   gB_nkl(_,_,n_coord,_,l_coord);                                                    // (BLK_N,BLK_K,k)
+@@ -291,7 +328,7 @@
+        Tensor gSFB = gSFB_nkl(_,_,broadcast_n(n_coord),_,l_coord);                                     // (BLK_N,BLK_K,k)
+  
+        // Partition source and destination tensors for tma copies
+-@@ -884,7 +946,17 @@
++@@ -884,7 +960,17 @@
+  
+      Tensor sA = make_tensor(make_smem_ptr(shared_tensors.smem_A.begin()), SmemLayoutA{});         // (BLK_M,BLK_K,PIPE)
+      Tensor sB = make_tensor(make_smem_ptr(shared_tensors.smem_B.begin()), SmemLayoutB{});         // (BLK_N,BLK_K,PIPE)
+@@ -310,3 +347,62 @@
+      Tensor sSFB = [&]() {
+        if constexpr (size<1>(TileShape{}) >= 128) {
+          return make_tensor(make_smem_ptr(shared_tensors.smem_SFB.begin()), SmemLayoutSFB{});  // (BLK_N,BLK_K,PIPE)
++@@ -1647,7 +1733,11 @@
++ #endif
++     };
++ 
+++#if defined(MIXFP4_RUNS) && MIXFP4_RUNS
+++    uint32_t pattern_cur  = params.ptr_runs != nullptr ? 0u : next_pattern();
+++#else
++     uint32_t pattern_cur  = next_pattern();
+++#endif
++     uint32_t pattern_next = 0;
++ 
++     auto k_tile_body_pipe = [&](auto site_c) {
++@@ -1679,6 +1769,36 @@
++       });
++     };
++ 
+++#if defined(MIXFP4_RUNS) && MIXFP4_RUNS
+++    // [NVFP4-RaZeR local hook, kernel-opt B; see sm120/kernel/LOCAL_CHANGES.md] Dispatch once per RUN of equal
+++    // patterns instead of once per k_tile. The host builds, from the tags, one list per (CTA row panel, warp row):
+++    // entry 0 is the number of runs, entry r >= 1 is (pattern | run length << 4) along K, the runs covering every
+++    // k_tile of the panel in order and each pattern being exactly what read_a_reg / read_a_smem would return for
+++    // those k_tiles. Each run enters its arm once and loops the unchanged k_tile body inside it (no flag reads, no
+++    // per-k_tile tree); the last run ends with the tail body. So every k_tile executes the same MMAs as the
+++    // per-k_tile dispatch. Without a table (ptr_runs == nullptr) the per-k_tile dispatch below runs.
+++    if (params.ptr_runs != nullptr) {
+++      auto const thr_vmnk = tiled_mma.get_thr_layout_vmnk().get_flat_coord(thread_idx);
+++      constexpr int kWarpsM = decltype(size<1>(tiled_mma.get_thr_layout_vmnk()))::value;
+++      uint16_t const* runs = params.ptr_runs
+++                           + (int64_t(get<0>(blk_coord)) * kWarpsM + int(get<1>(thr_vmnk))) * params.runs_stride;
+++      int const nruns = runs[0];
+++      uint32_t entry = runs[1];
+++      CUTLASS_PRAGMA_NO_UNROLL
+++      for (int r = 1; r <= nruns; ++r) {
+++        uint32_t const cur = entry;
+++        if (r < nruns) { entry = runs[r + 1]; }     // the next run's entry, loaded a run ahead
+++        bool const last = r == nruns;
+++        int len = int(cur >> 4) - (last ? 1 : 0);
+++        mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(cur & uint32_t(kNumArms - 1), [&](auto site_c) {
+++          CUTLASS_PRAGMA_NO_UNROLL
+++          for ( ; len > 0; --len) { k_tile_body(site_c); }
+++          if (last) { k_tile_tail_body(site_c); }
+++        });
+++      }
+++    }
+++    else {
+++#endif
++     CUTLASS_PRAGMA_NO_UNROLL
++     for ( ; k_tile_count > 1; --k_tile_count) {
++       mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(pattern_cur, k_tile_body_pipe);
++@@ -1687,6 +1807,9 @@
++ 
++     // The last body already computed the tail's arm.
++     mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(pattern_cur, k_tile_tail_body);
+++#if defined(MIXFP4_RUNS) && MIXFP4_RUNS
+++    }
+++#endif
++ #elif defined(MIXFP4_DISPATCH_PER_CTA) && MIXFP4_DISPATCH_PER_CTA
++     // ---------------------------------------------------------------------------------------
++     // ONE dispatch for the whole CTA: the entire k-loop lives inside each arm.
+diff --git a/sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp b/sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
+index 466739d..012be56 100644
+--- a/sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
++++ b/sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
+@@ -492,6 +492,12 @@ struct CollectiveMma<
+     LayoutSFA layout_SFA{};
+     ElementSF const* ptr_SFB{nullptr};
+     LayoutSFB layout_SFB{};
++#if defined(MIXFP4_RUNS) && MIXFP4_RUNS
++    // [NVFP4-RaZeR local hook, kernel-opt B; see sm120/kernel/LOCAL_CHANGES.md] the per-warp run table (see mma());
++    // nullptr runs the per-k_tile dispatch.
++    uint16_t const* ptr_runs{nullptr};
++    int runs_stride{0};
++#endif
+   };
+ 
+   // Device side kernel params
+@@ -535,6 +541,10 @@ struct CollectiveMma<
+     uint32_t tma_transaction_bytes = TmaTransactionBytes;
+     uint32_t tma_transaction_bytes_mk = TmaTransactionBytesMK;
+     uint32_t tma_transaction_bytes_nk = TmaTransactionBytesNK;
++#if defined(MIXFP4_RUNS) && MIXFP4_RUNS
++    uint16_t const* ptr_runs = nullptr;
++    int runs_stride = 0;
++#endif
+   };
+ 
+   //
+@@ -596,6 +606,10 @@ struct CollectiveMma<
+       TmaTransactionBytes,
+       TmaTransactionBytesMK,
+       TmaTransactionBytesNK
++#if defined(MIXFP4_RUNS) && MIXFP4_RUNS
++      , args.ptr_runs,
++      args.runs_stride
++#endif
+     };
+   }
+ 
+@@ -1719,7 +1733,11 @@ struct CollectiveMma<
+ #endif
+     };
+ 
++#if defined(MIXFP4_RUNS) && MIXFP4_RUNS
++    uint32_t pattern_cur  = params.ptr_runs != nullptr ? 0u : next_pattern();
++#else
+     uint32_t pattern_cur  = next_pattern();
++#endif
+     uint32_t pattern_next = 0;
+ 
+     auto k_tile_body_pipe = [&](auto site_c) {
+@@ -1751,6 +1769,36 @@ struct CollectiveMma<
+       });
+     };
+ 
++#if defined(MIXFP4_RUNS) && MIXFP4_RUNS
++    // [NVFP4-RaZeR local hook, kernel-opt B; see sm120/kernel/LOCAL_CHANGES.md] Dispatch once per RUN of equal
++    // patterns instead of once per k_tile. The host builds, from the tags, one list per (CTA row panel, warp row):
++    // entry 0 is the number of runs, entry r >= 1 is (pattern | run length << 4) along K, the runs covering every
++    // k_tile of the panel in order and each pattern being exactly what read_a_reg / read_a_smem would return for
++    // those k_tiles. Each run enters its arm once and loops the unchanged k_tile body inside it (no flag reads, no
++    // per-k_tile tree); the last run ends with the tail body. So every k_tile executes the same MMAs as the
++    // per-k_tile dispatch. Without a table (ptr_runs == nullptr) the per-k_tile dispatch below runs.
++    if (params.ptr_runs != nullptr) {
++      auto const thr_vmnk = tiled_mma.get_thr_layout_vmnk().get_flat_coord(thread_idx);
++      constexpr int kWarpsM = decltype(size<1>(tiled_mma.get_thr_layout_vmnk()))::value;
++      uint16_t const* runs = params.ptr_runs
++                           + (int64_t(get<0>(blk_coord)) * kWarpsM + int(get<1>(thr_vmnk))) * params.runs_stride;
++      int const nruns = runs[0];
++      uint32_t entry = runs[1];
++      CUTLASS_PRAGMA_NO_UNROLL
++      for (int r = 1; r <= nruns; ++r) {
++        uint32_t const cur = entry;
++        if (r < nruns) { entry = runs[r + 1]; }     // the next run's entry, loaded a run ahead
++        bool const last = r == nruns;
++        int len = int(cur >> 4) - (last ? 1 : 0);
++        mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(cur & uint32_t(kNumArms - 1), [&](auto site_c) {
++          CUTLASS_PRAGMA_NO_UNROLL
++          for ( ; len > 0; --len) { k_tile_body(site_c); }
++          if (last) { k_tile_tail_body(site_c); }
++        });
++      }
++    }
++    else {
++#endif
+     CUTLASS_PRAGMA_NO_UNROLL
+     for ( ; k_tile_count > 1; --k_tile_count) {
+       mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(pattern_cur, k_tile_body_pipe);
+@@ -1759,6 +1807,9 @@ struct CollectiveMma<
+ 
+     // The last body already computed the tail's arm.
+     mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(pattern_cur, k_tile_tail_body);
++#if defined(MIXFP4_RUNS) && MIXFP4_RUNS
++    }
++#endif
+ #elif defined(MIXFP4_DISPATCH_PER_CTA) && MIXFP4_DISPATCH_PER_CTA
+     // ---------------------------------------------------------------------------------------
+     // ONE dispatch for the whole CTA: the entire k-loop lives inside each arm.
+diff --git a/sm120/mixfp4_sm120/configs.py b/sm120/mixfp4_sm120/configs.py
+index 2e30a38..6ad8b2c 100644
+--- a/sm120/mixfp4_sm120/configs.py
++++ b/sm120/mixfp4_sm120/configs.py
+@@ -188,6 +188,51 @@ CONFIGS = {c.name: c for c in [
+         dict(_WT_AS_A_GEN, A_ATOMS=2, MMA_N=1, B_ATOMS=1),
+         expected_census={0: 16, 1: 16}, map_tile_rows=128,
+         description="A': n16k64_wA_g32 with a 128 x 16 CTA tile."),
++    # kernel-opt B: the mixed family with per-warp run tables (MIXFP4_RUNS): dispatch once per run of equal patterns
++    # along K instead of once per k_tile. Both paths are compiled (the per-k_tile one runs without a table), so the
++    # census is twice the plain build's.
++    KernelConfig(
++        'n16k64_wA_rt', 'mixed', 0, (16, 64), dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_RUNS=1), _WT_AS_A_GEN,
++        expected_census={0: 1024, 1: 1024},
++        description="kernel-opt B: n16k64_wA with per-warp run tables."),
++    KernelConfig(
++        'n16k64_wA_rt_n64', 'mixed', 0, (16, 64),
++        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_TILE_N=64, MIXFP4_B_ATOMS_PER_GRANULE=4, MIXFP4_RUNS=1),
++        dict(_WT_AS_A_GEN, MMA_N=4, B_ATOMS=4), expected_census={0: 512, 1: 512},
++        description="kernel-opt B: n16k64_wA_n64 with per-warp run tables."),
++    KernelConfig(
++        'n16k64_wA_rt_n32', 'mixed', 0, (16, 64),
++        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_TILE_N=32, MIXFP4_B_ATOMS_PER_GRANULE=2, MIXFP4_RUNS=1),
++        dict(_WT_AS_A_GEN, MMA_N=2, B_ATOMS=2), expected_census={0: 256, 1: 256},
++        description="kernel-opt B: n16k64_wA_n32 with per-warp run tables."),
++    KernelConfig(
++        'n16k64_wA_rt_n16', 'mixed', 0, (16, 64),
++        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_TILE_N=16, MIXFP4_B_ATOMS_PER_GRANULE=1, MIXFP4_LDSM_B=2, MIXFP4_RUNS=1),
++        dict(_WT_AS_A_GEN, MMA_N=1, B_ATOMS=1), expected_census={0: 128, 1: 128},
++        description="kernel-opt B: n16k64_wA_n16 with per-warp run tables."),
++    KernelConfig(
++        'n16k64_wA_g32_rt', 'mixed', 0, (32, 64),
++        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_A_ATOMS_PER_GRANULE=2, MIXFP4_RUNS=1), dict(_WT_AS_A_GEN, A_ATOMS=2),
++        expected_census={0: 256, 1: 256}, map_tile_rows=128,
++        description="kernel-opt B: n16k64_wA_g32 (A') with per-warp run tables."),
++    KernelConfig(
++        'n16k64_wA_g32_rt_n64', 'mixed', 0, (32, 64),
++        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_A_ATOMS_PER_GRANULE=2, MIXFP4_TILE_N=64, MIXFP4_B_ATOMS_PER_GRANULE=4,
++             MIXFP4_RUNS=1),
++        dict(_WT_AS_A_GEN, A_ATOMS=2, MMA_N=4, B_ATOMS=4), expected_census={0: 128, 1: 128}, map_tile_rows=128,
++        description="kernel-opt B: n16k64_wA_g32_n64 with per-warp run tables."),
++    KernelConfig(
++        'n16k64_wA_g32_rt_n32', 'mixed', 0, (32, 64),
++        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_A_ATOMS_PER_GRANULE=2, MIXFP4_TILE_N=32, MIXFP4_B_ATOMS_PER_GRANULE=2,
++             MIXFP4_RUNS=1),
++        dict(_WT_AS_A_GEN, A_ATOMS=2, MMA_N=2, B_ATOMS=2), expected_census={0: 64, 1: 64}, map_tile_rows=128,
++        description="kernel-opt B: n16k64_wA_g32_n32 with per-warp run tables."),
++    KernelConfig(
++        'n16k64_wA_g32_rt_n16', 'mixed', 0, (32, 64),
++        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_A_ATOMS_PER_GRANULE=2, MIXFP4_TILE_N=16, MIXFP4_B_ATOMS_PER_GRANULE=1,
++             MIXFP4_LDSM_B=2, MIXFP4_RUNS=1),
++        dict(_WT_AS_A_GEN, A_ATOMS=2, MMA_N=1, B_ATOMS=1), expected_census={0: 32, 1: 32}, map_tile_rows=128,
++        description="kernel-opt B: n16k64_wA_g32_n16 with per-warp run tables."),
+     KernelConfig(
+         'n16k64_wA_nodisp', 'mixed', 0, None,
+         dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_NO_DISPATCH=1, MIXFP4_PIPE_FLAGS=0), _WT_AS_A_GEN,
+diff --git a/sm120/mixfp4_sm120/lib.py b/sm120/mixfp4_sm120/lib.py
+index 5fa9e7e..7f373d8 100644
+--- a/sm120/mixfp4_sm120/lib.py
++++ b/sm120/mixfp4_sm120/lib.py
+@@ -116,6 +116,21 @@ class Kernel:
+         self.act_operand = 1 - self.weight_operand
+         self.d_colmajor = bool(self.desc['d_colmajor'])
+         self.stream_k = bool(self.desc.get('stream_k', 0))
++        # kernel-opt B: builds with MIXFP4_RUNS take a per-weight run table (mixfp4_sm120/runs.py)
++        self.runs = bool(self.desc.get('runs', 0))
++        self.runs_geometry = None
++        if self.runs:
++            if self.weight_operand != 0 or self.desc['tile_mnk'][0] != 128:
++                raise LibraryError(f'{name}: run tables need weights on A and a 128-row CTA tile')
++            self.runs_geometry = dict(warps_m=int(self.desc['warp_atoms_mn'][0]), mma_m=int(self.desc['blobgen_mma_mn'][0]),
++                                      a_atoms=int(self.desc['granule_a'][0]) // 16, tile_m=128)
++            lib.sm120_gemm_runs.argtypes = [_c_ptr, _c_ptr, _c_ptr, _c_ptr, _c_ptr, _c_int, _c_int, _c_int, _c_ptr,
++                                            _c_float, _c_ptr, _c_float, _c_ptr, _c_ptr, _c_int, _c_ptr, _c_size, _c_ptr]
++            lib.sm120_gemm_runs.restype = _c_int
++            lib.sm120_linear_runs.argtypes = [_c_ptr, _c_i64, _c_int, _c_int, _c_int, _c_ptr, _c_ptr, _c_ptr, _c_ptr,
++                                              _c_ptr, _c_float, _c_ptr, _c_int, _c_ptr, _c_ptr, _c_int, _c_ptr, _c_size,
++                                              _c_ptr]
++            lib.sm120_linear_runs.restype = _c_int
+         self.type_block = self.cfg.type_block
+         self._ws = {}
+         self._offsets = {}
+@@ -169,15 +184,23 @@ class Kernel:
+     # -------------------------------------------------------------------------------- GEMM
+ 
+     def gemm(self, a, sfa, b, sfb, m, n, k, *, scale_m=None, scale_m_default=1.0, scale_n=None,
+-             scale_n_default=1.0, bias=None, out=None, check=True, splits=1, decomposition=0):
++             scale_n_default=1.0, bias=None, out=None, check=True, splits=1, decomposition=0, runs=None):
+         """D = bf16((s_m[m] * s_n[n]) * decode(A) @ decode(B)^T + bias).
+ 
+         a: uint8 [m, k/2], b: uint8 [n, k/2] (element 2j in the low nibble); sfa / sfb: placed scale
+         bytes (bit 7 = E0M3 tag). Returns D as a [m, n] tensor, or for column-major-D builds as its
+         row-major transpose [n, m] (the same memory). Stream-K builds accept `splits` (> 1: split-K
+-        into that many K slices) and `decomposition` (0 heuristic, 1 data-parallel, 2 split-K, 3 stream-K)."""
++        into that many K slices) and `decomposition` (0 heuristic, 1 data-parallel, 2 split-K, 3 stream-K).
++        Run-table builds (kernel-opt B) accept `runs`, the int16 table of the weight operand A (runs.build)."""
+         if (splits != 1 or decomposition != 0) and not self.stream_k:
+             raise ValueError(f'{self.cfg.name} is not a Stream-K build')
++        if runs is not None:
++            if not self.runs:
++                raise ValueError(f'{self.cfg.name} is not a run-table build')
++            if check and not (runs.is_cuda and runs.dtype == torch.int16 and runs.is_contiguous() and runs.dim() == 2
++                              and runs.shape[0] == -(-m // 128) * self.runs_geometry['warps_m']):
++                raise ValueError(f'runs must be a contiguous CUDA int16 [{-(-m // 128) * self.runs_geometry["warps_m"]}, '
++                                 f'stride] table for m={m}')
+         dev = a.device
+         if check:
+             for name, t in (('a', a), ('sfa', sfa), ('b', b), ('sfb', sfb)):
+@@ -204,19 +227,33 @@ class Kernel:
+         ws = self.workspace(m, n, k, dev, splits, decomposition)
+         stream = torch.cuda.current_stream(dev).cuda_stream
+         ptr = lambda t: None if t is None else t.data_ptr()  # noqa: E731
+-        rc = self.lib.sm120_gemm(ptr(a), ptr(sfa), ptr(b), ptr(sfb), ptr(out), m, n, k,
+-                                 ptr(scale_m), float(scale_m_default), ptr(scale_n), float(scale_n_default),
+-                                 ptr(bias), int(splits), int(decomposition), ptr(ws), 0 if ws is None else ws.numel(), stream)
++        if runs is not None:
++            rc = self.lib.sm120_gemm_runs(ptr(a), ptr(sfa), ptr(b), ptr(sfb), ptr(out), m, n, k,
++                                          ptr(scale_m), float(scale_m_default), ptr(scale_n), float(scale_n_default),
++                                          ptr(bias), runs.data_ptr(), runs.shape[1], ptr(ws), 0 if ws is None else ws.numel(),
++                                          stream)
++        else:
++            rc = self.lib.sm120_gemm(ptr(a), ptr(sfa), ptr(b), ptr(sfb), ptr(out), m, n, k,
++                                     ptr(scale_m), float(scale_m_default), ptr(scale_n), float(scale_n_default),
++                                     ptr(bias), int(splits), int(decomposition), ptr(ws), 0 if ws is None else ws.numel(),
++                                     stream)
+         if rc != 0:
+             raise LibraryError(f'sm120_gemm({m}, {n}, {k}) failed with code {rc}')
+         return out
+ 
+-    def gemm_ptr(self, a, sfa, b, sfb, m, n, k, scale_m, scale_m_default, scale_n, scale_n_default, bias, out, stream):
+-        """Unchecked GEMM on raw device pointers (ints / None); `out` is a preallocated bf16 tensor."""
++    def gemm_ptr(self, a, sfa, b, sfb, m, n, k, scale_m, scale_m_default, scale_n, scale_n_default, bias, out, stream,
++                 runs=None):
++        """Unchecked GEMM on raw device pointers (ints / None); `out` is a preallocated bf16 tensor; `runs` the run
++        table of a run-table build (kernel-opt B), or None."""
+         ws = self.workspace(m, n, k, out.device)
+-        rc = self.lib.sm120_gemm(a, sfa, b, sfb, out.data_ptr(), m, n, k, scale_m, float(scale_m_default), scale_n,
+-                                 float(scale_n_default), bias, 1, 0, None if ws is None else ws.data_ptr(),
+-                                 0 if ws is None else ws.numel(), stream)
++        if runs is not None:
++            rc = self.lib.sm120_gemm_runs(a, sfa, b, sfb, out.data_ptr(), m, n, k, scale_m, float(scale_m_default),
++                                          scale_n, float(scale_n_default), bias, runs.data_ptr(), runs.shape[1],
++                                          None if ws is None else ws.data_ptr(), 0 if ws is None else ws.numel(), stream)
++        else:
++            rc = self.lib.sm120_gemm(a, sfa, b, sfb, out.data_ptr(), m, n, k, scale_m, float(scale_m_default), scale_n,
++                                     float(scale_n_default), bias, 1, 0, None if ws is None else ws.data_ptr(),
++                                     0 if ws is None else ws.numel(), stream)
+         if rc != 0:
+             raise LibraryError(f'sm120_gemm({m}, {n}, {k}) failed with code {rc}')
+         return out
+diff --git a/sm120/mixfp4_sm120/linear.py b/sm120/mixfp4_sm120/linear.py
+index 77ef273..3ff0c0c 100644
+--- a/sm120/mixfp4_sm120/linear.py
++++ b/sm120/mixfp4_sm120/linear.py
+@@ -15,6 +15,7 @@ rounding to bf16 (see NUMERICS.md for how this differs from the fake-quant order
+ import torch
+ 
+ from . import quant_act
++from . import runs as RT
+ from .artifact import ArtifactError, PackedWeight, uniform_flags
+ from .lib import Kernel, sf_buffer_size, sf_offset_formula
+ from .select import KernelSet
+@@ -76,6 +77,10 @@ class NativeLinear(torch.nn.Module):
+         self.register_buffer('sf', place_scales(pw.scales, k), persistent=False)
+         self.register_buffer('bias_bf16', None if pw.bias is None else pw.bias.to(torch.bfloat16).contiguous(),
+                              persistent=False)
++        # kernel-opt B: a run-table kernel (every width of a set shares the geometry) gets this weight's table, built
++        # once from the tags; every call then passes it and the kernel dispatches once per run of equal patterns.
++        self.register_buffer('runs', RT.build(pw.scales, n, k, kernel.runs_geometry).to(pw.scales.device)
++                             if getattr(kernel, 'runs', False) else None, persistent=False)
+         self.weights_on_a = kernel.weight_operand == 0
+         self.kernel_set = kernel if isinstance(kernel, KernelSet) else None
+         self.quant_mode = Kernel.QUANT_MODES[act_kind]
+@@ -128,7 +133,7 @@ class NativeLinear(torch.nn.Module):
+                 bptr = None if bias is None else bias.data_ptr()
+                 if self.weights_on_a:
+                     kern.gemm_ptr(self.packed.data_ptr(), self.sf.data_ptr(), base, base + off_sf, n, t, k,
+-                                  None, self.global_scale, base + off_gs, 1.0, bptr, y, stream)
++                                  None, self.global_scale, base + off_gs, 1.0, bptr, y, stream, runs=self.runs)
+                 else:
+                     kern.gemm_ptr(base, base + off_sf, self.packed.data_ptr(), self.sf.data_ptr(), t, n, k,
+                                   base + off_gs, 1.0, None, self.global_scale, bptr, y, stream)
+@@ -144,11 +149,19 @@ class NativeLinear(torch.nn.Module):
+             ws = kern.workspace(n, t, k, dev) if self.weights_on_a else kern.workspace(t, n, k, dev)
+             if self.share_input:
+                 _LAST_QUANT[dev.index] = (x2, key, scratch, base, off_sf, off_gs)
+-            rc = kern.lib.sm120_linear(x2.data_ptr(), x2.stride(0), t, k, self.quant_mode, base,
+-                                       base + off_sf, base + off_gs, self.packed.data_ptr(), self.sf.data_ptr(),
+-                                       self.global_scale, None if bias is None else bias.data_ptr(), n, y.data_ptr(),
+-                                       None if ws is None else ws.data_ptr(), 0 if ws is None else ws.numel(),
+-                                       stream)
++            if self.runs is not None:
++                rc = kern.lib.sm120_linear_runs(x2.data_ptr(), x2.stride(0), t, k, self.quant_mode, base,
++                                                base + off_sf, base + off_gs, self.packed.data_ptr(), self.sf.data_ptr(),
++                                                self.global_scale, None if bias is None else bias.data_ptr(), n,
++                                                y.data_ptr(), self.runs.data_ptr(), self.runs.shape[1],
++                                                None if ws is None else ws.data_ptr(), 0 if ws is None else ws.numel(),
++                                                stream)
++            else:
++                rc = kern.lib.sm120_linear(x2.data_ptr(), x2.stride(0), t, k, self.quant_mode, base,
++                                           base + off_sf, base + off_gs, self.packed.data_ptr(), self.sf.data_ptr(),
++                                           self.global_scale, None if bias is None else bias.data_ptr(), n, y.data_ptr(),
++                                           None if ws is None else ws.data_ptr(), 0 if ws is None else ws.numel(),
++                                           stream)
+             if rc != 0:
+                 raise RuntimeError(f'{self.name}: sm120_linear failed with code {rc}')
+             y = y.view(*lead, n)
+@@ -156,7 +169,8 @@ class NativeLinear(torch.nn.Module):
+         packed_x, sf_x, gs_x = quant_act.quantize(x2, self.act_kind)
+         if self.weights_on_a:
+             y = kern.gemm(self.packed, self.sf, packed_x, sf_x, n, t, k,
+-                          scale_m_default=self.global_scale, scale_n=gs_x, bias=self.bias_bf16, check=False)
++                          scale_m_default=self.global_scale, scale_n=gs_x, bias=self.bias_bf16, check=False,
++                          runs=self.runs)
+         else:
+             y = kern.gemm(packed_x, sf_x, self.packed, self.sf, t, n, k,
+                           scale_m=gs_x, scale_n_default=self.global_scale, bias=self.bias_bf16, check=False)
+diff --git a/sm120/mixfp4_sm120/runs.py b/sm120/mixfp4_sm120/runs.py
+new file mode 100644
+index 0000000..4a352bd
+--- /dev/null
++++ b/sm120/mixfp4_sm120/runs.py
+@@ -0,0 +1,92 @@
++"""kernel-opt B: per-warp run tables for the weights-on-A mixed kernels built with MIXFP4_RUNS.
++
++The mixed mainloop dispatches every k_tile on a pattern of E0M3 flags that each warp reads from its operands (bit
++g + a_gran * kb for granule g of the warp's m-atoms and k_block kb of the k_tile). With a run table it instead
++enters each run of equal patterns once and loops the unchanged k_tile body inside that arm (the collective's
++MIXFP4_RUNS hook). The table is built here, once per weight, from the same tags, so every k_tile still executes the
++MMAs of its own pattern.
++
++Geometry (all widths of the n16k64_wA family and of the 32-row-granule g32 builds share it; `Kernel.runs_geometry`):
++a CTA covers tile_m = 128 weight rows (one "panel"); warp row w of warps_m = 4 owns m-atoms m = 0 .. mma_m - 1 at the
++16-row blocks m * warps_m + w of the panel; a granule is a_atoms consecutive m-atoms and takes its first atom's flag;
++k_tiles are 128 wide (two 64-wide k_blocks). Rows past n and k_blocks past K read as E2M1 (the TMA zero fill).
++
++Table: int16 [panels * warps_m, stride], row p * warps_m + w: entry 0 = number of runs R, entries 1 .. R = pattern |
++run length << 4, in K order; the lengths sum to the number of k_tiles. stride = 1 + the largest R.
++"""
++import torch
++
++from . import numerics as N
++
++K_TILE = 128
++
++
++def block_flags(scales, n, k):
++    """bool [n/16 (rounded up), k/64]: the E0M3 tag of every 16-row x 64-column tile, from the tagged scale bytes
++    [n, k/16] (bit 7). The tag the kernel reads is the tile's first scale byte (tags are uniform over 16x64 tiles)."""
++    rows16 = -(-n // 16)
++    f = (scales[::16, ::64 // N.SCALE_BLOCK] >> 7).to(torch.bool)
++    assert tuple(f.shape) == (rows16, k // 64), (tuple(f.shape), n, k)
++    return f
++
++
++def warp_patterns(flags16, n, k, warps_m=4, mma_m=2, a_atoms=1, tile_m=128):
++    """int64 [panels, warps_m, k_tiles]: the joint pattern each warp's dispatch reads at each k_tile."""
++    blocks = tile_m // 16
++    assert blocks == warps_m * mma_m and mma_m % a_atoms == 0, (tile_m, warps_m, mma_m, a_atoms)
++    panels = -(-n // tile_m)
++    k_tiles = -(-k // K_TILE)
++    f = torch.zeros(panels * blocks, k_tiles * 2, dtype=torch.int64, device=flags16.device)
++    f[:flags16.shape[0], :flags16.shape[1]] = flags16.to(torch.int64)
++    f = f.view(panels, mma_m, warps_m, k_tiles, 2)             # 16-row block m * warps_m + w = m-atom m of warp row w
++    a_gran = mma_m // a_atoms
++    pat = torch.zeros(panels, warps_m, k_tiles, dtype=torch.int64, device=flags16.device)
++    for g in range(a_gran):
++        for kb in range(2):
++            pat |= f[:, g * a_atoms, :, :, kb] << (g + a_gran * kb)
++    return pat
++
++
++def run_table(pat):
++    """int16 [panels * warps_m, stride] run table (see the module docstring) of a warp_patterns tensor."""
++    panels, warps_m, k_tiles = pat.shape
++    if k_tiles >= 2048:
++        raise ValueError(f'{k_tiles} k_tiles: a run length needs more than 11 bits')
++    rows = pat.reshape(panels * warps_m, k_tiles)
++    start = torch.ones_like(rows, dtype=torch.bool)
++    start[:, 1:] = rows[:, 1:] != rows[:, :-1]
++    run_id = torch.cumsum(start.to(torch.int64), 1) - 1                     # [R, k_tiles]
++    nruns = start.sum(1)
++    length = torch.zeros_like(rows).scatter_add_(1, run_id, torch.ones_like(rows))
++    pattern = torch.zeros_like(rows).scatter_(1, run_id, rows)
++    stride = 1 + int(nruns.max())
++    table = torch.zeros(rows.shape[0], stride, dtype=torch.int64, device=rows.device)
++    table[:, 0] = nruns
++    table[:, 1:] = (pattern | (length << 4))[:, :stride - 1]
++    return table.to(torch.int16).contiguous()
++
++
++def build(scales, n, k, geometry):
++    """The run table of one weight (tagged scale bytes [n, k/16]) for a kernel of the given runs geometry."""
++    return run_table(warp_patterns(block_flags(scales, n, k), n, k, **geometry))
++
++
++def reference_table(pat):
++    """The same table by a plain loop (tests)."""
++    panels, warps_m, k_tiles = pat.shape
++    lists = []
++    for row in pat.reshape(panels * warps_m, k_tiles).tolist():
++        runs = []
++        for p in row:
++            if runs and runs[-1][0] == p:
++                runs[-1][1] += 1
++            else:
++                runs.append([p, 1])
++        lists.append(runs)
++    stride = 1 + max(len(r) for r in lists)
++    out = torch.zeros(len(lists), stride, dtype=torch.int64)
++    for i, runs in enumerate(lists):
++        out[i, 0] = len(runs)
++        for j, (p, length) in enumerate(runs):
++            out[i, 1 + j] = p | (length << 4)
++    return out.to(torch.int16)
+diff --git a/sm120/mixfp4_sm120/select.py b/sm120/mixfp4_sm120/select.py
+index 20532d7..043397a 100644
+--- a/sm120/mixfp4_sm120/select.py
++++ b/sm120/mixfp4_sm120/select.py
+@@ -32,10 +32,14 @@ FAMILIES = {
+     'mixed_wB': {16: 'n8k64_wB_m16', 32: 'n8k64_wB_m32', 64: 'n8k64_wB_m64', 128: 'n8k64_wB', '128x64': 'n8k64_wB_n64'},
+     # kernel-opt A': the 4-arm 32-row-granule builds for 256x64 (and coarser) maps
+     'mixed256': {16: 'n16k64_wA_g32_n16', 32: 'n16k64_wA_g32_n32', 64: 'n16k64_wA_g32_n64', 128: 'n16k64_wA_g32'},
++    # kernel-opt B: the same families with per-warp run tables
++    'mixed_rt': {16: 'n16k64_wA_rt_n16', 32: 'n16k64_wA_rt_n32', 64: 'n16k64_wA_rt_n64', 128: 'n16k64_wA_rt'},
++    'mixed256_rt': {16: 'n16k64_wA_g32_rt_n16', 32: 'n16k64_wA_g32_rt_n32', 64: 'n16k64_wA_g32_rt_n64',
++                    128: 'n16k64_wA_g32_rt'},
+ }
+ # A family that takes another family's tile-table rows: 'mixed256' has the CTA tile of 'mixed' at every width, and uses
+ # its widths so that the two differ only in the dispatch granule (kernel-opt A').
+-TABLE_FAMILY = {'mixed256': 'mixed'}
++TABLE_FAMILY = {'mixed256': 'mixed', 'mixed_rt': 'mixed', 'mixed256_rt': 'mixed'}
+ TABLE_DIR = Path(__file__).resolve().parents[1] / 'configs'
+ BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
+ 
+@@ -80,8 +84,11 @@ class KernelSet:
+                     (ref.weight_operand, ref.type_block, ref.d_colmajor, ref.cfg.map_tile_rows):
+                 raise ValueError(f'{k.cfg.name} is not interchangeable with {ref.cfg.name}')
+             k.check_sf_formula([(128, 8, 256), (48, 3, 2560)])
++        if len({(k.runs, str(k.runs_geometry)) for k in self.kernels.values()}) != 1:
++            raise ValueError(f'{family}: the widths disagree on run-table support (kernel-opt B)')
+         self.primary = ref
+         self.weight_operand, self.type_block, self.d_colmajor = ref.weight_operand, ref.type_block, ref.d_colmajor
++        self.runs, self.runs_geometry = ref.runs, ref.runs_geometry
+         self.cfg = ref.cfg
+         self.sha256 = {k.cfg.name: k.sha256 for k in self.kernels.values()}
+         self.table, self.table_source = {}, None
+diff --git a/sm120/tests/test_gemm.py b/sm120/tests/test_gemm.py
+index 8e6da19..6950450 100644
+--- a/sm120/tests/test_gemm.py
++++ b/sm120/tests/test_gemm.py
+@@ -20,7 +20,9 @@ from mixfp4_sm120.lib import Kernel, sf_buffer_size, sf_offset_formula
+ pytestmark = pytest.mark.gpu
+ 
+ MIXED = ['n16k64_wA', 'n16k64_wA_8x1', 'n16k64_wA_n64', 'n16k64_wA_n32', 'n16k64_wA_n16', 'n8k64_wB',
+-         'n8k64_wB_m64', 'n8k64_wB_m32', 'n8k64_wB_m16', 'n8k64_wB_n64']
++         'n8k64_wB_m64', 'n8k64_wB_m32', 'n8k64_wB_m16', 'n8k64_wB_n64',
++         # kernel-opt B: the run-table builds without a table (their per-k_tile path; tests/test_runs.py covers the tables)
++         'n16k64_wA_rt', 'n16k64_wA_rt_n64', 'n16k64_wA_rt_n32', 'n16k64_wA_rt_n16']
+ 
+ 
+ def linear_gemm(kern, wp, wsf, gs_w, xp, xsf, gs_x, n, t, k, **kw):
+diff --git a/sm120/tests/test_runs.py b/sm120/tests/test_runs.py
+new file mode 100644
+index 0000000..61c316b
+--- /dev/null
++++ b/sm120/tests/test_runs.py
+@@ -0,0 +1,150 @@
++"""kernel-opt B: run-table builds (MIXFP4_RUNS) dispatch once per run of equal patterns along K.
++
++1. The run table (mixfp4_sm120/runs.py) equals a plain-loop reference and decodes back to the per-k_tile patterns; the
++   warp patterns follow the kernel's granule layout (G-span: warp w owns 16-row blocks w and w + 4 of a panel).
++2. With the table, every run-table build computes exactly what it computes without one (its per-k_tile dispatch) and
++   what the reference build computes (n16k64_wA or n16k64_wA_g32 from the reference build directory), bitwise: the
++   decode probe on single-tag and random maps, and random GEMMs over model and boundary shapes (partial row panels,
++   K not a multiple of 128) with every joint pattern present.
++3. NativeLinear on a run-table KernelSet builds the table and equals NativeLinear on the reference set on the fused,
++   reuse and unfused paths.
++"""
++import os
++from pathlib import Path
++
++import pytest
++import torch
++
++from mixfp4_sm120 import numerics as N
++from mixfp4_sm120 import runs as RT
++from mixfp4_sm120.artifact import pack_module
++from mixfp4_sm120.lib import Kernel
++from mixfp4_sm120.linear import NativeLinear, clear_quant_cache
++from mixfp4_sm120.select import KernelSet
++from test_gemm import SHAPES, identity_operand, linear_gemm, place, random_weight_operand
++
++pytestmark = pytest.mark.gpu
++
++REF_ROOT = Path(os.environ.get('SM120_REF_BUILD_DIR', Path(__file__).resolve().parents[1] / 'build'))
++REF_A1 = Path(os.environ.get('SM120_REF_A1_DIR', '/home/dev/n16k64_campaign/kernel_opt/build_A1'))
++RT16 = ['n16k64_wA_rt', 'n16k64_wA_rt_n64', 'n16k64_wA_rt_n32', 'n16k64_wA_rt_n16']
++RT32 = ['n16k64_wA_g32_rt', 'n16k64_wA_g32_rt_n64', 'n16k64_wA_g32_rt_n32', 'n16k64_wA_g32_rt_n16']
++
++
++def kernel(name):
++    try:
++        k = Kernel.load(name)
++    except Exception as e:  # noqa: BLE001
++        pytest.skip(f'{name} not built: {e}')
++    assert k.runs, name
++    return k
++
++
++def reference(name):
++    ref, root = ('n16k64_wA_g32', REF_A1) if '_g32' in name else ('n16k64_wA', REF_ROOT)
++    try:
++        return Kernel.load(ref + name.split('_rt')[1], build_root=root)
++    except Exception as e:  # noqa: BLE001
++        pytest.skip(f'reference {ref} not built in {root}: {e}')
++
++
++def random_map(name, n, k, g, frac):
++    """A random map the build executes: 16x64 tiles, or (g32) uniform over 128-row panels, stored as 16x64 granules."""
++    rows = 128 if '_g32' in name else 16
++    mask = torch.rand(-(-n // rows), k // 64, generator=g) < frac
++    return mask.repeat_interleave(rows // 16, 0)[:n // 16]
++
++
++def test_run_table_reference():
++    g = torch.Generator().manual_seed(0)
++    for panels, warps, k_tiles, dens in ((3, 4, 40, 0.1), (5, 4, 1, 0.5), (2, 4, 140, 0.3), (7, 4, 33, 0.0)):
++        pat = (torch.rand(panels, warps, k_tiles, generator=g) < dens).long() * torch.randint(1, 16, (panels, warps, k_tiles), generator=g)
++        table = RT.run_table(pat)
++        assert torch.equal(table, RT.reference_table(pat))
++        for i, row in enumerate(pat.reshape(-1, k_tiles).tolist()):
++            seq = []
++            for j in range(int(table[i, 0])):
++                e = int(table[i, 1 + j]) & 0xFFFF
++                seq += [e & 15] * (e >> 4)
++            assert seq == row
++
++
++def test_warp_patterns_layout():
++    n, k = 256, 256
++    f = torch.zeros(n // 16, k // 64, dtype=torch.bool)
++    f[1, 0] = True       # panel 0, block 1 = warp 1's m-atom 0, k_tile 0, k_block 0
++    f[12, 3] = True      # panel 1, block 4 = warp 0's m-atom 1, k_tile 1, k_block 1
++    p16 = RT.warp_patterns(f, n, k)
++    assert p16[0, 1].tolist() == [1, 0] and p16[1, 0].tolist() == [0, 8] and int(p16.sum()) == 9
++    p32 = RT.warp_patterns(f, n, k, a_atoms=2)       # a g32 granule takes its first m-atom's flag
++    assert p32[0, 1].tolist() == [1, 0] and int(p32.sum()) == 1
++
++
++@pytest.mark.parametrize('name', RT16 + RT32)
++@pytest.mark.parametrize('n,k', [(128, 128), (256, 512), (48, 256), (1024, 320), (4096, 192)])
++def test_decode_probe(device, name, n, k):
++    kern, ref = kernel(name), reference(name)
++    g = torch.Generator(device='cpu').manual_seed(n * 7 + k)
++    m16 = random_map(name, n, k, g, 0.4)
++    wnib, wsb = random_weight_operand(n, k, m16, (16, 64), seed=n + k)
++    table = RT.build(wsb, n, k, kern.runs_geometry).cuda()
++    got = {}
++    for label, kk, runs in (('runs', kern, table), ('no table', kern, None), ('reference', ref, None)):
++        out = torch.empty((n, k), dtype=torch.float64, device='cuda')
++        for off in range(0, k, 1024):
++            t = min(1024, k - off)
++            xnib, xsb = identity_operand(t, k, off)
++            d = kk.gemm(N.pack_nibbles(wnib), place(wsb, k), N.pack_nibbles(xnib), place(xsb, k), n, t, k, runs=runs)
++            out[:, off:off + t] = d.double().t()
++        got[label] = out
++    assert torch.equal(got['runs'], N.decode_exact(wnib, wsb, 1.0))
++    assert torch.equal(got['runs'], got['no table']) and torch.equal(got['runs'], got['reference'])
++
++
++@pytest.mark.parametrize('name', RT16 + RT32)
++@pytest.mark.parametrize('t,n,k', SHAPES)
++def test_random_gemm_bitwise(device, name, t, n, k):
++    kern, ref = kernel(name), reference(name)
++    g = torch.Generator(device='cpu').manual_seed(t * 31 + n + k)
++    m16 = random_map(name, n, k, g, 0.5)
++    w = (torch.randn(n, k, generator=g) * 0.02).cuda().bfloat16()
++    x = torch.randn(t, k, generator=g)
++    x[:, torch.randperm(k, generator=g)[:4]] *= 30
++    x = x.cuda().bfloat16()
++    wnib, wsb, gs_w = N.quantize_weight(w, 'map', m16, (16, 64))
++    xnib, xsb, gs_x = N.quantize_act(x, 'four_over_six_rows')
++    table = RT.build(wsb.cuda(), n, k, kern.runs_geometry)
++    args = (N.pack_nibbles(wnib), place(wsb, k), float(gs_w), N.pack_nibbles(xnib), place(xsb, k), gs_x, n, t, k)
++    a = kern.gemm(args[0], args[1], args[3], args[4], n, t, k, scale_m_default=args[2], scale_n=gs_x, runs=table)
++    b = linear_gemm(kern, *args)
++    c = linear_gemm(ref, *args)
++    assert torch.equal(a.view(torch.int16), b.view(torch.int16)), 'runs path differs from the per-k_tile path'
++    assert torch.equal(a.view(torch.int16), c.view(torch.int16)), 'runs path differs from the reference build'
++
++
++@pytest.mark.parametrize('family,ref_family,ref_root', [('mixed_rt', 'mixed', REF_ROOT), ('mixed256_rt', 'mixed256', REF_A1)])
++@pytest.mark.parametrize('t,n,k', [(1, 4096, 4096), (19, 1024, 4096), (300, 48, 2560), (77, 2560, 9728)])
++def test_native_linear_paths(device, family, ref_family, ref_root, t, n, k):
++    try:
++        ks = KernelSet(family)
++        rs = KernelSet(ref_family, build_root=ref_root)
++    except Exception as e:  # noqa: BLE001
++        pytest.skip(f'{family} or {ref_family} not built: {e}')
++    g = torch.Generator(device='cpu').manual_seed(t + n)
++    w = (torch.randn(n, k, generator=g) * 0.02).cuda().bfloat16()
++    bias = (torch.randn(n, generator=g) * 0.1).cuda().bfloat16()
++    m16 = random_map('_g32' if 'mixed256' in family else '', n, k, g, 0.3)
++    pw = pack_module('m', w, bias, 'map', m16, (16, 64))
++    x = torch.randn(t, k, generator=g).cuda().bfloat16()
++    lin, rlin = NativeLinear(pw, ks, 'four_over_six_rows', 'm'), NativeLinear(pw, rs, 'four_over_six_rows', 'm')
++    assert lin.runs is not None and rlin.runs is None
++    for fused, share in ((True, False), (True, True), (False, False)):
++        outs = []
++        for l_ in (lin, rlin):
++            clear_quant_cache()
++            l_.fused, l_.share_input = fused, share
++            y = l_(x)
++            if share:
++                y = l_(x)
++            outs.append(y)
++        assert torch.equal(outs[0].view(torch.int16), outs[1].view(torch.int16)), (fused, share)
+diff --git a/sm120/tests/test_select.py b/sm120/tests/test_select.py
+index 9bc5eab..665b96c 100644
+--- a/sm120/tests/test_select.py
++++ b/sm120/tests/test_select.py
+@@ -22,7 +22,7 @@ def random_map(family, n, k, g, frac):
+     """(mask, type_block) of a random map the family executes: 8x64 for the weights-on-B family, 16x64 for 'mixed';
+     'mixed256' (kernel-opt A') gets a map uniform over 128-row panels, stored as 16x64 granules as the 256x64 artifacts
+     are (a partial last panel is cut to the real rows)."""
+-    rows = {'mixed_wB': 8, 'mixed256': 128}.get(family, 16)
++    rows = 8 if family == 'mixed_wB' else 128 if family.startswith('mixed256') else 16    # mixed256*: 128-row panels
+     mask = torch.rand(-(-n // rows), k // 64, generator=g) < frac
+     if rows > 16:
+         mask, rows = mask.repeat_interleave(rows // 16, 0)[:n // 16], 16
+@@ -46,7 +46,7 @@ def test_widths_bitwise_equal(device, family, t, n, k):
+         assert torch.equal(o, ref), f'width {wd} differs'
+ 
+ 
+-@pytest.mark.parametrize('family', ['mixed', 'mixed_wB', 'mixed256'])
++@pytest.mark.parametrize('family', ['mixed', 'mixed_wB', 'mixed256', 'mixed_rt', 'mixed256_rt'])
+ def test_batch_invariance(device, family):
+     ks = kset(family)
+     g = torch.Generator(device='cpu').manual_seed(3)

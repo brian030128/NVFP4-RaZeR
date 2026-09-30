@@ -1,0 +1,17 @@
+bitwise: freq and rt (with its table) equal n16k64_wA on every tag set; runs per warp (max, mean): {'e2m1': (1, 1.0), 'real': (17, 10.015625), 'densest': (22, 14.375), 'e0m3': (1, 1.0), 'p3': (1, 1.0), 'p5': (1, 1.0)}
+4096^3 width 128 (warm): stock_wA 114.4 us, nodisp 116.0 us
+  e2m1     default  117.6 us | freq  -0.33 % | rt  -0.76 % | rt vs nodisp  +0.61 % | rt vs stock  +2.01 %
+  real     default  118.9 us | freq  -0.76 % | rt  +1.80 % | rt vs nodisp  +4.33 % | rt vs stock  +5.79 %
+  densest  default  118.5 us | freq  -0.00 % | rt  +3.08 % | rt vs nodisp  +5.27 % | rt vs stock  +6.74 %
+  e0m3     default  124.2 us | freq  +1.49 % | rt  -5.90 % | rt vs nodisp  +0.72 % | rt vs stock  +2.12 %
+  p3       default  118.4 us | freq  +0.21 % | rt  -1.38 % | rt vs nodisp  +0.63 % | rt vs stock  +2.04 %
+  p5       default  121.2 us | freq  +2.22 % | rt  -3.04 % | rt vs nodisp  +1.27 % | rt vs stock  +2.68 %
+q_proj     4096x4096 T=  1 width  16: warm default    8.1 us, freq  +2.37 %, rt +13.04 % | cold default    8.8 us, freq  -0.19 %, rt  +9.28 % | runs/warp max 26
+q_proj     4096x4096 T= 16 width  16: warm default    8.1 us, freq  +2.37 %, rt +13.04 % | cold default    8.6 us, freq  -0.93 %, rt +11.52 % | runs/warp max 26
+q_proj     4096x4096 T= 64 width  32: warm default    9.7 us, freq  +1.99 %, rt +14.90 % | cold default    9.1 us, freq  +1.40 %, rt +27.02 % | runs/warp max 26
+down_proj  4096x14336 T=  1 width  16: warm default   21.3 us, freq  -6.02 %, rt  +0.15 % | cold default   25.8 us, freq  -0.50 %, rt  -0.19 % | runs/warp max 39
+down_proj  4096x14336 T= 16 width  16: warm default   21.2 us, freq  -5.42 %, rt  +0.90 % | cold default   25.9 us, freq  -0.37 %, rt  -0.06 % | runs/warp max 39
+down_proj  4096x14336 T= 64 width  32: warm default   25.4 us, freq  -4.42 %, rt  +5.67 % | cold default   26.4 us, freq  -0.48 %, rt  +3.03 % | runs/warp max 39
+gate_proj  14336x4096 T=  1 width  16: warm default   10.6 us, freq  -0.60 %, rt  +2.42 % | cold default   22.6 us, freq  -0.28 %, rt  +0.15 % | runs/warp max 18
+gate_proj  14336x4096 T= 16 width  16: warm default   10.1 us, freq  -1.58 %, rt  -1.27 % | cold default   22.5 us, freq  -0.14 %, rt  +0.14 % | runs/warp max 18
+gate_proj  14336x4096 T= 64 width  64: warm default   13.2 us, freq  -2.66 %, rt +12.80 % | cold default   23.1 us, freq  -0.14 %, rt  +2.15 % | runs/warp max 18
