@@ -203,6 +203,10 @@ dispatch_pattern_tree(uint32_t pattern, Body&& body) {
 #ifndef MIXFP4_ARM_XOR
 #define MIXFP4_ARM_XOR 0
 #endif
+// [NVFP4-RaZeR local hook, kernel-opt #2; see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_DISPATCH_FREQ=1 tests the all-E2M1
+// pattern (0) first -- one compare, and its arm on the fall-through path -- and only then enters the unchanged tree.
+// In the paper maps 82-95 % of all (warp, k_tile) patterns are 0 (results/kernel_opt/dispatch), which today pay the
+// tree's full log2(arms) compares. Every arm computes exactly as before. Unset, this is the upstream dispatch.
 template <int Lo, int Hi, class Body>
 CUTLASS_DEVICE void
 dispatch_pattern(uint32_t pattern, Body&& body) {
@@ -211,6 +215,14 @@ dispatch_pattern(uint32_t pattern, Body&& body) {
   dispatch_pattern_tree<Lo, Hi>(pattern ^ uint32_t(MIXFP4_ARM_XOR), [&](auto c) {
     body(cute::C<(decltype(c)::value ^ MIXFP4_ARM_XOR)>{});
   });
+#elif defined(MIXFP4_DISPATCH_FREQ) && MIXFP4_DISPATCH_FREQ
+  if constexpr (Lo == 0 && Hi > 0) {
+    if (pattern == 0u) { body(cute::C<0>{}); }
+    else               { dispatch_pattern_tree<Lo, Hi>(pattern, body); }
+  }
+  else {
+    dispatch_pattern_tree<Lo, Hi>(pattern, body);
+  }
 #else
   dispatch_pattern_tree<Lo, Hi>(pattern, body);
 #endif

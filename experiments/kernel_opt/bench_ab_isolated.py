@@ -78,21 +78,26 @@ def main():
     B.write(args.out, res)
 
 
-def run(args, tel):
+def run(args, tel, CONFIGS=CONFIGS, kernels=None, pairs=None):
+    """CONFIGS / kernels / pairs: amendment 2's suite passes its own (experiments/kernel_opt/bench_ab2_isolated.py);
+    pairs = [(before config, after config)] checked bitwise on the timed operands."""
     torch.backends.cuda.matmul.allow_tf32 = False
     arts = dict(spec.split('=', 1) for spec in args.artifact)
-    kernels = dict(stock=KernelSet('stock'), stock_wB=Kernel.load('stock_wB'), n8k64_wB=Kernel.load('n8k64_wB'),
-                   auto_wB=KernelSet('mixed_wB', build_root=args.after_root))
-    if args.opt1_table:
-        kernels['auto_wB1'] = KernelSet('mixed_wB', build_root=args.after_root, widths=(16, 32, 64, 128),
-                                        table=args.opt1_table)
-    before_root = REPO / 'sm120' / 'build'
-    for name in ('stock_wB', 'n8k64_wB'):
-        assert Path(kernels[name].path).parent.parent == before_root, kernels[name].path
-    assert all(Path(k.path).parent.parent == before_root for k in kernels['stock'].kernels.values())
-    for name in ('auto_wB', 'auto_wB1'):
-        if name in kernels:
-            assert all(Path(k.path).parent.parent == Path(args.after_root) for k in kernels[name].kernels.values())
+    if kernels is None:
+        kernels = dict(stock=KernelSet('stock'), stock_wB=Kernel.load('stock_wB'), n8k64_wB=Kernel.load('n8k64_wB'),
+                       auto_wB=KernelSet('mixed_wB', build_root=args.after_root))
+        if args.opt1_table:
+            kernels['auto_wB1'] = KernelSet('mixed_wB', build_root=args.after_root, widths=(16, 32, 64, 128),
+                                            table=args.opt1_table)
+        before_root = REPO / 'sm120' / 'build'
+        for name in ('stock_wB', 'n8k64_wB'):
+            assert Path(kernels[name].path).parent.parent == before_root, kernels[name].path
+        assert all(Path(k.path).parent.parent == before_root for k in kernels['stock'].kernels.values())
+        for name in ('auto_wB', 'auto_wB1'):
+            if name in kernels:
+                assert all(Path(k.path).parent.parent == Path(args.after_root) for k in kernels[name].kernels.values())
+    if pairs is None:
+        pairs = [(f'n8k64_wB_{v}', f'{s}_{v}') for v in ('typical', 'worst') for s in ('auto_wB', 'auto_wB1')]
     cfgs = [c for c, (kind, _, kname, _) in CONFIGS.items() if kind in arts and kname in kernels
             and (not args.configs or c in args.configs.split(','))]
     res = dict(status='running', gpu=B.gpu_info(), power_limit_w=tel.power_limit_w(),
@@ -182,8 +187,7 @@ def run(args, tel):
                     raise G.CheckFailed(f'{proj} T={t} {c}: the isolated GEMM differs from NativeLinear')
                 ys[c] = y
             # kernel-opt: before and after must give the same output bits on the same tags (G4 on the timed operands)
-            for v, b in ((v, f'{s}_{v}') for v in ('typical', 'worst') for s in ('auto_wB', 'auto_wB1')):
-                a = f'n8k64_wB_{v}'
+            for a, b in pairs:
                 if a in ys and b in ys:
                     ok = bool(torch.equal(ys[a].view(torch.int16), ys[b].view(torch.int16)))
                     res['checks']['bitwise'].append(dict(proj=proj, tokens=t, config=f'{b} == {a}', equal=ok))

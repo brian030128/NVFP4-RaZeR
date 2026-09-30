@@ -23,6 +23,7 @@ Nothing here depends on an undocumented local checkout or absolute path: CUDA is
 --cuda-home / $CUDA_HOME (default /usr/local/cuda-13.1), CUTLASS is the git submodule.
 """
 import argparse
+import dataclasses
 import ctypes
 import datetime
 import hashlib
@@ -252,6 +253,9 @@ def source_hashes(blob):
     return out
 
 
+EXTRA_DEFINES = {}
+
+
 def build(cfg, tc, selftest=False):
     out = BUILD_ROOT / cfg.name
     if out.exists():
@@ -278,6 +282,8 @@ def build(cfg, tc, selftest=False):
         sass_sha256=sass_sha256(tc['cuobjdump'], lib), unpatched_sass_sha256=sass_sha256(tc['cuobjdump'], f'{lib}.unpatched'),
         patch=pinfo, compiled_description=desc, resource_usage=res,
     )
+    if EXTRA_DEFINES:
+        manifest['extra_defines'] = dict(EXTRA_DEFINES)   # --define: merged into `defines` above as well
     if selftest:
         manifest['selftest'] = st = run_selftest(cfg, tc, out)
         # The library differs from the self-test driver only in its epilogue; the mainloop's
@@ -333,12 +339,20 @@ def main():
     ap.add_argument('--all', action='store_true')
     ap.add_argument('--selftest', action='store_true', help='also build and gate the upstream self-test driver')
     ap.add_argument('--cuda-home', type=Path, default=Path(os.environ.get('CUDA_HOME', '/usr/local/cuda-13.1')))
+    ap.add_argument('--define', action='append', default=[], metavar='MACRO=VALUE',
+                    help='add a preprocessor define to every configuration built (recorded in each manifest as '
+                         'extra_defines); for variant builds in a separate SM120_BUILD_DIR, e.g. kernel-opt #2')
     args = ap.parse_args()
+    for kv in args.define:
+        k, v = kv.split('=', 1)
+        EXTRA_DEFINES[k] = int(v) if v.lstrip('-').isdigit() else v
     names = list(CFG.CONFIGS) if args.all else (args.config or [CFG.DEFAULT])
     tc = toolchain(args.cuda_home)
     failed = []
     for name in names:
         cfg = CFG.get(name)
+        if EXTRA_DEFINES:
+            cfg = dataclasses.replace(cfg, defines={**cfg.defines, **EXTRA_DEFINES})
         try:
             m = build(cfg, tc, args.selftest)
             p = m['patch']

@@ -4,7 +4,13 @@
     python experiments/kernel_opt/check_bitwise.py --build-root /home/dev/n16k64_campaign/kernel_opt/build \
         --candidates n8k64_wB,n8k64_wB_m64,n8k64_wB_m32,n8k64_wB_m16 --set mixed_wB --out JSON
 
-Protocol: results/kernel_opt/PROTOCOL.md (gate G4). A failure is reported and stops the optimization's adoption.
+Protocol: results/kernel_opt/PROTOCOL.md (gate G4; amendment 2's G4' uses --family wA as well). A failure is reported and
+stops the optimization's adoption.
+
+--family wB (default): everything below, for the weights-on-B builds (8x64 maps).
+--family wA (amendment 2): the same checks for the weights-on-A builds -- reference n16k64_wA from sm120/build, the real
+  modules of each model's TC 16x64 and TC 256x64 artifacts (densest and lower-median per shape and unit), synthetic
+  16x64 tags.
 
 - Reference: n8k64_wB loaded from sm120/build, the build behind every paper result (library sha256 recorded).
 - Candidates: the builds of --build-root named by --candidates, each alone, and the width-selecting KernelSet --set
@@ -51,6 +57,10 @@ ACT = 'four_over_six_rows'
 PATHS = ('fused', 'reuse', 'unfused')
 
 
+FAMILIES = dict(wB=dict(ref='n8k64_wB', units=('8x64',), tile=(8, 64)),
+                wA=dict(ref='n16k64_wA', units=('16x64', '256x64'), tile=(16, 64)))
+
+
 def read_module(art, meta, name):
     """PackedWeight of one module of a TC artifact, checked against its manifest entry."""
     m = next(e for e in meta['modules'] if e['name'] == name)
@@ -66,11 +76,11 @@ def read_module(art, meta, name):
                           m['e0m3_tiles'])
 
 
-def real_modules(model):
-    """[(label, PackedWeight)]: per distinct shape, the densest and the lower-median module of the TC 8x64 artifact."""
-    art = ARTIFACTS / f'{model}_tc_8x64'
+def real_modules(model, unit='8x64'):
+    """[(label, PackedWeight)]: per distinct shape, the densest and the lower-median module of the TC artifact."""
+    art = ARTIFACTS / f'{model}_tc_{unit}'
     meta = json.loads((art / 'artifact.json').read_text())
-    assert tuple(meta['type_block']) == (8, 64), meta['type_block']
+    assert tuple(meta['type_block']) == tuple(int(v) for v in unit.split('x')), meta['type_block']
     by = collections.OrderedDict()
     for i, m in enumerate(meta['modules']):
         by.setdefault(tuple(m['shape']), []).append((m['e0m3_tiles'], i, m['name']))
@@ -79,22 +89,22 @@ def real_modules(model):
         worst = max(mods, key=lambda v: (v[0], -v[1]))
         typical = sorted(mods)[(len(mods) - 1) // 2]
         for label, (tiles, _, name) in (('densest', worst), ('median', typical)):
-            out.append((f'{model} {name} ({label}, {tiles} E0M3 tiles)', read_module(art, meta, name)))
+            out.append((f'{model} {unit} {name} ({label}, {tiles} E0M3 tiles)', read_module(art, meta, name)))
     return out, meta['weights_sha256']
 
 
-def synthetic(shape):
+def synthetic(shape, tile=(8, 64)):
     n, k = shape
     g = torch.Generator('cpu').manual_seed(n * 7 + k)
     w = (torch.randn(n, k, generator=g) * 0.02).cuda().bfloat16()
     bias = (torch.randn(n, generator=g) * 0.1).cuda().bfloat16()
-    nb = -(-n // 8)
+    nb = -(-n // tile[0])
     rnd = torch.rand(nb, k // 64, generator=g) < 0.3
     out = []
     for tag, mask, b in (('all E2M1', torch.zeros(nb, k // 64, dtype=torch.bool), None),
                          ('all E0M3', torch.ones(nb, k // 64, dtype=torch.bool), None),
                          ('random 30 %', rnd, None), ('random 30 % + bias', rnd, bias)):
-        out.append((f'synthetic {n}x{k} {tag}', A.pack_module('synthetic', w, b, 'map', mask, (8, 64))))
+        out.append((f'synthetic {n}x{k} {tag}', A.pack_module('synthetic', w, b, 'map', mask, tile)))
     return out
 
 
@@ -142,6 +152,7 @@ def same(a, b):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--family', choices=sorted(FAMILIES), default='wB')
     ap.add_argument('--build-root', required=True)
     ap.add_argument('--candidates', required=True, help='comma-separated build names in --build-root')
     ap.add_argument('--set', default=None, help='a select.FAMILIES family to check as a KernelSet (from --build-root)')
@@ -151,7 +162,8 @@ def main():
     args = ap.parse_args()
     B.require_idle()
     torch.backends.cuda.matmul.allow_tf32 = False
-    ref = Kernel.load('n8k64_wB')
+    fam = FAMILIES[args.family]
+    ref = Kernel.load(fam['ref'])
     assert Path(ref.path).parent.parent == REPO / 'sm120' / 'build', f'reference is not sm120/build: {ref.path}'
     cands = {n: Kernel.load(n, build_root=args.build_root) for n in args.candidates.split(',')}
     if args.set:
@@ -160,19 +172,20 @@ def main():
         assert (c.weight_operand, c.type_block) == (ref.weight_operand, ref.type_block), c.cfg.name
     tokens = [int(v) for v in args.tokens.split(',')]
     res = dict(status='running', started_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
-               gpu=B.gpu_info(), reference=dict(name='n8k64_wB', library=str(ref.path), sha256=ref.sha256),
+               gpu=B.gpu_info(), family=args.family, reference=dict(name=fam['ref'], library=str(ref.path), sha256=ref.sha256),
                candidates={n: (c.sha256 if isinstance(c, Kernel) else c.describe()) for n, c in cands.items()},
                tokens=tokens, graph_tokens=list(GRAPH_TOKENS), activation_quantizer=ACT, paths=list(PATHS) + ['graph'],
                artifacts={}, weights=[], comparisons=collections.Counter(), failures=[], reference_path_disagreements=[])
     work, seen = [], set()
     for model in args.models.split(','):
-        real, wsha = real_modules(model)
-        res['artifacts'][model] = dict(path=str(ARTIFACTS / f'{model}_tc_8x64'), weights_sha256=wsha)
-        for label, pw in real:
-            work.append((label, pw, True))
-            if pw.shape not in seen:
-                seen.add(pw.shape)
-                work += [(lab, p, False) for lab, p in synthetic(pw.shape)]
+        for unit in fam['units']:
+            real, wsha = real_modules(model, unit)
+            res['artifacts'][f'{model} {unit}'] = dict(path=str(ARTIFACTS / f'{model}_tc_{unit}'), weights_sha256=wsha)
+            for label, pw in real:
+                work.append((label, pw, True))
+                if pw.shape not in seen:
+                    seen.add(pw.shape)
+                    work += [(lab, p, False) for lab, p in synthetic(pw.shape, fam['tile'])]
     for label, pw, is_real in work:
         n, k = pw.shape
         res['weights'].append(dict(label=label, shape=[n, k], e0m3_tiles=pw.e0m3_tiles, bias=pw.bias is not None))

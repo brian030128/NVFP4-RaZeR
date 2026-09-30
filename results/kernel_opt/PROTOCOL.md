@@ -205,3 +205,84 @@ T = 512. The cause is the CTA count.
 - No decode process was started, so no partial decode record exists.
 - M3 will be run later as a decode-only run (`ab_e2e.py --what decode`, the same policies, settings, rotation and
   output directory), when the user says start. 1b is not reported as done until then.
+
+---
+
+## Amendment 2 (#2): frequency-aware dispatch — the all-E2M1 pattern first
+
+Written 2026-09-30, before any registered GPU run of #2. The hashes and time are in `registration_2.json`. The user
+decided to run it (relayed by nvfp4-razer-c9); optimization 1b's decode (M3) stays paused. Everything of optimization 1
+not named here applies unchanged.
+
+**Why.**
+- The mixed kernels pay a fixed dispatch cost with every k_tile all-E2M1: +2.0–2.6 % over the no-dispatch build (C2,
+  C3, and `e0m3/test_bc` +2.5 %).
+- Each warp picks its k_tile arm through a balanced binary tree of log2(arms) compares (`dispatch_pattern`).
+- In the paper's maps 82–95 % of all (warp, k_tile) patterns are pattern 0, i.e. all-E2M1 (`results/kernel_opt/dispatch`).
+- All-E0M3 patterns are 0.00 % (16x64, 8x64) and at most 1.3 % (256x64).
+
+**What changes.**
+- **Hook** `MIXFP4_DISPATCH_FREQ=1` in the collective's `dispatch_pattern`:
+  - if the pattern is 0, run arm 0 (one compare, the fall-through path);
+  - else enter the unchanged tree, so every other pattern keeps its path plus one jump.
+  - Unset, it is the upstream dispatch.
+- **No all-E0M3 test.** The coordinator's first sketch tested all-E0M3 second; the histogram above makes that a compare
+  added to the 5–18 % non-zero patterns, to help 0–1.3 %, so it is not done.
+- **Every arm computes exactly as before.**
+- **Builds:** `sm120/build.py --all --define MIXFP4_DISPATCH_FREQ=1` into `/home/dev/n16k64_campaign/kernel_opt/build_freq`,
+  with the same configuration names. The define is recorded in each manifest as `extra_defines`; `--define` is a new
+  optional build.py flag.
+  - Dispatching builds covered: n16k64_wA, _8x1, _n64, _n32, _n16, _sk; n8k64_wB, _m64, _m32, _m16, _n64.
+  - Measured: the deployed families, KernelSet('mixed') (16x64 and 256x64 maps) and KernelSet('mixed_wB') (8x64).
+  - The Stream-K (_sk) and 8x1 builds are covered by the gates but not measured.
+  - The tile table is unchanged, so the same widths are chosen before and after.
+  - Optimization 1b's builds (`build`) and `sm120/build` are untouched.
+
+**Gates** (a failure stops #2 and is reported):
+- **G1′:**
+  - n16k64_wA and n8k64_wB rebuilt from the hooked sources without the define have `sm120/build`'s patched and
+    unpatched SASS (`build_hookcheck`).
+  - In `build_freq`, every configuration without a dispatch (stock_*, n16k64_wA_nodisp) has its default SASS.
+- **G2′:** every dispatching build in `build_freq` keeps its expected OMMA census, with no predicated OMMA (build.py
+  enforces both).
+- **G3′:**
+  - `build.py --selftest --define MIXFP4_DISPATCH_FREQ=1` for n16k64_wA, n16k64_wA_n16, n8k64_wB and n8k64_wB_m16
+    (PASS patched / FAIL unpatched);
+  - `pytest sm120/tests/test_gemm.py sm120/tests/test_select.py` with `SM120_BUILD_DIR` = `build_freq`, all passing.
+- **G4′:** `check_bitwise.py` against `sm120/build`, 0 differences, for both families:
+  - `--family wA`: n16k64_wA, _n64, _n32, _n16, _8x1 and the `mixed` set from `build_freq`, on real 16x64 and 256x64
+    modules plus synthetic 16x64 tags;
+  - `--family wB`: n8k64_wB, _m64, _m32, _m16, _n64 and the `mixed_wB` set.
+- **G5′:** `check_model_logits.py`, logits bitwise equal on all 4 models:
+  - 16x64 and 256x64 artifacts: before = set:mixed from `sm120/build`, after = set:mixed from `build_freq`;
+  - 8x64 artifact: before = n8k64_wB from `sm120/build`, after = set:mixed_wB from `build_freq`.
+
+**Measurements:**
+- **M1′: `experiments/kernel_opt/bench_ab2_isolated.py`,** the deviation-2 method (`bench_ab_isolated.run`, unchanged
+  per repetition), all four models, every projection.
+  - Tokens 1, 4, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192.
+  - Configurations:
+    - stock_wA, stock_wB;
+    - the 16x64 and 256x64 maps on the `mixed` set, from `sm120/build` (before) and `build_freq` (after);
+    - the 8x64 map on the `mixed_wB` set, from `build` (optimization 1b, before) and `build_freq` (after);
+    - typical and worst tags.
+  - Check: after equals before bitwise on the timed operands.
+  - Reported, as per-forward GEMM sums:
+    - after vs before;
+    - 16x64 and 256x64 vs stock_wA, before → after, at every T (requested by the coordinator);
+    - 8x64 vs stock_wA and stock_wB.
+- **C2′: `experiments/kernel_opt/c2_freq.py`,** 4096³:
+  - stock_wA, nodisp; n16k64_wA default / freq with all-E2M1, real map and all-E0M3 tags;
+  - the weights-on-B pair: stock_wB, n8k64_wB default / freq with 8x64 tags.
+  - Modes b2b (C2's), isolated and sustained (NVML), each mode run for every configuration before the next mode.
+  - Check: bitwise equal.
+- **M2′ (conditional): end-to-end CUDA-graph prefill.**
+  - It runs only if M1′ shows a per-forward GEMM gain of ≥ 1 % (well above M1's per-round spread of ≤ 0.7 pp) for a
+    unit at T ≥ 128.
+  - It would be registered as a further amendment, with its policies, before running.
+
+**Before registration (disclosed, not a result).**
+- The hook's n16k64_wA build (SASS 82eadf6d…, the same census as default) was timed once at 4096³, isolated, 3 rounds
+  (scratch `quick_freq.py`). Outputs were bitwise equal.
+- freq vs default: all-E2M1 +0.5 % (the rounds overlap), real map −1.2 %, all-E0M3 +1.6 % (the added jump).
+- This suggests the fixed dispatch cost is not the tree's compares. M1′ and C2′ decide.

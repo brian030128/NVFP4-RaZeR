@@ -1,0 +1,193 @@
+{
+ "protocol": "results/kernel_opt/PROTOCOL.md",
+ "amendment": "Amendment 2 (#2, frequency-aware dispatch)",
+ "protocol_sha256": "08af64a211eaf8b23fe88e74f0c4985c63bf27becebf16647a6fc74c21ad0b26",
+ "registered_utc": "2026-09-30T17:53:41+00:00",
+ "parent_commit": "f2297dce64bdba2002c3da18023e578b708f4310",
+ "branch": "kernel-opt",
+ "note": "before any registered GPU run of #2 (G3 self-tests, pytest, G4, G5, M1, C2); the build_freq builds (CPU) are listed with their SASS hashes",
+ "files": {
+  "results/kernel_opt/PROTOCOL.md": "08af64a211eaf8b23fe88e74f0c4985c63bf27becebf16647a6fc74c21ad0b26",
+  "sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp": "a3bd79d81974acb4b20f8243c84b61205ea12f77f8e808267455f7b996f46db0",
+  "sm120/kernel/src/mixed_nvfp4_gemm.cu": "189dcf341dbb9010f283b60b0c67c75b0f1fa24ac4f4919c4100e6ab68f7d312",
+  "sm120/kernel/LOCAL_CHANGES.patch": "7dd23b08dd758646fd7433234808ce5bfd61d09574c5c882e5d2b1b3fa4cb0d3",
+  "sm120/build.py": "0c9e6707dc0f4cd17923f1ebf16ce0571ea134787775be6abe7938ad78f706ab",
+  "sm120/mixfp4_sm120/configs.py": "f1e10e984ff49d83728c56fdf2eab043c2dcef6be4050df21502544699df9664",
+  "sm120/mixfp4_sm120/select.py": "0e9e368f6ead9cb9e9ce3865651947b8c37c81e9e4ecee56c9769b8157de83af",
+  "sm120/mixfp4_sm120/lib.py": "b0d3755ace700c97cef387938e72f0256f21dc5c5a2bd0fc75c62f40bbb42395",
+  "sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.json": "884ddef9bc48c064bfd99efc48bbe07b63f664f0a98a80dbfc118dc73fecd44c",
+  "experiments/kernel_opt/check_sass.py": "7e1557f24dee6db54abe186987dd71045e240c02f91dc1a792db485536591036",
+  "experiments/kernel_opt/check_bitwise.py": "70173066d396f5ca363ac3b7b14f4fd7c65dfb0dd35491ae91a6c1634f2930cb",
+  "experiments/kernel_opt/check_model_logits.py": "656191906bc78992d8734786e5591ea466cedddab82c443b85bf2f20c42d647f",
+  "experiments/kernel_opt/bench_ab_isolated.py": "6bf89aa3dc01dd126a81f048a039d88b71ba82f87429457dc46d2eb6fae76b78",
+  "experiments/kernel_opt/bench_ab2_isolated.py": "39465ef5ac865fa4aecba9e77f3b43854db312f62849b691bed4fb99a6db3d16",
+  "experiments/kernel_opt/c2_freq.py": "dde84998100720e345f446374110db87c49362759cb9f5dc5b8297d6009e0adf",
+  "experiments/kernel_opt/ab2_report.py": "528ad0b44053b9bf27b76e30334288951d45b7edd4363c789daf99696a1141ae",
+  "experiments/kernel_opt/run_opt2.sh": "b402de692f9aaa8368a72710bd12018f27379dbd2bf3a39266d6c71ea356ef29",
+  "experiments/paper/bench_gemm_isolated.py": "c41c4133c9b24e5a500536347414dd0158c55d58dc458006013e2ab8e5e55e88",
+  "sm120/tests/test_gemm.py": "24f852b410ed52e20b0a800161ce87a649232a18c05978c698f40bf1b9af380c",
+  "sm120/tests/test_select.py": "7f2ca9f665cafc44b4ecc985b5a6c51f72f04e0be83da7cae4ded53b3360b4c2"
+ },
+ "build_freq": {
+  "n16k64_wA": {
+   "sass_sha256": "82eadf6ded0b6f0b02d36c844d9f6a5b329affce6ef39034aced0265413bc7a4",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "n16k64_wA_8x1": {
+   "sass_sha256": "a2881fee0e4e9e83e2f91fbed5744254afa7d902708faa4ecf855b11d9b89091",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "n16k64_wA_n16": {
+   "sass_sha256": "ebe1aa89fbf59042fa6afd7045f1d3c3046263a8a5945bdce2bed848a9152c83",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "n16k64_wA_n32": {
+   "sass_sha256": "c4f6084c1ef6d1d2205e35ee17e80d1210f550cdde7ee5aa3018659f492253f8",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "n16k64_wA_n64": {
+   "sass_sha256": "52da988dd01d55ea5e97531d35e91ca9b8630f60b07cb967547135bfc0fdf98d",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "n16k64_wA_nodisp": {
+   "sass_sha256": "ef283c856d0ba30c6cd533c2927f5d1a3d7b50d85f2fe5e714bdf2016f7eb148",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "n16k64_wA_sk": {
+   "sass_sha256": "d533d53312a5f2ab1d43d3dd20dab82fbd2f39ae5327ac1d75a8c32e320bb546",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "n16k64_wA_xor": {
+   "sass_sha256": "5928d129669115d7695b0d76707419280dc5d32afa7521919608f1bb0e9d5ea4",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "n8k64_wB": {
+   "sass_sha256": "b87246fe18f35a5ea0cb93bcd825ff276c6b9c3e377f3ff85c51fc447236ec3d",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "n8k64_wB_m16": {
+   "sass_sha256": "26a1272a48895debaf996f150b949992cd98800ab05371100dd0386e5c6f13d4",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "n8k64_wB_m32": {
+   "sass_sha256": "640816f55b9fa30f69381e6f9ba4b2de779bab3f37a40f087b20db6ad6f200bf",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "n8k64_wB_m64": {
+   "sass_sha256": "beb45315a2ac83cd33171002603daf4b4acb0fa0d8b42b7df28352c3f2c5295c",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "n8k64_wB_n64": {
+   "sass_sha256": "3edf6d8903fca74b6340224ba8149dde17980219619b1888e008692f2045eb61",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "n8k64_wB_xor": {
+   "sass_sha256": "751dfc9aad0ae95351a3639b2b3f3111714f22d62819b062d5d59770b5056957",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "stock_wA": {
+   "sass_sha256": "9a51fb36358f89c728999324fc82c3a7f883fc28853341ca818afb7c7c8bf69f",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "stock_wA_n16": {
+   "sass_sha256": "a9bc0ef37b716a9f0638c8f602f581fc83deda5ee6f5154f7d0e50a91bd4b3f7",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "stock_wA_n32": {
+   "sass_sha256": "f853e44cf6a2d9873297a64a2406b8ac392e688c21b8c79b71072fc633d8c48f",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "stock_wA_n64": {
+   "sass_sha256": "4da7ccc1473e65cb822edee2a5cf6dad837cd83349b7871a6699f74180a48b25",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "stock_wA_sk": {
+   "sass_sha256": "922bdb87817c9ac43e025c07c36d5fe948340d653346eab561df45d4b6cd8948",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  },
+  "stock_wB": {
+   "sass_sha256": "aa9845946447449f0b6ce5689413a2eebba93551f793839f26da32d918db3faa",
+   "extra_defines": {
+    "MIXFP4_DISPATCH_FREQ": 1
+   },
+   "repo_head": "f2297dce64bdba2002c3da18023e578b708f4310",
+   "repo_dirty": true
+  }
+ }
+}

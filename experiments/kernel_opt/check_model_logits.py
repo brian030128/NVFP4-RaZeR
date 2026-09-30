@@ -13,6 +13,9 @@ Protocol: results/kernel_opt/PROTOCOL.md (G5). Per model:
   same forwards run;
 - rule: the logits are equal bitwise at every shape, and every scoped Linear is a NativeLinear and ran in both.
 The widths the set used per shape are recorded.
+
+Amendment 2 (G5'): --unit selects the TC artifact (8x64, 16x64, 256x64), and --before / --after the kernels, each a build
+name (from sm120/build, or --before-root / --after-root) or 'set:<family>'. Defaults reproduce the gate above.
 """
 import argparse
 import datetime
@@ -55,21 +58,33 @@ def forwards(model):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--after-root', required=True)
+    ap.add_argument('--unit', default='8x64', choices=('8x64', '16x64', '256x64'))
+    ap.add_argument('--before', default='n8k64_wB', help="build name or 'set:<family>' (sm120/build unless --before-root)")
+    ap.add_argument('--before-root', default=None)
+    ap.add_argument('--after', default='set:mixed_wB', help="build name or 'set:<family>' from --after-root")
     ap.add_argument('--models', default='llama8b,mistral7b,phi4,qwen27b')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     B.require_idle()
     torch.backends.cuda.matmul.allow_tf32 = False
     C = load('sm120_eval_common', REPO / 'sm120' / 'eval' / 'common.py')
-    before = Kernel.load('n8k64_wB')
-    assert Path(before.path).parent.parent == REPO / 'sm120' / 'build', before.path
-    after = KernelSet('mixed_wB', build_root=args.after_root)
+    def resolve(spec, root):
+        return KernelSet(spec[4:], build_root=root) if spec.startswith('set:') else Kernel.load(spec, build_root=root)
+    before = resolve(args.before, args.before_root)
+    for k in (before.kernels.values() if isinstance(before, KernelSet) else [before]):
+        want = Path(args.before_root) if args.before_root else REPO / 'sm120' / 'build'
+        assert Path(k.path).parent.parent == want, k.path
+    after = resolve(args.after, args.after_root)
+    if not isinstance(after, KernelSet):
+        raise SystemExit('--after must be a set (its widths are recorded)')
+    desc = lambda k: k.describe() if isinstance(k, KernelSet) else dict(kernel=k.cfg.name, sha256=k.sha256)  # noqa: E731
     res = dict(status='running', started_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
-               gpu=B.gpu_info(), shapes=list(SHAPES), before=dict(kernel='n8k64_wB', sha256=before.sha256),
-               after=dict(kernel_set='mixed_wB', build_root=args.after_root, describe=after.describe()), models={})
+               gpu=B.gpu_info(), shapes=list(SHAPES), unit=args.unit, before=dict(spec=args.before, root=args.before_root,
+               describe=desc(before)), after=dict(spec=args.after, build_root=args.after_root, describe=after.describe()),
+               models={})
     ok = True
     for model_key in args.models.split(','):
-        art = ARTIFACTS / f'{model_key}_tc_8x64'
+        art = ARTIFACTS / f'{model_key}_tc_{args.unit}'
         model = C.load_model(model_key)
         rec = res['models'][model_key] = dict(artifact=str(art), shapes={})
         logits = {}

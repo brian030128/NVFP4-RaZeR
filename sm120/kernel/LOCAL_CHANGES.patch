@@ -170,7 +170,7 @@
 +#endif  // !MIXFP4_NO_SELFTEST
 --- upstream/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
 +++ sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
-@@ -184,17 +184,38 @@
+@@ -184,15 +184,48 @@
  // barriers, so ptxas leaves these as real branches rather than if-converting them.
  template <int Lo, int Hi, class Body>
  CUTLASS_DEVICE void
@@ -185,9 +185,9 @@
 -    else                          { dispatch_pattern<Mid + 1, Hi>(pattern, body); }
 +    if (pattern <= uint32_t(Mid)) { dispatch_pattern_tree<Lo, Mid>(pattern, body); }
 +    else                          { dispatch_pattern_tree<Mid + 1, Hi>(pattern, body); }
-   }
- }
- 
++  }
++}
++
 +// [NVFP4-RaZeR local hook, diagnostic only; see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_ARM_XOR=<mask> permutes
 +// where each pattern's arm sits in the branch tree: the tree is searched on (pattern ^ mask) and the leaf at position
 +// L runs the arm of pattern L ^ mask. Every arm computes exactly as before; only its code position (and so which
@@ -196,6 +196,10 @@
 +#ifndef MIXFP4_ARM_XOR
 +#define MIXFP4_ARM_XOR 0
 +#endif
++// [NVFP4-RaZeR local hook, kernel-opt #2; see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_DISPATCH_FREQ=1 tests the all-E2M1
++// pattern (0) first -- one compare, and its arm on the fall-through path -- and only then enters the unchanged tree.
++// In the paper maps 82-95 % of all (warp, k_tile) patterns are 0 (results/kernel_opt/dispatch), which today pay the
++// tree's full log2(arms) compares. Every arm computes exactly as before. Unset, this is the upstream dispatch.
 +template <int Lo, int Hi, class Body>
 +CUTLASS_DEVICE void
 +dispatch_pattern(uint32_t pattern, Body&& body) {
@@ -204,15 +208,21 @@
 +  dispatch_pattern_tree<Lo, Hi>(pattern ^ uint32_t(MIXFP4_ARM_XOR), [&](auto c) {
 +    body(cute::C<(decltype(c)::value ^ MIXFP4_ARM_XOR)>{});
 +  });
++#elif defined(MIXFP4_DISPATCH_FREQ) && MIXFP4_DISPATCH_FREQ
++  if constexpr (Lo == 0 && Hi > 0) {
++    if (pattern == 0u) { body(cute::C<0>{}); }
++    else               { dispatch_pattern_tree<Lo, Hi>(pattern, body); }
+   }
++  else {
++    dispatch_pattern_tree<Lo, Hi>(pattern, body);
++  }
 +#else
 +  dispatch_pattern_tree<Lo, Hi>(pattern, body);
 +#endif
-+}
-+
+ }
+ 
  // Pattern bit layout: A granule flags occupy bits [0, AGranules), B granule flags follow in
- // bits [AGranules, AGranules + BGranules).
- template <int AGranules, int AAtomsPerGranule>
-@@ -349,11 +370,27 @@
+@@ -349,11 +382,27 @@
  
    // SmemLayoutAtomSFA and SmemLayoutAtomSFB are for whole CTA tiles. We add the number of pipeline stages here.
    // The number of pipeline stages is the same as the number of pipeline stages from AB Load <-> MainLoop
@@ -241,7 +251,7 @@
    using SmemLayoutSFB_ = decltype(make_layout(
      append(shape(SmemLayoutAtomSFB{}), Int<DispatchPolicy::Stages>{}),
      append(stride(SmemLayoutAtomSFB{}), size(filter_zeros(SmemLayoutAtomSFB{})))
-@@ -466,7 +503,7 @@
+@@ -466,7 +515,7 @@
          GmemTiledCopySFA{},
          make_tensor(static_cast<ElementSF const*>(nullptr), LayoutSFA{}),
          SmemLayoutSFA{}(_,_,cute::Int<0>{}),
@@ -250,7 +260,7 @@
          _1{}));  // No programmatic multicast
  
  
-@@ -527,7 +564,7 @@
+@@ -527,7 +576,7 @@
          GmemTiledCopySFA{},
          tensor_sfa,
          SmemLayoutSFA{}(_,_,cute::Int<0>{}),
@@ -259,7 +269,7 @@
          _1{}); // No programmatic multicast
  
      typename Params::TMA_SFB tma_load_sfb = make_tma_copy<uint16_t>(
-@@ -800,7 +837,20 @@
+@@ -800,7 +849,20 @@
          make_stride(_0{}, size<1>(TileShapeSFB{}) / size<1>(TileShape{})));
        Tensor gA =   gA_mkl(_,_,m_coord,_,l_coord);                                                    // (BLK_M,BLK_K,k)
        Tensor gB =   gB_nkl(_,_,n_coord,_,l_coord);                                                    // (BLK_N,BLK_K,k)
@@ -281,7 +291,7 @@
        Tensor gSFB = gSFB_nkl(_,_,broadcast_n(n_coord),_,l_coord);                                     // (BLK_N,BLK_K,k)
  
        // Partition source and destination tensors for tma copies
-@@ -884,7 +934,17 @@
+@@ -884,7 +946,17 @@
  
      Tensor sA = make_tensor(make_smem_ptr(shared_tensors.smem_A.begin()), SmemLayoutA{});         // (BLK_M,BLK_K,PIPE)
      Tensor sB = make_tensor(make_smem_ptr(shared_tensors.smem_B.begin()), SmemLayoutB{});         // (BLK_N,BLK_K,PIPE)
