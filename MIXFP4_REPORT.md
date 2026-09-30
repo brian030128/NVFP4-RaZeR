@@ -1159,6 +1159,27 @@ Findings:
   Better-optimized joint training converges to the scale-only solution, consistent
   with the exact-acceptance ceiling.
 
+**MixFP4 tiles on top of the best scale-only map, with smoothing (jobs 460145,
+460146).**
+- **Setup:** start from scale-only Pile 20k × 10 (dev KL 0.08279, WikiText 14.0245,
+  C4 19.2762). Its scales are frozen (`--resume-scale-from`,
+  `--scale-epochs 0 --stage2 tiles`) and only the 8×64 E0M3 tiles train, for
+  10 epochs with early stopping.
+- **Arms:** hysteresis ±0.1 tiles; or soft sigmoid tiles (scales loaded with
+  margin 10 so they stay hard inside the blend).
+
+| tiles on frozen scale-only scales | best dev KL (epoch) | E0M3 tiles kept | WikiText-2 | C4 | ΔNLL vs scale-only (wiki / c4) |
+|---|---:|---:|---:|---:|---|
+| hysteresis | 0.08237 (1) | 612 | 14.034752 | 19.281891 | +0.00073±0.00151 / +0.00029±0.00121 |
+| soft | 0.08236 (8) | 21,657 | 14.026301 | 19.278237 | +0.00013±0.00147 / +0.00010±0.00111 |
+
+- **The tiles lower dev KL by at most 0.0004 (0.5%), and the test sets tie.**
+- With hysteresis, dev KL rises to 0.0845 as tiles accumulate (118 k) after
+  epoch 1. The soft run stays within 0.0824–0.0829 throughout.
+- Together with the straight-through warm starts and exact acceptance above:
+  **the MixFP4 gain available on top of a converged KL-trained scale-only
+  model at 8×64 is within noise on 1B.**
+
 **Making joint easier to train: two fixes (`--tile-lr-scale`, `--scale-grad-in-e0m3`).**
 
 Joint is harder to optimize than scale-only for two reasons:
