@@ -24,22 +24,26 @@ def test_widths_bitwise_equal(device, family, t, n, k):
     ks = kset(family, table={})
     g = torch.Generator(device='cpu').manual_seed(t + n)
     w = (torch.randn(n, k, generator=g) * 0.02).cuda().bfloat16()
-    mask = (torch.rand(n // 16, k // 64, generator=g) < 0.3) if family == 'mixed' else None
-    pw = pack_module('m', w, None, 'map' if mask is not None else 'nvfp4', mask, (16, 64) if mask is not None else None)
+    mixed = family.startswith('mixed')
+    tb = (8, 64) if family == 'mixed_wB' else (16, 64)          # the weights-on-B family executes 8x64 maps
+    mask = (torch.rand(-(-n // tb[0]), k // 64, generator=g) < 0.3) if mixed else None
+    pw = pack_module('m', w, None, 'map' if mask is not None else 'nvfp4', mask, tb if mask is not None else None)
     x = torch.randn(t, k, generator=g).cuda().bfloat16()
-    act = 'four_over_six_rows' if family == 'mixed' else 'nvfp4_rows'
+    act = 'four_over_six_rows' if mixed else 'nvfp4_rows'
     outs = {wd: NativeLinear(pw, kern, act, 'm')(x) for wd, kern in ks.kernels.items()}
     ref = outs[128]
     for wd, o in outs.items():
         assert torch.equal(o, ref), f'width {wd} differs'
 
 
-def test_batch_invariance(device):
-    ks = kset('mixed')
+@pytest.mark.parametrize('family', ['mixed', 'mixed_wB'])
+def test_batch_invariance(device, family):
+    ks = kset(family)
+    tb = (8, 64) if family == 'mixed_wB' else (16, 64)
     g = torch.Generator(device='cpu').manual_seed(3)
     w = (torch.randn(4096, 4096, generator=g) * 0.02).cuda().bfloat16()
-    mask = torch.rand(256, 64, generator=g) < 0.2
-    nl = NativeLinear(pack_module('m', w, None, 'map', mask, (16, 64)), ks, 'four_over_six_rows', 'm')
+    mask = torch.rand(4096 // tb[0], 64, generator=g) < 0.2
+    nl = NativeLinear(pack_module('m', w, None, 'map', mask, tb), ks, 'four_over_six_rows', 'm')
     x = torch.randn(512, 4096, generator=g).cuda().bfloat16()
     full = nl(x)
     for t in (1, 3, 16, 33, 100, 257):

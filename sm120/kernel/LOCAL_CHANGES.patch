@@ -18,7 +18,33 @@
  constexpr int AlignmentC = 128 / cutlass::sizeof_bits<ElementC>::value;
  constexpr int AlignmentD = 128 / cutlass::sizeof_bits<ElementD>::value;
  
-@@ -150,6 +159,17 @@
+@@ -89,7 +98,15 @@
+ #ifndef MIXFP4_TILE_K
+ #define MIXFP4_TILE_K 128
+ #endif
+-using ThreadBlockShape = Shape<_128, cute::Int<MIXFP4_TILE_N>, cute::Int<MIXFP4_TILE_K>>;
++// [NVFP4-RaZeR local hook, see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_TILE_M=<64|32|16> narrows the
++// CTA tile's M. With the weights on B (n8k64_wB) M is the token count, so this is the weights-on-B
++// counterpart of MIXFP4_TILE_N's narrow token tiles for small T (decode). The collective then loads
++// the whole 128-row scale-factor block of A and each CTA reads its sub-tile (the mirror of the
++// narrow-N SFB path). Unset, the tile is the upstream 128.
++#ifndef MIXFP4_TILE_M
++#define MIXFP4_TILE_M 128
++#endif
++using ThreadBlockShape = Shape<cute::Int<MIXFP4_TILE_M>, cute::Int<MIXFP4_TILE_N>, cute::Int<MIXFP4_TILE_K>>;
+ using ClusterShape = Shape<_1, _1, _1>;
+ 
+ // How the CTA's 8 MMA warps are arranged over the tile. The builder picks 4x2 for a 128-wide tile,
+@@ -129,6 +146,8 @@
+ #ifndef MIXFP4_EPI_M
+ #if MIXFP4_ATOM_M == 8
+ #define MIXFP4_EPI_M 128           // 8x1: one m-atom per warp, so MMA_TILE_M is the full 128
++#elif MIXFP4_TILE_M < 64
++#define MIXFP4_EPI_M MIXFP4_TILE_M // narrow M (local hook): the epilogue tile cannot exceed the CTA tile
+ #else
+ #define MIXFP4_EPI_M 64
+ #endif
+@@ -150,6 +169,17 @@
  using MixedEpilogueTile = cutlass::epilogue::collective::EpilogueTileAuto;
  #endif
  
@@ -36,17 +62,78 @@
  using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
      ArchTag, OperatorClass,
      ThreadBlockShape, ClusterShape,
-@@ -157,7 +177,8 @@
+@@ -157,7 +187,19 @@
      ElementAccumulator, ElementAccumulator,
      ElementC, LayoutCTag, AlignmentC,
      ElementD, LayoutDTag, AlignmentD,
 -    cutlass::epilogue::collective::EpilogueScheduleAuto>::CollectiveOp;
 +    cutlass::epilogue::collective::EpilogueScheduleAuto,
 +    MixedEpilogueFusion>::CollectiveOp;
++
++// [NVFP4-RaZeR local hook, see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_PINGPONG=1 selects CUTLASS's
++// ping-pong kernel schedule (4 MMA warps per tile, two consumer warp groups on alternating tiles)
++// instead of the builder's default cooperative one (8 MMA warps). The cooperative kernel requires a
++// CTA tile M >= 128, so the narrow-M (MIXFP4_TILE_M < 128) builds need it; they also need a 4-warp
++// arrangement (MIXFP4_ATOM_M * MIXFP4_ATOM_N == 4). Unset, the schedule is the upstream default.
++#if defined(MIXFP4_PINGPONG) && MIXFP4_PINGPONG
++using MixedBuilderSchedule = cutlass::gemm::KernelTmaWarpSpecializedPingpong;
++#else
++using MixedBuilderSchedule = cutlass::gemm::collective::KernelScheduleAuto;
++#endif
  
  // The standard builder: reused purely for its derived types (TiledMma, SmemLayoutAtoms, etc.),
  // not instantiated as an actual mainloop -- CollectiveOp below deliberately isn't used.
-@@ -267,11 +288,17 @@
+@@ -169,10 +211,38 @@
+     ThreadBlockShape, ClusterShape,
+     cutlass::gemm::collective::StageCountAutoCarveout<
+         static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
+-    cutlass::gemm::collective::KernelScheduleAuto>;
++    MixedBuilderSchedule>;
++
++// [NVFP4-RaZeR local hook] narrow M: the builder sizes the SFA smem atom as M/128 scale-factor blocks,
++// which is empty for M < 128 (it pads only SFB, to 128 columns). Take the atom of a 128-row builder
++// instead -- the collective loads the whole 128-row block -- and count the pipeline stages with it,
++// through the builder's own stage function. For M = 128 both are exactly the builder's.
++#if MIXFP4_TILE_M < 128
++using StdMainloopBuilder128 = cutlass::gemm::collective::CollectiveBuilder<
++    ArchTag, OperatorClass,
++    ElementA, LayoutATag, AlignmentA,
++    ElementB, LayoutBTag, AlignmentB,
++    ElementAccumulator,
++    Shape<_128, cute::Int<MIXFP4_TILE_N>, cute::Int<MIXFP4_TILE_K>>, ClusterShape,
++    cutlass::gemm::collective::StageCountAutoCarveout<
++        static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
++    MixedBuilderSchedule>;
++using MixedSmemLayoutAtomSFA = typename StdMainloopBuilder128::SmemLayoutAtomSFA;
++using MixedSmemLayoutAtomsA = decltype(cute::make_tuple(
++    typename StdMainloopBuilder::SmemLayoutAtomA{}, MixedSmemLayoutAtomSFA{}));
++constexpr int MixedStages = cutlass::gemm::collective::detail::sm100_compute_stage_count_or_override_blockscaled<
++    StdMainloopBuilder::ReducedSmemCapacityBytes,
++    typename StdMainloopBuilder::SmemAllocTypeA, typename StdMainloopBuilder::SmemAllocTypeB,
++    ThreadBlockShape, MixedSmemLayoutAtomSFA, typename StdMainloopBuilder::SmemLayoutAtomSFB>(
++    cutlass::gemm::collective::StageCountAutoCarveout<
++        static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>{});
++#else
++using MixedSmemLayoutAtomsA = typename StdMainloopBuilder::SmemLayoutAtomsA;
++constexpr int MixedStages = StdMainloopBuilder::DispatchPolicy::Stages;
++#endif
+ 
+ using MixedDispatchPolicy = cutlass::gemm::MainloopSm120TmaWarpSpecializedBlockScaledMixed<
+-    StdMainloopBuilder::DispatchPolicy::Stages,
++    MixedStages,
+     StdMainloopBuilder::DispatchPolicy::SchedulerPipelineStageCount,
+     typename StdMainloopBuilder::DispatchPolicy::ClusterShape,
+     typename StdMainloopBuilder::DispatchPolicy::Schedule>;
+@@ -259,7 +329,7 @@
+     typename StdMainloopBuilder::StridePairB,
+     MixedTiledMma,
+     typename StdMainloopBuilder::GmemTiledCopyPairA,
+-    typename StdMainloopBuilder::SmemLayoutAtomsA,
++    MixedSmemLayoutAtomsA,
+     typename StdMainloopBuilder::SmemCopyAtomsA,
+     cute::identity,
+     typename StdMainloopBuilder::GmemTiledCopyPairB,
+@@ -267,11 +337,17 @@
      MixedSmemCopyAtomsB,
      cute::identity>;
  
@@ -65,7 +152,7 @@
  
  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
  
-@@ -470,6 +497,10 @@
+@@ -470,6 +546,10 @@
    }
  }
  
@@ -76,8 +163,98 @@
  int run(int m, int n, int k, int warmup_iters, int bench_iters) {
    using Sm1xxBlkScaledConfig = typename Gemm::GemmKernel::CollectiveMainloop::Sm1xxBlkScaledConfig;
  
-@@ -773,3 +804,4 @@
+@@ -773,3 +853,4 @@
  
    return run(m, n, k, warmup_iters, bench_iters);
  }
 +#endif  // !MIXFP4_NO_SELFTEST
+--- upstream/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
++++ sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
+@@ -349,11 +349,27 @@
+ 
+   // SmemLayoutAtomSFA and SmemLayoutAtomSFB are for whole CTA tiles. We add the number of pipeline stages here.
+   // The number of pipeline stages is the same as the number of pipeline stages from AB Load <-> MainLoop
+-  using SmemLayoutSFA = decltype(make_layout(
++  using SmemLayoutSFA_ = decltype(make_layout(
+     append(shape(SmemLayoutAtomSFA{}), Int<DispatchPolicy::Stages>{}),
+     append(stride(SmemLayoutAtomSFA{}), size(filter_zeros(SmemLayoutAtomSFA{})))
+   ));
+ 
++  // [NVFP4-RaZeR local change, see sm120/kernel/LOCAL_CHANGES.md] narrow M (CTA tile M < 128), the
++  // mirror of the narrow-N handling of SFB below: the scale-factor layout's indivisible unit is a
++  // 128-row block, so the SFA smem tile (and its TMA box) covers the whole block and each CTA reads
++  // its M sub-tile. SmemLayoutAtomSFA must then be the 128-row atom (mixed_nvfp4_gemm.cu takes it
++  // from a 128-row builder). For M >= 128 both types are exactly the upstream ones.
++  using TileShapeSFA = cute::conditional_t<size<0>(TileShape{}) < 128,
++    decltype(cute::make_shape(
++      Int<128>{},
++      shape<1>(TileShape{}),
++      shape<2>(TileShape{}))),
++    TileShape>;
++
++  using SmemLayoutSFA = cute::conditional_t<size<0>(TileShape{}) < 128,
++    decltype(cute::logical_divide(SmemLayoutSFA_{}, select<0,2>(TileShape{}))),
++    SmemLayoutSFA_>;
++
+   using SmemLayoutSFB_ = decltype(make_layout(
+     append(shape(SmemLayoutAtomSFB{}), Int<DispatchPolicy::Stages>{}),
+     append(stride(SmemLayoutAtomSFB{}), size(filter_zeros(SmemLayoutAtomSFB{})))
+@@ -466,7 +482,7 @@
+         GmemTiledCopySFA{},
+         make_tensor(static_cast<ElementSF const*>(nullptr), LayoutSFA{}),
+         SmemLayoutSFA{}(_,_,cute::Int<0>{}),
+-        make_shape(shape<0>(TileShape{}), shape<2>(TileShape{})),
++        make_shape(shape<0>(TileShapeSFA{}), shape<2>(TileShapeSFA{})),
+         _1{}));  // No programmatic multicast
+ 
+ 
+@@ -527,7 +543,7 @@
+         GmemTiledCopySFA{},
+         tensor_sfa,
+         SmemLayoutSFA{}(_,_,cute::Int<0>{}),
+-        make_shape(shape<0>(TileShape{}), shape<2>(TileShape{})),
++        make_shape(shape<0>(TileShapeSFA{}), shape<2>(TileShapeSFA{})),
+         _1{}); // No programmatic multicast
+ 
+     typename Params::TMA_SFB tma_load_sfb = make_tma_copy<uint16_t>(
+@@ -800,7 +816,20 @@
+         make_stride(_0{}, size<1>(TileShapeSFB{}) / size<1>(TileShape{})));
+       Tensor gA =   gA_mkl(_,_,m_coord,_,l_coord);                                                    // (BLK_M,BLK_K,k)
+       Tensor gB =   gB_nkl(_,_,n_coord,_,l_coord);                                                    // (BLK_N,BLK_K,k)
+-      Tensor gSFA = gSFA_mkl(_,_,m_coord,_,l_coord);                                                  // (BLK_M,BLK_K,k)
++      // [NVFP4-RaZeR local change] narrow M: load the 128-row scale-factor block that holds this
++      // CTA's rows (the same broadcast as broadcast_n below); the consumer reads its sub-tile.
++      Tensor gSFA = [&]() {
++        if constexpr (size<0>(TileShape{}) < 128) {
++          auto broadcast_m = make_layout(
++            make_shape(Int<size<0>(TileShapeSFA{}) / size<0>(TileShape{})>{},
++                       Int<cute::numeric_limits<int>::max()>{}),
++            make_stride(_0{}, size<0>(TileShapeSFA{}) / size<0>(TileShape{})));
++          return gSFA_mkl(_,_,broadcast_m(m_coord),_,l_coord);                                         // (BLK_M,BLK_K,k)
++        }
++        else {
++          return gSFA_mkl(_,_,m_coord,_,l_coord);                                                      // (BLK_M,BLK_K,k)
++        }
++      }();
+       Tensor gSFB = gSFB_nkl(_,_,broadcast_n(n_coord),_,l_coord);                                     // (BLK_N,BLK_K,k)
+ 
+       // Partition source and destination tensors for tma copies
+@@ -884,7 +913,17 @@
+ 
+     Tensor sA = make_tensor(make_smem_ptr(shared_tensors.smem_A.begin()), SmemLayoutA{});         // (BLK_M,BLK_K,PIPE)
+     Tensor sB = make_tensor(make_smem_ptr(shared_tensors.smem_B.begin()), SmemLayoutB{});         // (BLK_N,BLK_K,PIPE)
+-    Tensor sSFA = make_tensor(make_smem_ptr(shared_tensors.smem_SFA.begin()), SmemLayoutSFA{});  // (BLK_M,BLK_K,PIPE)
++    Tensor sSFA = [&]() {
++      if constexpr (size<0>(TileShape{}) >= 128) {
++        return make_tensor(make_smem_ptr(shared_tensors.smem_SFA.begin()), SmemLayoutSFA{});  // (BLK_M,BLK_K,PIPE)
++      }
++      else {
++        // [NVFP4-RaZeR local change] narrow M: this CTA's rows of the 128-row SFA block
++        Tensor temp = make_tensor(make_smem_ptr(shared_tensors.smem_SFA.begin()), SmemLayoutSFA{});  // (BLK_SFA_M,BLK_K,PIPE)
++        auto m = get<0>(blk_coord);
++        return temp(make_coord(_,m % (size<0>(TileShapeSFA{}) / size<0>(TileShape{}))), _, _);
++      }
++    }();
+     Tensor sSFB = [&]() {
+       if constexpr (size<1>(TileShape{}) >= 128) {
+         return make_tensor(make_smem_ptr(shared_tensors.smem_SFB.begin()), SmemLayoutSFB{});  // (BLK_N,BLK_K,PIPE)

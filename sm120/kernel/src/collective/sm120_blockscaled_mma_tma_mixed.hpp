@@ -349,10 +349,26 @@ struct CollectiveMma<
 
   // SmemLayoutAtomSFA and SmemLayoutAtomSFB are for whole CTA tiles. We add the number of pipeline stages here.
   // The number of pipeline stages is the same as the number of pipeline stages from AB Load <-> MainLoop
-  using SmemLayoutSFA = decltype(make_layout(
+  using SmemLayoutSFA_ = decltype(make_layout(
     append(shape(SmemLayoutAtomSFA{}), Int<DispatchPolicy::Stages>{}),
     append(stride(SmemLayoutAtomSFA{}), size(filter_zeros(SmemLayoutAtomSFA{})))
   ));
+
+  // [NVFP4-RaZeR local change, see sm120/kernel/LOCAL_CHANGES.md] narrow M (CTA tile M < 128), the
+  // mirror of the narrow-N handling of SFB below: the scale-factor layout's indivisible unit is a
+  // 128-row block, so the SFA smem tile (and its TMA box) covers the whole block and each CTA reads
+  // its M sub-tile. SmemLayoutAtomSFA must then be the 128-row atom (mixed_nvfp4_gemm.cu takes it
+  // from a 128-row builder). For M >= 128 both types are exactly the upstream ones.
+  using TileShapeSFA = cute::conditional_t<size<0>(TileShape{}) < 128,
+    decltype(cute::make_shape(
+      Int<128>{},
+      shape<1>(TileShape{}),
+      shape<2>(TileShape{}))),
+    TileShape>;
+
+  using SmemLayoutSFA = cute::conditional_t<size<0>(TileShape{}) < 128,
+    decltype(cute::logical_divide(SmemLayoutSFA_{}, select<0,2>(TileShape{}))),
+    SmemLayoutSFA_>;
 
   using SmemLayoutSFB_ = decltype(make_layout(
     append(shape(SmemLayoutAtomSFB{}), Int<DispatchPolicy::Stages>{}),
@@ -466,7 +482,7 @@ struct CollectiveMma<
         GmemTiledCopySFA{},
         make_tensor(static_cast<ElementSF const*>(nullptr), LayoutSFA{}),
         SmemLayoutSFA{}(_,_,cute::Int<0>{}),
-        make_shape(shape<0>(TileShape{}), shape<2>(TileShape{})),
+        make_shape(shape<0>(TileShapeSFA{}), shape<2>(TileShapeSFA{})),
         _1{}));  // No programmatic multicast
 
 
@@ -527,7 +543,7 @@ struct CollectiveMma<
         GmemTiledCopySFA{},
         tensor_sfa,
         SmemLayoutSFA{}(_,_,cute::Int<0>{}),
-        make_shape(shape<0>(TileShape{}), shape<2>(TileShape{})),
+        make_shape(shape<0>(TileShapeSFA{}), shape<2>(TileShapeSFA{})),
         _1{}); // No programmatic multicast
 
     typename Params::TMA_SFB tma_load_sfb = make_tma_copy<uint16_t>(
@@ -800,7 +816,20 @@ struct CollectiveMma<
         make_stride(_0{}, size<1>(TileShapeSFB{}) / size<1>(TileShape{})));
       Tensor gA =   gA_mkl(_,_,m_coord,_,l_coord);                                                    // (BLK_M,BLK_K,k)
       Tensor gB =   gB_nkl(_,_,n_coord,_,l_coord);                                                    // (BLK_N,BLK_K,k)
-      Tensor gSFA = gSFA_mkl(_,_,m_coord,_,l_coord);                                                  // (BLK_M,BLK_K,k)
+      // [NVFP4-RaZeR local change] narrow M: load the 128-row scale-factor block that holds this
+      // CTA's rows (the same broadcast as broadcast_n below); the consumer reads its sub-tile.
+      Tensor gSFA = [&]() {
+        if constexpr (size<0>(TileShape{}) < 128) {
+          auto broadcast_m = make_layout(
+            make_shape(Int<size<0>(TileShapeSFA{}) / size<0>(TileShape{})>{},
+                       Int<cute::numeric_limits<int>::max()>{}),
+            make_stride(_0{}, size<0>(TileShapeSFA{}) / size<0>(TileShape{})));
+          return gSFA_mkl(_,_,broadcast_m(m_coord),_,l_coord);                                         // (BLK_M,BLK_K,k)
+        }
+        else {
+          return gSFA_mkl(_,_,m_coord,_,l_coord);                                                      // (BLK_M,BLK_K,k)
+        }
+      }();
       Tensor gSFB = gSFB_nkl(_,_,broadcast_n(n_coord),_,l_coord);                                     // (BLK_N,BLK_K,k)
 
       // Partition source and destination tensors for tma copies
@@ -884,7 +913,17 @@ struct CollectiveMma<
 
     Tensor sA = make_tensor(make_smem_ptr(shared_tensors.smem_A.begin()), SmemLayoutA{});         // (BLK_M,BLK_K,PIPE)
     Tensor sB = make_tensor(make_smem_ptr(shared_tensors.smem_B.begin()), SmemLayoutB{});         // (BLK_N,BLK_K,PIPE)
-    Tensor sSFA = make_tensor(make_smem_ptr(shared_tensors.smem_SFA.begin()), SmemLayoutSFA{});  // (BLK_M,BLK_K,PIPE)
+    Tensor sSFA = [&]() {
+      if constexpr (size<0>(TileShape{}) >= 128) {
+        return make_tensor(make_smem_ptr(shared_tensors.smem_SFA.begin()), SmemLayoutSFA{});  // (BLK_M,BLK_K,PIPE)
+      }
+      else {
+        // [NVFP4-RaZeR local change] narrow M: this CTA's rows of the 128-row SFA block
+        Tensor temp = make_tensor(make_smem_ptr(shared_tensors.smem_SFA.begin()), SmemLayoutSFA{});  // (BLK_SFA_M,BLK_K,PIPE)
+        auto m = get<0>(blk_coord);
+        return temp(make_coord(_,m % (size<0>(TileShapeSFA{}) / size<0>(TileShape{}))), _, _);
+      }
+    }();
     Tensor sSFB = [&]() {
       if constexpr (size<1>(TileShape{}) >= 128) {
         return make_tensor(make_smem_ptr(shared_tensors.smem_SFB.begin()), SmemLayoutSFB{});  // (BLK_N,BLK_K,PIPE)

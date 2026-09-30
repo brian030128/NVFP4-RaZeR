@@ -23,7 +23,7 @@ gradient-guided selector (research/n16k64 campaign)  ->  frozen map  (MIXFP4MAP/
 
 | | |
 |---|---|
-| `kernel/` | the mixfp4 kernel, vendored from `brian030128/mixfp4@7b3ab34` (`VENDORED.json`: per-file upstream hashes). Four macro-guarded hooks were added to `src/mixed_nvfp4_gemm.cu` (`LOCAL_CHANGES.md`); with the macros unset it is the upstream code. |
+| `kernel/` | the mixfp4 kernel, vendored from `brian030128/mixfp4@7b3ab34` (`VENDORED.json`: per-file upstream hashes). Macro-guarded hooks were added to `src/mixed_nvfp4_gemm.cu`, and a narrow-M path (CTA tile M < 128 only) to the collective (`LOCAL_CHANGES.md`); with the macros unset it is the upstream code. |
 | `third_party/cutlass` | CUTLASS submodule pinned to `e64a913` (v4.6.0-8), the commit mixfp4 was validated with |
 | `csrc/mixfp4_sm120.cu` | C ABI: `sm120_linear` (quantize + GEMM), `sm120_gemm` with the fused epilogue, scale-factor layout, granule map, config description |
 | `build.py` | build → patch → verify → manifest, one shared library per configuration |

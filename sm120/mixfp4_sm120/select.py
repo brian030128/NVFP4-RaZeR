@@ -23,6 +23,8 @@ from .lib import Kernel
 FAMILIES = {
     'mixed': {16: 'n16k64_wA_n16', 32: 'n16k64_wA_n32', 64: 'n16k64_wA_n64', 128: 'n16k64_wA'},
     'stock': {16: 'stock_wA_n16', 32: 'stock_wA_n32', 64: 'stock_wA_n64', 128: 'stock_wA'},
+    # weights on B (8x64 maps): the width is the CTA tile's M, i.e. again the tokens (kernel-opt)
+    'mixed_wB': {16: 'n8k64_wB_m16', 32: 'n8k64_wB_m32', 64: 'n8k64_wB_m64', 128: 'n8k64_wB'},
 }
 TABLE_DIR = Path(__file__).resolve().parents[1] / 'configs'
 BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
@@ -47,12 +49,12 @@ def fallback_width(t):
 class KernelSet:
     """The builds of one family, and the table choosing among them."""
 
-    def __init__(self, family='mixed', table=None, widths=None):
+    def __init__(self, family='mixed', table=None, widths=None, build_root=None):
         names = FAMILIES[family]
         if widths is not None:
             names = {w: n for w, n in names.items() if w in widths}
         self.family = family
-        self.kernels = {w: Kernel.load(n) for w, n in sorted(names.items())}
+        self.kernels = {w: Kernel.load(n, build_root=build_root) for w, n in sorted(names.items())}
         ref = self.kernels[max(self.kernels)]
         for k in self.kernels.values():
             if (k.weight_operand, k.type_block, k.d_colmajor) != (ref.weight_operand, ref.type_block, ref.d_colmajor):

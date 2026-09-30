@@ -98,7 +98,15 @@ using OperatorClass = cutlass::arch::OpClassBlockScaledTensorOp;
 #ifndef MIXFP4_TILE_K
 #define MIXFP4_TILE_K 128
 #endif
-using ThreadBlockShape = Shape<_128, cute::Int<MIXFP4_TILE_N>, cute::Int<MIXFP4_TILE_K>>;
+// [NVFP4-RaZeR local hook, see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_TILE_M=<64|32|16> narrows the
+// CTA tile's M. With the weights on B (n8k64_wB) M is the token count, so this is the weights-on-B
+// counterpart of MIXFP4_TILE_N's narrow token tiles for small T (decode). The collective then loads
+// the whole 128-row scale-factor block of A and each CTA reads its sub-tile (the mirror of the
+// narrow-N SFB path). Unset, the tile is the upstream 128.
+#ifndef MIXFP4_TILE_M
+#define MIXFP4_TILE_M 128
+#endif
+using ThreadBlockShape = Shape<cute::Int<MIXFP4_TILE_M>, cute::Int<MIXFP4_TILE_N>, cute::Int<MIXFP4_TILE_K>>;
 using ClusterShape = Shape<_1, _1, _1>;
 
 // How the CTA's 8 MMA warps are arranged over the tile. The builder picks 4x2 for a 128-wide tile,
@@ -138,6 +146,8 @@ using MixedAtomLayoutMNK =
 #ifndef MIXFP4_EPI_M
 #if MIXFP4_ATOM_M == 8
 #define MIXFP4_EPI_M 128           // 8x1: one m-atom per warp, so MMA_TILE_M is the full 128
+#elif MIXFP4_TILE_M < 64
+#define MIXFP4_EPI_M MIXFP4_TILE_M // narrow M (local hook): the epilogue tile cannot exceed the CTA tile
 #else
 #define MIXFP4_EPI_M 64
 #endif
@@ -180,6 +190,17 @@ using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBui
     cutlass::epilogue::collective::EpilogueScheduleAuto,
     MixedEpilogueFusion>::CollectiveOp;
 
+// [NVFP4-RaZeR local hook, see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_PINGPONG=1 selects CUTLASS's
+// ping-pong kernel schedule (4 MMA warps per tile, two consumer warp groups on alternating tiles)
+// instead of the builder's default cooperative one (8 MMA warps). The cooperative kernel requires a
+// CTA tile M >= 128, so the narrow-M (MIXFP4_TILE_M < 128) builds need it; they also need a 4-warp
+// arrangement (MIXFP4_ATOM_M * MIXFP4_ATOM_N == 4). Unset, the schedule is the upstream default.
+#if defined(MIXFP4_PINGPONG) && MIXFP4_PINGPONG
+using MixedBuilderSchedule = cutlass::gemm::KernelTmaWarpSpecializedPingpong;
+#else
+using MixedBuilderSchedule = cutlass::gemm::collective::KernelScheduleAuto;
+#endif
+
 // The standard builder: reused purely for its derived types (TiledMma, SmemLayoutAtoms, etc.),
 // not instantiated as an actual mainloop -- CollectiveOp below deliberately isn't used.
 using StdMainloopBuilder = cutlass::gemm::collective::CollectiveBuilder<
@@ -190,10 +211,38 @@ using StdMainloopBuilder = cutlass::gemm::collective::CollectiveBuilder<
     ThreadBlockShape, ClusterShape,
     cutlass::gemm::collective::StageCountAutoCarveout<
         static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
-    cutlass::gemm::collective::KernelScheduleAuto>;
+    MixedBuilderSchedule>;
+
+// [NVFP4-RaZeR local hook] narrow M: the builder sizes the SFA smem atom as M/128 scale-factor blocks,
+// which is empty for M < 128 (it pads only SFB, to 128 columns). Take the atom of a 128-row builder
+// instead -- the collective loads the whole 128-row block -- and count the pipeline stages with it,
+// through the builder's own stage function. For M = 128 both are exactly the builder's.
+#if MIXFP4_TILE_M < 128
+using StdMainloopBuilder128 = cutlass::gemm::collective::CollectiveBuilder<
+    ArchTag, OperatorClass,
+    ElementA, LayoutATag, AlignmentA,
+    ElementB, LayoutBTag, AlignmentB,
+    ElementAccumulator,
+    Shape<_128, cute::Int<MIXFP4_TILE_N>, cute::Int<MIXFP4_TILE_K>>, ClusterShape,
+    cutlass::gemm::collective::StageCountAutoCarveout<
+        static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
+    MixedBuilderSchedule>;
+using MixedSmemLayoutAtomSFA = typename StdMainloopBuilder128::SmemLayoutAtomSFA;
+using MixedSmemLayoutAtomsA = decltype(cute::make_tuple(
+    typename StdMainloopBuilder::SmemLayoutAtomA{}, MixedSmemLayoutAtomSFA{}));
+constexpr int MixedStages = cutlass::gemm::collective::detail::sm100_compute_stage_count_or_override_blockscaled<
+    StdMainloopBuilder::ReducedSmemCapacityBytes,
+    typename StdMainloopBuilder::SmemAllocTypeA, typename StdMainloopBuilder::SmemAllocTypeB,
+    ThreadBlockShape, MixedSmemLayoutAtomSFA, typename StdMainloopBuilder::SmemLayoutAtomSFB>(
+    cutlass::gemm::collective::StageCountAutoCarveout<
+        static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>{});
+#else
+using MixedSmemLayoutAtomsA = typename StdMainloopBuilder::SmemLayoutAtomsA;
+constexpr int MixedStages = StdMainloopBuilder::DispatchPolicy::Stages;
+#endif
 
 using MixedDispatchPolicy = cutlass::gemm::MainloopSm120TmaWarpSpecializedBlockScaledMixed<
-    StdMainloopBuilder::DispatchPolicy::Stages,
+    MixedStages,
     StdMainloopBuilder::DispatchPolicy::SchedulerPipelineStageCount,
     typename StdMainloopBuilder::DispatchPolicy::ClusterShape,
     typename StdMainloopBuilder::DispatchPolicy::Schedule>;
@@ -280,7 +329,7 @@ using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
     typename StdMainloopBuilder::StridePairB,
     MixedTiledMma,
     typename StdMainloopBuilder::GmemTiledCopyPairA,
-    typename StdMainloopBuilder::SmemLayoutAtomsA,
+    MixedSmemLayoutAtomsA,
     typename StdMainloopBuilder::SmemCopyAtomsA,
     cute::identity,
     typename StdMainloopBuilder::GmemTiledCopyPairB,

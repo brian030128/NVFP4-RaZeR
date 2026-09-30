@@ -99,6 +99,38 @@ CONFIGS = {c.name: c for c in [
         expected_census={0: 512, 2: 512},
         description='Comparison. Weights on B, 8 columns x 64 K granule, 1x8 arrangement, '
                     'activations pinned E2M1, row-major D.'),
+    # Narrow token tiles with the weights on B (kernel-opt). M is the token count there, so these are
+    # n8k64_wB's counterparts of the n16k64_wA_n* builds for small T (decode, short prefill):
+    # - MIXFP4_TILE_M narrows the CTA tile; the collective loads the whole 128-row scale-factor block
+    #   of A and each CTA reads its sub-tile (the mirror of the narrow-N SFB path).
+    # - CUTLASS's cooperative kernel requires a tile M >= 128, so these use the ping-pong schedule
+    #   (MIXFP4_PINGPONG): 4 MMA warps per tile. To keep n8k64_wB's 16 dispatch arms (2 n-atoms = 16
+    #   weight columns per warp) the warps are 1x4 and the tile is 64 weight columns wide.
+    # - A stays pinned E2M1 as one granule per warp (A_ATOMS = MMA_M); the OMMA census scales with the
+    #   warp's m-atoms. Bitwise equal to n8k64_wB (the per-output accumulation order is unchanged).
+    # - Ping-pong has one 4-warp group on the tensor cores at a time, so these lose at large T: the
+    #   'mixed_wB' KernelSet uses them only where the tile table says so.
+    KernelConfig(
+        'n8k64_wB_m64', 'mixed', 1, (8, 64),
+        dict(_B8X64, SM120_BIAS_ON_N=1, MIXFP4_PINGPONG=1, MIXFP4_TILE_M=64, MIXFP4_TILE_N=64, MIXFP4_ATOM_N=4,
+             MIXFP4_PERM_N=64, MIXFP4_A_ATOMS_PER_GRANULE=4),
+        dict(_B8X64_GEN, MMA_M=4, A_ATOMS=4),
+        expected_census={0: 256, 2: 256},
+        description='n8k64_wB with a 64 x 64 CTA tile (ping-pong, 1x4 warps): small-T kernel.'),
+    KernelConfig(
+        'n8k64_wB_m32', 'mixed', 1, (8, 64),
+        dict(_B8X64, SM120_BIAS_ON_N=1, MIXFP4_PINGPONG=1, MIXFP4_TILE_M=32, MIXFP4_TILE_N=64, MIXFP4_ATOM_N=4,
+             MIXFP4_PERM_N=64, MIXFP4_A_ATOMS_PER_GRANULE=2),
+        dict(_B8X64_GEN, MMA_M=2, A_ATOMS=2),
+        expected_census={0: 128, 2: 128},
+        description='n8k64_wB with a 32 x 64 CTA tile (ping-pong, 1x4 warps): small-T kernel.'),
+    KernelConfig(
+        'n8k64_wB_m16', 'mixed', 1, (8, 64),
+        dict(_B8X64, SM120_BIAS_ON_N=1, MIXFP4_PINGPONG=1, MIXFP4_TILE_M=16, MIXFP4_TILE_N=64, MIXFP4_ATOM_N=4,
+             MIXFP4_PERM_N=64, MIXFP4_A_ATOMS_PER_GRANULE=1),
+        dict(_B8X64_GEN, MMA_M=1, A_ATOMS=1),
+        expected_census={0: 64, 2: 64},
+        description='n8k64_wB with a 16 x 64 CTA tile (ping-pong, 1x4 warps): small-T kernel.'),
     KernelConfig(
         'n16k64_wA_nodisp', 'mixed', 0, None,
         dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_NO_DISPATCH=1, MIXFP4_PIPE_FLAGS=0), _WT_AS_A_GEN,

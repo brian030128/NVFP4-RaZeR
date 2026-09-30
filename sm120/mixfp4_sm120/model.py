@@ -20,13 +20,16 @@ from .select import KernelSet
 
 def resolve_kernel(kernel):
     """'auto' -> the mixed KernelSet with this GPU's tile table; 'auto_stock' -> the stock NVFP4 set;
-    a configuration name -> that single build; Kernel / KernelSet instances pass through."""
+    'auto_wB' -> the weights-on-B mixed set (8x64 maps); a configuration name -> that single build;
+    Kernel / KernelSet instances pass through."""
     if isinstance(kernel, (Kernel, KernelSet)):
         return kernel
     if kernel in ('auto', 'auto_mixed'):
         return KernelSet('mixed')
     if kernel == 'auto_stock':
         return KernelSet('stock')
+    if kernel == 'auto_wB':
+        return KernelSet('mixed_wB')           # 8x64 maps, weights on B, width-selecting (kernel-opt)
     return Kernel.load(kernel)
 
 
