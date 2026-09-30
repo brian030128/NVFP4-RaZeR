@@ -189,3 +189,22 @@ def test_native_linear_requires_uniform_panels(device):
     tiles[1, 2] = True
     pw256 = A.retile(A.pack_module('m', w, None, 'map', tiles.repeat_interleave(16, 0), (16, 64)), (256, 64))
     assert pw256.type_block == (256, 64) and pw256.e0m3_tiles == 1
+
+
+def test_auto_routes_256x64_maps(device):
+    """kernel-opt A' adoption: install(kernel='auto') runs a map whose own unit covers whole 128-row panels (the 256x64
+    maps, stored as 16x64 granules) on 'mixed256' when it is built, and every other map on 'mixed' as before."""
+    from mixfp4_sm120 import model as NM
+    k16, note16 = NM.resolve_kernel('auto', dict(type_block=[16, 64], note=dict(record=dict(unit='16x64'))))
+    assert k16.family == 'mixed' and note16 is None
+    k0, note0 = NM.resolve_kernel('auto', dict(type_block=None))
+    assert k0.family == 'mixed' and note0 is None
+    k256, note256 = NM.resolve_kernel('auto', dict(type_block=[16, 64], note=dict(record=dict(unit='256x64'))))
+    try:
+        Kernel.load('n16k64_wA_g32')
+        built = True
+    except Exception:  # noqa: BLE001
+        built = False
+    assert k256.family == ('mixed256' if built else 'mixed'), (k256.family, note256)
+    assert ('-> mixed256' in note256) if built else ('not built' in note256)
+    assert NM.resolve_kernel('auto_mixed', None)[0].family == 'mixed'

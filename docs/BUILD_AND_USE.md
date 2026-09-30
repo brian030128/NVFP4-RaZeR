@@ -145,6 +145,9 @@ python run_ppl_deploy.py --model mistral7b --data-root $DATA \
 - **NativeLinear:** every quantized Linear runs on the kernel with per-token activation scales.
 - **Fake (c):** the same numerics in BF16 fake quant, the like-for-like reference.
 - **Kernel defaults:** `auto` for 16x64 artifacts, `n8k64_wB` for 8x64, `auto_stock` for FourOverSix/NVFP4.
+  On the kernel-opt branch `auto` also runs a 256x64 artifact on the 4-arm `mixed256` set when its builds
+  (`n16k64_wA_g32`, `_n64`, `_n32`, `_n16`) are in the build directory. Outputs are identical, and the install
+  report's `routing` says which set ran (results/kernel_opt/A1/REPORT.md).
 - **Output:** `report.json` holds the per-window NLLs, the PPLs, native coverage and wall time.
 
 **How close the deployment path is:** `results/deploy_eval/REPORT.md` compares NativeLinear (c) with fake (c) and

@@ -13,27 +13,39 @@ from dataclasses import dataclass, field
 import torch
 
 from . import artifact as A
-from .lib import Kernel
+from .lib import Kernel, LibraryError
 from .linear import NativeLinear
 from .select import KernelSet
 
 
-def resolve_kernel(kernel):
-    """'auto' -> the mixed KernelSet with this GPU's tile table; 'auto_stock' -> the stock NVFP4 set;
-    'auto_wB' -> the weights-on-B mixed set (8x64 maps); 'auto_256' -> the 4-arm set for 256x64 maps (kernel-opt A';
-    NativeLinear verifies the tags are uniform over its 128-row panels); a configuration name -> that single build;
-    Kernel / KernelSet instances pass through."""
+def resolve_kernel(kernel, meta=None):
+    """Returns (kernel, routing note or None).
+
+    'auto' -> the mixed KernelSet with this GPU's tile table. For an artifact whose map unit (artifact.map_unit) covers
+    whole 128-row panels -- the 256x64 maps -- it is the 4-arm 'mixed256' set instead (kernel-opt A', adopted
+    2026-09-30), if that set is built in the build directory; otherwise 'mixed' (the same outputs bit for bit), and
+    the note says so. 'auto_mixed' -> always 'mixed'; 'auto_stock' -> the stock NVFP4 set; 'auto_wB' -> the
+    weights-on-B mixed set (8x64 maps); 'auto_256' -> 'mixed256' (NativeLinear verifies the tags are uniform over its
+    128-row panels); a configuration name -> that single build; Kernel / KernelSet instances pass through."""
     if isinstance(kernel, (Kernel, KernelSet)):
-        return kernel
-    if kernel in ('auto', 'auto_mixed'):
-        return KernelSet('mixed')
+        return kernel, None
+    if kernel == 'auto':
+        unit = A.map_unit(meta) if meta is not None else None
+        if unit is not None and unit[0] % 128 == 0:
+            try:
+                return KernelSet('mixed256'), f'auto: {unit[0]}x{unit[1]} map -> mixed256 (kernel-opt A\')'
+            except LibraryError as e:
+                return KernelSet('mixed'), f'auto: {unit[0]}x{unit[1]} map, mixed256 not built ({e}) -> mixed'
+        return KernelSet('mixed'), None
+    if kernel == 'auto_mixed':
+        return KernelSet('mixed'), None
     if kernel == 'auto_stock':
-        return KernelSet('stock')
+        return KernelSet('stock'), None
     if kernel == 'auto_wB':
-        return KernelSet('mixed_wB')           # 8x64 maps, weights on B, width-selecting (kernel-opt)
+        return KernelSet('mixed_wB'), None     # 8x64 maps, weights on B, width-selecting (kernel-opt)
     if kernel == 'auto_256':
-        return KernelSet('mixed256')           # 256x64 maps, 32-row granules, 4 arms (kernel-opt A')
-    return Kernel.load(kernel)
+        return KernelSet('mixed256'), None     # 256x64 maps, 32-row granules, 4 arms (kernel-opt A')
+    return Kernel.load(kernel), None
 
 
 def scope(model, loader='causal_lm'):
@@ -64,6 +76,7 @@ class InstallReport:
     kernel_set: dict | None = None
     activation_quantizer: str | None = None
     activation_quantizer_override: bool = False
+    routing: str | None = None
 
     def as_dict(self):
         return dict(kernel=self.kernel, kernel_sha256=self.kernel_sha256,
@@ -71,7 +84,7 @@ class InstallReport:
                     native_modules=len(self.native), fallback=self.fallback, bf16_by_design=self.bf16_by_design,
                     e0m3_tiles=self.e0m3_tiles, device_bytes=self.device_bytes, kernel_set=self.kernel_set,
                     activation_quantizer=self.activation_quantizer,
-                    activation_quantizer_override=self.activation_quantizer_override)
+                    activation_quantizer_override=self.activation_quantizer_override, routing=self.routing)
 
 
 @torch.no_grad()
@@ -85,14 +98,15 @@ def install(model, art_dir, kernel='auto', loader='causal_lm', strict=True, devi
     ('nvfp4_rows' / 'four_over_six_rows'). An override is for latency measurements only: the weights were calibrated
     with the artifact's activation quantizer, so an overridden install is not an evaluated configuration. The report
     records it (activation_quantizer_override=True)."""
-    kern = resolve_kernel(kernel)
     meta, weights = A.load(art_dir, device=device)
+    kern, routing = resolve_kernel(kernel, meta)
     act_kind = meta['activation_quantizer'] if activation_quantizer is None else activation_quantizer
     if act_kind not in ('nvfp4_rows', 'four_over_six_rows'):
         raise ValueError(f'unknown activation quantizer {act_kind!r}')
     name = kern.cfg.name if isinstance(kern, Kernel) else f'KernelSet({kern.family})'
     rep = InstallReport(name, kern.sha256, meta['weights_sha256'], (meta.get('map') or {}).get('sha256'))
     rep.kernel_set = kern.describe() if isinstance(kern, KernelSet) else None
+    rep.routing = routing
     rep.activation_quantizer = act_kind
     rep.activation_quantizer_override = act_kind != meta['activation_quantizer']
     mods = dict(scope(model, loader))

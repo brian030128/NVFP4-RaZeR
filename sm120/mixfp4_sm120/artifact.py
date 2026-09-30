@@ -25,6 +25,7 @@ import datetime
 import dataclasses
 import hashlib
 import json
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,6 +70,16 @@ def tile_flags(scales, type_block):
         raise ArtifactError(f'{bad} tiles carry a mixed E0M3 tag inside one {type_block} granule; the kernel '
                             f'requires uniform tags (non-uniform tags below one MMA atom can hang the GPU)')
     return hi.bool()
+
+
+def map_unit(meta):
+    """The map's own tile as (rows, cols): the unit the exporter recorded (note.record.unit -- '256x64' for the 256x64
+    maps, which store their tags as 16x64 granules), else the stored type_block; None for an E2M1-only artifact."""
+    unit = ((meta.get('note') or {}).get('record') or {}).get('unit')
+    if isinstance(unit, str) and re.fullmatch(r'\d+x\d+', unit):
+        return tuple(int(v) for v in unit.split('x'))
+    tb = meta.get('type_block')
+    return tuple(tb) if tb else None
 
 
 def uniform_flags(scales, type_block):

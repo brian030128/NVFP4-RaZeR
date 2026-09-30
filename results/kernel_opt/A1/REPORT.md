@@ -85,10 +85,26 @@ All outputs were bitwise equal.
 **What this says.** Halving the per-k_tile flag reads and the tree depth removes about half of the fixed cost. So the
 dispatch's cost is its per-k_tile instructions (the kernels are issue-bound), not memory or latency.
 
-## Adoption (proposed, per the amendment)
+## Adoption: adopted on kernel-opt (2026-09-30, by the user's go)
 
 Every gate passed, and no M1″ cell is slower beyond its per-round range. That meets the amendment's criterion for
-routing 256x64 artifacts to `mixed256` (`install(kernel='auto_256')`, builds in `build_A1`).
+routing 256x64 artifacts to `mixed256`.
+
+The user adopted it, relayed by the coordinator.
+- `install(kernel='auto')` now runs an artifact whose own map unit (`note.record.unit`, read by
+  `artifact.map_unit`) covers whole 128-row panels, i.e. the 256x64 maps, on `KernelSet('mixed256')`. It does so
+  when those builds are in the build directory (`SM120_BUILD_DIR=/home/dev/n16k64_campaign/kernel_opt/build_A1`, which
+  holds every configuration built from the A′ sources). Otherwise it falls back to `mixed`, which gives the same
+  outputs bit for bit.
+- The install report's new `routing` field records which set ran and why.
+- `'auto_256'` still selects `mixed256` explicitly, and `'auto_mixed'` still selects `mixed`.
+- 16x64 and 8x64 artifacts are routed exactly as before.
+- tm-opt and the paper's numbers are untouched.
+
+Checks of the routing change:
+- `test_g32.py::test_auto_routes_256x64_maps` passes with and without the g32 builds.
+- On Llama-3.1-8B, `install(kernel='auto')` with `build_A1` ran the TC 256x64 artifact on the four g32 builds, and its
+  logits (1x100) were bitwise equal to set:mixed from `sm120/build`. The TC 16x64 artifact stayed on `mixed`.
 
 M1″ also shows ≥ 1 % per-forward gains at T ≥ 256. By the user's decision (deviation 1 to amendment 2b), the end-to-end
 effect is measured later, once, cumulatively with #2 and A.
