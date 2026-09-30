@@ -132,3 +132,34 @@ A failure stops the run. It is reported, not worked around.
        L2-resident, while a forward reads every weight from DRAM once.
      - Testing it would need a cold-cache GEMM measurement, which is not in this protocol; it is proposed, not run.
      - The end-to-end prefill numbers are the primary latency result either way.
+
+2. **2026-09-30, before any GPU run of it: the per-forward GEMM latency is re-measured with isolated launches and cold
+   weights, and becomes the primary GEMM table.**
+   - **Approved by the user** (relayed by nvfp4-razer-c9), as proposed.
+   - **Reason:** step 06's overheads sit above earlier measurements on this GPU. At T ≥ 2048 they are 16x64 +3.6 to
+     +4.8 % and 8x64 +10.4 to +12.9 % (C1).
+     - Item #3 found isolated calls the most stable method, and the one that agreed with full-model prefill.
+     - Step 06 differs in three ways, and each can inflate the gap: CUPTI over 20 back-to-back calls (the
+       dependent-launch barrier, the sustained power cap), L2-warm weights, and the densest module.
+   - **Method, checks and report:** in `PROTOCOL_GEMM_ISOLATED.md`, registered separately in
+     `registration_gemm_isolated.json`.
+   - **Step 06's records and tables are kept,** labelled "CUPTI, back-to-back calls, L2-warm, densest module".
+   - **Corrections to deviation 1's follow-up.** Its text above is not edited. The errors were found on 2026-09-30,
+     while checking a summary against the records.
+     - **"0.8–1.3 % longer with NVFP4 weights … at T ≥ 2048 (Llama, Mistral, Qwen)".** Per forward at T = 2048 / 4096 /
+       8192, the records give:
+       - Llama +0.8 / +0.7 / +1.2 %;
+       - Mistral +0.8 / +0.6 / +1.3 %;
+       - Qwen +0.4 / +0.7 / +0.9 %, so the range is 0.4–1.3 %;
+       - Phi-4 +0.3 / +0.7 / −0.4 %.
+     - **"At 4×2048 … within 1 pp: for 16x64, 256x64 and 8x64 on wB, on every model".** Mistral's 8x64 on wB is at
+       1.11 pp and is flagged. The 4×2048 gaps are:
+       - 16x64: 0.24–0.30 pp;
+       - 256x64: 0.24–0.66 pp;
+       - 8x64 on wB: 0.56–1.11 pp;
+       - 8x64 vs stock wA: 0.81–1.80 pp.
+     - **"At 1×128–1×256, the isolated GEMM difference is 1.2–5.8 pp larger than end to end".**
+       - At 1×128 it is 0.9–5.8 pp larger, in every row.
+       - At 1×256 the gap ranges from 3.3 pp larger to 1.8 pp smaller: for Phi-4 16x64 and 256x64 the end-to-end
+         difference is the larger one.
+       - "Isolated" there meant step 06's GEMM benchmark, not isolated launches.

@@ -13,6 +13,8 @@ Collected, from the output root (PAPER_OUT):
   latency/<model>/<policy>/round<r>.json       prefill latency, per process
   gemm/<model>.json                            GEMM and quantizer kernel times
   gemm_superseded/<model>.json                 the fixed-order GEMM records superseded by deviation 1 (PROTOCOL.md)
+  gemm_isolated/<model>.json, l2_check.json    deviation 2: the isolated, cold GEMM records (primary), the cold-cache
+  gemm_isolated/<model>.json.telemetry.csv     verification, and the 100 ms nvidia-smi telemetry of each run
   tables/*                                     the tables of step 07
 Not collected: the artifacts, the maps themselves, the logs (logs/*.log), anything else.
 """
@@ -57,8 +59,8 @@ def main():
         copied.append(b)
     for f in sorted(src.glob('latency/*/*/round*.json')):
         put(f, dst / 'latency' / f.parent.parent.name / f.parent.name / f.name)
-    for sub in ('gemm', 'gemm_superseded'):
-        for f in sorted(src.glob(f'{sub}/*.json')):
+    for sub in ('gemm', 'gemm_superseded', 'gemm_isolated'):
+        for f in sorted(src.glob(f'{sub}/*.json')) + sorted(src.glob(f'{sub}/*.telemetry.csv')):
             put(f, dst / sub / f.name)
     for f in sorted(src.glob('tables/*')):
         put(f, dst / 'tables' / f.name)

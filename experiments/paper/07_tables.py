@@ -26,8 +26,13 @@ Writes <out>/tables/main.md (8x64 and 16x64), appendix.md (256x64, and the per-s
   - `ours-<u>-nvfp4act` (latency only) against NVFP4;
   - for 8x64, also against the weights-on-B references.
 - **GEMM:** the per-forward sum over the quantized text Linears of each projection's kernel time times its module
-  count. Since deviation 1, each kernel time is the median of 3 rounds in a rotated order; the fixed-order records are
-  rendered separately as tables/gemm_superseded.md.
+  count.
+  - **Primary since deviation 2** (gemm_isolated_tables.py, results/paper/PROTOCOL_GEMM_ISOLATED.md): isolated launches,
+    cold weights, CUPTI device time; the FlipQuant (ours) maps with the typical and the worst module's tags. Main
+    tables: 8x64 and 16x64, and the old / new / end-to-end overheads side by side; appendix: 256x64, the per-shape
+    detail, the tags, the telemetry.
+  - **The alternative method** (step 06: CUPTI, back-to-back calls, L2-warm, densest module; deviation 1's rotated
+    order) is rendered in the appendix, labelled; the fixed-order records it replaced are tables/gemm_superseded.md.
 - **GEMM vs end to end:** the per-forward GEMM difference must match the end-to-end CUDA-graph difference within 1 %
   of the reference prefill. Rows that do not are flagged (appendix; a count in the main tables). The activation quantizer's per-forward sum counts only its launches, net of the reuse measured in step 05
   (q/k/v and gate/up share one quantization). Without a step-05 record, it assumes no reuse, an upper bound, and says so.
@@ -40,6 +45,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paper_common as P  # noqa: E402
+import gemm_isolated_tables as GI  # noqa: E402
 
 TASKS = ('mmlu', 'arc_challenge', 'arc_easy', 'hellaswag', 'piqa')
 TASK_TITLES = dict(mmlu='MMLU (5-shot)', arc_challenge='ARC-C', arc_easy='ARC-E', hellaswag='HellaSwag', piqa='PIQA')
@@ -439,8 +445,16 @@ def main():
     everything = {}
     docs = {}
     prefill_all = {m: prefill_results(args.out, m) for m in args.models}
-    _, gemm_detail, _ = gemm_section(args.out, args.models, list(args.units), prefill_all)     # every unit's kernel
+    # deviation 2: the isolated, cold GEMM records are the primary GEMM tables when present; step 06's become the
+    # labelled alternative method
+    iso = GI.sections(args.out, args.models, prefill_all, table, read) if (args.out / 'gemm_isolated').is_dir() else None
+    has_iso = bool(iso and iso['data']['models'])
+    alt = f'ALTERNATIVE METHOD ({GI.ALT_METHOD}; step 06): ' if has_iso else ''
+    _, gemm_detail, _ = gemm_section(args.out, args.models, list(args.units), prefill_all, label=alt)     # every unit's kernel
     check_text, check_summary, check_data = consistency_section(args.out, args.models, list(args.units), prefill_all)
+    if alt:
+        check_text = check_text.replace('### GEMM vs', '### ' + alt + 'GEMM vs', 1)
+        check_summary = alt + check_summary if check_summary else ''
     if (args.out / 'gemm_superseded').is_dir():
         # the fixed-order records that deviation 1 superseded, kept with their tables
         label = 'SUPERSEDED (fixed-order measurement; results/paper/PROTOCOL.md, deviation 1): '
@@ -459,15 +473,28 @@ def main():
         eager_text = ''
         if name == 'appendix':        # eager prefill, every unit: supplementary, with the host-bound mark
             eager_text, _ = latency_section(args.out, args.models, list(args.units), ('eager',))
-        gemm_text, _, gemm_data = gemm_section(args.out, args.models, units, prefill_all)
         title = ('Main tables: 8x64 and 16x64' if name == 'main' else
                  'Appendix: 256x64, eager prefill (every unit), and the per-shape GEMM detail')
-        docs[name] = '\n\n'.join(x for x in (f'# {title}', note.strip(), ppl_text, lm_text, lat_text, gemm_text,
-                                             check_summary if name == 'main' else '', eager_text,
-                                             check_text if name == 'appendix' else '',
-                                             gemm_detail if name == 'appendix' else '') if x) + '\n'
+        if not has_iso:
+            gemm_text, _, gemm_data = gemm_section(args.out, args.models, units, prefill_all)
+            parts = (ppl_text, lm_text, lat_text, gemm_text, check_summary if name == 'main' else '', eager_text,
+                     check_text if name == 'appendix' else '', gemm_detail if name == 'appendix' else '')
+        elif name == 'main':
+            gemm_data = iso['data']['models']
+            pointer = (f'The GEMM tables of the alternative method ({GI.ALT_METHOD}; step 06, deviation 1) are in the '
+                       'appendix. ' + check_summary)
+            parts = (ppl_text, lm_text, lat_text, iso['main'], iso['side_by_side'], iso['consistency_summary'], pointer)
+        else:
+            gemm_data = iso['data']['models']
+            alt_text, _, _ = gemm_section(args.out, args.models, list(args.units), prefill_all, label=alt)
+            parts = (ppl_text, lm_text, lat_text, iso['appendix_256'], eager_text, iso['consistency_text'], iso['detail'],
+                     iso['tags'], iso['telemetry'], alt_text, check_text, gemm_detail)
+        docs[name] = '\n\n'.join(x for x in (f'# {title}', note.strip()) + parts if x) + '\n'
         everything[name] = dict(units=units, ppl=ppl_data, downstream=lm_data, prefill=lat_data, gemm=gemm_data)
-    everything['gemm_consistency'] = dict(tolerance_pp=TOLERANCE_PP, rows=check_data, summary=check_summary)
+    everything['gemm_consistency'] = dict(tolerance_pp=TOLERANCE_PP, rows=check_data, summary=check_summary,
+                                          method=GI.ALT_METHOD if has_iso else 'step 06')
+    if has_iso:
+        everything['gemm_isolated'] = iso['data']
     for name, text in docs.items():
         (tdir / f'{name}.md').write_text(text)
     (tdir / 'tables.json').write_text(json.dumps(everything, indent=1, default=str) + '\n')
