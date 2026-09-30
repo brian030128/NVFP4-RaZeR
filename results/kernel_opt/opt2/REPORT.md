@@ -92,6 +92,12 @@ single-cell differences (for example −2.4 %) are within that drift.
   branch between the register pipeline's k_blocks, or the larger 16-arm body.
 - nodisp itself is +0.8 % / +1.2 % over stock_wA.
 
-## M2′: end-to-end prefill
+## M2′: end-to-end prefill — stopped by user request (partial, not used)
 
-Triggered by M1′ (amendment 2b) and registered separately. The results are appended here when it finishes.
+M1′ triggered it (amendment 2b), and it started at 18:48. The user stopped it at 19:12 (deviation 1 to amendment 2b):
+the expected end-to-end effect (~0.3–1 %) is at the per-process noise level. #2's end-to-end effect will be measured
+together with A′ and A, as one cumulative end-to-end measurement registered when those land.
+
+The 40 completed records are kept, marked partial (`/home/dev/n16k64_campaign/kernel_opt/opt2/e2e/PARTIAL.md`), and
+are not used for conclusions. They are Llama-3.1-8B complete and 5 policies of Mistral-7B-v0.3's round 1, and all pass
+the registered checks.

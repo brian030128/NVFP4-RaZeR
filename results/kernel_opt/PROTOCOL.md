@@ -343,3 +343,14 @@ unchanged. It uses M2's checks (`ab_e2e.prefill_check`) and a build check per po
   - No significance claims beyond the round range. Earlier prefill runs varied by about 1 % per process (D1b), which
     is the size of the effect expected here: M1′'s 0.4–1.5 % GEMM gains, diluted by the non-GEMM share.
 - **Adoption is unchanged:** #2 is adopted on kernel-opt because G1′–G5′ passed. M2′ reports its speed.
+
+**Deviation 1 to amendment 2b (2026-09-30 19:12 UTC): M2′ stopped by user request.**
+- Relayed by the coordinator: the expected end-to-end effect (~0.3–1 %) is at the per-process noise level. #2's
+  end-to-end effect will be measured together with A′ and A, as one cumulative end-to-end measurement registered when
+  those land.
+- The runner was stopped between processes at 19:12:12. The process it had just started (Mistral-7B-v0.3,
+  ours-8x64-opt, round 1) ran to completion on its own at 19:12:46 and passes the registered checks.
+- Completed: Llama-3.1-8B, all 7 policies × 5 rounds, and 5 policies of Mistral-7B-v0.3's round 1. That is 40
+  records, all complete and passing the registered checks.
+- They are kept in `/home/dev/n16k64_campaign/kernel_opt/opt2/e2e` (`PARTIAL.md` there), marked partial, and are not
+  used for conclusions.
