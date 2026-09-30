@@ -39,7 +39,9 @@ def gemm_section(model):
     if not path.exists():
         return None
     rec = json.loads(path.read_text())
-    assert rec['status'] == 'complete', path
+    if rec['status'] != 'complete':
+        print(f'note: {path} is {rec["status"]}; left out')
+        return None
     projs = rec['projections']
     by = {(r['config'], r['proj'], r['tokens']): r for r in rec['rows']}
     tokens = sorted({r['tokens'] for r in rec['rows']})
@@ -92,13 +94,17 @@ def e2e_section(what, model, key):
                 d['rounds'][r] = e[key]
                 if what == 'prefill':
                     d.setdefault('eager_rounds', {})[r] = rec['eager'][shape]['ms']
-                if what == 'decode' and e.get('decode_widths') is not None:
-                    d['widths'] = e['decode_widths']
+                if what == 'decode':
+                    d.setdefault('tps_rounds', {})[r] = e['tokens_per_s']
+                    if e.get('decode_widths') is not None:
+                        d['widths'] = e['decode_widths']
     for shape, pols in res.items():
         for pol, d in pols.items():
             d['median'] = statistics.median(d['rounds'].values())
             if 'eager_rounds' in d:
                 d['eager_median'] = statistics.median(d['eager_rounds'].values())
+            if 'tps_rounds' in d:
+                d['tps_median'] = statistics.median(d['tps_rounds'].values())
     return res
 
 
@@ -165,12 +171,35 @@ def main():
                     row.update(eager_before=b['eager_median'], eager_after=a['eager_median'],
                                eager_after_vs_before_pct=pct(a['eager_median'], b['eager_median']))
                 else:
-                    row['widths_after'] = a.get('widths')
+                    row.update(widths_after=a.get('widths'), tps_fo6=f6['tps_median'], tps_fo6_wB=f6b['tps_median'],
+                               tps_before=b['tps_median'], tps_after=a['tps_median'],
+                               tps_after_vs_before_pct=pct(a['tps_median'], b['tps_median']),
+                               tps_before_vs_fo6_pct=pct(b['tps_median'], f6['tps_median']),
+                               tps_after_vs_fo6_pct=pct(a['tps_median'], f6['tps_median']))
                 md.append(f"| {shape} | {f6['median']:.2f} | {f6b['median']:.2f} | {b['median']:.2f} | {a['median']:.2f} | "
                           f"{fmt(row['after_vs_before_pct'])} [{rng[0]:+.1f}, {rng[1]:+.1f}] | {fmt(row['before_vs_fo6_pct'])} → "
                           f"{fmt(row['after_vs_fo6_pct'])} | {fmt(row['before_vs_fo6wB_pct'])} → {fmt(row['after_vs_fo6wB_pct'])} |")
                 (pcsv if what == 'prefill' else dcsv).append(row)
             md.append('')
+            if what == 'prefill':
+                md.append('Eager prefill, ms (supplementary, as in the paper; small T is host-bound):\n')
+                md.append('| shape | fo6 | fo6-wB | before | after | after vs before |')
+                md.append('|---|---|---|---|---|---|')
+                for shape, pols in sec.items():
+                    if all(p in pols for p in POLICIES):
+                        e = {p: pols[p]['eager_median'] for p in POLICIES}
+                        md.append(f"| {shape} | {e['fo6']:.2f} | {e['fo6-wB']:.2f} | {e['ours-8x64']:.2f} | {e['ours-8x64-opt']:.2f} | "
+                                  f"{fmt(pct(e['ours-8x64-opt'], e['ours-8x64']))} |")
+                md.append('')
+            if what == 'decode':
+                md.append('Tokens per second (Experiment D\'s convention; higher is faster):\n')
+                md.append('| setting | fo6 | fo6-wB | before | after | after vs before | vs fo6: before → after |')
+                md.append('|---|---|---|---|---|---|---|')
+                for r in (x for x in dcsv if x['model'] == model):
+                    md.append(f"| {r['shape']} | {r['tps_fo6']:.1f} | {r['tps_fo6_wB']:.1f} | {r['tps_before']:.1f} | "
+                              f"{r['tps_after']:.1f} | {fmt(r['tps_after_vs_before_pct'])} | {fmt(r['tps_before_vs_fo6_pct'])} → "
+                              f"{fmt(r['tps_after_vs_fo6_pct'])} |")
+                md.append('')
     args.out_dir.mkdir(parents=True, exist_ok=True)
     (args.out_dir / 'ab1.json').write_text(json.dumps(data, indent=1) + '\n')
     for name, rows in (('ab1_gemm.csv', gcsv), ('ab1_prefill.csv', pcsv), ('ab1_decode.csv', dcsv)):
