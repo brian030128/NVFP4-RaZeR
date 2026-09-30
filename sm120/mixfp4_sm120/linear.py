@@ -15,7 +15,7 @@ rounding to bf16 (see NUMERICS.md for how this differs from the fake-quant order
 import torch
 
 from . import quant_act
-from .artifact import PackedWeight
+from .artifact import ArtifactError, PackedWeight, uniform_flags
 from .lib import Kernel, sf_buffer_size, sf_offset_formula
 from .select import KernelSet
 
@@ -54,8 +54,18 @@ class NativeLinear(torch.nn.Module):
         if pw.type_block is not None:
             if kernel.type_block is None:
                 raise ValueError(f'{name}: {kernel.cfg.name} cannot execute E0M3 tiles')
-            if pw.type_block[0] % kernel.type_block[0] or pw.type_block[1] % kernel.type_block[1]:
+            rows = getattr(kernel.cfg, 'map_tile_rows', None)
+            if pw.type_block[1] % kernel.type_block[1] or (rows is None and pw.type_block[0] % kernel.type_block[0]):
                 raise ValueError(f'{name}: map tile {pw.type_block} is not a union of kernel granules {kernel.type_block}')
+            if rows is not None and pw.type_block[0] % rows:
+                # kernel-opt A': this kernel's granule rows are not contiguous (a warp's two m-atoms, 64 rows apart), so
+                # only whole `rows`-row panels are unions of granules. A map declared finer (the 256x64 artifacts store
+                # 16x64 granules) runs if its tags are uniform over those panels -- verified here on the tags, a partial
+                # last panel over its real rows. Otherwise the kernel would apply one m-atom's format to the other.
+                try:
+                    uniform_flags(pw.scales, (rows, pw.type_block[1]))
+                except ArtifactError as e:
+                    raise ValueError(f'{name}: {kernel.cfg.name} needs tags uniform over {rows}-row panels: {e}') from None
         elif bool((pw.scales >> 7).any()):
             raise ValueError(f'{name}: E0M3 tags without a type block')
         self.name, self.kernel, self.act_kind = name, kernel, act_kind

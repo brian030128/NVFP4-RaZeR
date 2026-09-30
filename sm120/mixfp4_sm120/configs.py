@@ -26,6 +26,10 @@ class KernelConfig:
     # Per-site OMMA counts the patcher must report ({site: count}); None = record only.
     expected_census: dict | None = None
     description: str = ''
+    # Smallest contiguous row count that is a union of this kernel's weight granules, when the granule's rows are not
+    # contiguous (kernel-opt A': a warp's two m-atoms are 64 rows apart, so a 32-row granule tiles 128-row panels).
+    # A map is compatible only if its tile rows are a multiple of it. None = type_block[0] (contiguous granules).
+    map_tile_rows: int | None = None
 
     @property
     def d_colmajor(self):
@@ -155,6 +159,35 @@ CONFIGS = {c.name: c for c in [
         'n8k64_wB_xor', 'mixed', 1, (8, 64), dict(_B8X64, SM120_BIAS_ON_N=1, MIXFP4_ARM_XOR=15), _B8X64_GEN,
         expected_census={0: 512, 2: 512},
         description='Diagnostic: n8k64_wB with the dispatch arms permuted (all-E0M3 on the fall-through path).'),
+    # kernel-opt A': 256x64 maps on a 4-arm kernel. A 256x64 map gives both of a 4x2 warp's m-atoms (weight rows
+    # 16 w_m .. +15 and 64 + 16 w_m .. +15 of a 128-row panel) the same format, so the warp's two m-atoms can be one
+    # granule (MIXFP4_A_ATOMS_PER_GRANULE=2): 1 bit per k_block, 2 bits per k_tile, 4 joint arms instead of 16 (the
+    # 8x1 build's count). The granule's 32 rows are not contiguous, so a map must tile whole 128-row panels
+    # (map_tile_rows): 256x64 and coarser. Every output keeps its MMA sequence (bitwise equal to n16k64_wA on such maps).
+    KernelConfig(
+        'n16k64_wA_g32', 'mixed', 0, (32, 64),
+        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_A_ATOMS_PER_GRANULE=2), dict(_WT_AS_A_GEN, A_ATOMS=2),
+        expected_census={0: 128, 1: 128}, map_tile_rows=128,
+        description="A': n16k64_wA with a 2-m-atom (32-row, 128-row-panel) granule: 4 joint arms, for 256x64 maps."),
+    KernelConfig(
+        'n16k64_wA_g32_n64', 'mixed', 0, (32, 64),
+        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_A_ATOMS_PER_GRANULE=2, MIXFP4_TILE_N=64, MIXFP4_B_ATOMS_PER_GRANULE=4),
+        dict(_WT_AS_A_GEN, A_ATOMS=2, MMA_N=4, B_ATOMS=4),
+        expected_census={0: 64, 1: 64}, map_tile_rows=128,
+        description="A': n16k64_wA_g32 with a 128 x 64 CTA tile."),
+    KernelConfig(
+        'n16k64_wA_g32_n32', 'mixed', 0, (32, 64),
+        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_A_ATOMS_PER_GRANULE=2, MIXFP4_TILE_N=32, MIXFP4_B_ATOMS_PER_GRANULE=2),
+        dict(_WT_AS_A_GEN, A_ATOMS=2, MMA_N=2, B_ATOMS=2),
+        expected_census={0: 32, 1: 32}, map_tile_rows=128,
+        description="A': n16k64_wA_g32 with a 128 x 32 CTA tile."),
+    KernelConfig(
+        'n16k64_wA_g32_n16', 'mixed', 0, (32, 64),
+        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_A_ATOMS_PER_GRANULE=2, MIXFP4_TILE_N=16, MIXFP4_B_ATOMS_PER_GRANULE=1,
+             MIXFP4_LDSM_B=2),
+        dict(_WT_AS_A_GEN, A_ATOMS=2, MMA_N=1, B_ATOMS=1),
+        expected_census={0: 16, 1: 16}, map_tile_rows=128,
+        description="A': n16k64_wA_g32 with a 128 x 16 CTA tile."),
     KernelConfig(
         'n16k64_wA_nodisp', 'mixed', 0, None,
         dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_NO_DISPATCH=1, MIXFP4_PIPE_FLAGS=0), _WT_AS_A_GEN,

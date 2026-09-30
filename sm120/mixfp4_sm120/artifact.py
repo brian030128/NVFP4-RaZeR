@@ -22,6 +22,7 @@ Invariants checked on export AND on load (a violation raises):
   * tensor hashes and the safetensors file hash match the manifest.
 """
 import datetime
+import dataclasses
 import hashlib
 import json
 import subprocess
@@ -68,6 +69,38 @@ def tile_flags(scales, type_block):
         raise ArtifactError(f'{bad} tiles carry a mixed E0M3 tag inside one {type_block} granule; the kernel '
                             f'requires uniform tags (non-uniform tags below one MMA atom can hang the GPU)')
     return hi.bool()
+
+
+def uniform_flags(scales, type_block):
+    """tile_flags, except that a partial last row tile is allowed and checked over its real rows. kernel-opt A': a map
+    declared at a finer granule is re-verified at the coarser tile a kernel needs (the 256x64 artifacts store their
+    tags as 16x64 granules). Raises if any tile is not uniformly tagged."""
+    bm, bk = type_block
+    n, kb = scales.shape
+    per = bk // N.SCALE_BLOCK
+    if bk % N.SCALE_BLOCK or kb % per:
+        raise ArtifactError(f'scales {tuple(scales.shape)} not divisible along K into {type_block} tiles')
+    f = scales >> 7
+    full = n - n % bm
+    out = []
+    for part, rows in ((f[:full], bm), (f[full:], n - full)):
+        if part.shape[0]:
+            blk = part.reshape(-1, rows, kb // per, per)
+            lo, hi = blk.amin((1, 3)), blk.amax((1, 3))
+            if not torch.equal(lo, hi):
+                raise ArtifactError(f'{int((lo != hi).sum())} tiles carry a mixed E0M3 tag inside one {type_block} tile')
+            out.append(hi.bool())
+    return torch.cat(out)
+
+
+def retile(pw, type_block):
+    """The same PackedWeight declared at a coarser type block, after verifying (uniform_flags) that its tags are uniform
+    over it; e0m3_tiles is recounted at the new block."""
+    try:
+        flags = uniform_flags(pw.scales, type_block)
+    except ArtifactError as e:
+        raise ArtifactError(f'{pw.name}: {e}') from None
+    return dataclasses.replace(pw, type_block=tuple(type_block), e0m3_tiles=int(flags.sum()))
 
 
 @dataclass
@@ -220,8 +253,8 @@ def _compatible_configs(type_block):
     for c in CFG.CONFIGS.values():
         if type_block is None:
             out.append(c.name)                       # E2M1-only weights run on every build
-        elif c.type_block is not None and c.type_block[1] <= type_block[1] and type_block[0] % c.type_block[0] == 0 \
-                and type_block[1] % c.type_block[1] == 0:
+        elif c.type_block is not None and c.type_block[1] <= type_block[1] \
+                and type_block[0] % (c.map_tile_rows or c.type_block[0]) == 0 and type_block[1] % c.type_block[1] == 0:
             out.append(c.name)                       # the map's tiles are unions of the kernel's granules
     return out
 

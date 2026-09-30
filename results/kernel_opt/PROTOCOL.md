@@ -354,3 +354,126 @@ unchanged. It uses M2's checks (`ab_e2e.prefill_check`) and a build check per po
   records, all complete and passing the registered checks.
 - They are kept in `/home/dev/n16k64_campaign/kernel_opt/opt2/e2e` (`PARTIAL.md` there), marked partial, and are not
   used for conclusions.
+
+## Amendment 3 (A′): 256x64 maps on a 4-arm kernel with 32-row granules
+
+Written 2026-09-30, after #2's M2′ was stopped (deviation 1 to amendment 2b) and before any registered GPU run of
+A′. The hashes and time are in
+`registration_3.json`.
+- The coordinator (nvfp4-razer-c9) relayed the user's standing goal: bring the FlipQuant 16x64 GEMM family as close to
+  stock_wA latency as possible, at every T. A′ is its second step, after #2.
+- Optimization 1b's decode (M3) stays paused. The decisive-margin rule and the E0M3 amendment (i)–(iii) are not
+  adopted.
+- Everything of optimization 1 not named here applies unchanged.
+
+**Why.**
+- 256x64 maps run today on n16k64_wA, whose weight granule is one 16-row m-atom.
+  - That is 2 flag bits per k_block, 4 per k_tile, and a 16-arm tree.
+- A 4x2 warp of the 128-row CTA panel owns two m-atoms: weight rows 16w … 16w + 15 and 64 + 16w … 64 + 16w + 15.
+  - A 256x64 tile covers two whole panels, so a 256x64 map always gives both m-atoms the same format.
+- With the upstream parameter `MIXFP4_A_ATOMS_PER_GRANULE=2`, the two m-atoms become one granule that takes the first
+  atom's flag. That is 1 bit per k_block, 2 per k_tile, and 4 arms.
+  - Each arm executes the same MMA instructions, with the same operands and accumulation order, as the n16k64_wA arm it
+    replaces. So outputs are bitwise equal on every map that is uniform over 128-row panels.
+  - Per k_tile it reads half the flags, the tree is 2 compares deep instead of 4, and there are 4 arm bodies instead
+    of 16.
+  - #2 found the kernels issue-bound, with the dispatch's fixed cost not in the tree's compares. So fewer flag reads
+    are the plausible lever.
+
+**What changes.**
+- **No kernel source change.** `sm120/mixfp4_sm120/configs.py` gains the configurations below: the four widths of the
+  `mixed` family with the A granule set to 2 atoms (blob generator `A_ATOMS=2`).
+  | configuration | width | expected census (E2M1 / E0M3 OMMAs) |
+  |---|---|---|
+  | n16k64_wA_g32 | 128 | 128 / 128 |
+  | n16k64_wA_g32_n64 | 64 | 64 / 64 |
+  | n16k64_wA_g32_n32 | 32 | 32 / 32 |
+  | n16k64_wA_g32_n16 | 16 | 16 / 16 |
+- **`KernelConfig.map_tile_rows = 128`** for them. The granule's rows are not contiguous, so a map must be uniform over
+  whole 128-row panels.
+  - `NativeLinear` accepts a map declared at a finer tile (the 256x64 artifacts store their tags as 16x64 granules)
+    only after `artifact.uniform_flags` verifies that its tags are uniform over the panels, a partial last panel over
+    its real rows. Otherwise it raises.
+  - The artifact compatibility list uses the same rule.
+  - `artifact.retile` re-declares a PackedWeight at a coarser tile after the same verification.
+- **Routing:**
+  - `KernelSet('mixed256')` is a new family of the four builds.
+  - `model.install(kernel='auto_256')` selects it.
+  - It reads the `mixed` family's tile-table rows (`select.TABLE_FAMILY`), so every call runs at the same width as
+    today's path.
+  - `'auto'` is unchanged: the builds live in `build_A1`, and `sm120/build` is untouched.
+- **Builds:** `sm120/build.py --all` into `/home/dev/n16k64_campaign/kernel_opt/build_A1`, from the A′ sources.
+  - CPU only, with no GPU visible, before registration.
+  - Listed with their SASS hashes and source hashes in `registration_3.json`.
+- **Tests:** `sm120/tests/test_g32.py` (new) and `sm120/tests/test_select.py` (the `mixed256` family's maps).
+- **Gate scripts:**
+  - `check_bitwise.py --family g32`;
+  - `check_granule_map.py` (new);
+  - `check_sass.py --before-roots` (the kernel-opt build directories of earlier optimizations).
+- **Measurement scripts:** `bench_abA1_isolated.py`, `c2_g32.py`, `abA1_report.py`, `run_A1.sh`.
+
+**Gates** (`experiments/kernel_opt/run_A1.sh`, in this order; a failure stops A′ and is reported):
+- **G3″:** `build.py --selftest` for the four g32 builds into `build_A1`: PASS patched / FAIL unpatched.
+  - The upstream driver derives its granule map from the thread-to-row layout, so it tags the non-contiguous granules
+    correctly.
+- **G1″ / G2″ (`check_sass.py`):**
+  - G1″: every configuration other than the four g32 builds, as built in `build_A1`, has the patched and unpatched SASS
+    of its before build. The before build is searched in `sm120/build`, then kernel-opt's `build` (optimization 1b),
+    then `build_e0m3` (the XOR diagnostics), then `build_tmopt`.
+  - G2″: the four g32 builds have their expected census, with no predicated OMMA.
+- **G3″ pytest:** `test_gemm.py`, `test_select.py` and `test_g32.py`, all passing.
+  - `SM120_BUILD_DIR` = `build_A1`; n16k64_wA from `sm120/build` is the reference.
+- **G-span (`check_granule_map.py`):** the granule map, measured with the decode probe.
+  - n16k64_wA executes every 16-row block's own tag.
+  - Every g32 width executes blocks {8p + w, 8p + w + 4} for w < 4, taking the first block's tag.
+  - So every granule lies inside one 128-row panel and one 256-row tile, and every 256x64 tile is a union of granules.
+  - On a 48-row weight (Qwen3.8's partial panel), every real block executes its own tag.
+- **G4″ (`check_bitwise.py --family g32`):** 0 differences against n16k64_wA from `sm120/build`.
+  - Candidates: the four g32 builds and the `mixed256` set.
+  - Weights: the real modules of the four TC 256x64 artifacts (densest and lower-median per shape), plus synthetic
+    256x64 maps (all E2M1, all E0M3, random 30 %, random 30 % + bias).
+    - Each weight is re-declared at 256x64 by `retile`. That checks each artifact really is a 256x64 map.
+  - 15 token counts from 1 to 8192; the fused, reuse and unfused paths, and CUDA graphs.
+- **G5″ (`check_model_logits.py --unit 256x64`):** logits bitwise equal on all 4 models at 1x1, 1x16, 1x100, 1x2048
+  and 4x512.
+  - Before = set:mixed (`sm120/build`); after = set:mixed256 (`build_A1`).
+
+**Measurements:**
+- **M1″ (`bench_abA1_isolated.py`):** the deviation-2 method, all four models, every projection.
+  - Tokens 1, 4, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192 (M1′'s list).
+  - Configurations:
+    - stock_wA;
+    - the 256x64 maps on `mixed` from `sm120/build` (before);
+    - the same maps on `mixed256` from `build_A1` (after);
+    - typical and worst tags.
+  - Checks: after equals before bitwise on the timed operands, and the same width is chosen for every call.
+  - Reported as per-forward GEMM sums: after vs before with the per-round range, and 256x64 vs stock_wA before → after
+    at every T.
+- **C2″ (`c2_g32.py`):** 4096³.
+  - Configurations: stock_wA, nodisp, and n16k64_wA (`sm120/build`) and n16k64_wA_g32, each with all-E2M1 tags, the
+    real 256x64 map (Llama-3.1-8B layer-0 o_proj) and all-E0M3 tags.
+  - Modes: b2b, isolated and sustained.
+  - Check: bitwise equal.
+- No end-to-end run is part of this amendment. If M1″ shows a per-forward GEMM gain of ≥ 1 % at T ≥ 128, one is proposed.
+- **Adoption** is proposed to the coordinator, not automatic: route 256x64 artifacts to `mixed256` (`auto_256`) if
+  every gate passes and M1″ shows no per-forward regression beyond its per-round range at any T.
+
+**Before registration (disclosed, not results).**
+- The granule map was probed once, inline, on worktree builds of n16k64_wA_g32 and n16k64_wA_g32_n16. It was exactly
+  the map G-span requires.
+- The worktree builds were timed once (scratch `quick_g32.py`, 19:21–19:23 UTC). The method was isolated single
+  calls with CUPTI, 3 rotated rounds × 15, with WARM weights (no rotation or flush, unlike M1″'s cold weights). Every
+  output was bitwise equal to today's path.
+  - 4096³, 128-wide builds, g32 vs n16k64_wA: all-E2M1 −0.7 % (116.6 vs 117.4 µs), the real 256x64 map −1.9 %,
+    all-E0M3 −6.4 %. g32 runs all-E0M3 no slower than all-E2M1.
+  - Llama-3.1-8B shapes with the real 256x64 map, at the `mixed` table's widths:
+
+    | shape | T = 1 | T = 16 | T = 64 | T = 256 | T = 1024 |
+    |---|---|---|---|---|---|
+    | q_proj 4096x4096 | −12.8 % (16) | −12.4 % (16) | −6.9 % (32) | −6.8 % (64) | +0.6 % (128) |
+    | down_proj 4096x14336 | −13.7 % (16) | −14.1 % (16) | −7.6 % (32) | −7.1 % (64) | −0.8 % (64) |
+    | gate_proj 14336x4096 | −1.5 % (16) | −2.3 % (16) | −7.5 % (64) | −0.5 % (128) | −1.9 % (128) |
+
+    The width is in parentheses.
+  - With cold weights, small T is closer to memory-bound, so the registered M1″ may show less. These numbers are not
+    results.

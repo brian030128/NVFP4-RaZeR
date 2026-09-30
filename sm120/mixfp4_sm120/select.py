@@ -30,7 +30,12 @@ FAMILIES = {
     'stock': {16: 'stock_wA_n16', 32: 'stock_wA_n32', 64: 'stock_wA_n64', 128: 'stock_wA'},
     # weights on B (8x64 maps): the width is the CTA tile's M, i.e. again the tokens (kernel-opt)
     'mixed_wB': {16: 'n8k64_wB_m16', 32: 'n8k64_wB_m32', 64: 'n8k64_wB_m64', 128: 'n8k64_wB', '128x64': 'n8k64_wB_n64'},
+    # kernel-opt A': the 4-arm 32-row-granule builds for 256x64 (and coarser) maps
+    'mixed256': {16: 'n16k64_wA_g32_n16', 32: 'n16k64_wA_g32_n32', 64: 'n16k64_wA_g32_n64', 128: 'n16k64_wA_g32'},
 }
+# A family that takes another family's tile-table rows: 'mixed256' has the CTA tile of 'mixed' at every width, and uses
+# its widths so that the two differ only in the dispatch granule (kernel-opt A').
+TABLE_FAMILY = {'mixed256': 'mixed'}
 TABLE_DIR = Path(__file__).resolve().parents[1] / 'configs'
 BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
 
@@ -71,7 +76,8 @@ class KernelSet:
         self.kernels = {w: Kernel.load(n, build_root=build_root) for w, n in sorted(names.items(), key=lambda i: key_order(i[0]))}
         ref = self.kernels[max(w for w in self.kernels if isinstance(w, int))]
         for k in self.kernels.values():
-            if (k.weight_operand, k.type_block, k.d_colmajor) != (ref.weight_operand, ref.type_block, ref.d_colmajor):
+            if (k.weight_operand, k.type_block, k.d_colmajor, k.cfg.map_tile_rows) != \
+                    (ref.weight_operand, ref.type_block, ref.d_colmajor, ref.cfg.map_tile_rows):
                 raise ValueError(f'{k.cfg.name} is not interchangeable with {ref.cfg.name}')
             k.check_sf_formula([(128, 8, 256), (48, 3, 2560)])
         self.primary = ref
@@ -86,7 +92,7 @@ class KernelSet:
         if table is not None:
             data = json.loads(Path(table).read_text()) if not isinstance(table, dict) else table
             self.table = {tuple(int(v) for v in key.split('x')): {int(b): parse_key(w) for b, w in row.items()}
-                          for key, row in data.get(family, {}).items()}
+                          for key, row in data.get(TABLE_FAMILY.get(family, family), {}).items()}
             self.table_source = str(table) if not isinstance(table, dict) else 'dict'
         self.stats = {}
 
@@ -106,4 +112,5 @@ class KernelSet:
 
     def describe(self):
         return dict(family=self.family, kernels=self.sha256, table=self.table_source, table_shapes=len(self.table),
+                    table_family=TABLE_FAMILY.get(self.family, self.family),
                     calls_by_width=dict(sorted(self.stats.items(), key=lambda i: key_order(i[0]))))

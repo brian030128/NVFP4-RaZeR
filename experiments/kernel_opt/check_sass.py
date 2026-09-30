@@ -7,7 +7,8 @@
 Protocol: results/kernel_opt/PROTOCOL.md.
 - G1: every configuration of sm120/mixfp4_sm120/configs.py that is not new must exist in --after-root with the patched
   and unpatched SASS hashes (sass_sha256, unpatched_sass_sha256) of its before build: sm120/build if it has one, else
-  --tmopt-root (built by the same build.py from a git archive of tm-opt 74058af).
+  the first of --before-roots that has one (amendment 3: the kernel-opt build directories of earlier optimizations),
+  else --tmopt-root (built by the same build.py from a git archive of tm-opt 74058af).
 - G2: every new configuration's patched census equals its expected census, and it has no predicated OMMA.
 """
 import argparse
@@ -30,10 +31,12 @@ def main():
     ap.add_argument('--after-root', required=True)
     ap.add_argument('--tmopt-root', required=True)
     ap.add_argument('--new', required=True)
+    ap.add_argument('--before-roots', default='', help='comma-separated build directories searched after sm120/build')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     new = args.new.split(',')
-    res = dict(after_root=args.after_root, tmopt_root=args.tmopt_root, g1={}, g2={})
+    extra = [r for r in args.before_roots.split(',') if r]
+    res = dict(after_root=args.after_root, tmopt_root=args.tmopt_root, before_roots=extra, g1={}, g2={})
     ok = True
     for name in CFG.CONFIGS:
         after = manifest(args.after_root, name)
@@ -50,6 +53,9 @@ def main():
             ok &= passed
             continue
         before, source = manifest(REPO / 'sm120' / 'build', name), 'sm120/build'
+        for root in extra:
+            if before is None:
+                before, source = manifest(root, name), root
         if before is None:
             before, source = manifest(args.tmopt_root, name), 'tm-opt 74058af sources'
         row = dict(before_source=source, present=bool(after and before))

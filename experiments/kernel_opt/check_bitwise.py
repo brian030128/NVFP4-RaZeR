@@ -11,6 +11,11 @@ stops the optimization's adoption.
 --family wA (amendment 2): the same checks for the weights-on-A builds -- reference n16k64_wA from sm120/build, the real
   modules of each model's TC 16x64 and TC 256x64 artifacts (densest and lower-median per shape and unit), synthetic
   16x64 tags.
+--family g32 (amendment 3, A'): the 4-arm 32-row-granule builds on 256x64 maps -- reference n16k64_wA from sm120/build
+  (today's path for these maps), the real modules of each model's TC 256x64 artifact, synthetic maps drawn at 256x64
+  and stored as 16x64 granules as the artifacts are; every weight is re-declared at 256x64 (artifact.retile, which
+  verifies its tags are uniform there, a partial last row tile over its real rows) and the same PackedWeight is given
+  to the reference and the candidates.
 
 - Reference: n8k64_wB loaded from sm120/build, the build behind every paper result (library sha256 recorded).
 - Candidates: the builds of --build-root named by --candidates, each alone, and the width-selecting KernelSet --set
@@ -58,7 +63,8 @@ PATHS = ('fused', 'reuse', 'unfused')
 
 
 FAMILIES = dict(wB=dict(ref='n8k64_wB', units=('8x64',), tile=(8, 64)),
-                wA=dict(ref='n16k64_wA', units=('16x64', '256x64'), tile=(16, 64)))
+                wA=dict(ref='n16k64_wA', units=('16x64', '256x64'), tile=(16, 64)),
+                g32=dict(ref='n16k64_wA', units=('256x64',), tile=(16, 64), declare=(256, 64)))
 
 
 def read_module(art, meta, name):
@@ -94,18 +100,23 @@ def real_modules(model, unit='8x64', tile=(8, 64)):
     return out, meta['weights_sha256']
 
 
-def synthetic(shape, tile=(8, 64)):
+def synthetic(shape, tile=(8, 64), declare=None):
+    """declare (family g32): the maps are drawn at that tile, stored at `tile` granules and re-declared (retile)."""
     n, k = shape
     g = torch.Generator('cpu').manual_seed(n * 7 + k)
     w = (torch.randn(n, k, generator=g) * 0.02).cuda().bfloat16()
     bias = (torch.randn(n, generator=g) * 0.1).cuda().bfloat16()
-    nb = -(-n // tile[0])
+    rows = declare[0] if declare else tile[0]
+    nb = -(-n // rows)
     rnd = torch.rand(nb, k // 64, generator=g) < 0.3
     out = []
     for tag, mask, b in (('all E2M1', torch.zeros(nb, k // 64, dtype=torch.bool), None),
                          ('all E0M3', torch.ones(nb, k // 64, dtype=torch.bool), None),
                          ('random 30 %', rnd, None), ('random 30 % + bias', rnd, bias)):
-        out.append((f'synthetic {n}x{k} {tag}', A.pack_module('synthetic', w, b, 'map', mask, tile)))
+        if declare:
+            mask = mask.repeat_interleave(rows // tile[0], 0)[:n // tile[0]]
+        pw = A.pack_module('synthetic', w, b, 'map', mask, tile)
+        out.append((f'synthetic {n}x{k} {tag}', A.retile(pw, declare) if declare else pw))
     return out
 
 
@@ -170,7 +181,11 @@ def main():
     if args.set:
         cands[f'set:{args.set}'] = KernelSet(args.set, build_root=args.build_root)
     for c in cands.values():
-        assert (c.weight_operand, c.type_block) == (ref.weight_operand, ref.type_block), c.cfg.name
+        if fam.get('declare'):
+            rows = c.cfg.map_tile_rows or c.type_block[0]
+            assert c.weight_operand == ref.weight_operand and fam['declare'][0] % rows == 0, c.cfg.name
+        else:
+            assert (c.weight_operand, c.type_block) == (ref.weight_operand, ref.type_block), c.cfg.name
     tokens = [int(v) for v in args.tokens.split(',')]
     res = dict(status='running', started_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
                gpu=B.gpu_info(), family=args.family, reference=dict(name=fam['ref'], library=str(ref.path), sha256=ref.sha256),
@@ -183,13 +198,16 @@ def main():
             real, wsha = real_modules(model, unit, fam['tile'])
             res['artifacts'][f'{model} {unit}'] = dict(path=str(ARTIFACTS / f'{model}_tc_{unit}'), weights_sha256=wsha)
             for label, pw in real:
+                if fam.get('declare'):
+                    pw = A.retile(pw, fam['declare'])
                 work.append((label, pw, True))
                 if pw.shape not in seen:
                     seen.add(pw.shape)
-                    work += [(lab, p, False) for lab, p in synthetic(pw.shape, fam['tile'])]
+                    work += [(lab, p, False) for lab, p in synthetic(pw.shape, fam['tile'], fam.get('declare'))]
     for label, pw, is_real in work:
         n, k = pw.shape
-        res['weights'].append(dict(label=label, shape=[n, k], e0m3_tiles=pw.e0m3_tiles, bias=pw.bias is not None))
+        res['weights'].append(dict(label=label, shape=[n, k], e0m3_tiles=pw.e0m3_tiles, bias=pw.bias is not None,
+                                   type_block=list(pw.type_block)))
         rlin = NativeLinear(pw, ref, ACT, 'ref')
         clins = {c: NativeLinear(pw, kern, ACT, c) for c, kern in cands.items()}
         for t in tokens:
