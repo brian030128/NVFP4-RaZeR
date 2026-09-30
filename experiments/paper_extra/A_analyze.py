@@ -4,22 +4,24 @@ A_table_<model>_<corpus>.tex, A.json} from the A_formats.py records. CPU, second
 
     PAPER_PYTHON experiments/paper_extra/A_analyze.py [--models llama8b] [--out A_OUT] [--dest results/paper_extra/A]
 
-Names in every output: "IF4 (Cook et al.)", "MixFP4 (Zou et al.)", "MixFP4 (Zou et al.) + FourOverSix" (the user's
-variant), "FlipQuant (ours)" (code path TM-OPT+TC); never a bare "MixFP4". Every comparison is a paired ΔNLL (nats per token = Δ log PPL)
+Names in every output: "IF4 (Cook et al.)", "MixFP4 (Zou et al.)", "MixFP4 (Zou et al.) + FourOverSix" and "IF4 (Cook
+et al.) + FourOverSix" (the user's variants, "(our variant)" in the LaTeX), "FlipQuant (ours)" (code path TM-OPT+TC);
+never a bare "MixFP4". Every comparison is a paired ΔNLL (nats per token = Δ log PPL)
 over the same windows (token hashes compared), on WikiText-2 and C4: 1 SE in the CSVs, ± 2 SE in the markdown;
 negative = the first policy has the lower NLL.
-PRIMARY (results/paper_extra/A/PROTOCOL.md, fixed before the runs), for R in the three rules:
+PRIMARY (results/paper_extra/A/PROTOCOL.md, fixed before the runs; amendment 2 adds the rule if4fo6), for R in the rules:
   (a) degradation R@g − R@1x16, g in {8x64, 16x64, 256x64};
   (b) gain over the rule's own base R@g − base(R), every g: base = the rule's own E2M1 candidate everywhere (NVFP4
-      weights) with FourOverSix activations, e2m1 for IF4 and e2m1z for Zou; FourOverSix for Zou + FO6;
+      weights) with FourOverSix activations, e2m1 for IF4 and e2m1z for Zou; FourOverSix for Zou + FO6 and IF4 + FO6;
   (c) ours vs the rule, tc@g − R@g;
   (d) retention: gain_g = NLL(FourOverSix) − NLL(R@g) and retained = gain_g / gain_1x16, with a 95 % paired bootstrap
       interval over windows (10,000 resamples, seed 0); no fraction when R@1x16 is not better than FourOverSix by 2 SE.
+CONTRAST (amendment 2): IF4 + FO6 − Zou + FO6 at every g, the two uniform candidates on the same FourOverSix base.
 MECHANISM: the within-tile mixing of each rule's 1x16 choices at 8x64 / 16x64 / 256x64 (tiles whose blocks disagree;
 the mean minority share inside those), per projection and overall; the uniform-format share per projection.
 WEIGHT ERROR: the installed weights' total squared error, relative to FourOverSix and to NVFP4, next to ΔNLL.
 SECONDARY: every policy against FourOverSix and against NVFP4 (the paper row, NVFP4 activations).
-PAPER TABLES: LaTeX, per model and corpus: the three rules and ours at 1x16 / 8x64 / 16x64 / 256x64, with the reference
+PAPER TABLES: LaTeX, per model and corpus: the four rules and ours at 1x16 / 8x64 / 16x64 / 256x64, with the reference
 line (NVFP4, NVFP4 weights + FourOverSix act., FourOverSix, BF16), all from the same fake (c) path.
 """
 import argparse
@@ -38,12 +40,13 @@ PARTS23 = Path('/home/dev/n16k64_campaign/deploy_eval/runs')
 PARTS23_LABEL = {'bf16': 'BF16', 'nvfp4': 'NVFP4-fake', 'fo6': 'FourOverSix-fake', 'tc-8x64': 'tc-8x64-fake',
                  'tc-16x64': 'tc-16x64-fake', 'tc-256x64': 'tc-256x64-fake'}
 PROJ = ('q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj')
-RULES = ('if4', 'zou', 'zoufo6')
+RULES = ('if4', 'zou', 'zoufo6', 'if4fo6')
 RULE_NAME = {'if4': 'IF4 (Cook et al.)', 'zou': 'MixFP4 (Zou et al.)', 'zoufo6': 'MixFP4 (Zou et al.) + FourOverSix',
+             'if4fo6': 'IF4 (Cook et al.) + FourOverSix',
              'tc': 'FlipQuant (ours)'}
 REF_NAME = {'bf16': 'BF16', 'nvfp4': 'NVFP4', 'fo6': 'FourOverSix', 'e2m1': 'NVFP4 weights + FourOverSix act.',
             'e2m1z': 'NVFP4 weights (MixFP4 (Zou et al.) E2M1) + FourOverSix act.'}
-BASE = dict(if4='e2m1', zou='e2m1z', zoufo6='fo6')
+BASE = dict(if4='e2m1', zou='e2m1z', zoufo6='fo6', if4fo6='fo6')
 COARSE = ('8x64', '16x64', '256x64')
 CORPORA = (('wiki', 'WikiText-2'), ('c4', 'C4'))
 BOOT = 10000
@@ -157,8 +160,8 @@ def main():
                 md.append(f'| {RULE_NAME[R]} | {g} | {pm(r, "wiki")} | {pm(r, "c4")} |')
         md += ['\n### Primary (b): gain over the rule\'s own base, R@g − base\n',
                'Base: each rule\'s own E2M1 candidate everywhere with FourOverSix activations (e2m1 for IF4, e2m1z for MixFP4 '
-               '(Zou et al.): NVFP4 weights); FourOverSix for MixFP4 (Zou et al.) + FourOverSix. The same FourOverSix '
-               'activations everywhere.\n',
+               '(Zou et al.): NVFP4 weights); FourOverSix for MixFP4 (Zou et al.) + FourOverSix and IF4 (Cook et al.) + '
+               'FourOverSix. The same FourOverSix activations everywhere.\n',
                '| rule | base | g | WikiText-2 | C4 |', '|---|---|---|---:|---:|']
         for R in RULES:
             for g in UNITS:
@@ -170,6 +173,12 @@ def main():
             for g in COARSE:
                 r = comp('ours_minus_rule', R, g, f'tc-{g}', f'{R}-{g}')
                 md.append(f'| {RULE_NAME[R]} | {g} | {pm(r, "wiki")} | {pm(r, "c4")} |')
+        md += ['\n### Contrast (amendment 2): IF4 (Cook et al.) + FourOverSix − MixFP4 (Zou et al.) + FourOverSix, at the same g\n',
+               'The two uniform candidates (IF4\'s INT4 with the shared max/6 scale; Zou\'s E1M2 with its own max/7 scale) on the '
+               'same FourOverSix E2M1 base, each with its own tie rule.\n', '| g | WikiText-2 | C4 |', '|---|---:|---:|']
+        for g in UNITS:
+            r = comp('if4fo6_minus_zoufo6', 'if4fo6', g, f'if4fo6-{g}', f'zoufo6-{g}')
+            md.append(f'| {g} | {pm(r, "wiki")} | {pm(r, "c4")} |')
         md.append('\n`*` = |Δ| > 2 SE.\n')
         # (d) retention of the 1x16 gain over FourOverSix
         md += ['### Primary (d): how much of the 1x16 gain over FourOverSix survives at the tile\n',
@@ -286,6 +295,7 @@ def main():
             rows = [f"IF4 (Cook et al.) & {' & '.join(cell(f'if4-{g}') for g in UNITS)} \\\\",
                     f"MixFP4 (Zou et al.) & {' & '.join(cell(f'zou-{g}') for g in UNITS)} \\\\",
                     f"MixFP4 (Zou et al.) + FourOverSix (our variant) & {' & '.join(cell(f'zoufo6-{g}') for g in UNITS)} \\\\",
+                    f"IF4 (Cook et al.) + FourOverSix (our variant) & {' & '.join(cell(f'if4fo6-{g}') for g in UNITS)} \\\\",
                     f"FlipQuant (ours) & -- & {' & '.join(cell(f'tc-{g}') for g in COARSE)} \\\\"]
             refs = ', '.join(f'{REF_NAME[p]} {cell(p)}' for p in ('nvfp4', 'e2m1', 'fo6', 'bf16'))
             tex = ('% ' + f'{P.TITLES[model]}, {title} perplexity, fake (c) simulator (results/paper_extra/A). FlipQuant (ours) here '
@@ -322,7 +332,17 @@ def main():
                  f"{s['elements']} elements differ.\n"
                  f"- MixFP4 (Zou et al.)'s E1M2 candidate against the repo's E0M3 alpha = 1 candidate: "
                  f"{s['zou_e1m2_vs_repo_e0m3_elements_differing']} elements differ.\n"
-                 f"- The tile rule at 1x16 equals the per-block rule, every rule and module: {s['tile_1x16_equals_block_all']}.\n\n")
+                 f"- The tile rule at 1x16 equals the per-block rule, every rule and module: {s['tile_1x16_equals_block_all']}.\n")
+        chk = read(args.dest / 'if4fo6_check.json') or (json.loads((args.dest / 'if4fo6_check.json').read_text())
+                                                          if (args.dest / 'if4fo6_check.json').exists() else None)
+        if chk:
+            mods = chk['modules'].values()
+            a1_md += (f"- IF4 (Cook et al.) + FourOverSix (amendment 2; if4fo6_check.json, {len(chk['modules'])} modules): FP "
+                      f"candidate equals MixFP4 (Zou et al.) + FourOverSix's bitwise: {all(m['fp_equals_zoufo6_fp'] for m in mods)}; "
+                      f"INT4 candidate equals IF4's as installed: {all(m['int_equals_if4_int_installed'] for m in mods)}; ties "
+                      f"keep FP: {all(m['choice_is_strictly_lower'] for m in mods)}; the existing rules' outputs unchanged: "
+                      f"{sum(chk['unchanged'].values())} of {len(chk['unchanged'])}.\n")
+        a1_md += '\n'
     (args.dest / 'A.md').write_text(
         '# Experiment A: IF4 (Cook et al.) and MixFP4 (Zou et al.) per-block selection, coarsened to hardware tiles\n\n'
         'One fake (c) simulator for every row: the listed weights with FourOverSix per-token activations (NVFP4 activations '

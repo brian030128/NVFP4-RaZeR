@@ -157,3 +157,48 @@ PPL): ± 2 SE in `A.md`, 1 SE in the CSVs. Negative means the first policy is be
    - **Not a deviation, for the record:** the 3-policy smoke test before registration found a variable-shadowing bug
      in `run_ppl_deploy.py`'s mixing aggregation (`tile` rebound inside the loop). It was fixed before registration;
      the registered hash includes the fix.
+
+2. **2026-09-30, amendment before any of its GPU runs: a new arm, IF4 (Cook et al.) + FourOverSix (our variant),
+   rule `if4fo6`,** for Llama-3.1-8B, Mistral-7B-v0.3 and Phi-4 at 1x16, 8x64, 16x64 and 256x64: 12 fake (c)
+   policies. Requested by the user and relayed by nvfp4-razer-c9. Registered in `registration_if4fo6.json`.
+   - **Our variant, not Cook et al.'s.** The user notes that Cook et al. position IF4 as an alternative to FourOverSix,
+     not a combination; their code offers IF4 and FourOverSix as separate quantization schemes. The arm mirrors
+     MixFP4 (Zou et al.) + FourOverSix.
+   - **Definition** (`quantize/adaptive_formats.py`, rule `if4fo6`):
+     - **FP candidate:** the repo's FourOverSix per 16-block (`quant_nvfp4_4over6`: the max/6 or max/4 scale by
+       squared error). It is the same candidate as zoufo6's and the E2M1 base of our maps.
+     - **Uniform candidate:** IF4's INT4, exactly as implemented and verified against the official reference in A1.
+       The shared scale Δ = e4m3(max|x| / 6) relative to α = amax / (6·448); round(clamp(x / Δ · 1.16666666, −7, 7)),
+       half to even; dequantized × Δ · 0.8571428571.
+     - **Selection:** the lower squared error per block at 1x16, the tile sum at the coarse granularities. Ties keep
+       the FP candidate (IF4's rule).
+     - **Errors:** taken on the weights as installed (BF16), as for zoufo6.
+     - **Activations:** FourOverSix per token, as in every A arm.
+   - **Registered checks** (`check_if4fo6.py`, CPU, before the GPU runs; a failure stops them). On the 11 A1 modules:
+     - the FP candidate equals zoufo6's bitwise;
+     - the INT4 candidate equals IF4's as installed bitwise;
+     - INT4 is chosen exactly where its error is strictly lower;
+     - the tile rule at 1x16 equals the per-block rule.
+     On 3 modules, every existing rule's installed weights at 1x16 and 16x64 equal those of the registered code
+     (c923f32).
+   - **During the runs:** the window hashes must equal the existing policies' (A_analyze asserts this).
+   - **The existing references and arms are not re-run:** they are deterministic, and their records stand.
+   - **Primary comparisons:** the same four as for the other rules.
+     - (a) R@g − R@1x16;
+     - (b) R@g − FourOverSix, its own base;
+     - (c) FlipQuant (ours) − R@g;
+     - (d) retention of the 1x16 gain over FourOverSix, with bootstrap intervals.
+     - **Added:** the contrast IF4 + FO6 − Zou + FO6 at every g. It compares the two uniform candidates on the same
+       FourOverSix base, each with its own tie rule.
+   - **Mechanism and records:** within-tile mixing, the uniform share per projection, and the weight reconstruction
+     error, as for the other rules.
+   - **Outputs:**
+     - A.csv, A_primary.csv, A_retention.csv and A_mixing.csv are extended;
+     - every A_table_<model>_<corpus>.tex gains the row "IF4 (Cook et al.) + FourOverSix (our variant)";
+     - A.md and SUMMARY.md are updated, and so is the A section of `results/paper_extra/SUMMARY_ACD_zh.md`.
+   - **Changed files:**
+     - `quantize/adaptive_formats.py`: the rule, and IF4's tie rule extended to it;
+     - `experiments/paper_extra/A_formats.py`: the 4 policies per model;
+     - `experiments/paper_extra/A_analyze.py`: the rule, its base, the contrast, the LaTeX row, and the check's line in
+       A.md. Without the new records its CSVs are byte-identical, and the LaTeX tables only gain the row, as "--".
+     - The new `check_if4fo6.py`. Hashes are in `registration_if4fo6.json`.

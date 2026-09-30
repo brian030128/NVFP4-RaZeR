@@ -23,6 +23,11 @@ base): the E2M1 candidate is the repo's FourOverSix (quant_nvfp4_4over6: per blo
 has the lower squared error; the E2M1 base of the TM-OPT+TC maps); the uniform candidate is Zou's E1M2 path above; per
 block (or tile) the lower squared error, ties to the uniform format as in Zou. quant_nvfp4_4over6 returns BF16, so
 both candidates' errors are taken on the weights as installed (BF16), in the original units.
+IF4 rule + FourOverSix E2M1 (rule if4fo6; a user-requested arm, results/paper_extra/A/PROTOCOL.md amendment 2): our
+variant, not Cook et al.'s (their code offers IF4 and FourOverSix as separate schemes). The FP candidate is the repo's
+FourOverSix, as in zoufo6; the uniform candidate is IF4's INT4 above (the shared scale e4m3(bmax / 6), the 7/6 and 6/7
+constants); per block (or tile) the lower squared error, ties keep the FP candidate as in IF4. Both candidates' errors
+are taken on the weights as installed (BF16), as in zoufo6.
 E2M1 bases (never the uniform format), each rule's own base for experiment A's gain comparison: rule e2m1 is IF4's FP
 candidate everywhere (E2M1 at scale e4m3(bmax / 6), i.e. NVFP4 weights, round to nearest even); rule e2m1zou is Zou's
 E2M1 candidate everywhere. They differ only in the operation order of the scale and dequantization (0.33 % of BF16
@@ -35,7 +40,7 @@ import torch
 
 IF4_INT_EXPANSION = 0.8571428571       # 6 / 7, as fouroversix kernels/constants.py
 IF4_INT_EXPANSION_RCP = 1.16666666     # 7 / 6
-RULES = ('if4', 'zou', 'zoufo6', 'e2m1', 'e2m1zou')
+RULES = ('if4', 'zou', 'zoufo6', 'e2m1', 'e2m1zou', 'if4fo6')
 
 
 def e2m1_rne(x):
@@ -100,6 +105,14 @@ def candidates(w, rule):
         e_fp = ((d_fp - x) ** 2).sum(dim=-1)
         e_int = ((d_int - x) ** 2).sum(dim=-1)
         zero = zero_zou
+    elif rule == 'if4fo6':
+        from quantize.quantizer import quant_nvfp4_4over6
+        d_fp = quant_nvfp4_4over6(w, 4, 16).float().reshape(-1, 16)
+        _, d_if4, _, _, zero_if4 = candidates(w, 'if4')
+        d_int = d_if4.to(w.dtype).float().reshape(-1, 16)          # both candidates as installed
+        e_fp = ((d_fp - x) ** 2).sum(dim=-1)
+        e_int = ((d_int - x) ** 2).sum(dim=-1)
+        zero = zero_if4
     else:
         raise ValueError(rule)
     return (d_fp.reshape(rows, cols), d_int.reshape(rows, cols), e_fp.reshape(rows, cols // 16),
@@ -109,7 +122,7 @@ def candidates(w, rule):
 def select(e_fp, e_int, rule, tile=None):
     """Blocks [rows, cols / 16] that take the uniform (INT4 / E1M2) candidate: per block (tile None or (1, 16)), or
     elected per tile (rows_t, cols_t) from the summed squared errors; ties follow the original rule."""
-    uniform_wins = (lambda a, b: a < b) if rule == 'if4' else (lambda a, b: a <= b)   # a = uniform error, b = FP
+    uniform_wins = (lambda a, b: a < b) if rule in ('if4', 'if4fo6') else (lambda a, b: a <= b)   # a = uniform, b = FP
     if tile is None or tuple(tile) == (1, 16):
         return uniform_wins(e_int, e_fp)
     tr, tc = tile

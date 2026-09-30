@@ -14,6 +14,9 @@ per (model, policy)), WikiText-2 and C4 on the released protocol windows:
                            weights only; FourOverSix per-token activations (convention (c)), like every paper number
   zoufo6-<unit>            the user-requested arm: Zou's rule with FourOverSix E2M1 as the E2M1 candidate (the base of
                            our maps); OURS vs zoufo6 isolates the selection method, zoufo6 vs zou the FourOverSix part
+  if4fo6-<unit>            amendment 2 (the user): IF4's rule with FourOverSix as the FP candidate and IF4's INT4 as the
+                           uniform one (our variant; ties keep FP); if4fo6 vs zoufo6 contrasts the two uniform candidates
+                           on the same FourOverSix base
 Outputs: <A_OUT>/ppl/<model>/<policy>/report.json (A_OUT: PAPER_EXTRA_OUT/A, default
 /home/dev/n16k64_campaign/paper_extra/A); commands in <A_OUT>/commands.log, logs in <A_OUT>/logs.
 """
@@ -27,7 +30,7 @@ import paper_common as P  # noqa: E402
 OUT = Path(os.environ.get('PAPER_EXTRA_OUT', '/home/dev/n16k64_campaign/paper_extra')) / 'A'
 UNITS = ('1x16', '8x64', '16x64', '256x64')
 POLICIES = (['bf16', 'nvfp4', 'fo6', 'e2m1', 'e2m1z'] + [f'tc-{u}' for u in P.UNITS] +
-            [f'{r}-{u}' for r in ('if4', 'zou', 'zoufo6') for u in UNITS])
+            [f'{r}-{u}' for r in ('if4', 'zou', 'zoufo6', 'if4fo6') for u in UNITS])
 
 
 def spec(model, pol):
