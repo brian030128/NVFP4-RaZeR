@@ -18,6 +18,12 @@
 **執行資訊**
 - Commit：`ef74a1a`、`67d115c`。Protocol：`c923f32`。
 - 共 60 個 policy（3 個模型 × 20 個 policy），全部走同一個 fake (c) 模擬器。
+- **追加（amendment 2，登錄 `9883703`）：** 新增「IF4 (Cook et al.) + FourOverSix（我們的變體）」。
+  - 3 個模型 × 4 種粒度，共 12 個 policy，全部成功。
+  - FP 候選是 FourOverSix，INT4 候選是 IF4 的 INT4，平手時保留 FP。
+  - Cook et al. 把 IF4 和 FourOverSix 當作兩個各自獨立的方案，所以這個組合是我們的變體。
+  - CPU 檢查通過：候選和 Zou + FourOverSix 的 FP、IF4 的 INT4 逐位元相同；既有規則的輸出 30/30 不變。
+  - 其他 arm 和 reference 沒有重跑，window 完全相同。
 - 選擇規則只作用在權重上；activation 一律使用 per-token 的 FourOverSix。
 
 **檢查**
@@ -37,14 +43,17 @@
 | Llama-3.1-8B | IF4 (Cook et al.) | 6.84 | 6.93 | 6.92 | 6.93 |
 | | MixFP4 (Zou et al.) | 6.83 | 6.93 | 6.91 | 6.91 |
 | | MixFP4 (Zou et al.) + FourOverSix | 6.83 | 6.87 | 6.90 | 6.89 |
+| | IF4 (Cook et al.) + FourOverSix | 6.83 | 6.89 | 6.92 | 6.89 |
 | | **FlipQuant (ours)** | -- | **6.78** | **6.78** | **6.80** |
 | Mistral-7B-v0.3 | IF4 | 5.51 | 5.52 | 5.53 | 5.53 |
 | | MixFP4 (Zou) | 5.51 | 5.53 | 5.54 | 5.53 |
 | | MixFP4 (Zou) + FourOverSix | 5.50 | 5.51 | 5.52 | 5.52 |
+| | IF4 + FourOverSix | 5.50 | 5.53 | 5.52 | 5.52 |
 | | **FlipQuant (ours)** | -- | **5.49** | **5.49** | **5.49** |
 | Phi-4 | IF4 | 6.65 | 6.67 | 6.67 | 6.67 |
 | | MixFP4 (Zou) | 6.66 | 6.69 | 6.68 | 6.69 |
 | | MixFP4 (Zou) + FourOverSix | 6.65 | 6.68 | 6.68 | 6.68 |
+| | IF4 + FourOverSix | 6.64 | 6.66 | 6.67 | 6.67 |
 | | **FlipQuant (ours)** | -- | **6.61** | **6.61** | **6.63** |
 
 **C4**
@@ -54,14 +63,17 @@
 | Llama-3.1-8B | IF4 | 9.77 | 9.88 | 9.91 | 9.90 |
 | | MixFP4 (Zou) | 9.77 | 9.89 | 9.89 | 9.88 |
 | | MixFP4 (Zou) + FourOverSix | 9.76 | 9.84 | 9.85 | 9.83 |
+| | IF4 + FourOverSix | 9.76 | 9.85 | 9.86 | 9.83 |
 | | **FlipQuant (ours)** | -- | **9.68** | **9.68** | **9.73** |
 | Mistral-7B-v0.3 | IF4 | 8.05 | 8.07 | 8.07 | 8.08 |
 | | MixFP4 (Zou) | 8.05 | 8.07 | 8.08 | 8.08 |
 | | MixFP4 (Zou) + FourOverSix | 8.05 | 8.06 | 8.06 | 8.07 |
+| | IF4 + FourOverSix | 8.06 | 8.06 | 8.07 | 8.06 |
 | | **FlipQuant (ours)** | -- | **8.02** | **8.02** | **8.03** |
 | Phi-4 | IF4 | 10.52 | 10.56 | 10.56 | 10.56 |
 | | MixFP4 (Zou) | 10.52 | 10.56 | 10.56 | 10.56 |
 | | MixFP4 (Zou) + FourOverSix | 10.52 | 10.54 | 10.54 | 10.55 |
+| | IF4 + FourOverSix | 10.52 | 10.54 | 10.54 | 10.55 |
 | | **FlipQuant (ours)** | -- | **10.50** | **10.51** | **10.52** |
 
 **Reference**（同一個模擬器，WikiText-2 / C4）
@@ -85,13 +97,21 @@ LaTeX：`results/paper_extra/A/A_table_{llama8b,mistral7b,phi4}_{wiki,c4}.tex`�
 | **(b-2) 粗 tile − 自己的基底** | 0/18 較好，10/18 顯著變差 | 6/18 顯著較好（全部在 WikiText），0 變差 | 0/18 較好，3/18 顯著變差 |
 | **(c) FlipQuant − 各規則（同 tile）** | **18/18 顯著較好**（−0.0110 到 −0.0234） | **18/18 顯著較好**（−0.0043 到 −0.0085） | **18/18 顯著較好**（−0.0033 到 −0.0114） |
 | (c′) FlipQuant − MixFP4 (Zou) + FourOverSix（兩者只差在選法） | −0.0110 到 −0.0179 | −0.0043 到 −0.0067 | −0.0033 到 −0.0099 |
+| **IF4 + FourOverSix（amendment 2）** | | | |
+| (a) 粗 tile − 1x16 | 6/6 顯著變差（+0.0070 到 +0.0127） | 4/6 顯著變差（+0.0006 到 +0.0054；C4 的 8x64、256x64 不顯著） | 6/6 顯著變差（+0.0015 到 +0.0050） |
+| (b-1) 1x16 − FourOverSix | 2/2 顯著較好（−0.0071 / −0.0055） | 2/2 顯著較好（−0.0039 / −0.0015） | 2/2 顯著較好（−0.0036 / −0.0026） |
+| (b-2) 粗 tile − FourOverSix | 0/6 較好，3/6 顯著變差 | 0/6 較好，1/6 顯著變差 | 1/6 顯著較好（8x64 的 C4，−0.0011），0 變差 |
+| (c) FlipQuant − IF4 + FourOverSix（同 tile） | **6/6 顯著較好**（−0.0105 到 −0.0199） | **6/6 顯著較好**（−0.0038 到 −0.0074） | **6/6 顯著較好**（−0.0032 到 −0.0091） |
+| (e) IF4 + FourOverSix − Zou + FourOverSix（同樣的 FourOverSix 基底，只差在均勻候選） | 1x16：−0.0001 / +0.0001；8x64、16x64 的 WikiText +0.0033、+0.0028（顯著） | 1x16：−0.0006 / +0.0009；WikiText 8x64 +0.0032、16x64 +0.0012、256x64 −0.0010（顯著） | 1x16：−0.0017 / −0.0001；8x64 的 WikiText −0.0017（顯著） |
+
+(e) 的差異小，而且正負不一，C4 上都在 ±0.0009 以內。兩種均勻候選其實是同一組 ±7 整數格點，只差在 scale 的 E4M3 捨入在哪一步：先取 max/6 再乘 6/7，或直接取 max/7。
 
 (b) 各規則的基底：
 - IF4：`e2m1`，也就是 IF4 的 FP 候選。
 - MixFP4 (Zou)：`e2m1z`，也就是 Zou 的 E2M1 候選。
-- Zou + FourOverSix：FourOverSix。
+- Zou + FourOverSix、IF4 + FourOverSix：FourOverSix。
 
-三個基底的 activation 都用 FourOverSix。
+所有基底的 activation 都用 FourOverSix。
 
 **(d) 1x16 相對 FourOverSix 的增益，粗化後還保留多少**
 - 18 個 (模型, 規則, 資料集) 組合中，有 17 個的 1x16 增益是顯著的。例外是 Zou 在 Phi-4 WikiText，這組不計算比例。
@@ -100,6 +120,10 @@ LaTeX：`results/paper_extra/A/A_table_{llama8b,mistral7b,phi4}_{wiki,c4}.tex`�
   - Zou：−188% 到 −43%。
   - Zou + FourOverSix：−150% 到 +49%。
 - 唯一顯著大於 0 的是 Zou + FourOverSix 在 Mistral WikiText 的 8x64：49%（95% 區間 [23, 79]）。
+- **IF4 + FourOverSix（amendment 2）：**
+  - 1x16 的增益在 6 組中都顯著。
+  - 18 個保留比例中有 13 個是負的。
+  - 唯一顯著大於 0 的是 Phi-4 C4 的 8x64：41%（[3, 74]）。
 
 ### A-3. 機制
 
@@ -110,10 +134,14 @@ LaTeX：`results/paper_extra/A/A_table_{llama8b,mistral7b,phi4}_{wiki,c4}.tex`�
 **加總誤差後，結果等於多數決。**
 - IF4 和 Zou 有 62–63% 的 block 偏好均勻格式。粗化後，均勻格式的占比變成：8x64 為 91–94.5%，16x64 為 96–98.4%，256x64 為 99.1–99.7%。
 - Zou + FourOverSix 在 1x16 是 53–54%。到 256x64 時，Llama 降到 41%，Mistral 降到 36%，Phi-4 反而升到 69%。
+- IF4 + FourOverSix 和 Zou + FourOverSix 相同：
+  - ≥ 99.999% 的 tile 是混合的，少數格式占 42.2–46.5%。
+  - 均勻格式在 1x16 是 53–54%。到 256x64 時，Llama 為 41%，Mistral 為 36%，Phi-4 為 67%。
 - FlipQuant 的 E0M3 占比：8x64 為 1.6–2.5%，16x64 為 2.2–3.3%，256x64 為 6.4–10.0%。
 
 **權重誤差預測不了 loss。**
 - Zou + FourOverSix 在 8x64 的權重平方誤差比 FourOverSix 少 3.7–4.4%，但 ΔNLL 落在 −0.0016 到 +0.0029：6 組中只有 1 組顯著較好，2 組顯著變差。
+- IF4 + FourOverSix 在 8x64 的權重誤差也比 FourOverSix 少 3.7–4.4%，同樣沒有換來顯著的增益，只有 Phi-4 的 C4 是例外。
 - FlipQuant 在 8x64 的權重誤差和 FourOverSix 幾乎一樣（−0.0% 到 +0.1%），卻全部顯著較好：
   - Llama：−0.0141 / −0.0141
   - Mistral：−0.0059 / −0.0058
@@ -123,6 +151,7 @@ LaTeX：`results/paper_extra/A/A_table_{llama8b,mistral7b,phi4}_{wiki,c4}.tex`�
 
 - FlipQuant 在 8x64 和 16x64 也顯著贏過各規則在 1x16 的結果（1x16 需要新硬體），三個模型、兩個資料集都成立。
 - 256x64 也成立，只有 Phi-4 的 C4 不顯著。
+- 對 IF4 + FourOverSix 的 1x16：8x64 和 16x64 同樣全部顯著；256x64 在 Phi-4 的兩個資料集都不顯著。
 - 注意：FlipQuant 使用了校準資料（open-web-math 與 codeparrot，不含 WikiText 和 C4），而這些規則完全不需要資料。
 
 ---

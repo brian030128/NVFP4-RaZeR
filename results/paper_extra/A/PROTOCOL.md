@@ -202,3 +202,14 @@ PPL): ± 2 SE in `A.md`, 1 SE in the CSVs. Negative means the first policy is be
      - `experiments/paper_extra/A_analyze.py`: the rule, its base, the contrast, the LaTeX row, and the check's line in
        A.md. Without the new records its CSVs are byte-identical, and the LaTeX tables only gain the row, as "--".
      - The new `check_if4fo6.py`. Hashes are in `registration_if4fo6.json`.
+
+   **Follow-up, 2026-09-30 08:00 UTC: amendment 2 run.**
+   - **The CPU check** (`if4fo6_check.json`) passed on all 11 modules. The existing rules' outputs are unchanged (30 of
+     30).
+   - **The runs:** 12 policies, 06:57–07:59 UTC, all exited 0.
+   - **Registered checks:** the window hashes equal every other policy's (asserted by A_analyze). The re-run references
+     still equal the Parts 2–3 records.
+   - **Outputs updated:** the A outputs and the LaTeX tables with the new row, SUMMARY.md, and the A section of
+     SUMMARY_ACD_zh.md.
+   - **The records:** `ppl/<model>/if4fo6-<unit>.json`. The command logs (`commands.log` here and for D and the
+     paper run) are now force-added; `*.log` is git-ignored, and they had not been committed before.
