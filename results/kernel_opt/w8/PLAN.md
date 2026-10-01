@@ -89,7 +89,9 @@ bitwise-safe idea reaches it; see "Structural" below.
 - It measures exactly what dispatch work could still recover at each width.
 
 **P6: the 8x64 default (decision b).**
-- Today `'auto'` serves 16x64 and 256x64 maps; 8x64 needs an explicit kernel, and the paper used `n8k64_wB`.
+- Today `'auto'` serves 16x64 and 256x64 maps only. On an 8x64 map it picks the 16x64 set, which NativeLinear
+  rejects (an 8-row tile is not a union of 16-row granules). So 8x64 needs an explicit kernel; the paper used
+  `n8k64_wB`.
 - Recommend: `'auto'` → the adopted width-selecting wB set on kernel-opt, with `'paper_wB'` (`n8k64_wB`) for the paper
   path.
 - It is bitwise identical (1b's G4/G5, and P2–P4's gates). Adopt it after P2–P4 so the default is the final set.
