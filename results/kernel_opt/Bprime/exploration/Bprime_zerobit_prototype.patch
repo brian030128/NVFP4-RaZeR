@@ -1,0 +1,628 @@
+diff --git a/sm120/csrc/mixfp4_sm120.cu b/sm120/csrc/mixfp4_sm120.cu
+index b804e19..f597045 100644
+--- a/sm120/csrc/mixfp4_sm120.cu
++++ b/sm120/csrc/mixfp4_sm120.cu
+@@ -188,6 +188,8 @@ struct Call {
+   int decomposition = 0;   // 0 heuristic, 1 data-parallel, 2 split-K, 3 stream-K
+   int raster = 0;          // kernel-opt #4, persistent scheduler: 0 heuristic, 1 along M, 2 along N
+   int swizzle = 1;         // kernel-opt #4, persistent scheduler: maximum swizzle size 1, 2, 4 or 8
++  uint32_t const *zbits = nullptr;   // kernel-opt B': per-warp all-E2M1 bits (MIXFP4_ZEROBIT builds), see the collective
++  int zbits_stride = 0;              // 32-bit words per (CTA row panel, warp row)
+ };
+ 
+ typename Gemm::Arguments make_arguments(Call const &c) {
+@@ -242,6 +244,10 @@ typename Gemm::Arguments make_arguments(Call const &c) {
+   args.scheduler.raster_order = c.raster == 1 ? RasterOptions::AlongM
+                               : c.raster == 2 ? RasterOptions::AlongN : RasterOptions::Heuristic;
+   args.scheduler.max_swizzle_size = c.swizzle;
++#endif
++#if defined(MIXFP4_ZEROBIT) && MIXFP4_ZEROBIT
++  args.mainloop.ptr_zbits = c.zbits;
++  args.mainloop.zbits_stride = c.zbits_stride;
+ #endif
+   return args;
+ }
+@@ -318,6 +324,10 @@ int sm120_describe(char *out, int capacity) {
+   int streamk = 0;
+ #if defined(SM120_STREAMK) && SM120_STREAMK
+   streamk = 1;
++#endif
++  int zbits = 0;   // kernel-opt B': takes the per-warp all-E2M1 bits (sm120_gemm_ex2 / sm120_linear_ex2)
++#if defined(MIXFP4_ZEROBIT) && MIXFP4_ZEROBIT
++  zbits = 1;
+ #endif
+   using TM = typename Gemm::GemmKernel::CollectiveMainloop::TiledMma;
+   int const atom_m = int(size<1>(typename TM::ThrLayoutVMNK{}));
+@@ -331,11 +341,11 @@ int sm120_describe(char *out, int capacity) {
+       "\"granule_a\":[%d,%d],\"granule_b\":[%d,%d],\"pinned_e2m1\":[%d,%d],"
+       "\"blobgen_mma_mn\":[%d,%d],\"d_colmajor\":%d,\"bias_on_n\":%d,\"mainloop_stages\":%d,"
+       "\"shared_storage_bytes\":%d,\"cutlass_version\":\"%d.%d.%d\",\"epilogue\":\"bf16((s_m*s_n)*acc+bias)\","
+-      "\"stream_k\":%d}",
++      "\"stream_k\":%d,\"zbits\":%d}",
+       SM120_CONFIG_NAME, stock, int(size<0>(ThreadBlockShape{})), int(size<1>(ThreadBlockShape{})),
+       int(size<2>(ThreadBlockShape{})), atom_m, atom_n, a_rows, a_k, b_cols, b_k, pin_a, pin_b,
+       blob_mma_m, blob_mma_n, d_colmajor, bias_on_n, stages, smem, CUTLASS_MAJOR, CUTLASS_MINOR,
+-      CUTLASS_PATCH, streamk);
++      CUTLASS_PATCH, streamk, zbits);
+   if (out != nullptr && capacity > 0) {
+     int const n = len < capacity - 1 ? len : capacity - 1;
+     for (int i = 0; i < n; ++i) { out[i] = buf[i]; }
+@@ -425,6 +435,12 @@ int sm120_gemm_ex(void const *a, void const *sfa, void const *b, void const *sfb
+                   float const *scale_n, float scale_n_default,
+                   void const *bias, int raster, int swizzle,
+                   void *workspace, size_t workspace_size, void *stream);
++int sm120_gemm_ex2(void const *a, void const *sfa, void const *b, void const *sfb, void *d,
++                   int m, int n, int k,
++                   float const *scale_m, float scale_m_default,
++                   float const *scale_n, float scale_n_default,
++                   void const *bias, int raster, int swizzle, void const *zbits, int zbits_stride,
++                   void *workspace, size_t workspace_size, void *stream);
+ 
+ // One native Linear: quantize x [T, K] into the given buffers, then y = x W^T (+ bias) through
+ // whichever operand this build puts the weights on. y is the row-major [T, N] bf16 output.
+@@ -471,6 +487,27 @@ int sm120_gemm_ex(void const *a, void const *sfa, void const *b, void const *sfb
+   return gemm_call(c, workspace, workspace_size, stream);
+ }
+ 
++// kernel-opt B': sm120_gemm_ex with the per-warp all-E2M1 bits of a MIXFP4_ZEROBIT build (zbits: a row of
++// zbits_stride 32-bit words per (CTA row panel, warp row); see the collective). zbits == nullptr is sm120_gemm_ex.
++int sm120_gemm_ex2(void const *a, void const *sfa, void const *b, void const *sfb, void *d,
++                   int m, int n, int k,
++                   float const *scale_m, float scale_m_default,
++                   float const *scale_n, float scale_n_default,
++                   void const *bias, int raster, int swizzle, void const *zbits, int zbits_stride,
++                   void *workspace, size_t workspace_size, void *stream) {
++#if !(defined(MIXFP4_ZEROBIT) && MIXFP4_ZEROBIT)
++  if (zbits != nullptr) { return -6003; }                    // not a B' build
++#endif
++#if defined(SM120_STREAMK) && SM120_STREAMK
++  if (raster != 0 || swizzle != 1) { return -6001; }
++#endif
++  if (raster < 0 || raster > 2 || (swizzle != 1 && swizzle != 2 && swizzle != 4 && swizzle != 8)) { return -6002; }
++  if (zbits != nullptr && zbits_stride < ((k + 127) / 128 + 31) / 32 + 1) { return -6004; }   // a row + the read-ahead word
++  Call c{a, sfa, b, sfb, d, m, n, k, scale_m, scale_n, scale_m_default, scale_n_default, bias, 1, 0, raster, swizzle,
++         static_cast<uint32_t const *>(zbits), zbits_stride};
++  return gemm_call(c, workspace, workspace_size, stream);
++}
++
+ // sm120_linear with the scheduler's raster order and swizzle (weights on A or B, as sm120_linear).
+ int sm120_linear_ex(void const *x, int64_t x_stride, int T, int K, int mode, void *x_packed, void *x_sf, void *x_gs,
+                     void const *w_packed, void const *w_sf, float gs_w, void const *bias, int N, void *y,
+@@ -486,5 +523,22 @@ int sm120_linear_ex(void const *x, int64_t x_stride, int T, int K, int mode, voi
+ #endif
+ }
+ 
++// sm120_linear_ex with the per-warp all-E2M1 bits (kernel-opt B'; weights on A only).
++int sm120_linear_ex2(void const *x, int64_t x_stride, int T, int K, int mode, void *x_packed, void *x_sf, void *x_gs,
++                     void const *w_packed, void const *w_sf, float gs_w, void const *bias, int N, void *y,
++                     int raster, int swizzle, void const *zbits, int zbits_stride,
++                     void *workspace, size_t workspace_size, void *stream) {
++  int rc = sm120_quant_rows(x, x_stride, T, K, mode, x_packed, x_sf, x_gs, stream);
++  if (rc != 0 || T == 0) { return rc; }
++#if defined(SM120_BIAS_ON_N) && SM120_BIAS_ON_N
++  if (zbits != nullptr) { return -6005; }                    // the bits describe weights on A
++  return sm120_gemm_ex(x_packed, x_sf, w_packed, w_sf, y, T, N, K, static_cast<float const *>(x_gs), 1.0f, nullptr,
++                       gs_w, bias, raster, swizzle, workspace, workspace_size, stream);
++#else
++  return sm120_gemm_ex2(w_packed, w_sf, x_packed, x_sf, y, N, T, K, nullptr, gs_w, static_cast<float const *>(x_gs),
++                        1.0f, bias, raster, swizzle, zbits, zbits_stride, workspace, workspace_size, stream);
++#endif
++}
++
+ 
+ }  // extern "C"
+diff --git a/sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp b/sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
+index 466739d..a02de62 100644
+--- a/sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
++++ b/sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp
+@@ -492,6 +492,12 @@ struct CollectiveMma<
+     LayoutSFA layout_SFA{};
+     ElementSF const* ptr_SFB{nullptr};
+     LayoutSFB layout_SFB{};
++#if defined(MIXFP4_ZEROBIT) && MIXFP4_ZEROBIT
++    // [NVFP4-RaZeR local hook, kernel-opt B'; see sm120/kernel/LOCAL_CHANGES.md] the per-warp all-E2M1 bits (see mma());
++    // nullptr runs the per-k_tile dispatch.
++    uint32_t const* ptr_zbits{nullptr};
++    int zbits_stride{0};
++#endif
+   };
+ 
+   // Device side kernel params
+@@ -535,6 +541,10 @@ struct CollectiveMma<
+     uint32_t tma_transaction_bytes = TmaTransactionBytes;
+     uint32_t tma_transaction_bytes_mk = TmaTransactionBytesMK;
+     uint32_t tma_transaction_bytes_nk = TmaTransactionBytesNK;
++#if defined(MIXFP4_ZEROBIT) && MIXFP4_ZEROBIT
++    uint32_t const* ptr_zbits = nullptr;
++    int zbits_stride = 0;
++#endif
+   };
+ 
+   //
+@@ -596,6 +606,10 @@ struct CollectiveMma<
+       TmaTransactionBytes,
+       TmaTransactionBytesMK,
+       TmaTransactionBytesNK
++#if defined(MIXFP4_ZEROBIT) && MIXFP4_ZEROBIT
++      , args.ptr_zbits,
++      args.zbits_stride
++#endif
+     };
+   }
+ 
+@@ -1719,6 +1733,81 @@ struct CollectiveMma<
+ #endif
+     };
+ 
++#if defined(MIXFP4_ZEROBIT) && MIXFP4_ZEROBIT && defined(MIXFP4_JOINT_KA) && MIXFP4_JOINT_KA
++    // [NVFP4-RaZeR local hook, kernel-opt B'; see sm120/kernel/LOCAL_CHANGES.md] One bit per k_tile and warp instead of
++    // the per-k_tile flag reads. The host builds, from the tags, a bit row per (CTA row panel, warp row): bit kt is 0
++    // iff every granule this warp reads in k_tile kt is E2M1, i.e. iff next_pattern() would return 0 there. A zero bit
++    // runs arm 0's body without reading a flag or entering the tree; a set bit reads the flags at the top of the
++    // k_tile (as MIXFP4_PIPE_FLAGS=0 does) and dispatches among arms 1 .. kNumArms-1. Every k_tile executes the same
++    // MMAs as the per-k_tile dispatch. The row's 32-bit words are read one window ahead (the host pads a row by one
++    // word). Without bits (ptr_zbits == nullptr) the pipelined dispatch below runs.
++    if (params.ptr_zbits != nullptr) {
++      auto const thr_vmnk = tiled_mma.get_thr_layout_vmnk().get_flat_coord(thread_idx);
++      constexpr int kWarpsM = decltype(size<1>(tiled_mma.get_thr_layout_vmnk()))::value;
++      uint32_t const* zrow = params.ptr_zbits
++                           + (int64_t(get<0>(blk_coord)) * kWarpsM + int(get<1>(thr_vmnk))) * params.zbits_stride;
++#if MIXFP4_ZEROBIT == 2 || MIXFP4_ZEROBIT == 3
++      // Variant 2: a loop over 32-k_tile windows around a loop over a window's bits, shifting the word down one bit
++      // per k_tile; the next window's word is read a whole window ahead.
++      int const last_kt = k_tile_count - 1;
++      int kt = 0;
++      uint32_t znext = zrow[0];
++      uint32_t zword = 0;
++      CUTLASS_PRAGMA_NO_UNROLL
++      for (int zw = 0; kt < last_kt; ++zw) {
++        zword = znext;
++        znext = zrow[zw + 1];
++        int const end = min(kt + 32, last_kt);
++        CUTLASS_PRAGMA_NO_UNROLL
++        for ( ; kt < end; ++kt, zword >>= 1) {
++#if MIXFP4_ZEROBIT == 3
++          // variant 3: arm 0 on the fall-through path (a taken branch per k_tile is what costs here)
++          if (__builtin_expect(!(zword & 1u), 1)) {
++            k_tile_body(C<0>{});
++          }
++          else {
++            mixfp4_detail::dispatch_pattern_tree<1, kNumArms - 1>(next_pattern(), k_tile_body);
++          }
++#else
++          if (zword & 1u) {
++            mixfp4_detail::dispatch_pattern_tree<1, kNumArms - 1>(next_pattern(), k_tile_body);
++          }
++          else {
++            k_tile_body(C<0>{});
++          }
++#endif
++        }
++      }
++      // the tail k_tile (index last_kt): its bit is the low bit of zword unless last_kt starts a new window
++      if (((last_kt & 31) == 0 ? znext : zword) & 1u) {
++#else
++      uint32_t zword = zrow[0];
++      uint32_t znext = zrow[1];
++      int kt = 0;
++      CUTLASS_PRAGMA_NO_UNROLL
++      for ( ; k_tile_count > 1; --k_tile_count) {
++        if ((zword >> (kt & 31)) & 1u) {
++          mixfp4_detail::dispatch_pattern_tree<1, kNumArms - 1>(next_pattern(), k_tile_body);
++        }
++        else {
++          k_tile_body(C<0>{});
++        }
++        ++kt;
++        if ((kt & 31) == 0) {
++          zword = znext;
++          znext = zrow[(kt >> 5) + 1];
++        }
++      }
++      if ((zword >> (kt & 31)) & 1u) {
++#endif
++        mixfp4_detail::dispatch_pattern_tree<1, kNumArms - 1>(next_pattern(), k_tile_tail_body);
++      }
++      else {
++        k_tile_tail_body(C<0>{});
++      }
++    }
++    else {
++#endif
+     uint32_t pattern_cur  = next_pattern();
+     uint32_t pattern_next = 0;
+ 
+@@ -1759,6 +1848,9 @@ struct CollectiveMma<
+ 
+     // The last body already computed the tail's arm.
+     mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(pattern_cur, k_tile_tail_body);
++#if defined(MIXFP4_ZEROBIT) && MIXFP4_ZEROBIT && defined(MIXFP4_JOINT_KA) && MIXFP4_JOINT_KA
++    }
++#endif
+ #elif defined(MIXFP4_DISPATCH_PER_CTA) && MIXFP4_DISPATCH_PER_CTA
+     // ---------------------------------------------------------------------------------------
+     // ONE dispatch for the whole CTA: the entire k-loop lives inside each arm.
+diff --git a/sm120/mixfp4_sm120/configs.py b/sm120/mixfp4_sm120/configs.py
+index 94e5aba..435c6f5 100644
+--- a/sm120/mixfp4_sm120/configs.py
++++ b/sm120/mixfp4_sm120/configs.py
+@@ -246,6 +246,15 @@ for _base in ('n16k64_wA', 'n16k64_wA_n64', 'n16k64_wA_n32', 'n16k64_wA_n16',
+         _c, name=_base + '_t0', blob_gen=dict(_c.blob_gen, TAG0=0),
+         description=f'kernel-opt t0: {_base} without the site-0 prmt tags (TAG0=0).')
+ 
++# kernel-opt B': the adopted 16x64 builds with the per-warp all-E2M1 bits (MIXFP4_ZEROBIT). The kernel keeps the
++# pipelined per-k_tile dispatch for calls without bits, so each census is twice its base's.
++for _base in ('n16k64_wA_n16_t0', 'n16k64_wA_n32_t0', 'n16k64_wA_n64_t0', 'n16k64_wA_e64_t0'):
++    _c = CONFIGS[_base]
++    CONFIGS[_base + '_zb'] = dataclasses.replace(
++        _c, name=_base + '_zb', defines=dict(_c.defines, MIXFP4_ZEROBIT=1),
++        expected_census={site: 2 * v for site, v in _c.expected_census.items()},
++        description=f"kernel-opt B': {_base} with the per-warp all-E2M1 bits (MIXFP4_ZEROBIT).")
++
+ DEFAULT = 'n16k64_wA'
+ 
+ 
+diff --git a/sm120/mixfp4_sm120/lib.py b/sm120/mixfp4_sm120/lib.py
+index 8d0e540..aa530ba 100644
+--- a/sm120/mixfp4_sm120/lib.py
++++ b/sm120/mixfp4_sm120/lib.py
+@@ -125,6 +125,23 @@ class Kernel:
+         self.act_operand = 1 - self.weight_operand
+         self.d_colmajor = bool(self.desc['d_colmajor'])
+         self.stream_k = bool(self.desc.get('stream_k', 0))
++        # kernel-opt B': MIXFP4_ZEROBIT builds take the per-warp all-E2M1 bits of the weight operand (mixfp4_sm120/zbits.py)
++        self.zbits = bool(self.desc.get('zbits', 0))
++        self.zbits_geometry = None
++        if self.zbits:
++            if self.weight_operand != 0 or self.desc['tile_mnk'][0] != 128:
++                raise LibraryError(f'{name}: the all-E2M1 bits need weights on A and a 128-row CTA tile')
++            self.zbits_geometry = dict(warps_m=int(self.desc['warp_atoms_mn'][0]),
++                                       mma_m=int(self.desc['blobgen_mma_mn'][0]),
++                                       a_atoms=int(self.desc['granule_a'][0]) // 16, tile_m=128)
++            lib.sm120_gemm_ex2.argtypes = [_c_ptr, _c_ptr, _c_ptr, _c_ptr, _c_ptr, _c_int, _c_int, _c_int, _c_ptr,
++                                           _c_float, _c_ptr, _c_float, _c_ptr, _c_int, _c_int, _c_ptr, _c_int, _c_ptr,
++                                           _c_size, _c_ptr]
++            lib.sm120_gemm_ex2.restype = _c_int
++            lib.sm120_linear_ex2.argtypes = [_c_ptr, _c_i64, _c_int, _c_int, _c_int, _c_ptr, _c_ptr, _c_ptr, _c_ptr,
++                                             _c_ptr, _c_float, _c_ptr, _c_int, _c_ptr, _c_int, _c_int, _c_ptr, _c_int,
++                                             _c_ptr, _c_size, _c_ptr]
++            lib.sm120_linear_ex2.restype = _c_int
+         self.type_block = self.cfg.type_block
+         self._ws = {}
+         self._offsets = {}
+@@ -178,7 +195,7 @@ class Kernel:
+     # -------------------------------------------------------------------------------- GEMM
+ 
+     def gemm(self, a, sfa, b, sfb, m, n, k, *, scale_m=None, scale_m_default=1.0, scale_n=None,
+-             scale_n_default=1.0, bias=None, out=None, check=True, splits=1, decomposition=0, schedule=None):
++             scale_n_default=1.0, bias=None, out=None, check=True, splits=1, decomposition=0, schedule=None, zbits=None):
+         """D = bf16((s_m[m] * s_n[n]) * decode(A) @ decode(B)^T + bias).
+ 
+         a: uint8 [m, k/2], b: uint8 [n, k/2] (element 2j in the low nibble); sfa / sfb: placed scale
+@@ -186,11 +203,19 @@ class Kernel:
+         row-major transpose [n, m] (the same memory). Stream-K builds accept `splits` (> 1: split-K
+         into that many K slices) and `decomposition` (0 heuristic, 1 data-parallel, 2 split-K, 3 stream-K).
+         `schedule` (kernel-opt #4): (raster, swizzle) for the persistent tile scheduler -- raster 0 heuristic, 1 along
+-        M, 2 along N; swizzle 1, 2, 4 or 8; None is (0, 1), the scheduler's defaults."""
++        M, 2 along N; swizzle 1, 2, 4 or 8; None is (0, 1), the scheduler's defaults. `zbits` (kernel-opt B', a
++        MIXFP4_ZEROBIT build): the int32 bit rows of the weight operand A (zbits.build), or None."""
+         if (splits != 1 or decomposition != 0) and not self.stream_k:
+             raise ValueError(f'{self.cfg.name} is not a Stream-K build')
+         if schedule is not None and tuple(schedule) != (0, 1) and not self.has_schedule:
+             raise ValueError(f'{self.cfg.name} was built without sm120_gemm_ex')
++        if zbits is not None:
++            if not self.zbits:
++                raise ValueError(f'{self.cfg.name} is not a MIXFP4_ZEROBIT build')
++            if check and not (zbits.is_cuda and zbits.dtype == torch.int32 and zbits.is_contiguous() and zbits.dim() == 2
++                              and zbits.shape[0] == -(-m // 128) * self.zbits_geometry['warps_m']):
++                raise ValueError(f'zbits must be contiguous CUDA int32 [{-(-m // 128) * self.zbits_geometry["warps_m"]}, '
++                                 f'stride] rows for m={m}')
+         dev = a.device
+         if check:
+             for name, t in (('a', a), ('sfa', sfa), ('b', b), ('sfb', sfb)):
+@@ -217,7 +242,13 @@ class Kernel:
+         ws = self.workspace(m, n, k, dev, splits, decomposition)
+         stream = torch.cuda.current_stream(dev).cuda_stream
+         ptr = lambda t: None if t is None else t.data_ptr()  # noqa: E731
+-        if schedule is not None and tuple(schedule) != (0, 1):
++        if zbits is not None:
++            sched = (0, 1) if schedule is None else tuple(schedule)
++            rc = self.lib.sm120_gemm_ex2(ptr(a), ptr(sfa), ptr(b), ptr(sfb), ptr(out), m, n, k,
++                                         ptr(scale_m), float(scale_m_default), ptr(scale_n), float(scale_n_default),
++                                         ptr(bias), int(sched[0]), int(sched[1]), zbits.data_ptr(), zbits.shape[1],
++                                         ptr(ws), 0 if ws is None else ws.numel(), stream)
++        elif schedule is not None and tuple(schedule) != (0, 1):
+             rc = self.lib.sm120_gemm_ex(ptr(a), ptr(sfa), ptr(b), ptr(sfb), ptr(out), m, n, k,
+                                         ptr(scale_m), float(scale_m_default), ptr(scale_n), float(scale_n_default),
+                                         ptr(bias), int(schedule[0]), int(schedule[1]), ptr(ws), 0 if ws is None else ws.numel(),
+@@ -232,11 +263,17 @@ class Kernel:
+         return out
+ 
+     def gemm_ptr(self, a, sfa, b, sfb, m, n, k, scale_m, scale_m_default, scale_n, scale_n_default, bias, out, stream,
+-                 schedule=None):
+-        """Unchecked GEMM on raw device pointers (ints / None); `out` is a preallocated bf16 tensor; `schedule` as in
+-        gemm (kernel-opt #4)."""
++                 schedule=None, zbits=None):
++        """Unchecked GEMM on raw device pointers (ints / None); `out` is a preallocated bf16 tensor; `schedule` and
++        `zbits` as in gemm (kernel-opt #4, B')."""
+         ws = self.workspace(m, n, k, out.device)
+-        if schedule is not None and tuple(schedule) != (0, 1):
++        if zbits is not None:
++            sched = (0, 1) if schedule is None else tuple(schedule)
++            rc = self.lib.sm120_gemm_ex2(a, sfa, b, sfb, out.data_ptr(), m, n, k, scale_m, float(scale_m_default), scale_n,
++                                         float(scale_n_default), bias, int(sched[0]), int(sched[1]), zbits.data_ptr(),
++                                         zbits.shape[1], None if ws is None else ws.data_ptr(),
++                                         0 if ws is None else ws.numel(), stream)
++        elif schedule is not None and tuple(schedule) != (0, 1):
+             rc = self.lib.sm120_gemm_ex(a, sfa, b, sfb, out.data_ptr(), m, n, k, scale_m, float(scale_m_default), scale_n,
+                                         float(scale_n_default), bias, int(schedule[0]), int(schedule[1]),
+                                         None if ws is None else ws.data_ptr(), 0 if ws is None else ws.numel(), stream)
+diff --git a/sm120/mixfp4_sm120/linear.py b/sm120/mixfp4_sm120/linear.py
+index f0250a1..3aa4b19 100644
+--- a/sm120/mixfp4_sm120/linear.py
++++ b/sm120/mixfp4_sm120/linear.py
+@@ -17,6 +17,7 @@ import torch
+ from . import quant_act
+ from .artifact import ArtifactError, PackedWeight, uniform_flags
+ from .lib import Kernel, sf_buffer_size, sf_offset_formula
++from . import zbits as ZB
+ from .select import KernelSet
+ 
+ 
+@@ -78,6 +79,10 @@ class NativeLinear(torch.nn.Module):
+                              persistent=False)
+         self.weights_on_a = kernel.weight_operand == 0
+         self.kernel_set = kernel if isinstance(kernel, KernelSet) else None
++        # kernel-opt B': a MIXFP4_ZEROBIT kernel (every width of a set shares the geometry) gets this weight's all-E2M1
++        # bit rows, built once from the tags; every call passes them (zbits.py).
++        self.register_buffer('zbits', ZB.build(pw.scales, n, k, kernel.zbits_geometry).to(pw.scales.device)
++                             if getattr(kernel, 'zbits', False) else None, persistent=False)
+         self.quant_mode = Kernel.QUANT_MODES[act_kind]
+         self.fused = True          # use sm120_linear when the selected library provides it
+         self.share_input = True    # reuse the previous call's quantized activation of the same tensor
+@@ -129,7 +134,8 @@ class NativeLinear(torch.nn.Module):
+                 bptr = None if bias is None else bias.data_ptr()
+                 if self.weights_on_a:
+                     kern.gemm_ptr(self.packed.data_ptr(), self.sf.data_ptr(), base, base + off_sf, n, t, k,
+-                                  None, self.global_scale, base + off_gs, 1.0, bptr, y, stream, schedule=sched)
++                                  None, self.global_scale, base + off_gs, 1.0, bptr, y, stream, schedule=sched,
++                                  zbits=self.zbits)
+                 else:
+                     kern.gemm_ptr(base, base + off_sf, self.packed.data_ptr(), self.sf.data_ptr(), t, n, k,
+                                   base + off_gs, 1.0, None, self.global_scale, bptr, y, stream, schedule=sched)
+@@ -145,7 +151,14 @@ class NativeLinear(torch.nn.Module):
+             ws = kern.workspace(n, t, k, dev) if self.weights_on_a else kern.workspace(t, n, k, dev)
+             if self.share_input:
+                 _LAST_QUANT[dev.index] = (x2, key, scratch, base, off_sf, off_gs)
+-            if sched != (0, 1):
++            if self.zbits is not None:
++                rc = kern.lib.sm120_linear_ex2(x2.data_ptr(), x2.stride(0), t, k, self.quant_mode, base,
++                                               base + off_sf, base + off_gs, self.packed.data_ptr(), self.sf.data_ptr(),
++                                               self.global_scale, None if bias is None else bias.data_ptr(), n,
++                                               y.data_ptr(), sched[0], sched[1], self.zbits.data_ptr(),
++                                               self.zbits.shape[1], None if ws is None else ws.data_ptr(),
++                                               0 if ws is None else ws.numel(), stream)
++            elif sched != (0, 1):
+                 rc = kern.lib.sm120_linear_ex(x2.data_ptr(), x2.stride(0), t, k, self.quant_mode, base,
+                                               base + off_sf, base + off_gs, self.packed.data_ptr(), self.sf.data_ptr(),
+                                               self.global_scale, None if bias is None else bias.data_ptr(), n,
+@@ -165,7 +178,7 @@ class NativeLinear(torch.nn.Module):
+         if self.weights_on_a:
+             y = kern.gemm(self.packed, self.sf, packed_x, sf_x, n, t, k,
+                           scale_m_default=self.global_scale, scale_n=gs_x, bias=self.bias_bf16, check=False,
+-                          schedule=sched)
++                          schedule=sched, zbits=self.zbits)
+         else:
+             y = kern.gemm(packed_x, sf_x, self.packed, self.sf, t, n, k,
+                           scale_m=gs_x, scale_n_default=self.global_scale, bias=self.bias_bf16, check=False,
+diff --git a/sm120/mixfp4_sm120/select.py b/sm120/mixfp4_sm120/select.py
+index 7417057..a924441 100644
+--- a/sm120/mixfp4_sm120/select.py
++++ b/sm120/mixfp4_sm120/select.py
+@@ -45,15 +45,20 @@ FAMILIES = {
+     # (TABLE_FILE): the 4b widths and per-call scheduler rows tuned at them. The paper sets above are unchanged.
+     'mixed_ko': {16: 'n16k64_wA_n16_t0', 32: 'n16k64_wA_n32_t0', 64: 'n16k64_wA_n64_t0', 128: 'n16k64_wA_e64_t0'},
+     'stock_ko': {16: 'stock_wA_n16', 32: 'stock_wA_n32', 64: 'stock_wA_n64', 128: 'stock_wA_e64'},
++    # kernel-opt B': 'mixed_ko' with the per-warp all-E2M1 bits; it reads the adopted table and 'mixed_ko''s scheduler rows
++    'mixed_zb': {16: 'n16k64_wA_n16_t0_zb', 32: 'n16k64_wA_n32_t0_zb', 64: 'n16k64_wA_n64_t0_zb',
++                 128: 'n16k64_wA_e64_t0_zb'},
+ }
+ # A family that takes another family's tile-table rows: 'mixed256' has the CTA tile of 'mixed' at every width, and uses
+ # its widths so that the two differ only in the dispatch granule (kernel-opt A').
+ TABLE_FAMILY = {'mixed256': 'mixed', 'mixed_e': 'mixed', 'stock_e': 'stock', 'mixed_t0': 'mixed', 'mixed256_t0': 'mixed',
+-                'mixed_ko': 'mixed', 'stock_ko': 'stock'}
++                'mixed_ko': 'mixed', 'stock_ko': 'stock', 'mixed_zb': 'mixed'}
++# A family that takes another family's scheduler rows (kernel-opt B': the same tiles, the same order)
++SCHEDULE_FAMILY = {'mixed_zb': 'mixed_ko'}
+ TABLE_DIR = Path(__file__).resolve().parents[1] / 'configs'
+ # The table file a family reads by default: '<gpu>.<suffix>.json' if listed here and present, else '<gpu>.json' (the
+ # paper table). The adopted kernel-opt sets read '<gpu>.ko.json' (amendment 7).
+-TABLE_FILE = {'mixed_ko': 'ko', 'stock_ko': 'ko'}
++TABLE_FILE = {'mixed_ko': 'ko', 'stock_ko': 'ko', 'mixed_zb': 'ko'}
+ BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
+ 
+ 
+@@ -99,6 +104,11 @@ class KernelSet:
+             k.check_sf_formula([(128, 8, 256), (48, 3, 2560)])
+         self.primary = ref
+         self.weight_operand, self.type_block, self.d_colmajor = ref.weight_operand, ref.type_block, ref.d_colmajor
++        # kernel-opt B': a set of MIXFP4_ZEROBIT builds takes the per-warp all-E2M1 bits (all widths or none)
++        if len({k.zbits for k in self.kernels.values()}) != 1 or \
++                len({repr(k.zbits_geometry) for k in self.kernels.values()}) != 1:
++            raise ValueError(f'{family}: every width must take the same all-E2M1 bits, or none')
++        self.zbits, self.zbits_geometry = ref.zbits, ref.zbits_geometry
+         self.cfg = ref.cfg
+         self.sha256 = {k.cfg.name: k.sha256 for k in self.kernels.values()}
+         self.table, self.table_source, self.schedules = {}, None, {}
+@@ -114,7 +124,7 @@ class KernelSet:
+                           for key, row in data.get(TABLE_FAMILY.get(family, family), {}).items()}
+             # kernel-opt #4: optional per-(shape, bucket) scheduler settings [raster, swizzle] under 'schedule'
+             self.schedules = {tuple(int(v) for v in key.split('x')): {int(b): tuple(rs) for b, rs in row.items()}
+-                              for key, row in data.get('schedule', {}).get(family, {}).items()}
++                              for key, row in data.get('schedule', {}).get(SCHEDULE_FAMILY.get(family, family), {}).items()}
+             self.table_source = str(table) if not isinstance(table, dict) else 'dict'
+         self.stats = {}
+ 
+diff --git a/sm120/mixfp4_sm120/zbits.py b/sm120/mixfp4_sm120/zbits.py
+new file mode 100644
+index 0000000..ed39323
+--- /dev/null
++++ b/sm120/mixfp4_sm120/zbits.py
+@@ -0,0 +1,77 @@
++"""kernel-opt B': per-warp all-E2M1 bits for the weights-on-A mixed kernels built with MIXFP4_ZEROBIT.
++
++The mixed mainloop dispatches every k_tile on a pattern of E0M3 flags that each warp reads from its operands (bit
++g + a_gran * kb for granule g of the warp's m-atoms and k_block kb of the k_tile). With the bits, a warp instead tests
++one bit per k_tile: 0 means the pattern is 0 (every granule E2M1), and the kernel runs arm 0's body without reading a
++flag; 1 means it reads the flags and dispatches among the other arms (the collective's MIXFP4_ZEROBIT hook). The bits
++are built here, once per weight, from the same tags, so every k_tile still executes the MMAs of its own pattern.
++
++Geometry (all widths of the n16k64_wA family share it; `Kernel.zbits_geometry`): a CTA covers tile_m = 128 weight rows
++(one "panel"); warp row w of warps_m = 4 owns m-atoms m = 0 .. mma_m - 1 at the 16-row blocks m * warps_m + w of the
++panel; a granule is a_atoms consecutive m-atoms and takes its first atom's flag; k_tiles are 128 wide (two 64-wide
++k_blocks). Rows past n and k_blocks past K read as E2M1 (the TMA zero fill).
++
++Rows: int32 [panels * warps_m, stride] (uint32 bit patterns), row p * warps_m + w; bit kt % 32 of word kt // 32 is
++(pattern of that warp at k_tile kt) != 0. stride = ceil(k_tiles / 32) + 1: the kernel reads one word ahead.
++"""
++import torch
++
++from . import numerics as N
++
++K_TILE = 128
++
++
++def block_flags(scales, n, k):
++    """bool [n/16 (rounded up), k/64]: the E0M3 tag of every 16-row x 64-column tile, from the tagged scale bytes
++    [n, k/16] (bit 7). The tag the kernel reads is the tile's first scale byte (tags are uniform over 16x64 tiles)."""
++    rows16 = -(-n // 16)
++    f = (scales[::16, ::64 // N.SCALE_BLOCK] >> 7).to(torch.bool)
++    assert tuple(f.shape) == (rows16, -(-k // 64)), (tuple(f.shape), n, k)
++    return f
++
++
++def warp_patterns(flags16, n, k, warps_m=4, mma_m=2, a_atoms=1, tile_m=128):
++    """int64 [panels, warps_m, k_tiles]: the joint pattern each warp's dispatch reads at each k_tile."""
++    blocks = tile_m // 16
++    assert blocks == warps_m * mma_m and mma_m % a_atoms == 0, (tile_m, warps_m, mma_m, a_atoms)
++    panels = -(-n // tile_m)
++    k_tiles = -(-k // K_TILE)
++    f = torch.zeros(panels * blocks, k_tiles * 2, dtype=torch.int64, device=flags16.device)
++    f[:flags16.shape[0], :flags16.shape[1]] = flags16.to(torch.int64)
++    f = f.view(panels, mma_m, warps_m, k_tiles, 2)             # 16-row block m * warps_m + w = m-atom m of warp row w
++    a_gran = mma_m // a_atoms
++    pat = torch.zeros(panels, warps_m, k_tiles, dtype=torch.int64, device=flags16.device)
++    for g in range(a_gran):
++        for kb in range(2):
++            pat |= f[:, g * a_atoms, :, :, kb] << (g + a_gran * kb)
++    return pat
++
++
++def bit_rows(pat):
++    """int32 [panels * warps_m, ceil(k_tiles / 32) + 1] rows of a warp_patterns tensor (see the module docstring)."""
++    panels, warps_m, k_tiles = pat.shape
++    rows = panels * warps_m
++    words = -(-k_tiles // 32) + 1
++    bits = torch.zeros(rows, words * 32, dtype=torch.int64, device=pat.device)
++    bits[:, :k_tiles] = (pat != 0).reshape(rows, k_tiles).to(torch.int64)
++    w = (bits.view(rows, words, 32) << torch.arange(32, device=pat.device)).sum(-1)
++    return torch.where(w >= 2 ** 31, w - 2 ** 32, w).to(torch.int32).contiguous()
++
++
++def build(scales, n, k, geometry):
++    """The bit rows of one weight (tagged scale bytes [n, k/16]) for a kernel of the given geometry."""
++    return bit_rows(warp_patterns(block_flags(scales, n, k), n, k, **geometry))
++
++
++def reference_rows(pat):
++    """The same rows by a plain loop (tests)."""
++    panels, warps_m, k_tiles = pat.shape
++    words = -(-k_tiles // 32) + 1
++    out = []
++    for row in pat.reshape(panels * warps_m, k_tiles).tolist():
++        ws = [0] * words
++        for kt, p in enumerate(row):
++            if p:
++                ws[kt // 32] |= 1 << (kt % 32)
++        out.append([w - 2 ** 32 if w >= 2 ** 31 else w for w in ws])
++    return torch.tensor(out, dtype=torch.int32)
+diff --git a/sm120/tests/test_zbits.py b/sm120/tests/test_zbits.py
+new file mode 100644
+index 0000000..7ce22ae
+--- /dev/null
++++ b/sm120/tests/test_zbits.py
+@@ -0,0 +1,74 @@
++"""kernel-opt B': the per-warp all-E2M1 bits (MIXFP4_ZEROBIT builds, mixfp4_sm120/zbits.py).
++
++- the packed bit rows equal a plain-loop reference, and bit kt is set exactly when the warp's pattern is non-zero;
++- every B' build computes its base build's output bit for bit, with the bits (fused, unfused) and without them (the
++  kernel's pipelined fallback), on random maps of every density, partial row panels and K not a multiple of 128;
++- negative control: all-zero bits on a map with E0M3 tiles must change the output (the bits are what the kernel uses).
++"""
++import pytest
++import torch
++
++from mixfp4_sm120 import zbits as ZB
++from mixfp4_sm120.artifact import pack_module
++from mixfp4_sm120.lib import Kernel
++from mixfp4_sm120.linear import NativeLinear
++
++ZB_BUILDS = {'n16k64_wA_n16_t0_zb': 'n16k64_wA_n16_t0', 'n16k64_wA_n32_t0_zb': 'n16k64_wA_n32_t0',
++             'n16k64_wA_n64_t0_zb': 'n16k64_wA_n64_t0', 'n16k64_wA_e64_t0_zb': 'n16k64_wA_e64_t0'}
++SHAPES = [(1, 4096, 4096), (19, 1024, 4096), (77, 2560, 9728), (300, 48, 2560), (1000, 4096, 1024), (64, 640, 320)]
++
++
++def kernel(name):
++    try:
++        return Kernel.load(name)
++    except Exception as e:  # noqa: BLE001
++        pytest.skip(f'{name} not built: {e}')
++
++
++@pytest.mark.parametrize('seed', range(5))
++def test_bit_rows_reference(seed):
++    g = torch.Generator().manual_seed(seed)
++    pat = (torch.rand(3, 4, 37 + 31 * seed, generator=g) < 0.2).to(torch.int64) * torch.randint(1, 16, (1,), generator=g)
++    rows = ZB.bit_rows(pat)
++    assert torch.equal(rows, ZB.reference_rows(pat))
++    assert rows.shape == (12, -(-pat.shape[2] // 32) + 1)
++    assert not rows[:, -1].any()                          # the read-ahead word is padding
++
++
++@pytest.mark.gpu
++@pytest.mark.parametrize('name', sorted(ZB_BUILDS))
++@pytest.mark.parametrize('t,n,k', SHAPES)
++@pytest.mark.parametrize('frac', [0.0, 0.1, 0.5, 1.0])
++def test_bitwise_equal_to_base(device, name, t, n, k, frac):
++    zk, base = kernel(name), kernel(ZB_BUILDS[name])
++    assert zk.zbits and not base.zbits
++    g = torch.Generator(device='cpu').manual_seed(t + n + k + int(100 * frac))
++    w = (torch.randn(n, k, generator=g) * 0.02).cuda().bfloat16()
++    mask = torch.rand(-(-n // 16), k // 64, generator=g) < frac
++    pw = pack_module('m', w, None, 'map', mask, (16, 64))
++    x = torch.randn(t, k, generator=g).cuda().bfloat16()
++    ref = NativeLinear(pw, base, 'four_over_six_rows', 'm')(x)
++    lin = NativeLinear(pw, zk, 'four_over_six_rows', 'm')
++    assert lin.zbits is not None
++    assert torch.equal(lin(x), ref)                       # fused, with the bits
++    lin.fused = False
++    assert torch.equal(lin(x), ref)                       # unfused, with the bits
++    lin.zbits = None
++    assert torch.equal(lin(x), ref)                       # the kernel's pipelined fallback (no bits)
++
++
++@pytest.mark.gpu
++@pytest.mark.parametrize('name', sorted(ZB_BUILDS))
++def test_negative_control(device, name):
++    zk = kernel(name)
++    n, k, t = 1024, 4096, 64
++    g = torch.Generator(device='cpu').manual_seed(7)
++    w = (torch.randn(n, k, generator=g) * 0.02).cuda().bfloat16()
++    mask = torch.rand(n // 16, k // 64, generator=g) < 0.5
++    pw = pack_module('m', w, None, 'map', mask, (16, 64))
++    x = torch.randn(t, k, generator=g).cuda().bfloat16()
++    lin = NativeLinear(pw, zk, 'four_over_six_rows', 'm')
++    good = lin(x)
++    assert lin.zbits.any()
++    lin.zbits = torch.zeros_like(lin.zbits)               # claims every k_tile is all-E2M1: E0M3 tiles run as E2M1
++    assert not torch.equal(lin(x), good)
