@@ -168,6 +168,7 @@ def main():
     ap.add_argument('--build-root', required=True)
     ap.add_argument('--candidates', required=True, help='comma-separated build names in --build-root')
     ap.add_argument('--set', default=None, help='a select.FAMILIES family to check as a KernelSet (from --build-root)')
+    ap.add_argument('--table', default=None, help="the set's tile table (default: the GPU's; kernel-opt #4: with schedule rows)")
     ap.add_argument('--models', default=','.join(MODELS))
     ap.add_argument('--tokens', default=','.join(map(str, TOKENS)))
     ap.add_argument('--out', type=Path, required=True)
@@ -179,7 +180,7 @@ def main():
     assert Path(ref.path).parent.parent == REPO / 'sm120' / 'build', f'reference is not sm120/build: {ref.path}'
     cands = {n: Kernel.load(n, build_root=args.build_root) for n in args.candidates.split(',')}
     if args.set:
-        cands[f'set:{args.set}'] = KernelSet(args.set, build_root=args.build_root)
+        cands[f'set:{args.set}'] = KernelSet(args.set, build_root=args.build_root, table=args.table)
     for c in cands.values():
         if fam.get('declare'):
             rows = c.cfg.map_tile_rows or c.type_block[0]

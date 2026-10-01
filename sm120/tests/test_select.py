@@ -6,7 +6,7 @@ import torch
 from mixfp4_sm120 import numerics as N
 from mixfp4_sm120.artifact import pack_module
 from mixfp4_sm120.linear import NativeLinear
-from mixfp4_sm120.select import FAMILIES, KernelSet, bucket, fallback_width
+from mixfp4_sm120.select import FAMILIES, TABLE_FAMILY, KernelSet, bucket, fallback_width
 
 pytestmark = pytest.mark.gpu
 
@@ -44,6 +44,30 @@ def test_widths_bitwise_equal(device, family, t, n, k):
     ref = outs[128]
     for wd, o in outs.items():
         assert torch.equal(o, ref), f'width {wd} differs'
+
+
+@pytest.mark.parametrize('family', ['mixed_e', 'stock_e'])
+@pytest.mark.parametrize('t,n,k', [(1, 4096, 4096), (300, 1024, 4096), (1000, 4096, 1024)])
+def test_schedules_bitwise_equal(device, family, t, n, k):
+    """kernel-opt #4: every scheduler setting (raster 0/1/2 x swizzle 1/2/4/8) computes the default (0, 1)'s output
+    bitwise at every width, through NativeLinear (sm120_linear_ex) as a table's schedule row selects it."""
+    g = torch.Generator(device='cpu').manual_seed(t + n + 7)
+    w = (torch.randn(n, k, generator=g) * 0.02).cuda().bfloat16()
+    mixed = family.startswith('mixed')
+    mask, tb = random_map(family, n, k, g, 0.3) if mixed else (None, None)
+    pw = pack_module('m', w, None, 'map' if mask is not None else 'nvfp4', mask, tb)
+    x = torch.randn(t, k, generator=g).cuda().bfloat16()
+    act = 'four_over_six_rows' if mixed else 'nvfp4_rows'
+    ref = None
+    for wd in kset(family, table={}).kernels:
+        ks = kset(family, table={TABLE_FAMILY[family]: {f'{n}x{k}': {str(bucket(t)): wd}}})
+        nl = NativeLinear(pw, ks, act, 'm')
+        for combo in [(r, s) for r in (0, 1, 2) for s in (1, 2, 4, 8)]:
+            ks.schedules = {(n, k): {bucket(t): combo}}
+            assert ks.width(n, k, t) == wd and ks.schedule(n, k, t) == combo
+            y = nl(x)
+            ref = y if ref is None else ref
+            assert torch.equal(y, ref), f'width {wd} schedule {combo} differs'
 
 
 @pytest.mark.parametrize('family', ['mixed', 'mixed_wB', 'mixed256'])

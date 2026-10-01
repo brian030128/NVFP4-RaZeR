@@ -42,9 +42,14 @@ def main():
         after = manifest(args.after_root, name)
         if name in new:
             cfg = CFG.get(name)
-            got = {int(k): v for k, v in after['patch']['sites'].items()} if after else None
-            want = {int(k): v for k, v in (cfg.expected_census or {}).items()}
             pred = after['patch']['census_patched']['predicated'] if after else None
+            if not cfg.patch:
+                # kernel-opt #4: a new unpatched (stock) build -- E2M1 OMMAs only, none predicated
+                got = after['patch']['census_patched']['formats'] if after else None
+                want = {'E2M1xE2M1': after['patch']['census_patched']['total']} if after else None
+            else:
+                got = {int(k): v for k, v in after['patch']['sites'].items()} if after else None
+                want = {int(k): v for k, v in (cfg.expected_census or {}).items()}
             passed = bool(after) and got == want and pred == 0
             res['g2'][name] = dict(census=got, expected=want, predicated=pred, passed=passed,
                                    sass_sha256=after and after['sass_sha256'],

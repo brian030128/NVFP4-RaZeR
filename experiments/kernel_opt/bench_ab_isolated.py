@@ -167,12 +167,16 @@ def run(args, tel, CONFIGS=CONFIGS, kernels=None, pairs=None):
                     xp, xsf, gs = q
                     wp, wsf = copies[c][counter[c] % len(copies[c])]
                     counter[c] += 1
+                    # kernel-opt #4: the set's scheduler setting for this call ((0, 1) without a schedule table)
+                    sched = lin.kernel_set.schedule(n, k, t) if lin.kernel_set is not None else (0, 1)
                     if lin.weights_on_a:
                         kern.gemm_ptr(wp.data_ptr(), wsf.data_ptr(), xp.data_ptr(), xsf.data_ptr(), n, t, k,
-                                      None, lin.global_scale, gs.data_ptr(), 1.0, bptr, y, stream.cuda_stream)
+                                      None, lin.global_scale, gs.data_ptr(), 1.0, bptr, y, stream.cuda_stream,
+                                      schedule=sched)
                     else:
                         kern.gemm_ptr(xp.data_ptr(), xsf.data_ptr(), wp.data_ptr(), wsf.data_ptr(), t, n, k,
-                                      gs.data_ptr(), 1.0, None, lin.global_scale, bptr, y, stream.cuda_stream)
+                                      gs.data_ptr(), 1.0, None, lin.global_scale, bptr, y, stream.cuda_stream,
+                                      schedule=sched)
                     return y
                 fns[c] = (quant, gemm, kern)
                 # registered check (deviation 2): the isolated path equals NativeLinear's fused forward bitwise
@@ -252,6 +256,7 @@ def run(args, tel, CONFIGS=CONFIGS, kernels=None, pairs=None):
                     proj=proj, out=n, inp=k, tokens=t, config=c, kind=kind, tags=variant, kernel=kern.cfg.name,
                     kernel_sha256=kern.sha256, act=act,
                     width=lins[c].kernel_set.width(n, k, t) if lins[c].kernel_set is not None else None,
+                    schedule=list(lins[c].kernel_set.schedule(n, k, t)) if lins[c].kernel_set is not None else None,
                     gemm_us=statistics.median(g_all), gemm=G.stats(g_all), quant_us=statistics.median(q_all),
                     quant=G.stats(q_all), event_us=statistics.median(e_all), event=G.stats(e_all),
                     rounds=[dict(round=b['round'], position=b['position'], gemm_us=statistics.median(b['gemm_us']),

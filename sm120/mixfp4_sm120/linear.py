@@ -110,6 +110,7 @@ class NativeLinear(torch.nn.Module):
         if t == 0:
             return x.new_empty((*lead, n))
         kern = self.kernel if self.kernel_set is None else self.kernel_set.pick(n, k, t)
+        sched = (0, 1) if self.kernel_set is None else self.kernel_set.schedule(n, k, t)     # kernel-opt #4
         if self.fused and kern.has_quant:
             if x2.dtype != torch.bfloat16 or x2.stride(1) != 1:
                 x2 = x2.to(torch.bfloat16).contiguous()
@@ -128,10 +129,10 @@ class NativeLinear(torch.nn.Module):
                 bptr = None if bias is None else bias.data_ptr()
                 if self.weights_on_a:
                     kern.gemm_ptr(self.packed.data_ptr(), self.sf.data_ptr(), base, base + off_sf, n, t, k,
-                                  None, self.global_scale, base + off_gs, 1.0, bptr, y, stream)
+                                  None, self.global_scale, base + off_gs, 1.0, bptr, y, stream, schedule=sched)
                 else:
                     kern.gemm_ptr(base, base + off_sf, self.packed.data_ptr(), self.sf.data_ptr(), t, n, k,
-                                  base + off_gs, 1.0, None, self.global_scale, bptr, y, stream)
+                                  base + off_gs, 1.0, None, self.global_scale, bptr, y, stream, schedule=sched)
                 y = y.view(*lead, n)
                 return y if y.dtype == x.dtype else y.to(x.dtype)
             # one scratch allocation for the quantized activation: packed codes | scale bytes | gs,
@@ -144,11 +145,18 @@ class NativeLinear(torch.nn.Module):
             ws = kern.workspace(n, t, k, dev) if self.weights_on_a else kern.workspace(t, n, k, dev)
             if self.share_input:
                 _LAST_QUANT[dev.index] = (x2, key, scratch, base, off_sf, off_gs)
-            rc = kern.lib.sm120_linear(x2.data_ptr(), x2.stride(0), t, k, self.quant_mode, base,
-                                       base + off_sf, base + off_gs, self.packed.data_ptr(), self.sf.data_ptr(),
-                                       self.global_scale, None if bias is None else bias.data_ptr(), n, y.data_ptr(),
-                                       None if ws is None else ws.data_ptr(), 0 if ws is None else ws.numel(),
-                                       stream)
+            if sched != (0, 1):
+                rc = kern.lib.sm120_linear_ex(x2.data_ptr(), x2.stride(0), t, k, self.quant_mode, base,
+                                              base + off_sf, base + off_gs, self.packed.data_ptr(), self.sf.data_ptr(),
+                                              self.global_scale, None if bias is None else bias.data_ptr(), n,
+                                              y.data_ptr(), sched[0], sched[1], None if ws is None else ws.data_ptr(),
+                                              0 if ws is None else ws.numel(), stream)
+            else:
+                rc = kern.lib.sm120_linear(x2.data_ptr(), x2.stride(0), t, k, self.quant_mode, base,
+                                           base + off_sf, base + off_gs, self.packed.data_ptr(), self.sf.data_ptr(),
+                                           self.global_scale, None if bias is None else bias.data_ptr(), n, y.data_ptr(),
+                                           None if ws is None else ws.data_ptr(), 0 if ws is None else ws.numel(),
+                                           stream)
             if rc != 0:
                 raise RuntimeError(f'{self.name}: sm120_linear failed with code {rc}')
             y = y.view(*lead, n)
@@ -156,9 +164,11 @@ class NativeLinear(torch.nn.Module):
         packed_x, sf_x, gs_x = quant_act.quantize(x2, self.act_kind)
         if self.weights_on_a:
             y = kern.gemm(self.packed, self.sf, packed_x, sf_x, n, t, k,
-                          scale_m_default=self.global_scale, scale_n=gs_x, bias=self.bias_bf16, check=False)
+                          scale_m_default=self.global_scale, scale_n=gs_x, bias=self.bias_bf16, check=False,
+                          schedule=sched)
         else:
             y = kern.gemm(packed_x, sf_x, self.packed, self.sf, t, n, k,
-                          scale_m=gs_x, scale_n_default=self.global_scale, bias=self.bias_bf16, check=False)
+                          scale_m=gs_x, scale_n_default=self.global_scale, bias=self.bias_bf16, check=False,
+                          schedule=sched)
         y = y.view(*lead, n)
         return y if y.dtype == x.dtype else y.to(x.dtype)

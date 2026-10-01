@@ -44,7 +44,18 @@
  #else
  #define MIXFP4_EPI_M 64
  #endif
-@@ -150,6 +169,17 @@
+@@ -144,12 +163,27 @@
+ #define MIXFP4_EPI_N 16
+ #endif
+ #endif
+-#if MIXFP4_ATOM_M == 8 || MIXFP4_ATOM_M == 1
++#if defined(MIXFP4_EPI_TILE_M) && defined(MIXFP4_EPI_TILE_N)
++// [NVFP4-RaZeR local hook, kernel-opt #4; see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_EPI_TILE_M/N set the epilogue tile
++// of any warp arrangement (sm120/csrc sets the stock builds' the same way). Unset, the choice below is upstream's.
++using MixedEpilogueTile = Shape<cute::Int<MIXFP4_EPI_TILE_M>, cute::Int<MIXFP4_EPI_TILE_N>>;
++#elif MIXFP4_ATOM_M == 8 || MIXFP4_ATOM_M == 1
+ using MixedEpilogueTile = Shape<cute::Int<MIXFP4_EPI_M>, cute::Int<MIXFP4_EPI_N>>;
+ #else
  using MixedEpilogueTile = cutlass::epilogue::collective::EpilogueTileAuto;
  #endif
  
@@ -62,7 +73,7 @@
  using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
      ArchTag, OperatorClass,
      ThreadBlockShape, ClusterShape,
-@@ -157,7 +187,19 @@
+@@ -157,7 +191,19 @@
      ElementAccumulator, ElementAccumulator,
      ElementC, LayoutCTag, AlignmentC,
      ElementD, LayoutDTag, AlignmentD,
@@ -83,7 +94,7 @@
  
  // The standard builder: reused purely for its derived types (TiledMma, SmemLayoutAtoms, etc.),
  // not instantiated as an actual mainloop -- CollectiveOp below deliberately isn't used.
-@@ -169,10 +211,38 @@
+@@ -169,10 +215,38 @@
      ThreadBlockShape, ClusterShape,
      cutlass::gemm::collective::StageCountAutoCarveout<
          static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
@@ -124,7 +135,7 @@
      StdMainloopBuilder::DispatchPolicy::SchedulerPipelineStageCount,
      typename StdMainloopBuilder::DispatchPolicy::ClusterShape,
      typename StdMainloopBuilder::DispatchPolicy::Schedule>;
-@@ -259,7 +329,7 @@
+@@ -259,7 +333,7 @@
      typename StdMainloopBuilder::StridePairB,
      MixedTiledMma,
      typename StdMainloopBuilder::GmemTiledCopyPairA,
@@ -133,7 +144,7 @@
      typename StdMainloopBuilder::SmemCopyAtomsA,
      cute::identity,
      typename StdMainloopBuilder::GmemTiledCopyPairB,
-@@ -267,11 +337,17 @@
+@@ -267,11 +341,17 @@
      MixedSmemCopyAtomsB,
      cute::identity>;
  
@@ -152,7 +163,7 @@
  
  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
  
-@@ -470,6 +546,10 @@
+@@ -470,6 +550,10 @@
    }
  }
  
@@ -163,7 +174,7 @@
  int run(int m, int n, int k, int warmup_iters, int bench_iters) {
    using Sm1xxBlkScaledConfig = typename Gemm::GemmKernel::CollectiveMainloop::Sm1xxBlkScaledConfig;
  
-@@ -773,3 +853,4 @@
+@@ -773,3 +857,4 @@
  
    return run(m, n, k, warmup_iters, bench_iters);
  }

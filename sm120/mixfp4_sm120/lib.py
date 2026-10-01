@@ -98,6 +98,15 @@ class Kernel:
         lib.sm120_gemm.argtypes = [_c_ptr, _c_ptr, _c_ptr, _c_ptr, _c_ptr, _c_int, _c_int, _c_int,
                                    _c_ptr, _c_float, _c_ptr, _c_float, _c_ptr, _c_int, _c_int, _c_ptr, _c_size, _c_ptr]
         lib.sm120_gemm.restype = _c_int
+        self.has_schedule = hasattr(lib, 'sm120_gemm_ex')       # kernel-opt #4: raster order / swizzle per call
+        if self.has_schedule:
+            lib.sm120_gemm_ex.argtypes = [_c_ptr, _c_ptr, _c_ptr, _c_ptr, _c_ptr, _c_int, _c_int, _c_int, _c_ptr,
+                                          _c_float, _c_ptr, _c_float, _c_ptr, _c_int, _c_int, _c_ptr, _c_size, _c_ptr]
+            lib.sm120_gemm_ex.restype = _c_int
+            lib.sm120_linear_ex.argtypes = [_c_ptr, _c_i64, _c_int, _c_int, _c_int, _c_ptr, _c_ptr, _c_ptr, _c_ptr,
+                                            _c_ptr, _c_float, _c_ptr, _c_int, _c_ptr, _c_int, _c_int, _c_ptr, _c_size,
+                                            _c_ptr]
+            lib.sm120_linear_ex.restype = _c_int
         self.has_quant = hasattr(lib, 'sm120_quant_rows')
         if self.has_quant:
             lib.sm120_quant_rows.argtypes = [_c_ptr, _c_i64, _c_int, _c_int, _c_int, _c_ptr, _c_ptr, _c_ptr, _c_ptr]
@@ -169,15 +178,19 @@ class Kernel:
     # -------------------------------------------------------------------------------- GEMM
 
     def gemm(self, a, sfa, b, sfb, m, n, k, *, scale_m=None, scale_m_default=1.0, scale_n=None,
-             scale_n_default=1.0, bias=None, out=None, check=True, splits=1, decomposition=0):
+             scale_n_default=1.0, bias=None, out=None, check=True, splits=1, decomposition=0, schedule=None):
         """D = bf16((s_m[m] * s_n[n]) * decode(A) @ decode(B)^T + bias).
 
         a: uint8 [m, k/2], b: uint8 [n, k/2] (element 2j in the low nibble); sfa / sfb: placed scale
         bytes (bit 7 = E0M3 tag). Returns D as a [m, n] tensor, or for column-major-D builds as its
         row-major transpose [n, m] (the same memory). Stream-K builds accept `splits` (> 1: split-K
-        into that many K slices) and `decomposition` (0 heuristic, 1 data-parallel, 2 split-K, 3 stream-K)."""
+        into that many K slices) and `decomposition` (0 heuristic, 1 data-parallel, 2 split-K, 3 stream-K).
+        `schedule` (kernel-opt #4): (raster, swizzle) for the persistent tile scheduler -- raster 0 heuristic, 1 along
+        M, 2 along N; swizzle 1, 2, 4 or 8; None is (0, 1), the scheduler's defaults."""
         if (splits != 1 or decomposition != 0) and not self.stream_k:
             raise ValueError(f'{self.cfg.name} is not a Stream-K build')
+        if schedule is not None and tuple(schedule) != (0, 1) and not self.has_schedule:
+            raise ValueError(f'{self.cfg.name} was built without sm120_gemm_ex')
         dev = a.device
         if check:
             for name, t in (('a', a), ('sfa', sfa), ('b', b), ('sfb', sfb)):
@@ -204,19 +217,33 @@ class Kernel:
         ws = self.workspace(m, n, k, dev, splits, decomposition)
         stream = torch.cuda.current_stream(dev).cuda_stream
         ptr = lambda t: None if t is None else t.data_ptr()  # noqa: E731
-        rc = self.lib.sm120_gemm(ptr(a), ptr(sfa), ptr(b), ptr(sfb), ptr(out), m, n, k,
-                                 ptr(scale_m), float(scale_m_default), ptr(scale_n), float(scale_n_default),
-                                 ptr(bias), int(splits), int(decomposition), ptr(ws), 0 if ws is None else ws.numel(), stream)
+        if schedule is not None and tuple(schedule) != (0, 1):
+            rc = self.lib.sm120_gemm_ex(ptr(a), ptr(sfa), ptr(b), ptr(sfb), ptr(out), m, n, k,
+                                        ptr(scale_m), float(scale_m_default), ptr(scale_n), float(scale_n_default),
+                                        ptr(bias), int(schedule[0]), int(schedule[1]), ptr(ws), 0 if ws is None else ws.numel(),
+                                        stream)
+        else:
+            rc = self.lib.sm120_gemm(ptr(a), ptr(sfa), ptr(b), ptr(sfb), ptr(out), m, n, k,
+                                     ptr(scale_m), float(scale_m_default), ptr(scale_n), float(scale_n_default),
+                                     ptr(bias), int(splits), int(decomposition), ptr(ws), 0 if ws is None else ws.numel(),
+                                     stream)
         if rc != 0:
             raise LibraryError(f'sm120_gemm({m}, {n}, {k}) failed with code {rc}')
         return out
 
-    def gemm_ptr(self, a, sfa, b, sfb, m, n, k, scale_m, scale_m_default, scale_n, scale_n_default, bias, out, stream):
-        """Unchecked GEMM on raw device pointers (ints / None); `out` is a preallocated bf16 tensor."""
+    def gemm_ptr(self, a, sfa, b, sfb, m, n, k, scale_m, scale_m_default, scale_n, scale_n_default, bias, out, stream,
+                 schedule=None):
+        """Unchecked GEMM on raw device pointers (ints / None); `out` is a preallocated bf16 tensor; `schedule` as in
+        gemm (kernel-opt #4)."""
         ws = self.workspace(m, n, k, out.device)
-        rc = self.lib.sm120_gemm(a, sfa, b, sfb, out.data_ptr(), m, n, k, scale_m, float(scale_m_default), scale_n,
-                                 float(scale_n_default), bias, 1, 0, None if ws is None else ws.data_ptr(),
-                                 0 if ws is None else ws.numel(), stream)
+        if schedule is not None and tuple(schedule) != (0, 1):
+            rc = self.lib.sm120_gemm_ex(a, sfa, b, sfb, out.data_ptr(), m, n, k, scale_m, float(scale_m_default), scale_n,
+                                        float(scale_n_default), bias, int(schedule[0]), int(schedule[1]),
+                                        None if ws is None else ws.data_ptr(), 0 if ws is None else ws.numel(), stream)
+        else:
+            rc = self.lib.sm120_gemm(a, sfa, b, sfb, out.data_ptr(), m, n, k, scale_m, float(scale_m_default), scale_n,
+                                     float(scale_n_default), bias, 1, 0, None if ws is None else ws.data_ptr(),
+                                     0 if ws is None else ws.numel(), stream)
         if rc != 0:
             raise LibraryError(f'sm120_gemm({m}, {n}, {k}) failed with code {rc}')
         return out

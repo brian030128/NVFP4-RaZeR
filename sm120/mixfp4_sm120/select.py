@@ -32,10 +32,14 @@ FAMILIES = {
     'mixed_wB': {16: 'n8k64_wB_m16', 32: 'n8k64_wB_m32', 64: 'n8k64_wB_m64', 128: 'n8k64_wB', '128x64': 'n8k64_wB_n64'},
     # kernel-opt A': the 4-arm 32-row-granule builds for 256x64 (and coarser) maps
     'mixed256': {16: 'n16k64_wA_g32_n16', 32: 'n16k64_wA_g32_n32', 64: 'n16k64_wA_g32_n64', 128: 'n16k64_wA_g32'},
+    # kernel-opt #4: the 64 x 64 epilogue tile at width 128, for the mixed and the stock family alike. Width 64 keeps its
+    # build: there the tile costs a mainloop stage (6 -> 5) and was up to +4.9 % slower (results/kernel_opt/4)
+    'mixed_e': {16: 'n16k64_wA_n16', 32: 'n16k64_wA_n32', 64: 'n16k64_wA_n64', 128: 'n16k64_wA_e64'},
+    'stock_e': {16: 'stock_wA_n16', 32: 'stock_wA_n32', 64: 'stock_wA_n64', 128: 'stock_wA_e64'},
 }
 # A family that takes another family's tile-table rows: 'mixed256' has the CTA tile of 'mixed' at every width, and uses
 # its widths so that the two differ only in the dispatch granule (kernel-opt A').
-TABLE_FAMILY = {'mixed256': 'mixed'}
+TABLE_FAMILY = {'mixed256': 'mixed', 'mixed_e': 'mixed', 'stock_e': 'stock'}
 TABLE_DIR = Path(__file__).resolve().parents[1] / 'configs'
 BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
 
@@ -84,7 +88,7 @@ class KernelSet:
         self.weight_operand, self.type_block, self.d_colmajor = ref.weight_operand, ref.type_block, ref.d_colmajor
         self.cfg = ref.cfg
         self.sha256 = {k.cfg.name: k.sha256 for k in self.kernels.values()}
-        self.table, self.table_source = {}, None
+        self.table, self.table_source, self.schedules = {}, None, {}
         if table is None:
             path = TABLE_DIR / f'{gpu_slug()}.json'
             if path.exists():
@@ -93,6 +97,9 @@ class KernelSet:
             data = json.loads(Path(table).read_text()) if not isinstance(table, dict) else table
             self.table = {tuple(int(v) for v in key.split('x')): {int(b): parse_key(w) for b, w in row.items()}
                           for key, row in data.get(TABLE_FAMILY.get(family, family), {}).items()}
+            # kernel-opt #4: optional per-(shape, bucket) scheduler settings [raster, swizzle] under 'schedule'
+            self.schedules = {tuple(int(v) for v in key.split('x')): {int(b): tuple(rs) for b, rs in row.items()}
+                              for key, row in data.get('schedule', {}).get(family, {}).items()}
             self.table_source = str(table) if not isinstance(table, dict) else 'dict'
         self.stats = {}
 
@@ -105,6 +112,11 @@ class KernelSet:
                 w *= 2
         return w
 
+    def schedule(self, m, k, t):
+        """kernel-opt #4: (raster, swizzle) for this call, from the table's 'schedule' rows; (0, 1) without one."""
+        row = self.schedules.get((m, k))
+        return (row.get(bucket(t)) if row else None) or (0, 1)
+
     def pick(self, m, k, t):
         w = self.width(m, k, t)
         self.stats[w] = self.stats.get(w, 0) + 1
@@ -112,5 +124,5 @@ class KernelSet:
 
     def describe(self):
         return dict(family=self.family, kernels=self.sha256, table=self.table_source, table_shapes=len(self.table),
-                    table_family=TABLE_FAMILY.get(self.family, self.family),
+                    table_family=TABLE_FAMILY.get(self.family, self.family), schedule_shapes=len(self.schedules),
                     calls_by_width=dict(sorted(self.stats.items(), key=lambda i: key_order(i[0]))))

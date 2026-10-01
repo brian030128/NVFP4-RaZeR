@@ -188,6 +188,23 @@ CONFIGS = {c.name: c for c in [
         dict(_WT_AS_A_GEN, A_ATOMS=2, MMA_N=1, B_ATOMS=1),
         expected_census={0: 16, 1: 16}, map_tile_rows=128,
         description="A': n16k64_wA_g32 with a 128 x 16 CTA tile."),
+    # kernel-opt #4: the 64 x 64 epilogue tile (auto is 64 x 32 for these tiles), mixed and stock alike, at the widths
+    # whose CTA tile holds it (128, 64); the narrower widths keep their builds. Outputs are unchanged.
+    KernelConfig(
+        'n16k64_wA_e64', 'mixed', 0, (16, 64), dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_EPI_TILE_M=64, MIXFP4_EPI_TILE_N=64),
+        _WT_AS_A_GEN, expected_census={0: 512, 1: 512},
+        description='kernel-opt #4: n16k64_wA with a 64 x 64 epilogue tile.'),
+    KernelConfig(
+        'n16k64_wA_n64_e64', 'mixed', 0, (16, 64),
+        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_TILE_N=64, MIXFP4_B_ATOMS_PER_GRANULE=4, MIXFP4_EPI_TILE_M=64,
+             MIXFP4_EPI_TILE_N=64),
+        dict(_WT_AS_A_GEN, MMA_N=4, B_ATOMS=4), expected_census={0: 256, 1: 256},
+        description='kernel-opt #4: n16k64_wA_n64 with a 64 x 64 epilogue tile.'),
+    KernelConfig('stock_wA_e64', 'stock', 0, None, dict(MIXFP4_D_COLMAJOR=1, MIXFP4_EPI_TILE_M=64, MIXFP4_EPI_TILE_N=64), {},
+                 patch=False, description='kernel-opt #4: stock_wA with a 64 x 64 epilogue tile.'),
+    KernelConfig('stock_wA_n64_e64', 'stock', 0, None,
+                 dict(MIXFP4_D_COLMAJOR=1, MIXFP4_TILE_N=64, MIXFP4_EPI_TILE_M=64, MIXFP4_EPI_TILE_N=64), {}, patch=False,
+                 description='kernel-opt #4: stock_wA_n64 with a 64 x 64 epilogue tile.'),
     KernelConfig(
         'n16k64_wA_nodisp', 'mixed', 0, None,
         dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_NO_DISPATCH=1, MIXFP4_PIPE_FLAGS=0), _WT_AS_A_GEN,

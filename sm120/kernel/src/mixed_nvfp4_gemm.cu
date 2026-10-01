@@ -163,7 +163,11 @@ using MixedAtomLayoutMNK =
 #define MIXFP4_EPI_N 16
 #endif
 #endif
-#if MIXFP4_ATOM_M == 8 || MIXFP4_ATOM_M == 1
+#if defined(MIXFP4_EPI_TILE_M) && defined(MIXFP4_EPI_TILE_N)
+// [NVFP4-RaZeR local hook, kernel-opt #4; see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_EPI_TILE_M/N set the epilogue tile
+// of any warp arrangement (sm120/csrc sets the stock builds' the same way). Unset, the choice below is upstream's.
+using MixedEpilogueTile = Shape<cute::Int<MIXFP4_EPI_TILE_M>, cute::Int<MIXFP4_EPI_TILE_N>>;
+#elif MIXFP4_ATOM_M == 8 || MIXFP4_ATOM_M == 1
 using MixedEpilogueTile = Shape<cute::Int<MIXFP4_EPI_M>, cute::Int<MIXFP4_EPI_N>>;
 #else
 using MixedEpilogueTile = cutlass::epilogue::collective::EpilogueTileAuto;

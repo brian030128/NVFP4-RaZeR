@@ -108,9 +108,17 @@ using OperatorClass = cutlass::arch::OpClassBlockScaledTensorOp;
 using ThreadBlockShape = Shape<_128, cute::Int<MIXFP4_TILE_N>, _128>;
 using ClusterShape = Shape<_1, _1, _1>;
 
+// kernel-opt #4: -DMIXFP4_EPI_TILE_M=<m> -DMIXFP4_EPI_TILE_N=<n> sets the epilogue tile (stock and mixed alike; unset:
+// the builder's EpilogueTileAuto, 64 x 32 for these tiles). The epilogue computes every output element the same way
+// whatever its sub-tile, so outputs are unchanged.
+#if defined(MIXFP4_EPI_TILE_M) && defined(MIXFP4_EPI_TILE_N)
+using StockEpilogueTile = Shape<cute::Int<MIXFP4_EPI_TILE_M>, cute::Int<MIXFP4_EPI_TILE_N>>;
+#else
+using StockEpilogueTile = cutlass::epilogue::collective::EpilogueTileAuto;
+#endif
 using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
     ArchTag, OperatorClass, ThreadBlockShape, ClusterShape,
-    cutlass::epilogue::collective::EpilogueTileAuto,
+    StockEpilogueTile,
     ElementAccumulator, ElementAccumulator,
     ElementC, LayoutCTag, AlignmentC,
     ElementD, LayoutDTag, AlignmentD,
@@ -178,6 +186,8 @@ struct Call {
   void const *bias;
   int splits = 1;          // Stream-K builds only
   int decomposition = 0;   // 0 heuristic, 1 data-parallel, 2 split-K, 3 stream-K
+  int raster = 0;          // kernel-opt #4, persistent scheduler: 0 heuristic, 1 along M, 2 along N
+  int swizzle = 1;         // kernel-opt #4, persistent scheduler: maximum swizzle size 1, 2, 4 or 8
 };
 
 typename Gemm::Arguments make_arguments(Call const &c) {
@@ -227,8 +237,28 @@ typename Gemm::Arguments make_arguments(Call const &c) {
                                     : c.decomposition == 2 ? Mode::SplitK
                                     : c.decomposition == 3 ? Mode::StreamK : Mode::Heuristic;
   args.scheduler.reduction_mode = cutlass::gemm::kernel::detail::ReductionMode::Deterministic;
+#else
+  using RasterOptions = decltype(args.scheduler.raster_order);
+  args.scheduler.raster_order = c.raster == 1 ? RasterOptions::AlongM
+                              : c.raster == 2 ? RasterOptions::AlongN : RasterOptions::Heuristic;
+  args.scheduler.max_swizzle_size = c.swizzle;
 #endif
   return args;
+}
+
+int gemm_call(Call const &c, void *workspace, size_t workspace_size, void *stream) {
+  auto args = make_arguments(c);
+  if (Gemm::get_workspace_size(args) > workspace_size) { return -1000; }
+  Gemm gemm_op;
+  cutlass::Status status = gemm_op.can_implement(args);
+  if (status != cutlass::Status::kSuccess) { return -2000 - int(status); }
+  status = gemm_op.initialize(args, workspace, static_cast<cudaStream_t>(stream));
+  if (status != cutlass::Status::kSuccess) { return -3000 - int(status); }
+  status = gemm_op.run(static_cast<cudaStream_t>(stream));
+  if (status != cutlass::Status::kSuccess) { return -4000 - int(status); }
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) { return -5000 - int(err); }
+  return 0;
 }
 
 #ifndef SM120_CONFIG_NAME
@@ -389,6 +419,12 @@ int sm120_gemm(void const *a, void const *sfa, void const *b, void const *sfb, v
                float const *scale_n, float scale_n_default,
                void const *bias, int splits, int decomposition,
                void *workspace, size_t workspace_size, void *stream);
+int sm120_gemm_ex(void const *a, void const *sfa, void const *b, void const *sfb, void *d,
+                  int m, int n, int k,
+                  float const *scale_m, float scale_m_default,
+                  float const *scale_n, float scale_n_default,
+                  void const *bias, int raster, int swizzle,
+                  void *workspace, size_t workspace_size, void *stream);
 
 // One native Linear: quantize x [T, K] into the given buffers, then y = x W^T (+ bias) through
 // whichever operand this build puts the weights on. y is the row-major [T, N] bf16 output.
@@ -416,18 +452,39 @@ int sm120_gemm(void const *a, void const *sfa, void const *b, void const *sfb, v
   if (splits != 1 || decomposition != 0) { return -6000; }   // not a Stream-K build
 #endif
   Call c{a, sfa, b, sfb, d, m, n, k, scale_m, scale_n, scale_m_default, scale_n_default, bias, splits, decomposition};
-  auto args = make_arguments(c);
-  if (Gemm::get_workspace_size(args) > workspace_size) { return -1000; }
-  Gemm gemm_op;
-  cutlass::Status status = gemm_op.can_implement(args);
-  if (status != cutlass::Status::kSuccess) { return -2000 - int(status); }
-  status = gemm_op.initialize(args, workspace, static_cast<cudaStream_t>(stream));
-  if (status != cutlass::Status::kSuccess) { return -3000 - int(status); }
-  status = gemm_op.run(static_cast<cudaStream_t>(stream));
-  if (status != cutlass::Status::kSuccess) { return -4000 - int(status); }
-  cudaError_t err = cudaGetLastError();
-  if (err != cudaSuccess) { return -5000 - int(err); }
-  return 0;
+  return gemm_call(c, workspace, workspace_size, stream);
 }
+
+// kernel-opt #4: sm120_gemm with the persistent scheduler's raster order (0 heuristic, 1 along M, 2 along N) and
+// maximum swizzle (1, 2, 4, 8). Only the order of the output tiles changes, not what each one computes.
+int sm120_gemm_ex(void const *a, void const *sfa, void const *b, void const *sfb, void *d,
+                  int m, int n, int k,
+                  float const *scale_m, float scale_m_default,
+                  float const *scale_n, float scale_n_default,
+                  void const *bias, int raster, int swizzle,
+                  void *workspace, size_t workspace_size, void *stream) {
+#if defined(SM120_STREAMK) && SM120_STREAMK
+  if (raster != 0 || swizzle != 1) { return -6001; }         // Stream-K builds use their own scheduler
+#endif
+  if (raster < 0 || raster > 2 || (swizzle != 1 && swizzle != 2 && swizzle != 4 && swizzle != 8)) { return -6002; }
+  Call c{a, sfa, b, sfb, d, m, n, k, scale_m, scale_n, scale_m_default, scale_n_default, bias, 1, 0, raster, swizzle};
+  return gemm_call(c, workspace, workspace_size, stream);
+}
+
+// sm120_linear with the scheduler's raster order and swizzle (weights on A or B, as sm120_linear).
+int sm120_linear_ex(void const *x, int64_t x_stride, int T, int K, int mode, void *x_packed, void *x_sf, void *x_gs,
+                    void const *w_packed, void const *w_sf, float gs_w, void const *bias, int N, void *y,
+                    int raster, int swizzle, void *workspace, size_t workspace_size, void *stream) {
+  int rc = sm120_quant_rows(x, x_stride, T, K, mode, x_packed, x_sf, x_gs, stream);
+  if (rc != 0 || T == 0) { return rc; }
+#if defined(SM120_BIAS_ON_N) && SM120_BIAS_ON_N
+  return sm120_gemm_ex(x_packed, x_sf, w_packed, w_sf, y, T, N, K, static_cast<float const *>(x_gs), 1.0f, nullptr,
+                       gs_w, bias, raster, swizzle, workspace, workspace_size, stream);
+#else
+  return sm120_gemm_ex(w_packed, w_sf, x_packed, x_sf, y, N, T, K, nullptr, gs_w, static_cast<float const *>(x_gs),
+                       1.0f, bias, raster, swizzle, workspace, workspace_size, stream);
+#endif
+}
+
 
 }  // extern "C"

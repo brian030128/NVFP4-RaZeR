@@ -570,3 +570,110 @@ round × 8, into a scratch directory.
 - It reproduced M1's times and choices at the diagnostic's cells. For example, stock 4096x4096 at T = 64: width 32,
   8.70 µs.
 - Nothing from it is used.
+
+## Amendment 5 (#4): epilogue tile and tile-scheduler order, for the mixed 16x64 family and stock alike
+
+Written 2026-10-01, after B's exploration (ec2fbb1) and before any registered GPU run of #4. The hashes and time are in
+`registration_5.json`. B (per-warp run tables) was explored and not registered
+(`results/kernel_opt/B/EXPLORATION.md`), so it has no amendment and #4 takes the number 5.
+
+The user approved it, relayed by the coordinator: "#4, epilogue tile / raster-swizzle for the 16x64 family, with
+stock_wA tuned the same way. Same reporting." Earlier gaps and decisions are unchanged:
+- the 4b table is not adopted (its adoption awaits the user);
+- #1b M3, the margin rule and E0M3 (i)–(iii) stay on hold.
+
+**Why** (disclosed exploration, `results/kernel_opt/4/exploration/`; warm activations, cold weights, 3 × 30; every
+variant bitwise equal to its family's default):
+- **Epilogue tile.** Auto resolves to 64 × 32 for these tiles: the 64 × 32 builds have the auto builds' SASS, and they
+  timed within ±0.25 %, a noise control. (`quick_E_part2.out` labels auto "128x32"; the SASS shows it is 64 × 32.)
+  - The 64 × 64 tile keeps 4 mainloop stages; shared storage grows from 88,064 to 100,352 bytes.
+  - 64 × 64 was faster for both families at width 128 (Llama shapes, T = 256 / 1024 / 4096): mixed −0.05 to −1.73 %,
+    stock −0.09 to −0.95 %.
+  - 128 × 64 costs mainloop stages (stock 4 → 2) and was +1 to +33 % slower.
+  - At width 64 (CTA tile 128 × 64) the 64 × 64 tile costs a mainloop stage (6 → 5, both families). Timed after
+    `build_4` was built (`quick_E3.py`, 8 cells where the table runs width 64):
+    - −0.1 to −2.1 % mixed and −0.04 to −1.0 % stock on 7 cells;
+    - Qwen down (5120x17408) at T = 128: +4.9 % mixed, +3.6 % stock.
+    - So the sets use the tile at width 128 only.
+- **Tile-scheduler raster order and swizzle.** The persistent scheduler takes both at run time. Most (shape, T) cells
+  move both families by similar small amounts (−0.1 to −1.2 %).
+  - At T = 128, where mixed runs narrow (width 32) and stock at 64, rastering along M gains mixed −2.8 % (4096x4096)
+    and −3.6 % (4096x14336) against stock's −0.8 to −1.0 %.
+  - Rastering along M costs +3.5 % at T = 512 for 14336x4096. So the choice is per (shape, T).
+
+**What changes.**
+- **Epilogue tile hook.** In `src/mixed_nvfp4_gemm.cu` (vendored; LOCAL_CHANGES updated), `-DMIXFP4_EPI_TILE_M/N`
+  sets the epilogue tile of any warp arrangement; `sm120/csrc` does the same for the stock builds. Unset, the choice
+  is upstream (identical SASS).
+- **New builds:** n16k64_wA_e64 and n16k64_wA_n64_e64, and stock_wA_e64 and stock_wA_n64_e64 (the 64 × 64 tile at
+  widths 128 and 64).
+  - The width-64 builds are built and gated (G2, pytest, G4) but used by no set (see Why).
+- **Sets:** `mixed_e` = {16: n16k64_wA_n16, 32: n16k64_wA_n32, 64: n16k64_wA_n64, 128: n16k64_wA_e64}, and `stock_e`
+  the same with the stock builds.
+  - They read the `mixed` / `stock` width rows, so every call runs at today's width.
+  - Only the width-128 build and the scheduler setting differ from today's sets.
+- **Scheduler, host side only:**
+  - `sm120/csrc`: `sm120_gemm_ex` / `sm120_linear_ex` take (raster, swizzle) per call, with no global state.
+  - `Kernel.gemm` / `gemm_ptr` take `schedule=`; `KernelSet.schedule(m, k, t)` reads the table's optional `schedule`
+    rows; NativeLinear and the isolated harness pass it on every path.
+  - Without schedule rows every call uses (0, 1), the scheduler's defaults, exactly as before.
+- **`tune_tiles.py --schedule`:** tunes (raster, swizzle) per (shape, bucket) at each family's table width, with the
+  amendment 4b method (cold weights, activations quantized after the flush, 3 rotated rounds × 30), for `mixed_e` and
+  `stock_e` in one run.
+  - A setting replaces (0, 1) only if its median is at least 0.5 % below the default's and every one of its rounds is
+    below every round of the default's (a decisive margin).
+  - The output is the tracked width table plus `schedule` rows: `results/kernel_opt/4/table/`.
+- **Scripts:** `check_bitwise.py --table`; `check_sass.py` checks new unpatched builds (E2M1 only, no predication);
+  `bench_ab4_isolated.py`; `ab4_report.py`; `run_4.sh`.
+- **Builds:** `build.py --all` into `/home/dev/n16k64_campaign/kernel_opt/build_4` from the #4 sources (CPU only,
+  before registration).
+
+**Gates** (`run_4.sh`; a failure stops #4):
+- **G3:** `build.py --selftest` for n16k64_wA_e64 and n16k64_wA_n64_e64 (the stock builds have no self-test).
+- **G1 / G2 (`check_sass.py`):**
+  - G1: every other configuration keeps its before build's SASS (`sm120/build`, kernel-opt `build`, `build_e0m3`,
+    `build_A1`).
+  - G2: the two mixed builds have their census; the two stock builds are E2M1-only; nothing is predicated.
+- **Schedule tuning (SCHED_TUNE):** produces the table; it is not a gate.
+- **G3 pytest:** on `build_4`:
+  - `test_gemm.py`, with the e64 builds;
+  - `test_select.py`: `mixed_e` and `stock_e` widths bitwise equal;
+  - `test_select.py`'s new `test_schedules_bitwise_equal`: every setting (raster 0/1/2 × swizzle 1/2/4/8), at every
+    width of `mixed_e` and `stock_e`, bitwise equal to (0, 1) through NativeLinear. So the gate does not depend on
+    which settings the tuning picks.
+- **G4:** `check_bitwise.py --family wA`, n16k64_wA_e64, n16k64_wA_n64_e64 and set:mixed_e with the new table (so
+  every schedule row runs), 0 differences against n16k64_wA from `sm120/build`.
+- **G5:** logits bitwise equal on all 4 models × 5 shapes:
+  - 16x64: set:mixed (`sm120/build`) vs set:mixed_e with the new table;
+  - FourOverSix: set:stock vs set:stock_e with the new table.
+
+**Measurement M1 (`bench_ab4_isolated.py`):** the deviation-2 method, 4 models × tokens 1 … 8192.
+- Configurations:
+  - stock_wA (before) vs stock_e with the new table (after);
+  - 16x64 typical and worst on `mixed` (`sm120/build`, before) vs `mixed_e` with the new table (after);
+  - #2's freq path (`build_freq`) as a reference;
+  - the 256x64 path (TM-OPT+TC 256x64 on `mixed256` from `build_A1`, A′, current table), typical and worst, as a
+    reference. #4 does not change it; it gives the 256x64 gap to stock before and after.
+- Checks: after = before bitwise on the timed operands; the same widths.
+- Reported by `ab4_report.py`, per model and T:
+  - after vs before for stock and 16x64;
+  - the 16x64 gap vs stock_wA, both before → both after;
+  - the 256x64 gap vs stock_wA before and vs stock after;
+  - the scheduler settings the calls used.
+- #4 is measured on the default-dispatch builds, so its effect is separate from #2's. #2's freq builds are timed
+  alongside for reference.
+
+**Adoption** is proposed to the coordinator, not automatic. Adopt the width-128 64 × 64 builds and the schedule rows
+for both families if no unit's per-forward sum is slower beyond its round range at a (model, T) where anything
+changed.
+
+**Before registration (disclosed, not results).**
+- The exploration builds (`build_E`, worktree `wtE`) and scripts are in `results/kernel_opt/4/exploration/`.
+- The raster / swizzle exploration used a first version of the knob (a library-global setter). It was replaced by
+  per-call parameters before registration; the device code is identical.
+- The width-64 timing (`quick_E3.py` / `.out`, see Why) ran on the `build_4` libraries after `build.py --all`.
+- Smoke tests, run once into a scratch directory; nothing from them is used:
+  - `tune_tiles.tune_schedule` on two Llama shapes at buckets 16 and 256, 1 round × 3. It wrote a table.
+  - `test_schedules_bitwise_equal`: 6 passed.
+  - `bench_ab4_isolated.py` on Llama k_proj and o_proj at T = 16 and 256, 1 round × 3, with that table and two rows
+    forced to non-default settings. The settings reached the calls, and all 60 bitwise checks were equal.

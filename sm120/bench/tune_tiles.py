@@ -31,6 +31,12 @@ kernel-opt additions:
   after the flush and before each timed GEMM, which then reads those fresh activations. Only the weights are cold,
   as in inference and in the deviation-2 M1 (whose harness quantizes after the flush); without it the flush also
   evicts the activations, which inflates small-T times by 1-2.6 us and re-ranks the widths (results/kernel_opt/retune).
+- --schedule (kernel-opt #4; needs --cold --act-warm): instead of widths, tune the persistent tile scheduler's raster
+  order (0 heuristic, 1 along M, 2 along N) and maximum swizzle (1, 2, 4, 8) per (shape, bucket), at the width each
+  family's --width-table rows choose (weights on A). Every one of the 12 settings is timed in each of --rounds rotated
+  rounds; a setting replaces the default (0, 1) only if its median is at least 0.5 % below the default's and every one
+  of its rounds is below every round of the default's (a decisive margin, so noise does not pick). The output is the
+  width table with 'schedule' rows {family: {shape: {bucket: [raster, swizzle]}}} added, plus the raw per-round times.
 """
 import argparse
 import datetime
@@ -97,6 +103,56 @@ def cold_us(launch, wp, wsf, iters=20, warmup=3, act=None):
     return statistics.median(d)
 
 
+def tune_schedule(args, shapes):
+    """--schedule: see the docstring. shapes: {(n, k): mixed tags or None} as main() collects them."""
+    if not (args.cold and args.act_warm):
+        raise SystemExit('--schedule needs --cold --act-warm')
+    width_table = Path(args.width_table or S.TABLE_DIR / f'{S.gpu_slug()}.json')
+    fams = {f: S.KernelSet(f, table=width_table) for f in args.families.split(',')}
+    for f, ks in fams.items():
+        if ks.weight_operand != 0 or not all(k.has_schedule for k in ks.kernels.values()):
+            raise SystemExit(f'{f}: --schedule needs weights-on-A builds with sm120_gemm_ex')
+    combos = [(r, sw) for r in (0, 1, 2) for sw in (1, 2, 4, 8)]
+    sched = {f: {} for f in fams}
+    raw = {f: {} for f in fams}
+    for (n, k), mask in shapes.items():
+        for t in S.BUCKETS:
+            for f, ks in fams.items():
+                kern = ks.kernels[ks.width(n, k, t)]
+                mixed = kern.type_block is not None
+                op = operands(n, k, t, mask if mixed else None, (16, 64) if mixed and mask is not None else None,
+                              seed=n + k + t)
+                act = lambda kern=kern: kern.quant_rows(op['x'], 'four_over_six_rows')  # noqa: E731
+                per = {}
+                for r in range(args.rounds):
+                    shift = (r * len(combos) // args.rounds) % len(combos)
+                    for c in combos[shift:] + combos[:shift]:
+                        launch = lambda wp, wsf, q, kern=kern, c=c: kern.gemm(  # noqa: E731
+                            wp, wsf, q[0], q[1], n, t, k, scale_m_default=op['gsw'], scale_n=q[2], check=False, schedule=c)
+                        per.setdefault(c, []).append(cold_us(launch, op['wp'], op['wsf'], iters=args.iters, act=act))
+                med = {c: statistics.median(v) for c, v in per.items()}
+                best = min(med, key=med.get)
+                d = (0, 1)
+                decisive = med[best] <= 0.995 * med[d] and max(per[best]) < min(per[d])
+                sched[f].setdefault(f'{n}x{k}', {})[str(t)] = list(best if decisive else d)
+                raw[f].setdefault(f'{n}x{k}', {})[str(t)] = {f'{c[0]},{c[1]}': [round(v, 2) for v in per[c]] for c in combos}
+            print(n, k, t, {f: sched[f][f'{n}x{k}'][str(t)] for f in fams}, flush=True)
+    data = json.loads(width_table.read_text())
+    data.setdefault('schedule', {}).update(sched)
+    meta = dict(gpu=B.gpu_info(), created_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
+                kernels={f: ks.sha256 for f, ks in fams.items()}, width_table=str(width_table), models=args.models,
+                method=(f'cold isolated launches, activations quantized after the flush, {args.rounds} rotated rounds x '
+                        f'{args.iters} per setting; a setting replaces (0, 1) only if its median is >= 0.5 % below and '
+                        f'all its rounds are below all of the default\'s'))
+    data['meta'].setdefault('schedule', {}).update({f: meta for f in fams})
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    slug = S.gpu_slug()
+    (out / f'{slug}.json').write_text(json.dumps(data, indent=1, sort_keys=True) + '\n')
+    (out / f'{slug}.schedule_raw.json').write_text(json.dumps(dict(meta=meta, us_rounds=raw), indent=1, sort_keys=True) + '\n')
+    print('wrote', out / f'{slug}.json', 'with schedule rows for', list(fams))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--models', default='llama8b,mistral7b,phi4,qwen27b')
@@ -110,6 +166,8 @@ def main():
     ap.add_argument('--rounds', type=int, default=1, help='with --cold: rotated rounds per width (see the docstring)')
     ap.add_argument('--iters', type=int, default=20, help='with --cold: isolated launches per width and round')
     ap.add_argument('--act-warm', action='store_true', help='with --cold: quantize the activations after the flush')
+    ap.add_argument('--schedule', action='store_true', help='tune the scheduler setting per shape and bucket (docstring)')
+    ap.add_argument('--width-table', default=None, help="with --schedule: the width table (default: the GPU's table)")
     ap.add_argument('--out-dir', default=str(S.TABLE_DIR))
     ap.add_argument('--allow-busy', action='store_true')
     args = ap.parse_args()
@@ -141,6 +199,8 @@ def main():
                                          tiles=int(entry[0].numel()) if entry else -(-n // 8) * (k // 64))
     if (args.rounds > 1 or args.act_warm) and not args.cold:
         raise SystemExit('--rounds / --act-warm need --cold')
+    if args.schedule:
+        return tune_schedule(args, shapes)
     table = {f: {} for f in fams}
     raw = {f: {} for f in fams}
     raw_rounds = {f: {} for f in fams}
