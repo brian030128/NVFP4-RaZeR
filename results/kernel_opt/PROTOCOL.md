@@ -1123,3 +1123,78 @@ recorded here. `opt1/table_opt1.json` against `opt1b/table_opt1b.json`, `mixed_w
     routing note says so, and the build check requires `sm120/build`.
   - `'auto_wB'` and the single builds are unchanged.
   - Without scheduler rows, lib.py calls the GEMM through the same entry point as before.
+
+## Amendment 10: the 8x64 baseline on the current best kernels
+
+Written 2026-10-01, before any registered GPU run of this amendment. The hashes and time are in `registration_10.json`.
+
+**The request**, relayed by the coordinator: "new focus is 8x64 optimization on kernel-opt. Goal, as for 16x64: make
+the FlipQuant 8x64 GEMM reach stock latency at all T. Reference: stock_wA, i.e. FourOverSix on the deployment set
+(auto_stock / stock_ko). Report vs stock_wB too, for placement."
+- Step 1 b): "A baseline for 8x64 on the current best kernels: the #1b set (auto_wB / mixed_wB) with and without #2's
+  freq dispatch, vs stock_wA (stock_ko and paper stock) and stock_wB." It asks for a deviation-2 M1 and a C2-style
+  4096³ split.
+- The baseline is descriptive. Nothing is tuned or adopted from it; it ranks the step 2 plan.
+
+**What is measured.** No deployment build and no library source changes.
+- **The 8x64 path:**
+  - `mixed_wB` from the kernel-opt `build`: optimization 1b's five builds, default dispatch;
+  - `mixed_wB` from `build_freq`: #2's builds of the same set (`MIXFP4_DISPATCH_FREQ=1`).
+  - Both read the paper table `sm120/configs/<gpu>.json`, whose `mixed_wB` rows are 1b's (`opt1b/table_opt1b.json`).
+- **The references:**
+  - `stock_ko` from `build_7` on the adopted table: the deployment's stock, weights on A;
+  - the paper `stock` set and `stock_wB` (one 128-wide build) from `sm120/build`.
+- **New diagnostic builds, for C2w only.** These are n8k64_wB's no-dispatch ceiling: the same tile and 1x8 arrangement,
+  with the format dispatch compiled out (`MIXFP4_NO_DISPATCH=1`, E2M1 only), as n16k64_wA_nodisp is for 16x64.
+  - `n8k64_wB_nodisp` keeps the blob's site-0 prmt tags.
+  - `n8k64_wB_nodisp_t0` drops them (`TAG0=0`).
+  - Both are `patch=False`, in `configs.py` since 0105c7f, and were built CPU-only in `build_W` before registration.
+  - The wB blob carries 32 identity PRMTs, against n16k64_wA_nodisp's 8 (SASS count); the t0 build has none. The pair
+    sizes t0 for the wB family.
+
+**Gates** (`run_w8.sh`; a failure stops the run):
+- **G0 (`check_provenance.py`):** every file listed in the registration has its sha256. Every build used has its
+  registered library sha256, SASS sha256 and defines, and its library file matches its manifest.
+  - These builds are 1b's five, `build_freq`'s five, `build_7`'s four `stock_ko`, `sm120/build`'s paper `stock` set
+    and `stock_wB`, and `build_W`'s two ceilings.
+  - Their trail, checked at registration: 1b's five library sha256 equal those in 1b's M1 records. `build_freq`'s
+    five equal those in #2's M1′ records, which #2's G4′ gated. `build_7`'s are amendment 9's G0.
+- **G2 (`check_sass.py --only-new`):** the two ceilings have E2M1 OMMAs only, with none predicated.
+
+**M1 (`bench_w8_isolated.py`): GEMM time.**
+- **Method:** deviation-2, as in amendments 5–9: cold weights by rotation plus a 512 MiB read-flush, activations
+  quantized after the flush, CUPTI, 3 rotated rounds × 30.
+- **Scope:** all four models, every text-Linear shape, T ∈ {1, 4, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192},
+  typical and worst tags of the TC 8x64 artifacts.
+- **Configurations:** `stock_paper`, `stock_ko`, `stock_wB`, and `wB_{typical,worst}` and `wBfreq_{typical,worst}`.
+- **Checks:** M1's (the isolated path equals NativeLinear's forward), plus wBfreq equal to wB bitwise on the timed
+  operands.
+- **Reported (`w8_report.py`):**
+  - per model and T, the per-forward GEMM sums;
+  - the ratios: 8x64 vs stock_ko (typical, worst; #2's), vs the paper stock, and vs stock_wB; #2's vs the default
+    dispatch; stock_wB vs stock_ko; stock_ko vs the paper stock;
+  - over all cells and by T band: median, min, max, and the cells above or below zero in every round;
+  - the widths per projection and T.
+
+**C2w (`c2_w8.py`): the 4096³ breakdown.**
+- **Method:** C2′'s operands and modes: b2b, isolated, and sustained under NVML, 3 rotated rounds each.
+- **Configurations:**
+  - stock_wA (paper);
+  - stock_ko (its build and scheduler row at this shape);
+  - stock_wB;
+  - the two ceilings;
+  - n8k64_wB from 1b's `build` and from `build_freq`, each with all-E2M1, real (Llama-3.1-8B layer 0 o_proj, 8x64 map)
+    and all-E0M3 tags.
+- **Checks before timing:** nodisp_wB_t0 equals nodisp_wB bitwise, and each freq configuration equals its default.
+- **The decomposition read off it:**
+  - placement: stock_wB vs stock_wA;
+  - arrangement and tags: the ceilings vs stock_wB;
+  - dispatch: n8k64_wB all-E2M1 vs the tagged ceiling;
+  - E0M3 tiles: the real and all-E0M3 rows vs all-E2M1.
+
+**Disclosed, before registration: a smoke test of the new scripts, into a scratch directory.**
+- M1: Llama-3.1-8B o_proj and down_proj at T = 16 and 512, 1 round × 2.
+- C2w: 1 round.
+- Every check passed.
+- One fix came from it: the report skips an empty T band.
+- Nothing from it is used.
