@@ -1,0 +1,430 @@
+{
+ "status": "complete",
+ "started_utc": "2026-10-01T03:45:36+00:00",
+ "gpu": {
+  "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "driver_version": "595.71.05",
+  "power.limit": "500.00 W",
+  "power.default_limit": "600.00 W",
+  "clocks.max.sm": "3090 MHz",
+  "clocks.max.mem": "14001 MHz",
+  "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+  "persistence_mode": "Enabled",
+  "temperature.gpu": "54",
+  "utilization.gpu": "0 %",
+  "memory.used": "4 MiB",
+  "torch": "2.9.0+cu128",
+  "torch_cuda": "12.8",
+  "triton": "3.5.0",
+  "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+  "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "capability": [
+   12,
+   0
+  ],
+  "sm_count": 188,
+  "utc": "2026-10-01T03:45:36+00:00"
+ },
+ "shapes": [
+  "1x1",
+  "1x16",
+  "1x100",
+  "1x2048",
+  "4x512"
+ ],
+ "unit": "16x64",
+ "before": {
+  "spec": "set:mixed",
+  "root": null,
+  "table": null,
+  "describe": {
+   "family": "mixed",
+   "kernels": {
+    "n16k64_wA_n16": "773f183ed3130c47c3ae0b3c1c63dbf344c48d998dc313dabb5e00bf56d2ac76",
+    "n16k64_wA_n32": "a70d49fefba0ae6391898332007b21c360d39c48e317fb5a0a4c2561d82c25ac",
+    "n16k64_wA_n64": "0ce3bcc9360a77ee595e6b7ef72ebbe0c020c30c368574686362e2fbf176439e",
+    "n16k64_wA": "be8fd62d97b231c69e64afc62f1f31fbcf4535a45759f8feb13aeadfb86fe332"
+   },
+   "table": "/home/dev/NVFP4-RaZeR/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.json",
+   "table_shapes": 16,
+   "table_family": "mixed",
+   "schedule_shapes": 0,
+   "calls_by_width": {}
+  }
+ },
+ "after": {
+  "spec": "set:mixed_t0",
+  "build_root": "/home/dev/n16k64_campaign/kernel_opt/build_T",
+  "table": null,
+  "describe": {
+   "family": "mixed_t0",
+   "kernels": {
+    "n16k64_wA_n16_t0": "a2a1b5a6a6182f65d420540271661bc3c93bff2738d7ae3a141925b292f6cf75",
+    "n16k64_wA_n32_t0": "21c0edbe3ae648b87abb71c2e5cb1a8dd9e9bc8fd10c446a945f529f8fe1f6f9",
+    "n16k64_wA_n64_t0": "2822761482cf1383ae0159b35655d5ab8ae68cd48bd03cc5698e0ffd09ffc76d",
+    "n16k64_wA_t0": "e5044db7bcea90dc4570eedbffbf887342276760c86d4cd6fc4f5652c22cba8e"
+   },
+   "table": "/home/dev/NVFP4-RaZeR/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.json",
+   "table_shapes": 16,
+   "table_family": "mixed",
+   "schedule_shapes": 0,
+   "calls_by_width": {}
+  }
+ },
+ "models": {
+  "llama8b": {
+   "artifact": "/home/dev/n16k64_campaign/paper/artifacts/llama8b_tc_16x64",
+   "shapes": {
+    "1x1": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      1,
+      128256
+     ]
+    },
+    "1x16": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      16,
+      128256
+     ]
+    },
+    "1x100": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      100,
+      128256
+     ]
+    },
+    "1x2048": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      2048,
+      128256
+     ]
+    },
+    "4x512": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      4,
+      512,
+      128256
+     ]
+    }
+   },
+   "before": {
+    "install": {
+     "kernel": "KernelSet(mixed)",
+     "kernel_sha256": {
+      "n16k64_wA_n16": "773f183ed3130c47c3ae0b3c1c63dbf344c48d998dc313dabb5e00bf56d2ac76",
+      "n16k64_wA_n32": "a70d49fefba0ae6391898332007b21c360d39c48e317fb5a0a4c2561d82c25ac",
+      "n16k64_wA_n64": "0ce3bcc9360a77ee595e6b7ef72ebbe0c020c30c368574686362e2fbf176439e",
+      "n16k64_wA": "be8fd62d97b231c69e64afc62f1f31fbcf4535a45759f8feb13aeadfb86fe332"
+     },
+     "native_modules": 224
+    },
+    "native_called": 224,
+    "native": 224,
+    "calls_by_width": {
+     "16": 512,
+     "32": 96,
+     "128": 512
+    }
+   },
+   "after": {
+    "install": {
+     "kernel": "KernelSet(mixed_t0)",
+     "kernel_sha256": {
+      "n16k64_wA_n16_t0": "a2a1b5a6a6182f65d420540271661bc3c93bff2738d7ae3a141925b292f6cf75",
+      "n16k64_wA_n32_t0": "21c0edbe3ae648b87abb71c2e5cb1a8dd9e9bc8fd10c446a945f529f8fe1f6f9",
+      "n16k64_wA_n64_t0": "2822761482cf1383ae0159b35655d5ab8ae68cd48bd03cc5698e0ffd09ffc76d",
+      "n16k64_wA_t0": "e5044db7bcea90dc4570eedbffbf887342276760c86d4cd6fc4f5652c22cba8e"
+     },
+     "native_modules": 224
+    },
+    "native_called": 224,
+    "native": 224,
+    "calls_by_width": {
+     "16": 512,
+     "32": 96,
+     "128": 512
+    }
+   }
+  },
+  "mistral7b": {
+   "artifact": "/home/dev/n16k64_campaign/paper/artifacts/mistral7b_tc_16x64",
+   "shapes": {
+    "1x1": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      1,
+      32768
+     ]
+    },
+    "1x16": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      16,
+      32768
+     ]
+    },
+    "1x100": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      100,
+      32768
+     ]
+    },
+    "1x2048": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      2048,
+      32768
+     ]
+    },
+    "4x512": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      4,
+      512,
+      32768
+     ]
+    }
+   },
+   "before": {
+    "install": {
+     "kernel": "KernelSet(mixed)",
+     "kernel_sha256": {
+      "n16k64_wA_n16": "773f183ed3130c47c3ae0b3c1c63dbf344c48d998dc313dabb5e00bf56d2ac76",
+      "n16k64_wA_n32": "a70d49fefba0ae6391898332007b21c360d39c48e317fb5a0a4c2561d82c25ac",
+      "n16k64_wA_n64": "0ce3bcc9360a77ee595e6b7ef72ebbe0c020c30c368574686362e2fbf176439e",
+      "n16k64_wA": "be8fd62d97b231c69e64afc62f1f31fbcf4535a45759f8feb13aeadfb86fe332"
+     },
+     "native_modules": 224
+    },
+    "native_called": 224,
+    "native": 224,
+    "calls_by_width": {
+     "16": 512,
+     "32": 96,
+     "128": 512
+    }
+   },
+   "after": {
+    "install": {
+     "kernel": "KernelSet(mixed_t0)",
+     "kernel_sha256": {
+      "n16k64_wA_n16_t0": "a2a1b5a6a6182f65d420540271661bc3c93bff2738d7ae3a141925b292f6cf75",
+      "n16k64_wA_n32_t0": "21c0edbe3ae648b87abb71c2e5cb1a8dd9e9bc8fd10c446a945f529f8fe1f6f9",
+      "n16k64_wA_n64_t0": "2822761482cf1383ae0159b35655d5ab8ae68cd48bd03cc5698e0ffd09ffc76d",
+      "n16k64_wA_t0": "e5044db7bcea90dc4570eedbffbf887342276760c86d4cd6fc4f5652c22cba8e"
+     },
+     "native_modules": 224
+    },
+    "native_called": 224,
+    "native": 224,
+    "calls_by_width": {
+     "16": 512,
+     "32": 96,
+     "128": 512
+    }
+   }
+  },
+  "phi4": {
+   "artifact": "/home/dev/n16k64_campaign/paper/artifacts/phi4_tc_16x64",
+   "shapes": {
+    "1x1": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      1,
+      100352
+     ]
+    },
+    "1x16": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      16,
+      100352
+     ]
+    },
+    "1x100": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      100,
+      100352
+     ]
+    },
+    "1x2048": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      2048,
+      100352
+     ]
+    },
+    "4x512": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      4,
+      512,
+      100352
+     ]
+    }
+   },
+   "before": {
+    "install": {
+     "kernel": "KernelSet(mixed)",
+     "kernel_sha256": {
+      "n16k64_wA_n16": "773f183ed3130c47c3ae0b3c1c63dbf344c48d998dc313dabb5e00bf56d2ac76",
+      "n16k64_wA_n32": "a70d49fefba0ae6391898332007b21c360d39c48e317fb5a0a4c2561d82c25ac",
+      "n16k64_wA_n64": "0ce3bcc9360a77ee595e6b7ef72ebbe0c020c30c368574686362e2fbf176439e",
+      "n16k64_wA": "be8fd62d97b231c69e64afc62f1f31fbcf4535a45759f8feb13aeadfb86fe332"
+     },
+     "native_modules": 160
+    },
+    "native_called": 160,
+    "native": 160,
+    "calls_by_width": {
+     "16": 320,
+     "64": 120,
+     "128": 360
+    }
+   },
+   "after": {
+    "install": {
+     "kernel": "KernelSet(mixed_t0)",
+     "kernel_sha256": {
+      "n16k64_wA_n16_t0": "a2a1b5a6a6182f65d420540271661bc3c93bff2738d7ae3a141925b292f6cf75",
+      "n16k64_wA_n32_t0": "21c0edbe3ae648b87abb71c2e5cb1a8dd9e9bc8fd10c446a945f529f8fe1f6f9",
+      "n16k64_wA_n64_t0": "2822761482cf1383ae0159b35655d5ab8ae68cd48bd03cc5698e0ffd09ffc76d",
+      "n16k64_wA_t0": "e5044db7bcea90dc4570eedbffbf887342276760c86d4cd6fc4f5652c22cba8e"
+     },
+     "native_modules": 160
+    },
+    "native_called": 160,
+    "native": 160,
+    "calls_by_width": {
+     "16": 320,
+     "64": 120,
+     "128": 360
+    }
+   }
+  },
+  "qwen27b": {
+   "artifact": "/home/dev/n16k64_campaign/paper/artifacts/qwen27b_tc_16x64",
+   "shapes": {
+    "1x1": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      1,
+      248320
+     ]
+    },
+    "1x16": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      16,
+      248320
+     ]
+    },
+    "1x100": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      100,
+      248320
+     ]
+    },
+    "1x2048": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      2048,
+      248320
+     ]
+    },
+    "4x512": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      4,
+      512,
+      248320
+     ]
+    }
+   },
+   "before": {
+    "install": {
+     "kernel": "KernelSet(mixed)",
+     "kernel_sha256": {
+      "n16k64_wA_n16": "773f183ed3130c47c3ae0b3c1c63dbf344c48d998dc313dabb5e00bf56d2ac76",
+      "n16k64_wA_n32": "a70d49fefba0ae6391898332007b21c360d39c48e317fb5a0a4c2561d82c25ac",
+      "n16k64_wA_n64": "0ce3bcc9360a77ee595e6b7ef72ebbe0c020c30c368574686362e2fbf176439e",
+      "n16k64_wA": "be8fd62d97b231c69e64afc62f1f31fbcf4535a45759f8feb13aeadfb86fe332"
+     },
+     "native_modules": 496
+    },
+    "native_called": 496,
+    "native": 496,
+    "calls_by_width": {
+     "16": 1120,
+     "64": 416,
+     "128": 944
+    }
+   },
+   "after": {
+    "install": {
+     "kernel": "KernelSet(mixed_t0)",
+     "kernel_sha256": {
+      "n16k64_wA_n16_t0": "a2a1b5a6a6182f65d420540271661bc3c93bff2738d7ae3a141925b292f6cf75",
+      "n16k64_wA_n32_t0": "21c0edbe3ae648b87abb71c2e5cb1a8dd9e9bc8fd10c446a945f529f8fe1f6f9",
+      "n16k64_wA_n64_t0": "2822761482cf1383ae0159b35655d5ab8ae68cd48bd03cc5698e0ffd09ffc76d",
+      "n16k64_wA_t0": "e5044db7bcea90dc4570eedbffbf887342276760c86d4cd6fc4f5652c22cba8e"
+     },
+     "native_modules": 496
+    },
+    "native_called": 496,
+    "native": 496,
+    "calls_by_width": {
+     "16": 1120,
+     "64": 416,
+     "128": 944
+    }
+   }
+  }
+ },
+ "passed": true,
+ "finished_utc": "2026-10-01T03:48:25+00:00"
+}
