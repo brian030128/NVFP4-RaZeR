@@ -1198,3 +1198,15 @@ the FlipQuant 8x64 GEMM reach stock latency at all T. Reference: stock_wA, i.e. 
 - Every check passed.
 - One fix came from it: the report skips an empty T band.
 - Nothing from it is used.
+
+### Amendment 10: the run
+
+`run_w8.sh` ran on 2026-10-01 from 13:16 to 13:30 UTC (registration 0a57ff2), with no deviation.
+- **Gates:** G0 (34/34 files, 21/21 builds) and G2 passed.
+- **Checks:** M1's 3,240 bitwise comparisons and C2w's 4 were all equal.
+- **Results:** `results/kernel_opt/w8/REPORT.md`.
+  - The 8x64 path is +6.1 % per forward against `stock_ko` (median; +1.3 % at T ≤ 16, +10.2 % at T ≥ 2048), and #2's
+    dispatch is −0.70 %.
+  - At 4096³ the gap splits into the 1x8 arrangement (+2.3 … +3.3 %), the site-0 tags (+1.1 … +1.3 %), the dispatch
+    (+3.8 … +4.4 %, or +2.5 … +3.6 % with #2's) and the real map's E0M3 tiles (+0.5 … +1.1 %).
+- Nothing is adopted or tuned from the run.
