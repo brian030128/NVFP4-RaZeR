@@ -32,6 +32,8 @@ def main():
     ap.add_argument('--tmopt-root', required=True)
     ap.add_argument('--new', required=True)
     ap.add_argument('--before-roots', default='', help='comma-separated build directories searched after sm120/build')
+    ap.add_argument('--only-new', action='store_true',
+                    help='G2 only, for an after root that holds just the new builds (kernel-opt t0: the freq builds)')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     new = args.new.split(',')
@@ -56,6 +58,8 @@ def main():
                                    stages=after and after['compiled_description'].get('mainloop_stages'),
                                    tile_mnk=after and after['compiled_description'].get('tile_mnk'))
             ok &= passed
+            continue
+        if args.only_new:
             continue
         before, source = manifest(REPO / 'sm120' / 'build', name), 'sm120/build'
         for root in extra:

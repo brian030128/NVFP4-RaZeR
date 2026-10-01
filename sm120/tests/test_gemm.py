@@ -22,7 +22,9 @@ pytestmark = pytest.mark.gpu
 MIXED = ['n16k64_wA', 'n16k64_wA_8x1', 'n16k64_wA_n64', 'n16k64_wA_n32', 'n16k64_wA_n16', 'n8k64_wB',
          'n8k64_wB_m64', 'n8k64_wB_m32', 'n8k64_wB_m16', 'n8k64_wB_n64',
          # kernel-opt #4: the 64 x 64 epilogue-tile builds
-         'n16k64_wA_e64', 'n16k64_wA_n64_e64']
+         'n16k64_wA_e64', 'n16k64_wA_n64_e64',
+         # kernel-opt t0: without the site-0 prmt tags
+         'n16k64_wA_t0', 'n16k64_wA_n64_t0', 'n16k64_wA_n32_t0', 'n16k64_wA_n16_t0']
 
 
 def linear_gemm(kern, wp, wsf, gs_w, xp, xsf, gs_x, n, t, k, **kw):

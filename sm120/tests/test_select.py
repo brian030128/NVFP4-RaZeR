@@ -22,7 +22,7 @@ def random_map(family, n, k, g, frac):
     """(mask, type_block) of a random map the family executes: 8x64 for the weights-on-B family, 16x64 for 'mixed';
     'mixed256' (kernel-opt A') gets a map uniform over 128-row panels, stored as 16x64 granules as the 256x64 artifacts
     are (a partial last panel is cut to the real rows)."""
-    rows = {'mixed_wB': 8, 'mixed256': 128}.get(family, 16)
+    rows = 8 if family == 'mixed_wB' else 128 if family.startswith('mixed256') else 16
     mask = torch.rand(-(-n // rows), k // 64, generator=g) < frac
     if rows > 16:
         mask, rows = mask.repeat_interleave(rows // 16, 0)[:n // 16], 16
@@ -70,7 +70,7 @@ def test_schedules_bitwise_equal(device, family, t, n, k):
             assert torch.equal(y, ref), f'width {wd} schedule {combo} differs'
 
 
-@pytest.mark.parametrize('family', ['mixed', 'mixed_wB', 'mixed256'])
+@pytest.mark.parametrize('family', ['mixed', 'mixed_wB', 'mixed256', 'mixed_t0', 'mixed256_t0'])
 def test_batch_invariance(device, family):
     ks = kset(family)
     g = torch.Generator(device='cpu').manual_seed(3)

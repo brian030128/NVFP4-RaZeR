@@ -141,6 +141,166 @@ def parse_ommas(sass: str):
     return out
 
 
+# --untagged-site0 [NVFP4-RaZeR local change, kernel-opt; see sm120/kernel/LOCAL_CHANGES.md]. A blob generated with
+# TAG0=0 feeds its site-0 (e2m1 x e2m1) MMAs their scale word directly, without the identity prmt tag: site 0 is never
+# patched, so it needs no tag, and the tags cost one PRMT per (m-atom, k_block) and k_tile in every arm -- the whole gap
+# between the no-dispatch kernel and stock NVFP4. The E0M3 sites keep their tags. An OMMA's site is then read from the
+# reaching definitions of its SFA register over the kernel's control-flow graph (not from the nearest writer in
+# address order, which can belong to another arm): all reaching definitions are tags of one site s -> s; none of them
+# is the tag of an E0M3 site -> 0; anything else (a mix, or no definition) is an error. The equal-per-site check below
+# and build.py's expected census still apply, so an E0M3 OMMA lost to site 0 fails the build.
+INSN_RE = re.compile(r"/\*([0-9a-f]{4,})\*/\s+((?:@!?U?P[T\d]+\s+)?)([A-Z][A-Z0-9_.]*)\s*([^;]*);")
+NO_DEST = ("BRA", "BRX", "JMP", "JMX", "CALL", "RET", "EXIT", "WARPSYNC", "BSSY", "BSYNC", "BPT", "KILL")
+
+
+def _dest_regs(opcode, operands):
+    """General registers an instruction writes (none if its first operand is not one: RZ, a predicate, a uniform
+    register, an address, or a control-flow / store instruction)."""
+    base = opcode.split(".")[0]
+    if base in NO_DEST or base.startswith("ST"):
+        return ()
+    m = re.match(r"R(\d+)\b", operands)
+    if not m:
+        return ()
+    r0, parts = int(m.group(1)), opcode.split(".")
+    if base in ("OMMA", "HMMA", "IMMA", "QMMA"):
+        width = 4          # the 16x8 F32 accumulator fragment
+    elif base == "LDSM":
+        width = {"4": 4, "2": 2}.get(parts[-1], 1)
+    elif "128" in parts[1:]:
+        width = 4
+    elif "64" in parts[1:] or (base == "CS2R" and "32" not in parts[1:]) or (base == "IMAD" and "WIDE" in parts):
+        width = 2
+    elif base in ("DADD", "DMUL", "DFMA") or (base in ("F2F", "I2F") and "F64" in parts):
+        width = 2
+    else:
+        width = 1
+    return tuple(range(r0, r0 + width))
+
+
+def _functions(sass):
+    """[(name, [(addr, predicate, opcode, operands, line_index)])] for every function in the dump."""
+    out, cur = [], None
+    for i, line in enumerate(sass.split("\n")):
+        if "Function :" in line:
+            cur = (line.split("Function :", 1)[1].strip(), [])
+            out.append(cur)
+            continue
+        m = INSN_RE.search(line)
+        if m and cur is not None:
+            cur[1].append((int(m.group(1), 16), m.group(2).strip(), m.group(3), m.group(4).strip(), i))
+    return out
+
+
+def _control_flow(fname, ins):
+    """Basic blocks [(first, last)] of a function's instruction list and each block's successor blocks."""
+    index_of = {addr: j for j, (addr, _, _, _, _) in enumerate(ins)}
+    leaders, ends = {0}, {}
+    for j, (addr, pred, op, operands, _) in enumerate(ins):
+        base = op.split(".")[0]
+        if base in ("BRX", "JMX", "JMP", "CALL"):
+            raise RuntimeError(f"{fname}: {op} at 0x{addr:x}; --untagged-site0 supports direct branches only")
+        if base not in ("BRA", "EXIT", "RET"):
+            continue
+        conditional = bool(pred) or ".DIV" in op or bool(re.match(r"!?U?P[T\d]", operands))
+        targets = []
+        if base == "BRA":
+            t = re.findall(r"0x([0-9a-f]+)", operands)
+            if not t or int(t[-1], 16) not in index_of:
+                raise RuntimeError(f"{fname}: cannot resolve the target of {op} {operands} at 0x{addr:x}")
+            targets.append(index_of[int(t[-1], 16)])
+            leaders.add(targets[-1])
+        if j + 1 < len(ins):
+            leaders.add(j + 1)
+        ends[j] = targets + ([j + 1] if conditional and j + 1 < len(ins) else [])
+    starts = sorted(leaders)
+    blocks = [(s, (starts[k + 1] if k + 1 < len(starts) else len(ins)) - 1) for k, s in enumerate(starts)]
+    block_of = {s: b for b, (s, _) in enumerate(blocks)}
+    succ = []
+    for s, e in blocks:
+        nxt = ends[e] if e in ends else ([e + 1] if e + 1 < len(ins) else [])
+        succ.append([block_of[t] for t in nxt])
+    return blocks, succ
+
+
+def parse_ommas_cfg(sass: str):
+    """--untagged-site0: [(sass_address, word0, word1, site, selector or None)] for every OMMA, its site read from the
+    reaching definitions of its SFA register (see above)."""
+    lines = sass.split("\n")
+    out = []
+    for fname, ins in _functions(sass):
+        sfa_of = {}
+        for j, (_, _, op, operands, _) in enumerate(ins):
+            if op.startswith("OMMA.SF"):
+                sfa_of[j] = int(operands.split(",")[4].strip().split(".")[0][1:])   # the 5th register, as OMMA_RE
+        if not sfa_of:
+            continue
+        tracked = set(sfa_of.values())
+        blocks, succ = _control_flow(fname, ins)
+        preds = [[] for _ in blocks]
+        for b, ss in enumerate(succ):
+            for t in ss:
+                preds[t].append(b)
+
+        def step(j, state):
+            # a predicated write may or may not happen, so it adds a definition without killing the others
+            _, pred, op, operands, _ = ins[j]
+            for r in _dest_regs(op, operands):
+                if r in tracked:
+                    state[r] = (state.get(r, frozenset()) | {j}) if pred else frozenset({j})
+
+        def transfer(b, state):
+            st = dict(state)
+            for j in range(blocks[b][0], blocks[b][1] + 1):
+                step(j, st)
+            return st
+
+        ins_state = [dict() for _ in blocks]
+        out_state = [transfer(b, {}) for b in range(len(blocks))]
+        changed = True
+        while changed:
+            changed = False
+            for b in range(len(blocks)):
+                merged = {}
+                for p in preds[b]:
+                    for r, d in out_state[p].items():
+                        merged[r] = merged.get(r, frozenset()) | d
+                if merged != ins_state[b]:
+                    ins_state[b] = merged
+                    new_out = transfer(b, merged)
+                    if new_out != out_state[b]:
+                        out_state[b] = new_out
+                        changed = True
+        for b, (s, e) in enumerate(blocks):
+            st = dict(ins_state[b])
+            for j in range(s, e + 1):
+                if j in sfa_of:
+                    addr, reg = ins[j][0], sfa_of[j]
+                    reaching = st.get(reg, frozenset())
+                    if not reaching:
+                        raise RuntimeError(f"{fname}: OMMA at 0x{addr:x} reads R{reg} with no reaching definition")
+                    found = set()
+                    for d in reaching:
+                        mp = PRMT_SEL_RE.search(lines[ins[d][4]]) if ins[d][2].startswith("PRMT") else None
+                        sel = int(mp.group(1), 16) if mp else None
+                        found.add((SITE_BY_SELECTOR[sel][0], sel) if sel in SITE_BY_SELECTOR else (0, None))
+                    if len({site for site, _ in found}) != 1:
+                        raise RuntimeError(f"{fname}: OMMA at 0x{addr:x}: definitions of different sites reach R{reg}: "
+                                           f"{sorted(found, key=str)}")
+                    site = next(iter(found))[0]
+                    sel = next((x for _, x in found if x is not None), None)
+                    words = [int(w, 16) for w in SECOND_WORD_RE.findall(lines[ins[j][4]])]
+                    for k in range(ins[j][4] + 1, min(ins[j][4] + 4, len(lines))):
+                        if len(words) >= 2:
+                            break
+                        words += [int(w, 16) for w in SECOND_WORD_RE.findall(lines[k])]
+                    if len(words) < 2:
+                        raise RuntimeError(f"no second encoding word after OMMA at 0x{addr:x}")
+                    out.append((addr, words[0], words[1], site, sel))
+                step(j, st)
+    return sorted(out)
+
+
 def solve_base(data: bytes, ommas) -> int:
     """Find the unique file offset B with data[B + addr : B + addr + 16] == encoding, for all."""
     addr0, w0, w1, _, _ = ommas[0]
@@ -184,6 +344,10 @@ def main() -> int:
              "operand is pinned to E2M1 (-DMIXFP4_A_ALL_E2M1=1), which makes the two E0M3-on-A "
              "sites unreachable, so the kernel contains only sites 0 and 2. Equal counts among "
              "the sites that ARE present is still required.")
+    parser.add_argument(
+        "--untagged-site0", action="store_true",
+        help="the blob was generated with TAG0=0: site-0 OMMAs carry no prmt tag, and every OMMA's site is read "
+             "from the reaching definitions of its SFA register (see parse_ommas_cfg)")
     args = parser.parse_args()
 
     data = bytearray(args.baseline.read_bytes())
@@ -192,7 +356,7 @@ def main() -> int:
         check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     ).stdout
 
-    ommas = parse_ommas(sass)
+    ommas = parse_ommas_cfg(sass) if args.untagged_site0 else parse_ommas(sass)
     if not ommas:
         raise RuntimeError("cuobjdump found no OMMA instructions")
 

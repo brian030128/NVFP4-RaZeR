@@ -36,10 +36,14 @@ FAMILIES = {
     # build: there the tile costs a mainloop stage (6 -> 5) and was up to +4.9 % slower (results/kernel_opt/4)
     'mixed_e': {16: 'n16k64_wA_n16', 32: 'n16k64_wA_n32', 64: 'n16k64_wA_n64', 128: 'n16k64_wA_e64'},
     'stock_e': {16: 'stock_wA_n16', 32: 'stock_wA_n32', 64: 'stock_wA_n64', 128: 'stock_wA_e64'},
+    # kernel-opt t0: the 16x64 and 256x64 families without the site-0 prmt tags (bitwise equal to 'mixed' / 'mixed256')
+    'mixed_t0': {16: 'n16k64_wA_n16_t0', 32: 'n16k64_wA_n32_t0', 64: 'n16k64_wA_n64_t0', 128: 'n16k64_wA_t0'},
+    'mixed256_t0': {16: 'n16k64_wA_g32_n16_t0', 32: 'n16k64_wA_g32_n32_t0', 64: 'n16k64_wA_g32_n64_t0',
+                    128: 'n16k64_wA_g32_t0'},
 }
 # A family that takes another family's tile-table rows: 'mixed256' has the CTA tile of 'mixed' at every width, and uses
 # its widths so that the two differ only in the dispatch granule (kernel-opt A').
-TABLE_FAMILY = {'mixed256': 'mixed', 'mixed_e': 'mixed', 'stock_e': 'stock'}
+TABLE_FAMILY = {'mixed256': 'mixed', 'mixed_e': 'mixed', 'stock_e': 'stock', 'mixed_t0': 'mixed', 'mixed256_t0': 'mixed'}
 TABLE_DIR = Path(__file__).resolve().parents[1] / 'configs'
 BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
 

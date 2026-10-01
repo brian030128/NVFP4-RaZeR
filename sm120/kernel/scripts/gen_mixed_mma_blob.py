@@ -62,6 +62,18 @@ if NPAT > 32 and os.environ.get("ALLOW_OUTLINE") != "1":
         % (NPAT, A_ATOMS, B_ATOMS))
 
 SEL = ["0x3210", "0x3214", "0x3254", "0x3654"]
+# [NVFP4-RaZeR local change, kernel-opt t0; see sm120/kernel/LOCAL_CHANGES.md] Two options, both defaulting to the
+# original blob (byte-identical output):
+# TAG0: '0' emits site-0 (e2m1 x e2m1) MMAs without the identity prmt tag; they read the scale word directly. Site 0 is
+#   never patched, and the tags cost one PRMT per (m-atom, k_block) and k_tile in every arm -- the whole gap between
+#   the no-dispatch kernel and stock NVFP4. The E0M3 sites keep their tags; patch with --untagged-site0.
+# ORDER: the MMA issue order inside a k_block. 'm' is the m-major serpentine below. 'n' is the order of CUTLASS's
+#   cute::gemm, as in stock: n outer, m serpentine inside, so consecutive MMAs share B and its scale word and ptxas can
+#   mark them .reuse. Measured without effect (results/kernel_opt/t0/exploration); kept for that diagnostic. Every
+#   accumulator still receives its MMAs in the same k order, so outputs are unchanged.
+ORDER = os.environ.get("ORDER", "m")
+TAG0 = os.environ.get("TAG0", "1") == "1"
+assert ORDER in ("m", "n"), ORDER
 # Inline-asm operand numbering, derived from the warp tile: accumulators first (4 per MMA), then
 # the A fragments (4 regs per m-atom), B (2 per n-atom), and one scale word per atom.
 N_OUT = 4 * MMA_M * MMA_N
@@ -78,6 +90,10 @@ def acc(m, n, v):
 
 
 def serpentine(i):
+    if ORDER == "n":
+        n = i // MMA_M
+        j = i % MMA_M
+        return (MMA_M - 1 - j) if (n & 1) else j, n
     m = i // MMA_N
     j = i % MMA_N
     return m, (MMA_N - 1 - j) if (m & 1) else j
@@ -93,13 +109,17 @@ def emit_pattern(p):
         d = [acc(m, ns, v) for v in range(4)]
         a = [A_BASE + m * 4 + v for v in range(4)]
         b = [B_BASE + ns * 2 + v for v in range(2)]
-        out.append("    prmt.b32 %%sf%d, %%%d, %%%d, %s;"
-                   % (i, SFA_BASE + m, SFA_BASE + m, SEL[site]))
+        if site == 0 and not TAG0:
+            sfa = "%%%d" % (SFA_BASE + m)
+        else:
+            out.append("    prmt.b32 %%sf%d, %%%d, %%%d, %s;"
+                       % (i, SFA_BASE + m, SFA_BASE + m, SEL[site]))
+            sfa = "%%sf%d" % i
         out.append(
             "    %s {%%%d,%%%d,%%%d,%%%d}, {%%%d,%%%d,%%%d,%%%d}, {%%%d,%%%d}, "
-            "{%%%d,%%%d,%%%d,%%%d}, {%%sf%d}, {0, 0}, {%%%d}, {0, 0};"
+            "{%%%d,%%%d,%%%d,%%%d}, {%s}, {0, 0}, {%%%d}, {0, 0};"
             % (MMA, d[0], d[1], d[2], d[3], a[0], a[1], a[2], a[3], b[0], b[1],
-               d[0], d[1], d[2], d[3], i, SFB_BASE + ns))
+               d[0], d[1], d[2], d[3], sfa, SFB_BASE + ns))
     return out
 
 

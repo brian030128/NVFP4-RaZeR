@@ -11,6 +11,7 @@ Conventions:
   * weight_operand 1: weights are operand B, D = X W^T is [tokens, out] row-major.
   * type_block is (output channels, K) of one format granule, i.e. the selector's N x K block.
 """
+import dataclasses
 from dataclasses import dataclass, field
 
 
@@ -211,6 +212,12 @@ CONFIGS = {c.name: c for c in [
         patch=False,
         description='Latency ceiling of n16k64_wA: identical tile/arrangement, format dispatch compiled '
                     'out (E2M1 only). Not a deployment kernel.'),
+    # kernel-opt t0 (nodisp vs stock): n16k64_wA_nodisp without the blob's site-0 prmt tags (TAG0=0) -- the
+    # no-dispatch ceiling the t0 builds are measured against.
+    KernelConfig(
+        'n16k64_wA_nodisp_t0', 'mixed', 0, None,
+        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_NO_DISPATCH=1, MIXFP4_PIPE_FLAGS=0), dict(_WT_AS_A_GEN, TAG0=0),
+        patch=False, description='Diagnostic: n16k64_wA_nodisp without the site-0 prmt tags. Not a deployment kernel.'),
     KernelConfig(
         'stock_wA', 'stock', 0, None, dict(MIXFP4_D_COLMAJOR=1), {}, patch=False,
         description='Baseline. Stock CUTLASS SM120 NVFP4 mainloop, weights on A, column-major D, '
@@ -219,6 +226,18 @@ CONFIGS = {c.name: c for c in [
         'stock_wB', 'stock', 1, None, dict(SM120_BIAS_ON_N=1), {}, patch=False,
         description='Baseline. Stock CUTLASS SM120 NVFP4 mainloop, weights on B, row-major D.'),
 ]}
+
+# kernel-opt t0 (nodisp vs stock): the 16x64 and 256x64 (A') kernels with the blob's site-0 prmt tags dropped
+# (TAG0=0). The tags -- one identity PRMT per (m-atom, k_block) and k_tile in every arm -- were the whole gap between
+# n16k64_wA_nodisp and stock_wA (results/kernel_opt/t0). Site 0 is never patched, so only the E0M3 sites keep a tag; the
+# patcher reads the sites from reaching definitions (--untagged-site0). Same MMAs in the same order: bitwise equal to
+# their bases.
+for _base in ('n16k64_wA', 'n16k64_wA_n64', 'n16k64_wA_n32', 'n16k64_wA_n16',
+              'n16k64_wA_g32', 'n16k64_wA_g32_n64', 'n16k64_wA_g32_n32', 'n16k64_wA_g32_n16'):
+    _c = CONFIGS[_base]
+    CONFIGS[_base + '_t0'] = dataclasses.replace(
+        _c, name=_base + '_t0', blob_gen=dict(_c.blob_gen, TAG0=0),
+        description=f'kernel-opt t0: {_base} without the site-0 prmt tags (TAG0=0).')
 
 DEFAULT = 'n16k64_wA'
 

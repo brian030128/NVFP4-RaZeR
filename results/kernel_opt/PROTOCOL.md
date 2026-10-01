@@ -677,3 +677,108 @@ changed.
   - `test_schedules_bitwise_equal`: 6 passed.
   - `bench_ab4_isolated.py` on Llama k_proj and o_proj at T = 16 and 256, 1 round × 3, with that table and two rows
     forced to non-default settings. The settings reached the calls, and all 60 bitwise checks were equal.
+
+## Amendment 6 (t0): the cause of "nodisp is slower than stock_wA", and its fix — the blob's site-0 prmt tags dropped
+
+Written 2026-10-01, before any registered GPU run of t0. The hashes and time are in `registration_6.json`.
+
+The user asked, through the coordinator: "find the cause of 'n16k64_wA_nodisp is slower than stock_wA' (+0.8 to +1.8 %
+in C3/C2; +1.2 % at 4096^3 in your #2 split) and fix it, bitwise-safe". The pending decisions stay pending: #4 adoption,
+the 256x64 extension, 4b, B′ and the cumulative e2e.
+
+**Cause** (disclosed exploration, `results/kernel_opt/t0/exploration/`):
+- **SASS, CPU only.** stock_wA and n16k64_wA_nodisp from `build_4` (same sources, same epilogue tile) were compared.
+  - The MMA warps' k_tile loop is 91 vs 95 instructions. It is identical opcode for opcode except +4 PRMT in nodisp.
+  - Over the whole kernel the difference is +8 PRMT and −5 other instructions. Loads, barriers, syncs, the producer
+    and the epilogue are the same.
+- **The 4 PRMTs** are `PRMT Rd, Rs, 0x3210, Rs`: identity copies of the A scale-factor register.
+  - The MMA blob emits a `prmt.b32` before every MMA's scale operand. It is the site tag that tells the SASS patcher
+    which OMMAs to switch to E0M3; its selector names the site.
+  - ptxas keeps one per (m-atom, k_block), so 4 per k_tile and MMA warp.
+  - The real kernel's arms carry the same 4 per k_tile, the all-E2M1 arm included.
+- **The MMA order also differs.** The blob is m-major; CUTLASS issues n outer with the m-atoms alternating, so stock
+  has 16 OMMAs with operand `.reuse` per k_tile against nodisp's 2.
+- **Timing** (`quick_N.py`): the M1 condition plus back-to-back, 3 rounds, 7 cells from 4096x4096 at T = 16 to
+  4096³; every output bitwise equal to stock_wA. Against stock_wA:
+  - nodisp: +0.9 to +2.0 %;
+  - tags dropped: −0.6 to +0.3 %;
+  - CUTLASS's order with tags: +0.5 to +1.8 %;
+  - both: −0.4 to +0.4 %.
+- So the tags are the whole gap, and the order is not part of it.
+
+**What changes.**
+- **`sm120/kernel/scripts/gen_mixed_mma_blob.py`** (vendored, now locally modified):
+  - `TAG0=0` drops the tags of site-0 MMAs, which then read their scale word directly. The E0M3 sites keep theirs.
+  - `ORDER=n` issues the MMAs in CUTLASS's order. It is diagnostic only, used by the exploration.
+  - With neither set, the output is byte-identical (checked for the 7 blob shapes in use).
+- **`sm120/kernel/scripts/patch_mixed_nvfp4_gemm.py`** (vendored, now locally modified): `--untagged-site0` reads
+  each OMMA's site from the reaching definitions of its scale register over the kernel's control-flow graph.
+  - All reaching definitions are tags of one site s: site s. None is an E0M3 tag: site 0. Anything else is an error.
+  - Without the flag, the patcher is unchanged.
+  - Checked on all 74 existing tagged builds in 6 build directories: the analysis gives every OMMA the same site as
+    the strict parser.
+- **`LOCAL_CHANGES.md` / `.patch`** cover both scripts; the patch reproduces all four modified files from upstream.
+- **`sm120/build.py`** passes `--untagged-site0` exactly for configurations generated with `TAG0=0`, and requires
+  them to declare their census.
+- **New builds (`configs.py`):**
+  - n16k64_wA{,_n64,_n32,_n16}_t0 and n16k64_wA_g32{,_n64,_n32,_n16}_t0: each base plus `TAG0=0`, with the same
+    census.
+  - n16k64_wA_nodisp_t0: the diagnostic ceiling.
+- **Sets:** `mixed_t0` and `mixed256_t0`, reading the `mixed` width rows.
+- **Builds**, CPU only, from the t0 sources, before registration:
+  - `build_T`: all 37 configurations. `--all` built the first 4; the remaining 33 were built by 8 parallel
+    `build.py --config` processes. `--all` is the same per-configuration build in a loop.
+  - `build_Tfreq`: the four 16x64 t0 builds with `MIXFP4_DISPATCH_FREQ=1` (#2).
+- **Tests:**
+  - `test_gemm.py` with the 16x64 t0 builds and `test_g32.py` with the g32 t0 builds;
+  - `test_select.py`: its random 256x64 maps for every `mixed256*` family, and batch invariance for the t0 sets.
+- **Scripts:** `check_sass.py --only-new`, `bench_abT_isolated.py`, `c2_t0.py`, `abT_report.py`, `run_T.sh`.
+
+**Gates** (`run_T.sh`; a failure stops t0):
+- **G3:** `build.py --selftest` for the 8 t0 builds: the upstream self-test, PASS patched and FAIL unpatched under
+  random tagging, with the driver patched by `--untagged-site0`.
+- **G1 / G2 (`check_sass.py`):**
+  - G1 on `build_T`: the 28 existing configurations keep their patched and unpatched SASS. The before roots are
+    `sm120/build`, kernel-opt `build`, `build_e0m3`, `build_A1` and `build_4`.
+  - G2: the 9 new builds have their census and nothing is predicated; `build_Tfreq`'s four likewise.
+- **G3 pytest:** `test_gemm.py`, `test_select.py` and `test_g32.py` on `build_T`; `test_select.py -k mixed_t0` on
+  `build_Tfreq`.
+- **G4 (`check_bitwise.py`):** 0 differences against n16k64_wA from `sm120/build` for:
+  - the 16x64 t0 builds and set:mixed_t0, on `build_T` and on `build_Tfreq`;
+  - the g32 t0 builds and set:mixed256_t0, on `build_T`.
+- **G5:** whole-model logits bitwise equal on 4 models × 5 shapes:
+  - 16x64: set:mixed vs set:mixed_t0;
+  - 16x64 freq: set:mixed (`build_freq`) vs set:mixed_t0 (`build_Tfreq`);
+  - 256x64: set:mixed256 (`build_A1`) vs set:mixed256_t0 (`build_T`).
+
+**Measurement M1** (`bench_abT_isolated.py`): the deviation-2 method, 4 models × tokens 1 … 8192, the current tile
+table.
+- Configurations:
+  - stock_wA, the reference;
+  - nodisp → nodisp_t0 (FourOverSix artifact);
+  - 16x64 typical and worst, default dispatch (`sm120/build` → `build_T`);
+  - 16x64 typical and worst, #2's dispatch (`build_freq` → `build_Tfreq`);
+  - 256x64 typical and worst (`build_A1` → `build_T`).
+- Checks: after = before bitwise on the timed operands, and nodisp_t0 = stock_wA; the same widths.
+- Reported by `abT_report.py`: after vs before per unit, and each unit's gap vs stock_wA before → after.
+
+**C2‴** (`c2_t0.py`): 4096³, back-to-back, isolated and sustained, 3 rounds. Configurations: stock_wA, nodisp,
+nodisp_t0, and {default, t0, freq, freq t0} × {all-E2M1, real map, all-E0M3}.
+
+**Adoption** is proposed to the coordinator, not automatic: adopt the t0 builds for 16x64 and 256x64, with both
+dispatch variants, if no unit is slower beyond its round range at any (model, T).
+
+**Before registration (disclosed, not results).**
+- The exploration builds (`build_N`, worktree `wtN`), `quick_N.py` / `.out`, `sass_loops.py` and the loop dumps are
+  in `results/kernel_opt/t0/exploration/`.
+- The two `ORDER` builds of the exploration (n16k64_wA_nodisp_on and _t0on: nodisp with `ORDER=n`, and with `TAG0=0`
+  as well) were dropped from `configs.py` before registration.
+- `validate_cfg.py` / `.out` is the check of the reaching-definitions analysis on the 74 existing tagged builds.
+- On the finished `build_T`, `check_sass.py` was run once, CPU only, as a pre-check before registering. It passed
+  G1 for the 28 existing configurations and G2 for the 9 new ones. The chain runs it again as the gate.
+- One timing probe (`quick_T.py` / `.out`): the real dispatch kernels (n16k64_wA from `sm120/build` and `build_freq`
+  vs their t0 builds), Llama-3.1-8B's o_proj map and an all-E2M1 map, 4096x4096 at T = 256 / 1024 / 4096, M1's
+  condition, 3 × 30. Every output was bitwise equal.
+  - t0 vs tagged: −0.3 to −1.2 % (default dispatch) and −0.0 to −0.8 % (#2's dispatch) on the real map;
+  - −0.8 to −1.1 % and −1.2 to −1.6 % on the all-E2M1 map.
+  - Nothing from it is used.

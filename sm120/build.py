@@ -174,6 +174,16 @@ def resource_usage(cuobjdump, binary):
     return kernels
 
 
+def patcher_flags(cfg):
+    """kernel-opt (nodisp vs stock): a blob generated with TAG0=0 has untagged site-0 OMMAs, which the patcher reads
+    with --untagged-site0 (sites from reaching definitions). Such a configuration must declare its census."""
+    if str(cfg.blob_gen.get('TAG0', 1)) == '0':
+        if cfg.patch and cfg.expected_census is None:
+            raise BuildError(f'{cfg.name}: a TAG0=0 configuration must declare expected_census')
+        return ['--untagged-site0']
+    return []
+
+
 def patch(cfg, tc, lib):
     unpatched = Path(f'{lib}.unpatched')
     if not cfg.patch:
@@ -182,7 +192,8 @@ def patch(cfg, tc, lib):
             raise BuildError(f'{cfg.name}: a mixed configuration with a format granule must be patched')
         shutil.copy2(unpatched, lib)
         return dict(patched=False, census_unpatched=pre, census_patched=pre, patcher_log='')
-    log = run([sys.executable, PATCHER, '--cuobjdump', tc['cuobjdump'], '--allow-missing-sites', unpatched, lib])
+    log = run([sys.executable, PATCHER, '--cuobjdump', tc['cuobjdump'], '--allow-missing-sites', *patcher_flags(cfg),
+               unpatched, lib])
     m = re.search(r'per-site counts: (.*)', log)
     if not m:
         raise BuildError(f'patcher reported no census:\n{log}')
@@ -313,7 +324,8 @@ def run_selftest(cfg, tc, out):
            KERNEL / 'src' / 'mixed_nvfp4_gemm.cu', '-o', f'{exe}.unpatched',
            '-lcudadevrt', '-lcudart_static', '-lrt', '-lpthread', '-ldl', '-lgomp']
     run(cmd)
-    plog = run([sys.executable, PATCHER, '--cuobjdump', tc['cuobjdump'], '--allow-missing-sites', f'{exe}.unpatched', exe])
+    plog = run([sys.executable, PATCHER, '--cuobjdump', tc['cuobjdump'], '--allow-missing-sites', *patcher_flags(cfg),
+                f'{exe}.unpatched', exe])
     m = re.search(r'per-site counts: (.*)', plog)
     exe_sites = {int(k): int(v) for k, v in re.findall(r'site (\d+)=(\d+)', m.group(1))} if m else None
     tag = 'randa' if cfg.weight_operand == 0 else 'randb'

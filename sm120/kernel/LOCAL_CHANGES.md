@@ -2,11 +2,12 @@
 
 Upstream: `https://github.com/brian030128/mixfp4` at `7b3ab34ebc4a31b396a27fa6aea3650259714cf9`
 (the content of `mixfp4-main.zip`). `VENDORED.json` lists the upstream SHA-256 of every vendored
-file *before* modification. Two files are modified, `src/mixed_nvfp4_gemm.cu` and (since the
-`kernel-opt` branch) `src/collective/sm120_blockscaled_mma_tma_mixed.hpp`; the exact diff of both is
-`LOCAL_CHANGES.patch`. Every change is a compile-time hook that is inactive unless its macro is
-defined (or, for the collective, unless the CTA tile's M is below 128, which no upstream build
-uses), so a build without them is the upstream kernel (the upstream self-test driver built by
+file *before* modification. Four files are modified: `src/mixed_nvfp4_gemm.cu`, and on the
+`kernel-opt` branch `src/collective/sm120_blockscaled_mma_tma_mixed.hpp`, `scripts/gen_mixed_mma_blob.py`
+and `scripts/patch_mixed_nvfp4_gemm.py`. The exact diff of all four is `LOCAL_CHANGES.patch`. Every
+change is inactive unless it is asked for -- a compile-time macro, a blob-generator environment option
+or a patcher flag (or, for the collective, a CTA tile M below 128, which no upstream build uses) -- so
+a build without them is the upstream kernel (the upstream self-test driver built by
 `sm120/build.py --selftest` is compiled from this file with the hooks off). Every existing
 configuration rebuilt from the kernel-opt sources has the same patched and unpatched SASS as before
 (`results/kernel_opt/`, gate G1).
@@ -25,7 +26,15 @@ configuration rebuilt from the kernel-opt sources has the same patched and unpat
 | collective, narrow M (kernel-opt) | in `sm120_blockscaled_mma_tma_mixed.hpp`, only when the CTA tile's M < 128: the SFA smem tile and TMA box cover the whole 128-row scale-factor block (`TileShapeSFA`), the producer loads the block that holds the CTA's rows (`broadcast_m`), and the consumer reads its M sub-tile (`m % (128/M)`) | the mirror of the collective's existing narrow-N handling of SFB (`TileShapeSFB`, `broadcast_n`): the scale-factor layout's indivisible unit is a 128-row block. For M >= 128 every type is the upstream one (identical SASS, gate G1). |
 
 The mainloop collective (`src/collective/*`) is modified only by the narrow-M path, the pattern-0-first
-dispatch option and the diagnostic arm permutation above; the MMA atom, the blob/PTX generators and the
-SASS patcher are unmodified. `sm120/build.py` runs `scripts/gen_mixed_mma_blob.py` from a copy in the build
+dispatch option and the diagnostic arm permutation above; the MMA atom and the PTX generator are
+unmodified.
+
+Two script options (kernel-opt t0, `results/kernel_opt/t0`):
+
+| option | effect | why |
+|---|---|---|
+| `TAG0=0` (`scripts/gen_mixed_mma_blob.py`, environment) | site-0 (e2m1 x e2m1) MMAs read their scale word directly instead of through the identity `prmt.b32` site tag; the E0M3 sites keep their tags | the tags cost one PRMT per (m-atom, k_block) and k_tile in every arm, the all-E2M1 arm included; they were the whole gap between `n16k64_wA_nodisp` and stock (4 PRMTs per k_tile and MMA warp). Site 0 is never patched, so it needs no tag. Unset (1), the output is the upstream blob byte for byte. |
+| `ORDER=n` (`scripts/gen_mixed_mma_blob.py`, environment; diagnostic only) | the MMAs of a k_block are issued in CUTLASS's `cute::gemm` order (n outer, m serpentine) instead of the blob's m-major serpentine | the exploration's test of whether operand reuse matters: it does not. Unset (`m`), the upstream order. |
+| `--untagged-site0` (`scripts/patch_mixed_nvfp4_gemm.py`) | each OMMA's site is read from the reaching definitions of its SFA register over the kernel's control-flow graph: all of them tags of one site -> that site; none of them an E0M3 tag -> site 0; anything else is an error | needed for `TAG0=0` builds, whose site-0 OMMAs have no tag. `build.py` passes it exactly for configurations generated with `TAG0=0`, which must declare their census. Without the flag the patcher is the upstream one; on every existing tagged build the reaching-definitions analysis assigns each OMMA the upstream site. | `sm120/build.py` runs `scripts/gen_mixed_mma_blob.py` from a copy in the build
 directory, so the generated header never overwrites `src/collective/mixed_mma_blob_generated.hpp`
 (which is kept as the upstream committed default and is shadowed by include order).

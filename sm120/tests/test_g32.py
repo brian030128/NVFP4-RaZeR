@@ -29,7 +29,9 @@ from test_gemm import SHAPES, fp64_reference, identity_operand, linear_gemm, pla
 
 pytestmark = pytest.mark.gpu
 
-G32 = ['n16k64_wA_g32', 'n16k64_wA_g32_n64', 'n16k64_wA_g32_n32', 'n16k64_wA_g32_n16']
+G32 = ['n16k64_wA_g32', 'n16k64_wA_g32_n64', 'n16k64_wA_g32_n32', 'n16k64_wA_g32_n16',
+       # kernel-opt t0: without the site-0 prmt tags
+       'n16k64_wA_g32_t0', 'n16k64_wA_g32_n64_t0', 'n16k64_wA_g32_n32_t0', 'n16k64_wA_g32_n16_t0']
 PANEL = 128
 REF_ROOT = Path(os.environ.get('SM120_REF_BUILD_DIR', Path(__file__).resolve().parents[1] / 'build'))
 
