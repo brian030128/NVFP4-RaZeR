@@ -45,8 +45,9 @@ with typical tags: the 1b set against optimization 1's set, and the gap to stock
 - At T ≤ 64 the 1b set equals optimization 1's within ±0.3 %.
 - The 128 × 64 tile fixes the T = 256 CTA-count problem on Llama and Mistral, where 8x64 goes from +26 % to +0.2 % over
   stock_wA. It halves the problem on Phi-4 and Qwen.
-- **T = 512 and T ≥ 1024 keep +5.7 … +14.7 %.** That is the 1x8 arrangement and the dispatch; see amendment 10's
-  baseline.
+- **T = 512 and T ≥ 1024 keep +5.7 … +14.7 %.**
+  - The kernel report attributes the large-T part to the 1x8 arrangement and the 16-arm dispatch.
+  - Amendment 10's baseline measures that split.
 
 **M2: prefill, CUDA graph.** The 8x64 path against FourOverSix (`auto_stock`), in %, optimization 1's run → 1b's run.
 Each run is compared with its own FourOverSix processes:
@@ -78,8 +79,10 @@ Each run is compared with its own FourOverSix processes:
   Phi-4 +0.1 … −0.4 %.
 - **Against optimization 1's M3** (a separate run; each compared with its own FourOverSix processes):
   - Llama and Mistral are identical within ±0.03 points (the same builds and widths).
-  - Phi-4 differs by −0.18 … +0.11 points where the 1b table changed its decode widths: batch 4 (gate_up_proj 16 → 32)
-    and batch 16 (down_proj 32 → 16, qkv_proj 16 → 32). This is within the range the two runs' FourOverSix varies over.
+  - Phi-4 differs only where the 1b table changed its decode widths, and by little:
+    - batch 4, where gate_up_proj moves from width 16 to 32: −0.18 and −0.09 points;
+    - batch 16, where down_proj goes 32 → 16 and qkv_proj 16 → 32: +0.11 and +0.08 points.
+  - Given the ±0.03-point agreement on Llama and Mistral, these are probably real, but small.
 
 ## Status
 
