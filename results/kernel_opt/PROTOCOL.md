@@ -954,3 +954,114 @@ hashes are in `results/kernel_opt/c3k/registration.json`.
 - **Disclosed:** the sweep and analysis scripts were smoke-tested once into a scratch directory, on one shape, T = 16
   and 512, and 1 round × 2. Nothing from it is used.
 
+
+## Amendment 9: the cumulative registered run — the combined 16x64 build against today's paper builds
+
+Written 2026-10-01, before any registered GPU run of this amendment. The hashes and time are in `registration_9.json`.
+
+**The user's decision 7**, relayed by the coordinator: "after B′, one registered run with the combined build (freq or
+B′ per B′'s results + t0 + e64 + scheduling + 4b …). Gates, then M1 (combined vs today's paper builds) and the e2e
+prefill/decode harness, 4 models." The later schedule change limits it to the 16x64 family, plus stock/FourOverSix and
+the paper-build references. There is no 256x64 or 8x64 work.
+
+**The dispatch is #2's.** B′ was explored and does not supersede it (`results/kernel_opt/Bprime/EXPLORATION.md`,
+1884314). C3k showed #2's dispatch is the faster variant at real map densities (f ≈ 2–4 %).
+
+**What is measured.** This amendment adds no build and changes no library source; it adds only the scripts below.
+- **The combined 16x64 build:** `mixed_ko` from `build_7freq`, i.e. amendment 7's four builds with
+  `MIXFP4_DISPATCH_FREQ=1`, on the adopted table `sm120/configs/<gpu>.ko.json`. That is #2's dispatch, t0, #4's
+  epilogue tile at width 128, the 4b widths and the scheduler rows.
+  - Disclosed: the scheduler rows were tuned with the default dispatch (`build_7`). One set of rows serves both
+    dispatch variants (amendment 7).
+- **The adopted stock set:** `stock_ko` from `build_7`, on the same table.
+- **The references, today's paper builds:** `mixed` and `stock` from `sm120/build`, on the paper table
+  `sm120/configs/<gpu>.json`.
+- **In M1 only:** the adopted path with the default dispatch (`mixed_ko` from `build_7`). It gives #2's dispatch vs the
+  default on the real maps.
+
+**Gates** (`run_cum.sh`; a failure stops the run):
+- **G0 (`check_provenance.py`), the registered files and builds are the ones measured:**
+  - every file listed in the registration has its sha256;
+  - every build used has its registered library sha256, SASS sha256 and defines, and its library file matches its
+    manifest. These are `build_7freq`'s four builds, `build_7`'s four `mixed_ko` and four `stock_ko` builds, and the
+    eight paper builds of `mixed` and `stock` in `sm120/build`;
+  - the `build_7` and `build_7freq` builds have the patched and unpatched SASS of amendment 7's registration.
+  - Note: amendment 7's G3 self-test rebuilt `build_7`'s n16k64_wA_e64_t0 after that registration. Its SASS is the
+    registered one, but its library sha256 differs. Amendment 7's later gates (schedule tuning, G4, G5) ran on the
+    rebuilt library, which is the one registered here.
+- **G2 (`check_sass.py --only-new`):** the census and no predicated OMMA, for `build_7freq`'s four builds and
+  `build_7`'s eight (stock: E2M1 OMMAs only).
+- **G3 pytest:**
+  - `test_gemm.py` and `test_select.py` on `build_7freq`;
+  - `test_select.py -k "mixed_ko or stock_ko"` on `build_7`.
+  - Self-tests are not re-run, because `build.py --selftest` rebuilds the library. The same SASS passed them in
+    amendment 7, and G0 ties the two.
+- **G4 (`check_bitwise.py --family wA`):** 0 differences against n16k64_wA (`sm120/build`) for `build_7freq`'s four
+  builds, and for set:mixed_ko with the adopted table.
+- **G5:** whole-model logits bitwise equal on 4 models × 5 shapes:
+  - set:mixed (paper) vs set:mixed_ko (`build_7freq`, adopted table);
+  - set:stock vs set:stock_ko (`build_7`, adopted table).
+
+**M1 (`bench_cum_isolated.py`): GEMM time.**
+- **Method:** deviation-2, as in amendments 5 and 6: cold weights by rotation plus a 512 MiB read-flush, activations
+  quantized after the flush, CUPTI, 3 rotated rounds × 30.
+- **Scope:** all four models, every text-Linear shape, T ∈ {1, 4, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192},
+  typical and worst tags.
+- **Configurations:** `stock_paper`, `stock_ko`, and for each tag variant `paper_16x64`, `comb_16x64` (combined) and
+  `ko_16x64` (the adopted default dispatch). The tables differ in width (4b); each call records its width and scheduler
+  setting.
+- **Checks (a failure stops the run):**
+  - every timed path equals NativeLinear's forward (M1's);
+  - on the timed operands, bitwise: stock_ko equals the paper stock, and the combined build and ko each equal the
+    paper build.
+- **Reported (`cum_report.py`):**
+  - per model and T, the per-forward GEMM sum;
+  - the ratios: combined vs paper (typical, worst), stock_ko vs paper stock, adopted default vs paper, and #2's vs the
+    default dispatch;
+  - each 16x64 path's gap to its own stock and to the paper stock;
+  - over all cells: median, min, max, and the cells slower or faster in every round.
+
+**End to end (`cum_e2e.py`).** The paper's per-process scripts run unchanged: `bench_prefill.py` (step 05) and
+`bench_decode.py` (Experiment D).
+- **Policies:**
+
+  | policy | map | kernel | build directory | installed set, table |
+  |---|---|---|---|---|
+  | ours-16x64-paper | TC 16x64 | `paper_mixed` | `sm120/build` | `mixed`, paper table |
+  | ours-16x64-combined | TC 16x64 | `auto_mixed` | `build_7freq` | `mixed_ko`, adopted table |
+  | fo6-paper | FourOverSix | `paper_stock` | `sm120/build` | `stock`, paper table |
+  | fo6-ko | FourOverSix | `auto_stock` | `build_7` | `stock_ko`, adopted table |
+
+- **Prefill:** all four models at the paper's shapes (1x128 … 1x8192, 4x2048), 7 repetitions. 5 rounds, with the policy
+  list rotated by r − 1 in round r. That is 80 processes, about 2.3 h.
+- **Decode:** Llama-3.1-8B, Mistral-7B-v0.3 and Phi-4, with D's 6 settings (batch 1, 4, 16 × prompt 512, 2048) and 64
+  generated tokens. 5 rounds, rotated the same way. That is 60 processes, about 50 min.
+  - Qwen3.8-27B is out, as in Experiment D: the decode harness does not support its hybrid cache.
+- **Checks (a failure stops the run):**
+  - prefill: the graph's logits equal eager's bitwise at every shape;
+  - decode: the graph's first 33 greedy tokens equal an eager StaticCache decode's;
+  - every library a process loaded is a build of its policy's directory, by sha256;
+  - `MIXFP4_DISPATCH_FREQ=1` is set on exactly the `build_7freq` builds;
+  - the installed set is the policy's family, on its table.
+- **Reported (`cum_e2e_report.py`):**
+  - per model and shape (or setting), the median over rounds of each process's value: prefill in ms per forward,
+    decode in tokens per second;
+  - combined vs paper, fo6-ko vs fo6-paper, and each 16x64 policy vs FourOverSix;
+  - ranges pairing round r of both policies.
+  - No significance claims beyond the round range. Earlier prefill runs varied by about 1 % per process.
+
+**Nothing is adopted or tuned from this run.** It is descriptive: what the combined build changes against the paper
+builds, at the GEMM and end-to-end level. The paper numbers (tm-opt) stay untouched; whether to re-measure them is the
+user's decision. Still on hold: #1b M3, the decisive-margin rule, E0M3 (i)–(iii).
+
+**Disclosed, before registration: a smoke test of the new scripts, into a scratch directory.**
+- **M1:** Llama-3.1-8B o_proj and down_proj at T = 16 and 512, 1 round × 2.
+- **The e2e harness:** Llama-3.1-8B, all 4 policies, 1 round. Prefill at 1x128 and 1x2048 × 2 reps; decode at 1x512.
+- **Result:**
+  - the registered checks passed;
+  - the build check's negative controls failed as they should: the wrong directory, the wrong family, a paper record
+    against `build_7freq`.
+- **One fix came from it:** `run_cum.sh` now creates its `gemm` directory.
+- **G0 was dry-run on CPU** against this registration: it passed. Its negative control, a copy with one file hash and one
+  build's defines altered, failed on exactly those two.
+- Nothing from the smoke test is used.
