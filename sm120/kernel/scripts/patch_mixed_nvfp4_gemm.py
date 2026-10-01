@@ -42,6 +42,7 @@ import re
 import struct
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 
 FIELD_SHIFT = 14
@@ -149,6 +150,10 @@ def parse_ommas(sass: str):
 # address order, which can belong to another arm): all reaching definitions are tags of one site s -> s; none of them
 # is the tag of an E0M3 site -> 0; anything else (a mix, or no definition) is an error. The equal-per-site check below
 # and build.py's expected census still apply, so an E0M3 OMMA lost to site 0 fails the build.
+# Indirect branches (kernel-opt amendment 6b): ptxas can compile a switch -- CUTLASS's warp-role dispatch in the
+# upstream self-test driver -- to `LDC Rx, c[0x2][..]; BRX Rx imm`, a jump table in the kernel's .nv.constant2 section.
+# Each BRX then branches to (table word + its next PC + imm) for every word of that section, a superset of its real
+# targets when a kernel has several tables. A BRX without a table, or a target that is not an instruction, is an error.
 INSN_RE = re.compile(r"/\*([0-9a-f]{4,})\*/\s+((?:@!?U?P[T\d]+\s+)?)([A-Z][A-Z0-9_.]*)\s*([^;]*);")
 NO_DEST = ("BRA", "BRX", "JMP", "JMX", "CALL", "RET", "EXIT", "WARPSYNC", "BSSY", "BSYNC", "BPT", "KILL")
 
@@ -192,14 +197,31 @@ def _functions(sass):
     return out
 
 
-def _control_flow(fname, ins):
-    """Basic blocks [(first, last)] of a function's instruction list and each block's successor blocks."""
+def _control_flow(fname, ins, tables):
+    """Basic blocks [(first, last)] of a function's instruction list and each block's successor blocks. tables: the
+    function's jump-table words (.nv.constant2), for its BRX instructions."""
     index_of = {addr: j for j, (addr, _, _, _, _) in enumerate(ins)}
     leaders, ends = {0}, {}
     for j, (addr, pred, op, operands, _) in enumerate(ins):
         base = op.split(".")[0]
-        if base in ("BRX", "JMX", "JMP", "CALL"):
-            raise RuntimeError(f"{fname}: {op} at 0x{addr:x}; --untagged-site0 supports direct branches only")
+        if base in ("JMX", "JMP", "CALL"):
+            raise RuntimeError(f"{fname}: {op} at 0x{addr:x}; --untagged-site0 supports direct branches and BRX only")
+        if base == "BRX":
+            if not tables:
+                raise RuntimeError(f"{fname}: BRX at 0x{addr:x} has no jump table (.nv.constant2) to resolve it")
+            imm = re.findall(r"(-?0x[0-9a-f]+)", operands)
+            origin = (ins[j + 1][0] if j + 1 < len(ins) else addr + 16) + (int(imm[-1], 16) if imm else 0)
+            targets = []
+            for w in tables:
+                if origin + w not in index_of:
+                    raise RuntimeError(f"{fname}: jump-table word 0x{w:x} of the BRX at 0x{addr:x} gives 0x{origin + w:x}, "
+                                       "which is not an instruction")
+                targets.append(index_of[origin + w])
+            leaders.update(targets)
+            if j + 1 < len(ins):
+                leaders.add(j + 1)
+            ends[j] = sorted(set(targets)) + ([j + 1] if pred and j + 1 < len(ins) else [])
+            continue
         if base not in ("BRA", "EXIT", "RET"):
             continue
         conditional = bool(pred) or ".DIV" in op or bool(re.match(r"!?U?P[T\d]", operands))
@@ -223,9 +245,36 @@ def _control_flow(fname, ins):
     return blocks, succ
 
 
-def parse_ommas_cfg(sass: str):
+def jump_tables(cuobjdump, binary):
+    """{function name: jump-table words} from every cubin's .nv.constant2.<function> section (cuobjdump -xelf)."""
+    out = {}
+    with tempfile.TemporaryDirectory() as d:
+        subprocess.run([str(cuobjdump), "-xelf", "all", str(pathlib.Path(binary).resolve())], cwd=d, check=True,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        for path in sorted(pathlib.Path(d).glob("*.cubin")):
+            data = path.read_bytes()
+            if data[:4] != b"\x7fELF" or data[4] != 2 or data[5] != 1:
+                raise RuntimeError(f"{path.name}: not a little-endian ELF64 cubin")
+            shoff, = struct.unpack_from("<Q", data, 0x28)
+            shentsize, shnum, shstrndx = struct.unpack_from("<HHH", data, 0x3a)
+            secs = [struct.unpack_from("<IIQQQQIIQQ", data, shoff + i * shentsize) for i in range(shnum)]
+            strtab = secs[shstrndx][4]
+            for sh_name, _, _, _, offset, size, _, _, _, _ in secs:
+                name = data[strtab + sh_name:data.index(b"\0", strtab + sh_name)].decode()
+                if not name.startswith(".nv.constant2."):
+                    continue
+                words = struct.unpack_from(f"<{size // 4}I", data, offset)
+                fn = name[len(".nv.constant2."):]
+                if fn in out and out[fn] != words:
+                    raise RuntimeError(f"{fn}: different .nv.constant2 contents in two cubins")
+                out[fn] = words
+    return out
+
+
+def parse_ommas_cfg(sass: str, tables=None):
     """--untagged-site0: [(sass_address, word0, word1, site, selector or None)] for every OMMA, its site read from the
-    reaching definitions of its SFA register (see above)."""
+    reaching definitions of its SFA register (see above). tables: jump_tables() of the binary, for BRX."""
+    tables = tables or {}
     lines = sass.split("\n")
     out = []
     for fname, ins in _functions(sass):
@@ -236,7 +285,7 @@ def parse_ommas_cfg(sass: str):
         if not sfa_of:
             continue
         tracked = set(sfa_of.values())
-        blocks, succ = _control_flow(fname, ins)
+        blocks, succ = _control_flow(fname, ins, tables.get(fname))
         preds = [[] for _ in blocks]
         for b, ss in enumerate(succ):
             for t in ss:
@@ -356,7 +405,8 @@ def main() -> int:
         check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     ).stdout
 
-    ommas = parse_ommas_cfg(sass) if args.untagged_site0 else parse_ommas(sass)
+    ommas = (parse_ommas_cfg(sass, jump_tables(args.cuobjdump, args.baseline)) if args.untagged_site0
+             else parse_ommas(sass))
     if not ommas:
         raise RuntimeError("cuobjdump found no OMMA instructions")
 

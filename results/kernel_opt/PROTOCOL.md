@@ -782,3 +782,48 @@ dispatch variants, if no unit is slower beyond its round range at any (model, T)
   - t0 vs tagged: −0.3 to −1.2 % (default dispatch) and −0.0 to −0.8 % (#2's dispatch) on the real map;
   - −0.8 to −1.1 % and −1.2 to −1.6 % on the all-E2M1 map.
   - Nothing from it is used.
+
+## Amendment 6b (t0): the patcher resolves jump tables; the t0 chain runs again from the start
+
+Written 2026-10-01, after amendment 6's chain stopped at G3, and before any further registered GPU run of t0. The hashes
+and time are in `registration_6b.json`.
+
+The stop and why it happened are recorded in `results/kernel_opt/t0/stop_g3/STOP.md` (df73edf); the record stays.
+
+The coordinator approved the fix proposed there, with conditions:
+- an unresolvable BRX stays a hard error;
+- the 74 existing builds' site assignment is shown unchanged;
+- the t0 directories are rebuilt from scratch, with manifests;
+- re-registration comes before the chain re-runs from the start;
+- the self-test gate is kept.
+
+**What changes from amendment 6.** One thing: `patch_mixed_nvfp4_gemm.py --untagged-site0` resolves indirect branches.
+- ptxas can compile a switch to `LDC Rx, c[0x2][..]; BRX Rx imm`. CUTLASS's warp-role dispatch in the upstream
+  self-test driver is one; our library kernels contain none.
+- The patcher reads the function's `.nv.constant2` section from the cubin (`cuobjdump -xelf`). Each BRX then branches
+  to (word + its next PC + imm) for every word of the section, a superset of its real targets.
+- A BRX without a table, or a computed target that is not an instruction, is an error.
+- In the self-test kernels the table is the role switch: 4 words, e.g. `[0x16b0, 0x1050, 0x25e0, 0x1050]`.
+  - 0x1050 is the instruction after the BRX.
+  - 0x16b0 and 0x25e0 each follow an unconditional branch, and no direct branch reaches them.
+- `LOCAL_CHANGES.md` / `.patch` are updated, and the patch still reproduces all four modified files from upstream.
+- Everything else is amendment 6's: sources, builds, sets, scripts, gates, M1, C2‴ and the adoption criterion.
+
+**Validation** (CPU only; `results/kernel_opt/t0/6b/validate_6b.py`, `.out`):
+- On the 74 existing tagged mixed libraries (6 build directories), the analysis gives every OMMA the strict parser's
+  site. None of them has a BRX.
+- On the 21 existing tagged self-test executables, all of which have the BRX, it gives every OMMA the strict parser's
+  site. This checks the new path against ground truth.
+- The 8 t0 self-test executables left by the stopped G3 are classified with equal per-site counts. Each equals its
+  library's census, e.g. n16k64_wA_t0 512 / 512.
+
+**Builds.** The patcher is a recorded build input of every configuration, so both directories were rebuilt from the
+6b sources, CPU only, before registration:
+- `build_T`: all 37 configurations, 10 parallel `build.py --config` processes;
+- `build_Tfreq`: the four 16x64 t0 builds with `MIXFP4_DISPATCH_FREQ=1`.
+
+Every manifest's recorded sources equal the files registered in `registration_6b.json`. All 41 builds have the patched
+and unpatched SASS that `registration_6.json` recorded, so the change alters no library.
+
+**The chain.** `run_T.sh` runs from the start, unchanged. The stopped run's output directory was moved to
+`/home/dev/n16k64_campaign/kernel_opt/T_stop_g3` and is kept.
