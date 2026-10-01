@@ -910,3 +910,31 @@ measurement in amendments 4b, 5 and 6b.
 2. Add a note on the adoption to `results/kernel_opt/4/REPORT.md`, `retune/REPORT.md`, `t0/REPORT.md` and
    `docs/BUILD_AND_USE.md`.
 3. Commit and push.
+
+### Amendment 7: the run, the adoption and its deviations
+
+`run_7.sh` ran on 2026-10-01 from 04:47 to 05:24 UTC (registration 0ccb0a9). Every gate passed:
+- **G3:** n16k64_wA_e64_t0 and n16k64_wA_g32_e64 PASS.
+- **G1:** the 37 existing configurations keep their SASS.
+- **G2:** the 2 new builds and `build_7freq`'s four have their census, with no predication.
+- **pytest:** 1,151 passed on `build_7`, 9 on `build_7freq`.
+- **G4:** 31,680 comparisons (13,440 / 13,440 / 4,800), 0 differences.
+- **G5:** logits bitwise equal for 16x64, for 16x64 with #2's dispatch, and for FourOverSix.
+
+The schedule tuning set 62 of 224 `mixed_ko` rows and 92 of 224 `stock_ko` rows to a non-default setting
+(`results/kernel_opt/7/table/`).
+
+**The adoption.** The tuned table was copied to `sm120/configs/<gpu>.ko.json`. With that, `auto` and `auto_stock`
+route as registered, and BUILD_AND_USE and the #4, retune and t0 reports carry a note.
+
+**Deviations, disclosed:**
+1. **No 256x64 work.** After registration the user decided against any 256x64 work for now.
+   - The amendment 8 announced above (#4 on the 256x64 path) is cancelled. It was never registered, and the number
+     8 goes to the next registered amendment.
+   - n16k64_wA_g32_e64 stays in `configs.py`, because removing it would change the `configs.py` hash that every
+     `build_7` manifest records. It was built and gated as registered, but no set uses it.
+2. **256x64 routing restored.** The registered `model.py` sent a 256x64 map whose g32 builds are absent to the
+   adopted 16x64 set. The user asked for today's 256x64 routing, unchanged.
+   - So, after the chain, that fallback is the paper `mixed` set again: `mixed256` when built, else `mixed`.
+   - `test_g32.py`'s routing test was updated to match and re-run: it passed both on `build_7` and on `sm120/build`.
+

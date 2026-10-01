@@ -64,6 +64,19 @@ python -m pytest sm120/tests -q                          # needs the GPU; tests 
   instruction census is the pinned one.
 - **`--selftest`:** also requires the upstream self-test to pass on the patched kernel and fail on the unpatched one.
 
+On the kernel-opt branch the adopted 16x64 path and its stock reference are built like this (results/kernel_opt/PROTOCOL.md,
+amendment 7):
+
+```bash
+# 'mixed_ko': the 16x64 maps without the site-0 prmt tags (t0), the 64 x 64 epilogue tile at width 128 (#4)
+for c in n16k64_wA_n16_t0 n16k64_wA_n32_t0 n16k64_wA_n64_t0 n16k64_wA_e64_t0; do python sm120/build.py --config $c --selftest; done
+# 'stock_ko': stock tuned the same way (stock_wA_n16/_n32/_n64 from above, plus the 64 x 64 epilogue tile at width 128)
+python sm120/build.py --config stock_wA_e64
+# #2's pattern-0-first dispatch is a build variant of the same four mixed builds, in its own build directory
+for c in n16k64_wA_n16_t0 n16k64_wA_n32_t0 n16k64_wA_n64_t0 n16k64_wA_e64_t0; do
+  SM120_BUILD_DIR=sm120/build_freq python sm120/build.py --define MIXFP4_DISPATCH_FREQ=1 --config $c --selftest; done
+```
+
 The native (a) evaluator (`run_multiround.py --eval-backend native`) has its own library, built from the same
 vendored kernel. The `--tm-opt` preset uses it for its development monitor and its final evaluation:
 
@@ -145,9 +158,16 @@ python run_ppl_deploy.py --model mistral7b --data-root $DATA \
 - **NativeLinear:** every quantized Linear runs on the kernel with per-token activation scales.
 - **Fake (c):** the same numerics in BF16 fake quant, the like-for-like reference.
 - **Kernel defaults:** `auto` for 16x64 artifacts, `n8k64_wB` for 8x64, `auto_stock` for FourOverSix/NVFP4.
-  On the kernel-opt branch `auto` also runs a 256x64 artifact on the 4-arm `mixed256` set when its builds
-  (`n16k64_wA_g32`, `_n64`, `_n32`, `_n16`) are in the build directory. Outputs are identical, and the install
-  report's `routing` says which set ran (results/kernel_opt/A1/REPORT.md).
+  - **On the kernel-opt branch** (adopted 2026-10-01, amendment 7):
+    - `auto` runs 16x64 artifacts on `mixed_ko`, and `auto_stock` runs FourOverSix/NVFP4 on `stock_ko`, when their
+      builds are in the build directory (above). Otherwise they run on the paper sets `mixed` / `stock`.
+    - Both adopted sets read `sm120/configs/<gpu>.ko.json`: the 4b widths and the per-call scheduler rows tuned at
+      them.
+    - 256x64 artifacts run on the 4-arm `mixed256` set (A′; builds `n16k64_wA_g32`, `_n64`, `_n32`, `_n16`) when it
+      is in the build directory, as before.
+    - `paper_mixed` / `paper_stock` / `paper_256` select the paper sets with the paper table.
+  - Every set computes the same outputs bit for bit. The install report's `routing` says which set ran
+    (results/kernel_opt/A1, 4, retune and t0 REPORT.md).
 - **Output:** `report.json` holds the per-window NLLs, the PPLs, native coverage and wall time.
 
 **How close the deployment path is:** `results/deploy_eval/REPORT.md` compares NativeLinear (c) with fake (c) and

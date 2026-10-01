@@ -135,3 +135,11 @@ changed): met.
      e64 build, the g32 builds);
    - the schedule rows re-tuned at the 4b widths, if 4b is adopted. They were tuned at today's widths, and 4b changes
      some of them.
+
+## Adoption (2026-10-01)
+
+The user adopted #4 for both families. It is deployed in the adopted sets `mixed_ko` (with t0) and `stock_ko`, with
+the scheduler rows re-tuned at the 4b widths (amendment 7, `sm120/configs/<gpu>.ko.json`).
+
+#4 on the 256x64 path was cancelled by the user's later decision: no 256x64 work for now. n16k64_wA_g32_e64 stays
+built and gated, but no set uses it.

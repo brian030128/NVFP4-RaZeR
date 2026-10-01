@@ -33,8 +33,8 @@ def resolve_kernel(kernel, meta=None):
       - 16x64 (and finer): 'mixed_ko', the kernel-opt adoption of 2026-10-01 (amendment 7): no site-0 prmt tags (t0),
         #4's 64 x 64 epilogue tile at width 128, the 4b widths and per-call scheduler rows (the '<gpu>.ko.json' table).
         If its builds are not in the build directory, the paper 'mixed' set (the same outputs bit for bit).
-      - whole 128-row panels (256x64): the 4-arm 'mixed256' set (kernel-opt A', adopted 2026-09-30) if built, else as
-        16x64.
+      - whole 128-row panels (256x64): the 4-arm 'mixed256' set (kernel-opt A', adopted 2026-09-30) on the paper
+        table if built, else the paper 'mixed' set -- unchanged by amendment 7 (no 256x64 work for now).
     'auto_stock' -> the stock NVFP4 set tuned the same way: 'stock_ko' (#4 + 4b), else the paper 'stock'.
     'auto_mixed' -> the 16x64 set of 'auto' for any map; 'auto_wB' -> the weights-on-B mixed set (8x64 maps);
     'auto_256' -> 'mixed256' (NativeLinear verifies the tags are uniform over its 128-row panels).
@@ -48,8 +48,7 @@ def resolve_kernel(kernel, meta=None):
             try:
                 return KernelSet('mixed256'), f'auto: {unit[0]}x{unit[1]} map -> mixed256 (kernel-opt A\')'
             except LibraryError as e:
-                ks, note = _deployed('mixed_ko', 'mixed')
-                return ks, f'auto: {unit[0]}x{unit[1]} map, mixed256 not built ({e}) -> {note}'
+                return KernelSet('mixed'), f'auto: {unit[0]}x{unit[1]} map, mixed256 not built ({e}) -> mixed'
         ks, note = _deployed('mixed_ko', 'mixed')
         return ks, f'auto -> {note}'
     if kernel == 'auto_mixed':

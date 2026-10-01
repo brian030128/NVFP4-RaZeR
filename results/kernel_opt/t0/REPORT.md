@@ -161,3 +161,14 @@ With the tags gone, the no-dispatch ceiling equals stock. Everything left of the
 - **the real map's E0M3 tiles:** +0.25 % (isolated) to +1.5 % (sustained) on top.
 
 B′, a per-warp all-E2M1 bit per k_tile, is aimed at the first term, which is now the dominant one.
+
+## Adoption (2026-10-01)
+
+The user adopted t0 for the 16x64 family, for both dispatch variants. This is a disclosed deviation from the
+registered criterion: every 16x64 median improves, and the flagged cells are ≤ +0.35 %, about the chance level for 3
+rounds.
+
+It is deployed in `mixed_ko` (amendment 7): n16k64_wA_n16_t0 / _n32_t0 / _n64_t0, and n16k64_wA_e64_t0 (t0 with #4's
+epilogue tile) at width 128.
+
+t0 is not adopted for 256x64, where it is neutral; 256x64 keeps its A′ builds.

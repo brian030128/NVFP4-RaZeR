@@ -128,3 +128,13 @@ current → 4b):
 
 **Proposed** (the user's decision): adopt the 4b rows into the tracked table for both families, since it is the
 faster table for everyone. Report gap numbers against the 4b-tuned stock from then on.
+
+## Adoption of the 4b widths (2026-10-01)
+
+The user adopted the 4b table for both families. This is a disclosed deviation from amendment 4's criterion:
+- 18 of the 20 flagged cells are identical computations;
+- stock must be tuned as well as the mixed kernels for an honest comparison.
+
+The 4b widths are the width rows of `sm120/configs/<gpu>.ko.json`, which the adopted sets `mixed_ko` / `stock_ko`
+read, together with scheduler rows re-tuned at those widths (amendment 7). The paper table `sm120/configs/<gpu>.json`
+is unchanged.

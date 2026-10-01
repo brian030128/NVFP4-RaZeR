@@ -216,7 +216,7 @@ def test_auto_routes_256x64_maps(device):
     assert k0.family == deployed16
     k256, note256 = NM.resolve_kernel('auto', dict(type_block=[16, 64], note=dict(record=dict(unit='256x64'))))
     g32 = built('n16k64_wA_g32', 'n16k64_wA_g32_n64', 'n16k64_wA_g32_n32', 'n16k64_wA_g32_n16')
-    assert k256.family == ('mixed256' if g32 else deployed16), (k256.family, note256)
+    assert k256.family == ('mixed256' if g32 else 'mixed'), (k256.family, note256)     # 256x64: unchanged routing
     assert ('-> mixed256' in note256) if g32 else ('not built' in note256)
     assert NM.resolve_kernel('auto_mixed', None)[0].family == deployed16
     stock = 'stock_ko' if built('stock_wA_n16', 'stock_wA_n32', 'stock_wA_n64', 'stock_wA_e64') else 'stock'
