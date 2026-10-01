@@ -1084,3 +1084,42 @@ user's decision. Still on hold: #1b M3, the decisive-margin rule, E0M3 (i)–(ii
   - prefill −0.89 %;
   - decode +0.10 % tokens per second.
 - Nothing is adopted or tuned from the run.
+
+## Note 2 to amendment 1 (2026-10-01): optimization 1b's M3 resumed
+
+Written before any process of the resumed M3 started. The user gave the start, relayed by the coordinator on
+2026-10-01 at about 12:20 UTC, with the new 8x64 focus: "Resume #1b's paused M3 decode as registered: decode-only, same
+settings, the #1b builds. Close #1b with its report, noting the pause/resume."
+
+**The registered condition for M3 holds.** Amendment 1 runs M3 only if the re-tuned table changes a choice at the
+decode buckets (T ≤ 16) of a shape of Llama, Mistral or Phi-4. That diff was not recorded before the pause, so it is
+recorded here. `opt1/table_opt1.json` against `opt1b/table_opt1b.json`, `mixed_wB` rows:
+
+| shape | bucket | optimization 1 | 1b | model |
+|---|---|---|---|---|
+| 35840x5120 | 4 | 16 | 32 | Phi-4 gate_up_proj |
+| 5120x17920 | 16 | 32 | 16 | Phi-4 down_proj |
+| 7680x5120 | 16 | 16 | 32 | Phi-4 qkv_proj |
+| 10240x5120 | 1 | 32 | 16 | not a decode model's shape |
+
+**What runs:** `ab_e2e.py --what decode --out /home/dev/n16k64_campaign/kernel_opt/opt1b/e2e`, exactly as registered.
+- The policies are ours-8x64, ours-8x64-opt (`auto_wB` from the kernel-opt `build`, the 1b builds), fo6 and fo6-wB.
+- Llama-3.1-8B, Mistral-7B-v0.3 and Phi-4, with Experiment D's 6 settings.
+- 5 rounds, rotated by r − 1; the registered checks.
+- It writes to the same output directory; no decode record exists there.
+
+**Provenance, checked now:**
+- `ab_e2e.py` and `experiments/paper_extra/bench_decode.py` have their registered sha256 (`registration_1b.json`).
+- Every library that 1b's prefill records loaded equals its current manifest and file, by sha256: the 1b set's 5
+  builds, n8k64_wB, the paper `stock` set and stock_wB.
+- The tile table `sm120/configs/<gpu>.json` equals `opt1b/table_opt1b.json`, the table 1b's M1 and M2 ran with.
+
+**Disclosed: code that changed since 1b's registration.**
+- `sm120/mixfp4_sm120/model.py`, `lib.py`, `select.py` and `configs.py` changed in later amendments: routing names,
+  #4's scheduler plumbing, and new families and configurations.
+  - The configurations include amendment 10's two diagnostic builds, added before this run.
+- **For these four policies the changes select the same builds and table:**
+  - `'auto_stock'` falls back to the paper `stock` set, because `sm120/build` holds no `stock_ko` build. The record's
+    routing note says so, and the build check requires `sm120/build`.
+  - `'auto_wB'` and the single builds are unchanged.
+  - Without scheduler rows, lib.py calls the GEMM through the same entry point as before.

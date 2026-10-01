@@ -224,6 +224,17 @@ CONFIGS = {c.name: c for c in [
         'n16k64_wA_nodisp_t0', 'mixed', 0, None,
         dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_NO_DISPATCH=1, MIXFP4_PIPE_FLAGS=0), dict(_WT_AS_A_GEN, TAG0=0),
         patch=False, description='Diagnostic: n16k64_wA_nodisp without the site-0 prmt tags. Not a deployment kernel.'),
+    # kernel-opt 8x64 baseline (amendment 10): n8k64_wB's no-dispatch ceiling -- its tile and 1x8 arrangement with the
+    # format dispatch compiled out (E2M1 only) -- with and without the blob's site-0 prmt tags (TAG0=0).
+    KernelConfig(
+        'n8k64_wB_nodisp', 'mixed', 1, None,
+        dict(_B8X64, SM120_BIAS_ON_N=1, MIXFP4_NO_DISPATCH=1, MIXFP4_PIPE_FLAGS=0), _B8X64_GEN, patch=False,
+        description='Latency ceiling of n8k64_wB: identical tile/arrangement (1x8), format dispatch compiled out '
+                    '(E2M1 only). Not a deployment kernel.'),
+    KernelConfig(
+        'n8k64_wB_nodisp_t0', 'mixed', 1, None,
+        dict(_B8X64, SM120_BIAS_ON_N=1, MIXFP4_NO_DISPATCH=1, MIXFP4_PIPE_FLAGS=0), dict(_B8X64_GEN, TAG0=0),
+        patch=False, description='Diagnostic: n8k64_wB_nodisp without the site-0 prmt tags. Not a deployment kernel.'),
     KernelConfig(
         'stock_wA', 'stock', 0, None, dict(MIXFP4_D_COLMAJOR=1), {}, patch=False,
         description='Baseline. Stock CUTLASS SM120 NVFP4 mainloop, weights on A, column-major D, '
