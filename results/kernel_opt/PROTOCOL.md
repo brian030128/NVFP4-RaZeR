@@ -1065,3 +1065,22 @@ user's decision. Still on hold: #1b M3, the decisive-margin rule, E0M3 (i)–(ii
 - **G0 was dry-run on CPU** against this registration: it passed. Its negative control, a copy with one file hash and one
   build's defines altered, failed on exactly those two.
 - Nothing from the smoke test is used.
+
+### Amendment 9: the run
+
+`run_cum.sh` ran on 2026-10-01 from 05:55 to 09:13 UTC (registration baec35e), with no deviation.
+- **Every gate passed:**
+  - G0: 41/41 files, 20/20 builds, 12/12 with amendment 7's SASS;
+  - G2;
+  - G3 pytest: 174 passed on `build_7freq`, 17 on `build_7`;
+  - G4: 33,600 comparisons, 0 differences;
+  - G5: 16x64 and FourOverSix.
+- **Every registered check passed:**
+  - M1: 4,680 bitwise comparisons on the timed operands;
+  - 80 prefill processes and 60 decode processes.
+- **Results** are in `results/kernel_opt/cum/REPORT.md`. Headline medians for the combined build against the paper
+  build:
+  - GEMM −1.96 %; the gap to its own stock goes from +2.90 % to +1.45 %;
+  - prefill −0.89 %;
+  - decode +0.10 % tokens per second.
+- Nothing is adopted or tuned from the run.
