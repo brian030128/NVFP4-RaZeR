@@ -246,6 +246,20 @@ for _base in ('n16k64_wA', 'n16k64_wA_n64', 'n16k64_wA_n32', 'n16k64_wA_n16',
         _c, name=_base + '_t0', blob_gen=dict(_c.blob_gen, TAG0=0),
         description=f'kernel-opt t0: {_base} without the site-0 prmt tags (TAG0=0).')
 
+# kernel-opt C3k (amendment 8): the no-dispatch ceiling of the adopted 16x64 path at every width ('nodisp_ko'): its
+# tiles and epilogue with the format dispatch compiled out (E2M1 only, no site-0 tags). Not deployment kernels.
+_NODISP = dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_NO_DISPATCH=1, MIXFP4_PIPE_FLAGS=0)
+for _name, _defs, _gen in (
+        ('n16k64_wA_nodisp_n16_t0', dict(MIXFP4_TILE_N=16, MIXFP4_B_ATOMS_PER_GRANULE=1, MIXFP4_LDSM_B=2),
+         dict(MMA_N=1, B_ATOMS=1)),
+        ('n16k64_wA_nodisp_n32_t0', dict(MIXFP4_TILE_N=32, MIXFP4_B_ATOMS_PER_GRANULE=2), dict(MMA_N=2, B_ATOMS=2)),
+        ('n16k64_wA_nodisp_n64_t0', dict(MIXFP4_TILE_N=64, MIXFP4_B_ATOMS_PER_GRANULE=4), dict(MMA_N=4, B_ATOMS=4)),
+        ('n16k64_wA_nodisp_e64_t0', dict(MIXFP4_EPI_TILE_M=64, MIXFP4_EPI_TILE_N=64), {})):
+    CONFIGS[_name] = KernelConfig(
+        _name, 'mixed', 0, None, dict(_NODISP, **_defs), dict(_WT_AS_A_GEN, TAG0=0, **_gen), patch=False,
+        description="kernel-opt C3k: the adopted 16x64 path's tile with the format dispatch compiled out (E2M1 only). "
+                    'Not a deployment kernel.')
+
 DEFAULT = 'n16k64_wA'
 
 

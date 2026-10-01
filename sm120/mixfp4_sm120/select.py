@@ -45,15 +45,20 @@ FAMILIES = {
     # (TABLE_FILE): the 4b widths and per-call scheduler rows tuned at them. The paper sets above are unchanged.
     'mixed_ko': {16: 'n16k64_wA_n16_t0', 32: 'n16k64_wA_n32_t0', 64: 'n16k64_wA_n64_t0', 128: 'n16k64_wA_e64_t0'},
     'stock_ko': {16: 'stock_wA_n16', 32: 'stock_wA_n32', 64: 'stock_wA_n64', 128: 'stock_wA_e64'},
+    # kernel-opt C3k: the adopted path's no-dispatch ceiling (E2M1 only); the adopted table and mixed_ko's scheduler rows
+    'nodisp_ko': {16: 'n16k64_wA_nodisp_n16_t0', 32: 'n16k64_wA_nodisp_n32_t0', 64: 'n16k64_wA_nodisp_n64_t0',
+                  128: 'n16k64_wA_nodisp_e64_t0'},
 }
 # A family that takes another family's tile-table rows: 'mixed256' has the CTA tile of 'mixed' at every width, and uses
 # its widths so that the two differ only in the dispatch granule (kernel-opt A').
 TABLE_FAMILY = {'mixed256': 'mixed', 'mixed_e': 'mixed', 'stock_e': 'stock', 'mixed_t0': 'mixed', 'mixed256_t0': 'mixed',
-                'mixed_ko': 'mixed', 'stock_ko': 'stock'}
+                'mixed_ko': 'mixed', 'stock_ko': 'stock', 'nodisp_ko': 'mixed'}
+# A family that takes another family's scheduler rows (the same tiles in the same order)
+SCHEDULE_FAMILY = {'nodisp_ko': 'mixed_ko'}
 TABLE_DIR = Path(__file__).resolve().parents[1] / 'configs'
 # The table file a family reads by default: '<gpu>.<suffix>.json' if listed here and present, else '<gpu>.json' (the
 # paper table). The adopted kernel-opt sets read '<gpu>.ko.json' (amendment 7).
-TABLE_FILE = {'mixed_ko': 'ko', 'stock_ko': 'ko'}
+TABLE_FILE = {'mixed_ko': 'ko', 'stock_ko': 'ko', 'nodisp_ko': 'ko'}
 BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
 
 
@@ -114,7 +119,7 @@ class KernelSet:
                           for key, row in data.get(TABLE_FAMILY.get(family, family), {}).items()}
             # kernel-opt #4: optional per-(shape, bucket) scheduler settings [raster, swizzle] under 'schedule'
             self.schedules = {tuple(int(v) for v in key.split('x')): {int(b): tuple(rs) for b, rs in row.items()}
-                              for key, row in data.get('schedule', {}).get(family, {}).items()}
+                              for key, row in data.get('schedule', {}).get(SCHEDULE_FAMILY.get(family, family), {}).items()}
             self.table_source = str(table) if not isinstance(table, dict) else 'dict'
         self.stats = {}
 

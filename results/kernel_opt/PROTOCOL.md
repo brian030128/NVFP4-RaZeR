@@ -938,3 +938,19 @@ route as registered, and BUILD_AND_USE and the #4, retune and t0 reports carry a
    - So, after the chain, that fallback is the paper `mixed` set again: `mixed256` when built, else `mixed`.
    - `test_g32.py`'s routing test was updated to match and re-run: it passed both on `build_7` and on `sm120/build`.
 
+## Amendment 8: the E0M3-fraction sweep (C3k)
+
+Written 2026-10-01, before any GPU run of the sweep. The protocol is `results/kernel_opt/c3k/PROTOCOL.md` and the
+hashes are in `results/kernel_opt/c3k/registration.json`.
+
+- **The request.** The user asked for GEMM latency against the E0M3 tile share on the adopted path (both dispatch
+  variants), its no-dispatch ceiling and the paper kernel, each against its own stock. It runs before B′'s GPU work.
+- **Descriptive only.** Nothing is tuned or adopted from it.
+- **New:**
+  - the no-dispatch ceiling of the adopted path: `nodisp_ko` = n16k64_wA_nodisp_{n16,n32,n64}_t0 and _e64_t0, in
+    `configs.py` / `select.py`, built CPU-only in `build_C3k`;
+  - `select.py`'s `SCHEDULE_FAMILY`, so that `nodisp_ko` reads `mixed_ko`'s scheduler rows;
+  - `c3k_fraction.py`, `c3k_analyze.py`, `run_c3k.sh`.
+- **Disclosed:** the sweep and analysis scripts were smoke-tested once into a scratch directory, on one shape, T = 16
+  and 512, and 1 round × 2. Nothing from it is used.
+
