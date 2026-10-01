@@ -31,7 +31,9 @@ pytestmark = pytest.mark.gpu
 
 G32 = ['n16k64_wA_g32', 'n16k64_wA_g32_n64', 'n16k64_wA_g32_n32', 'n16k64_wA_g32_n16',
        # kernel-opt t0: without the site-0 prmt tags
-       'n16k64_wA_g32_t0', 'n16k64_wA_g32_n64_t0', 'n16k64_wA_g32_n32_t0', 'n16k64_wA_g32_n16_t0']
+       'n16k64_wA_g32_t0', 'n16k64_wA_g32_n64_t0', 'n16k64_wA_g32_n32_t0', 'n16k64_wA_g32_n16_t0',
+       # kernel-opt #4 on the 256x64 path (amendment 8)
+       'n16k64_wA_g32_e64']
 PANEL = 128
 REF_ROOT = Path(os.environ.get('SM120_REF_BUILD_DIR', Path(__file__).resolve().parents[1] / 'build'))
 
@@ -195,18 +197,28 @@ def test_native_linear_requires_uniform_panels(device):
 
 def test_auto_routes_256x64_maps(device):
     """kernel-opt A' adoption: install(kernel='auto') runs a map whose own unit covers whole 128-row panels (the 256x64
-    maps, stored as 16x64 granules) on 'mixed256' when it is built, and every other map on 'mixed' as before."""
+    maps, stored as 16x64 granules) on 'mixed256' when it is built, and every other map on the deployed 16x64 set.
+    Amendment 7 (adoption of t0, #4 and 4b): that set is 'mixed_ko' when built, else the paper 'mixed'; 'auto_stock'
+    likewise 'stock_ko', else 'stock'; the 'paper_*' names keep the paper sets."""
     from mixfp4_sm120 import model as NM
+
+    def built(*names):
+        try:
+            for n in names:
+                Kernel.load(n)
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+    deployed16 = 'mixed_ko' if built('n16k64_wA_n16_t0', 'n16k64_wA_n32_t0', 'n16k64_wA_n64_t0', 'n16k64_wA_e64_t0') else 'mixed'
     k16, note16 = NM.resolve_kernel('auto', dict(type_block=[16, 64], note=dict(record=dict(unit='16x64'))))
-    assert k16.family == 'mixed' and note16 is None
+    assert k16.family == deployed16 and ('-> mixed_ko' in note16 if deployed16 == 'mixed_ko' else 'not built' in note16)
     k0, note0 = NM.resolve_kernel('auto', dict(type_block=None))
-    assert k0.family == 'mixed' and note0 is None
+    assert k0.family == deployed16
     k256, note256 = NM.resolve_kernel('auto', dict(type_block=[16, 64], note=dict(record=dict(unit='256x64'))))
-    try:
-        Kernel.load('n16k64_wA_g32')
-        built = True
-    except Exception:  # noqa: BLE001
-        built = False
-    assert k256.family == ('mixed256' if built else 'mixed'), (k256.family, note256)
-    assert ('-> mixed256' in note256) if built else ('not built' in note256)
-    assert NM.resolve_kernel('auto_mixed', None)[0].family == 'mixed'
+    g32 = built('n16k64_wA_g32', 'n16k64_wA_g32_n64', 'n16k64_wA_g32_n32', 'n16k64_wA_g32_n16')
+    assert k256.family == ('mixed256' if g32 else deployed16), (k256.family, note256)
+    assert ('-> mixed256' in note256) if g32 else ('not built' in note256)
+    assert NM.resolve_kernel('auto_mixed', None)[0].family == deployed16
+    stock = 'stock_ko' if built('stock_wA_n16', 'stock_wA_n32', 'stock_wA_n64', 'stock_wA_e64') else 'stock'
+    assert NM.resolve_kernel('auto_stock', None)[0].family == stock
+    assert [NM.resolve_kernel(f'paper_{u}', None)[0].family for u in ('mixed', 'stock')] == ['mixed', 'stock']

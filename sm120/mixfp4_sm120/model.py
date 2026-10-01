@@ -18,15 +18,28 @@ from .linear import NativeLinear
 from .select import KernelSet
 
 
+def _deployed(family, paper):
+    """The adopted kernel-opt set if its builds are in the build directory, else the paper set; (set, note)."""
+    try:
+        return KernelSet(family), f'{family} (kernel-opt adoption, amendment 7)'
+    except LibraryError as e:
+        return KernelSet(paper), f'{family} not built ({e}) -> {paper} (paper set)'
+
+
 def resolve_kernel(kernel, meta=None):
     """Returns (kernel, routing note or None).
 
-    'auto' -> the mixed KernelSet with this GPU's tile table. For an artifact whose map unit (artifact.map_unit) covers
-    whole 128-row panels -- the 256x64 maps -- it is the 4-arm 'mixed256' set instead (kernel-opt A', adopted
-    2026-09-30), if that set is built in the build directory; otherwise 'mixed' (the same outputs bit for bit), and
-    the note says so. 'auto_mixed' -> always 'mixed'; 'auto_stock' -> the stock NVFP4 set; 'auto_wB' -> the
-    weights-on-B mixed set (8x64 maps); 'auto_256' -> 'mixed256' (NativeLinear verifies the tags are uniform over its
-    128-row panels); a configuration name -> that single build; Kernel / KernelSet instances pass through."""
+    'auto' -> the deployed mixed set for the artifact's map unit (artifact.map_unit):
+      - 16x64 (and finer): 'mixed_ko', the kernel-opt adoption of 2026-10-01 (amendment 7): no site-0 prmt tags (t0),
+        #4's 64 x 64 epilogue tile at width 128, the 4b widths and per-call scheduler rows (the '<gpu>.ko.json' table).
+        If its builds are not in the build directory, the paper 'mixed' set (the same outputs bit for bit).
+      - whole 128-row panels (256x64): the 4-arm 'mixed256' set (kernel-opt A', adopted 2026-09-30) if built, else as
+        16x64.
+    'auto_stock' -> the stock NVFP4 set tuned the same way: 'stock_ko' (#4 + 4b), else the paper 'stock'.
+    'auto_mixed' -> the 16x64 set of 'auto' for any map; 'auto_wB' -> the weights-on-B mixed set (8x64 maps);
+    'auto_256' -> 'mixed256' (NativeLinear verifies the tags are uniform over its 128-row panels).
+    'paper_mixed' / 'paper_stock' / 'paper_256' -> the paper sets 'mixed' / 'stock' / 'mixed256' with the paper table.
+    A configuration name -> that single build; Kernel / KernelSet instances pass through."""
     if isinstance(kernel, (Kernel, KernelSet)):
         return kernel, None
     if kernel == 'auto':
@@ -35,16 +48,22 @@ def resolve_kernel(kernel, meta=None):
             try:
                 return KernelSet('mixed256'), f'auto: {unit[0]}x{unit[1]} map -> mixed256 (kernel-opt A\')'
             except LibraryError as e:
-                return KernelSet('mixed'), f'auto: {unit[0]}x{unit[1]} map, mixed256 not built ({e}) -> mixed'
-        return KernelSet('mixed'), None
+                ks, note = _deployed('mixed_ko', 'mixed')
+                return ks, f'auto: {unit[0]}x{unit[1]} map, mixed256 not built ({e}) -> {note}'
+        ks, note = _deployed('mixed_ko', 'mixed')
+        return ks, f'auto -> {note}'
     if kernel == 'auto_mixed':
-        return KernelSet('mixed'), None
+        ks, note = _deployed('mixed_ko', 'mixed')
+        return ks, f'auto_mixed -> {note}'
     if kernel == 'auto_stock':
-        return KernelSet('stock'), None
+        ks, note = _deployed('stock_ko', 'stock')
+        return ks, f'auto_stock -> {note}'
     if kernel == 'auto_wB':
         return KernelSet('mixed_wB'), None     # 8x64 maps, weights on B, width-selecting (kernel-opt)
     if kernel == 'auto_256':
         return KernelSet('mixed256'), None     # 256x64 maps, 32-row granules, 4 arms (kernel-opt A')
+    if kernel in ('paper_mixed', 'paper_stock', 'paper_256'):
+        return KernelSet({'paper_mixed': 'mixed', 'paper_stock': 'stock', 'paper_256': 'mixed256'}[kernel]), None
     return Kernel.load(kernel), None
 
 

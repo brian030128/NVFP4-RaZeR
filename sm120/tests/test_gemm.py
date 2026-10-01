@@ -24,7 +24,9 @@ MIXED = ['n16k64_wA', 'n16k64_wA_8x1', 'n16k64_wA_n64', 'n16k64_wA_n32', 'n16k64
          # kernel-opt #4: the 64 x 64 epilogue-tile builds
          'n16k64_wA_e64', 'n16k64_wA_n64_e64',
          # kernel-opt t0: without the site-0 prmt tags
-         'n16k64_wA_t0', 'n16k64_wA_n64_t0', 'n16k64_wA_n32_t0', 'n16k64_wA_n16_t0']
+         'n16k64_wA_t0', 'n16k64_wA_n64_t0', 'n16k64_wA_n32_t0', 'n16k64_wA_n16_t0',
+         # kernel-opt adoption (amendment 7): the deployed 16x64 path's width-128 build
+         'n16k64_wA_e64_t0']
 
 
 def linear_gemm(kern, wp, wsf, gs_w, xp, xsf, gs_x, n, t, k, **kw):

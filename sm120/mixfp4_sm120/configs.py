@@ -201,6 +201,12 @@ CONFIGS = {c.name: c for c in [
              MIXFP4_EPI_TILE_N=64),
         dict(_WT_AS_A_GEN, MMA_N=4, B_ATOMS=4), expected_census={0: 256, 1: 256},
         description='kernel-opt #4: n16k64_wA_n64 with a 64 x 64 epilogue tile.'),
+    # kernel-opt #4 on the 256x64 path (amendment 8): A''s 4-arm 32-row-granule build with the 64 x 64 epilogue tile.
+    KernelConfig(
+        'n16k64_wA_g32_e64', 'mixed', 0, (32, 64),
+        dict(_WT_AS_A, MIXFP4_D_COLMAJOR=1, MIXFP4_A_ATOMS_PER_GRANULE=2, MIXFP4_EPI_TILE_M=64, MIXFP4_EPI_TILE_N=64),
+        dict(_WT_AS_A_GEN, A_ATOMS=2), expected_census={0: 128, 1: 128}, map_tile_rows=128,
+        description="kernel-opt #4: n16k64_wA_g32 with a 64 x 64 epilogue tile."),
     KernelConfig('stock_wA_e64', 'stock', 0, None, dict(MIXFP4_D_COLMAJOR=1, MIXFP4_EPI_TILE_M=64, MIXFP4_EPI_TILE_N=64), {},
                  patch=False, description='kernel-opt #4: stock_wA with a 64 x 64 epilogue tile.'),
     KernelConfig('stock_wA_n64_e64', 'stock', 0, None,
@@ -233,7 +239,8 @@ CONFIGS = {c.name: c for c in [
 # patcher reads the sites from reaching definitions (--untagged-site0). Same MMAs in the same order: bitwise equal to
 # their bases.
 for _base in ('n16k64_wA', 'n16k64_wA_n64', 'n16k64_wA_n32', 'n16k64_wA_n16',
-              'n16k64_wA_g32', 'n16k64_wA_g32_n64', 'n16k64_wA_g32_n32', 'n16k64_wA_g32_n16'):
+              'n16k64_wA_g32', 'n16k64_wA_g32_n64', 'n16k64_wA_g32_n32', 'n16k64_wA_g32_n16',
+              'n16k64_wA_e64'):   # amendment 7: the adopted 16x64 path's width-128 build (t0 + #4's epilogue tile)
     _c = CONFIGS[_base]
     CONFIGS[_base + '_t0'] = dataclasses.replace(
         _c, name=_base + '_t0', blob_gen=dict(_c.blob_gen, TAG0=0),

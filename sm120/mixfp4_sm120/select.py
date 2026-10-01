@@ -40,11 +40,20 @@ FAMILIES = {
     'mixed_t0': {16: 'n16k64_wA_n16_t0', 32: 'n16k64_wA_n32_t0', 64: 'n16k64_wA_n64_t0', 128: 'n16k64_wA_t0'},
     'mixed256_t0': {16: 'n16k64_wA_g32_n16_t0', 32: 'n16k64_wA_g32_n32_t0', 64: 'n16k64_wA_g32_n64_t0',
                     128: 'n16k64_wA_g32_t0'},
+    # kernel-opt adoption (amendment 7, 2026-10-01): the deployed 16x64 path -- t0 at every width (no site-0 prmt tags),
+    # #4's 64 x 64 epilogue tile at width 128 -- and stock tuned the same way (#4). Both read the adopted table
+    # (TABLE_FILE): the 4b widths and per-call scheduler rows tuned at them. The paper sets above are unchanged.
+    'mixed_ko': {16: 'n16k64_wA_n16_t0', 32: 'n16k64_wA_n32_t0', 64: 'n16k64_wA_n64_t0', 128: 'n16k64_wA_e64_t0'},
+    'stock_ko': {16: 'stock_wA_n16', 32: 'stock_wA_n32', 64: 'stock_wA_n64', 128: 'stock_wA_e64'},
 }
 # A family that takes another family's tile-table rows: 'mixed256' has the CTA tile of 'mixed' at every width, and uses
 # its widths so that the two differ only in the dispatch granule (kernel-opt A').
-TABLE_FAMILY = {'mixed256': 'mixed', 'mixed_e': 'mixed', 'stock_e': 'stock', 'mixed_t0': 'mixed', 'mixed256_t0': 'mixed'}
+TABLE_FAMILY = {'mixed256': 'mixed', 'mixed_e': 'mixed', 'stock_e': 'stock', 'mixed_t0': 'mixed', 'mixed256_t0': 'mixed',
+                'mixed_ko': 'mixed', 'stock_ko': 'stock'}
 TABLE_DIR = Path(__file__).resolve().parents[1] / 'configs'
+# The table file a family reads by default: '<gpu>.<suffix>.json' if listed here and present, else '<gpu>.json' (the
+# paper table). The adopted kernel-opt sets read '<gpu>.ko.json' (amendment 7).
+TABLE_FILE = {'mixed_ko': 'ko', 'stock_ko': 'ko'}
 BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
 
 
@@ -95,6 +104,8 @@ class KernelSet:
         self.table, self.table_source, self.schedules = {}, None, {}
         if table is None:
             path = TABLE_DIR / f'{gpu_slug()}.json'
+            if family in TABLE_FILE and (TABLE_DIR / f'{gpu_slug()}.{TABLE_FILE[family]}.json').exists():
+                path = TABLE_DIR / f'{gpu_slug()}.{TABLE_FILE[family]}.json'
             if path.exists():
                 table = path
         if table is not None:

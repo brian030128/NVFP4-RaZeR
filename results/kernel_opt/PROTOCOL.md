@@ -827,3 +827,86 @@ and unpatched SASS that `registration_6.json` recorded, so the change alters no 
 
 **The chain.** `run_T.sh` runs from the start, unchanged. The stopped run's output directory was moved to
 `/home/dev/n16k64_campaign/kernel_opt/T_stop_g3` and is kept.
+
+## Amendment 7: adoption of t0 (16x64), #4 (both families) and the 4b widths (both families)
+
+Written 2026-10-01, before any registered GPU run of this amendment. The hashes and time are in `registration_7.json`.
+
+**The user's decisions**, relayed by the coordinator: "go on all pending decisions". This amendment carries out 1, 3
+and 5 of them.
+1. **Adopt t0 for the 16x64 family, for both dispatch variants (default and freq).** This is a disclosed deviation
+   from amendment 6's adoption criterion. Every 16x64 median improves, and the flagged cells are ≤ +0.35 %, about the
+   chance level for 3 rounds (`results/kernel_opt/t0/REPORT.md`). t0 is not adopted for 256x64.
+2. (not this amendment)
+3. **Adopt #4 for both families:** the 64 × 64 epilogue tile at width 128, plus the per-call scheduler rows.
+4. (amendment 8: #4 on the 256x64 path)
+5. **Adopt the 4b tile table for both families,** a disclosed deviation from amendment 4's criterion. 18 of 4b's 20
+   flagged cells are identical computations, and stock must be tuned as well as the mixed kernels for an honest
+   comparison. The schedule rows are re-tuned at the 4b widths.
+
+Still on hold: #1b M3, the decisive-margin rule, E0M3 (i)–(iii). The paper numbers (tm-opt) stay untouched until the
+user decides to re-measure.
+
+**What changes.**
+- **New builds (`configs.py`):**
+  - n16k64_wA_e64_t0: #4's width-128 build without the site-0 tags. It joins the t0 variants, census {0: 512, 1: 512}.
+  - n16k64_wA_g32_e64: A′'s width-128 build with the 64 × 64 epilogue tile, census {0: 128, 1: 128}, built now for
+    amendment 8.
+- **New sets (`select.py`):**
+  - `mixed_ko` = {16: n16k64_wA_n16_t0, 32: …_n32_t0, 64: …_n64_t0, 128: n16k64_wA_e64_t0};
+  - `stock_ko` = `stock_e` = {16, 32, 64: the stock builds; 128: stock_wA_e64}.
+  - Both read the 'mixed' / 'stock' width rows of the adopted table `sm120/configs/<gpu>.ko.json` (`TABLE_FILE`).
+  - The paper sets and the paper table `sm120/configs/<gpu>.json` are unchanged.
+- **The adopted table** is 4b's widths (`results/kernel_opt/retune/b/tables/`) plus `schedule` rows for `mixed_ko`
+  and `stock_ko`. The rows are tuned by `tune_tiles.py --schedule` at the 4b widths with amendment 5's method: cold
+  weights, activations quantized after the flush, 3 rotated rounds × 30, and the decisive-margin rule.
+  - Every row is re-tuned, not only those whose width 4b changed. The mixed builds changed too (t0), and the cost is
+    the same.
+  - One set of rows serves both dispatch variants; the scheduler order is host-side.
+  - The chain writes the table to `results/kernel_opt/7/table/`. Adoption copies it to
+    `sm120/configs/<gpu>.ko.json` after the gates pass.
+- **Routing (`model.py`):**
+  - `install(kernel='auto')` runs 16x64 maps on `mixed_ko`, and `'auto_stock'` (FourOverSix, NVFP4) runs on
+    `stock_ko`.
+  - Either falls back to the paper set when its builds are not in the build directory, with a routing note.
+  - 256x64 maps stay on `mixed256` (A′) until amendment 8. `'auto_mixed'` follows `'auto'`'s 16x64 set.
+  - `'paper_mixed'` / `'paper_stock'` / `'paper_256'` select the paper sets.
+- **#2's dispatch** stays a build-time variant: the `mixed_ko` builds built with `MIXFP4_DISPATCH_FREQ=1`. Whether
+  it, or B′, becomes the default is decided on B′'s results.
+- **Tests:**
+  - `test_gemm.py` with n16k64_wA_e64_t0; `test_g32.py` with n16k64_wA_g32_e64;
+  - `test_select.py`: batch invariance of `mixed_ko`, and all 12 scheduler settings bitwise equal for `mixed_ko` and
+    `stock_ko`;
+  - `test_g32.py`'s routing test now expects the adopted sets.
+- **Script:** `run_7.sh`.
+- **Builds**, CPU only, from the amendment 7 sources, before registration:
+  - `build_7`: all 39 configurations, 10 parallel `build.py --config` processes;
+  - `build_7freq`: the four `mixed_ko` builds with `MIXFP4_DISPATCH_FREQ=1`.
+
+**Gates** (`run_7.sh`; a failure stops the adoption):
+- **G3:** `build.py --selftest` for n16k64_wA_e64_t0 and n16k64_wA_g32_e64.
+- **G1 / G2 (`check_sass.py`):**
+  - G1 on `build_7`: the 37 existing configurations keep their patched and unpatched SASS. The before roots are
+    `sm120/build`, kernel-opt `build`, `build_e0m3`, `build_A1`, `build_4` and `build_T`.
+  - G2: the 2 new builds have their census, and nothing is predicated; `build_7freq`'s four likewise.
+- **Schedule tuning (SCHED_TUNE):** produces the adopted table; it is not a gate.
+- **G3 pytest:** `test_gemm.py`, `test_select.py` and `test_g32.py` on `build_7`; `test_select.py -k mixed_ko` on
+  `build_7freq`.
+- **G4 (`check_bitwise.py`):** 0 differences against n16k64_wA (`sm120/build`) for:
+  - n16k64_wA_e64_t0 and set:mixed_ko with the adopted table, on `build_7` and `build_7freq`;
+  - n16k64_wA_g32_e64 (family g32), on `build_7`.
+- **G5:** whole-model logits bitwise equal on 4 models × 5 shapes, each paper set vs its adopted set with the adopted
+  table:
+  - 16x64: set:mixed vs set:mixed_ko;
+  - 16x64 with #2's dispatch: set:mixed from `build_freq` vs set:mixed_ko from `build_7freq`;
+  - FourOverSix: set:stock vs set:stock_ko.
+
+**No M1 here.** The adopted path is the combination of t0, #4 and 4b, and is measured as such in the cumulative
+registered run (decision 7): combined vs the paper builds, plus the end-to-end harness. Each part has its own
+measurement in amendments 4b, 5 and 6b.
+
+**After the gates:**
+1. Copy the tuned table to `sm120/configs/<gpu>.ko.json`.
+2. Add a note on the adoption to `results/kernel_opt/4/REPORT.md`, `retune/REPORT.md`, `t0/REPORT.md` and
+   `docs/BUILD_AND_USE.md`.
+3. Commit and push.

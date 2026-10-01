@@ -46,7 +46,7 @@ def test_widths_bitwise_equal(device, family, t, n, k):
         assert torch.equal(o, ref), f'width {wd} differs'
 
 
-@pytest.mark.parametrize('family', ['mixed_e', 'stock_e'])
+@pytest.mark.parametrize('family', ['mixed_e', 'stock_e', 'mixed_ko', 'stock_ko'])
 @pytest.mark.parametrize('t,n,k', [(1, 4096, 4096), (300, 1024, 4096), (1000, 4096, 1024)])
 def test_schedules_bitwise_equal(device, family, t, n, k):
     """kernel-opt #4: every scheduler setting (raster 0/1/2 x swizzle 1/2/4/8) computes the default (0, 1)'s output
@@ -70,7 +70,7 @@ def test_schedules_bitwise_equal(device, family, t, n, k):
             assert torch.equal(y, ref), f'width {wd} schedule {combo} differs'
 
 
-@pytest.mark.parametrize('family', ['mixed', 'mixed_wB', 'mixed256', 'mixed_t0', 'mixed256_t0'])
+@pytest.mark.parametrize('family', ['mixed', 'mixed_wB', 'mixed256', 'mixed_t0', 'mixed256_t0', 'mixed_ko'])
 def test_batch_invariance(device, family):
     ks = kset(family)
     g = torch.Generator(device='cpu').manual_seed(3)
