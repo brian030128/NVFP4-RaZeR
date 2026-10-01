@@ -60,6 +60,14 @@ MODELS = {
     'phi4': dict(repo='microsoft/phi-4', revision='2db69c1c3e91a05d2c64a3185acfbaf36f744e25', record=None),
     'qwen27b': dict(repo='Qwen/Qwen3.8-27B', revision='1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0',
                     record='results/math_code_adaptive/calibration_333787_qwen27b/report.json'),
+    # flipquant-maps (results/flipquant_maps/PROTOCOL.md): no record; drawn with the builder rule as phi4. Revisions are
+    # the Hub's main as resolved on 2026-10-01 (~/flipquant's registry pins Nemotron to the same commit).
+    'qwen3_1p7b': dict(repo='Qwen/Qwen3-1.7B', revision='70d244cc86ccca08cf5af4e1e306ecf908b1ad5e', record=None),
+    'qwen3_8b': dict(repo='Qwen/Qwen3-8B', revision='b968826d9c46dd6066d109eabc6255188de91218', record=None),
+    'mistral7b_ins': dict(repo='mistralai/Mistral-7B-Instruct-v0.3', revision='c170c708c41dac9275d15a8fff4eca08d52bab71',
+                          record=None),
+    'nemotron9b': dict(repo='nvidia/NVIDIA-Nemotron-Nano-9B-v2', revision='6533e8de2c68e4536bf7c411d7a3ce5734111476',
+                       record=None),
 }
 DEVELOPMENT = ('fresh_dev1', 'fresh_dev2', 'fresh_dev3')
 QWEN27B_PUBLISHED = 'results/kse_paper/job_336969/qwen27b/report.json'
@@ -124,7 +132,7 @@ def write_draw(target, records, rule, extra):
     return report
 
 
-def prepare(key, out, builder):
+def prepare(key, out, builder, fit_only=False):
     spec = MODELS[key]
     source = str(snapshot(key))
     tok = AutoTokenizer.from_pretrained(source)
@@ -158,7 +166,10 @@ def prepare(key, out, builder):
     summary['calibration_report_sha256'] = digest_file(calibration / 'report.json')
     summary['matrices'] = len(matrices)
     summary['development'] = {}
-    if key == 'qwen27b':
+    if fit_only:
+        # flipquant-maps: calibration runs with --no-dev, so no development set is drawn
+        summary['development'] = 'not drawn (--fit-only)'
+    elif key == 'qwen27b':
         published = json.loads((REPO / QWEN27B_PUBLISHED).read_text())
         c4 = [d['document_sha256'] for d in published['data']['c4_paper']['documents']]
         wanted = {d['name'].rsplit('/', 1)[1]: d['sha256']
@@ -210,13 +221,14 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--model', action='append', choices=[k for k in MODELS if k != 'llama8b'], required=True)
+    ap.add_argument('--fit-only', action='store_true', help='write the calibration record only (no development draws)')
     args = ap.parse_args()
     torch.set_num_threads(8)
     sys.path.insert(0, str(REPO / 'research/n16k64/software/primary'))
     from campaign.data import builder_seed0
-    checks = builder_rule_checks(builder_seed0) if 'phi4' in args.model else None
+    checks = builder_rule_checks(builder_seed0) if any(MODELS[k]['record'] is None for k in args.model) else None
     for key in args.model:
-        summary = prepare(key, args.out, builder_seed0)
+        summary = prepare(key, args.out, builder_seed0, args.fit_only)
         if checks is not None:
             summary['builder_rule_reproduces'] = checks
             (args.out / key / 'prepare_summary.json').write_text(json.dumps(summary, indent=2) + '\n')

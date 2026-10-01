@@ -59,6 +59,10 @@ PUBLISHED = {'llama8b': 'results/kse_paper/job_336566/llama8b/report.json',
              'llama8b_ins': 'results/kse_paper/job_336566/llama8b/report.json'}
 # Models prepared only locally (prepare_model_data.py): three development draws with Llama's rule.
 LOCAL_DEVELOPMENT = {m: ('fresh_dev1', 'fresh_dev2', 'fresh_dev3') for m in ('qwen4b', 'mistral7b', 'phi4')}
+# flipquant-maps (results/flipquant_maps/PROTOCOL.md): fit set only (prepare_model_data.py --fit-only); calibrated
+# with --no-dev, so their development directories are named but never read.
+LOCAL_DEVELOPMENT.update({m: ('fresh_dev1', 'fresh_dev2', 'fresh_dev3')
+                          for m in ('qwen3_1p7b', 'qwen3_8b', 'mistral7b_ins', 'nemotron9b')})
 MODELS = tuple(CALIBRATIONS) + tuple(LOCAL_DEVELOPMENT)
 
 
