@@ -75,8 +75,9 @@ bitwise-safe idea reaches it; see "Structural" below.
 - The re-tune covers all five builds, the `'128x64'` key included, and the scheduler rows.
 - The decisive-margin rule means a non-default choice must win beyond the round range, as amendment 7's scheduler
   rows did.
-- The worst cell (Llama/Mistral T = 512, +15 %) runs the 128 × 128 tile in a single partial wave, a likely candidate
-  for the 128 × 64 tile.
+- The worst cell, Llama/Mistral T = 512 (+15 %), runs the 128 × 128 tile. That leaves q/o/down_proj at 128 CTAs on
+  188 SMs, a single partial wave, so its width is a candidate for re-ranking; the 128 × 64 tile doubles the CTA count.
+  `stock_ko` runs the same tile count there, so part of this cell may stay.
 - Phi-4 1x512 (1b's open item) is re-checked in P7.
 
 **P5: the same-placement reference (decision a). What I would do:**
