@@ -1515,3 +1515,75 @@ a rule.
     10 % under pure noise.
   - So configuration-level offsets of up to about 2 % on single GEMMs escape the round range.
 - **Results:** `results/kernel_opt/w8/p3/REPORT.md`. Adoption is for the coordinator to decide.
+
+## Amendment 12b (the 8x64 plan's P3b, option C): a fresh confirmation of a reduced 8x64 table
+
+Written 2026-10-02, after amendment 12's result and before any registered GPU run of this amendment. The hashes and
+time are in `registration_12b.json`.
+
+**The decisions**, relayed by the coordinator after amendment 12's result:
+- **Option C.** Register a reduced 8x64 table before running it: 1b's rows plus only the P3 width changes that were
+  faster in every round on both tag sets, with no scheduler rows for 8x64. Confirm it with a fresh M1 under the same
+  rule.
+- **The fallback.** If P3b fails the rule, adopt option A without asking again: P2's adopted path, on 1b's rows.
+- **stock_wB_ko** (stock_wB_e64 with its P3 scheduler rows) is adopted, since it met its rule.
+- **The post-hoc A/A analysis** stays in amendment 12's report, labelled as such.
+
+**The selection criterion** (`p3b_tables.py select`; written before any run of this amendment, applied to amendment 12's
+registered M1 records):
+- **Candidates.** A P3 width change at (shape, bucket) is a P3 'mixed_wB' width that differs from 1b's paper row.
+- **Kept only if** it was faster in every round on both tag sets, for every (model, projection) of that shape at
+  T = bucket. Faster in every round means every round's per-GEMM median of the change lies below every round's of
+  1b's row.
+  - **Typical tags:** `wBw_typical` (P3's widths, no scheduler rows) against `wBp2_typical` (1b's rows).
+  - **Worst tags:** `wBko_worst` (the P3 table) against `wBp2_worst`. M1 had no widths-only worst configuration, so the
+    worst-tag evidence includes P3's scheduler row where the cell has one. The fresh M1 tests the width without it.
+- **Not kept:** a bucket M1 did not measure (2 or 8) gives no evidence.
+- **The result:** 11 of the 22 changes are kept (`results/kernel_opt/w8/p3b/cells.json` lists all 22 with their evidence):
+
+| shape (out x in) | bucket | 1b → P3b | used by | amendment 12's per-GEMM evidence, medians of the round medians (typical / worst) |
+|---|---:|---|---|---|
+| 1024x4096 | 128 | 64 → 32 | Llama-3.1-8B, Mistral-7B k/v_proj | −10.9 … −12.0 % / −11.7 … −12.9 % |
+| 1024x5120 | 64 | 32 → 16 | Qwen3.8-27B k/v_proj | −4.8, −5.5 % / −6.5, −8.1 % |
+| 1024x5120 | 256 | 64 → 32 | Qwen3.8-27B k/v_proj | −1.0, −1.9 % / −5.3, −6.4 % |
+| 4096x14336 | 64 | 32 → 64 | Llama-3.1-8B, Mistral-7B down_proj | −1.4, −0.8 % / −0.7, −0.7 % |
+| 4096x4096 | 1024 | 128 → 128x64 | Llama-3.1-8B, Mistral-7B q/o_proj | −0.7 … −1.6 % / −3.1 … −4.3 % |
+| 48x5120 | 1024 | 16 → 32 | Qwen3.8-27B in_proj_a/b | −1.4, −3.6 % / −2.0, −2.9 % |
+| 48x5120 | 8192 | 64 → 128x64 | Qwen3.8-27B in_proj_a/b | −12.5, −12.5 % / −11.9, −11.8 % |
+| 5120x17408 | 32 | 16 → 32 | Qwen3.8-27B down_proj | −0.7 % / −0.8 % |
+| 5120x5120 | 128 | 64 → 128x64 | Phi-4 o_proj | −4.5 % / −4.0 % |
+| 5120x6144 | 128 | 64 → 128x64 | Qwen3.8-27B o_proj, out_proj | −2.9, −2.9 % / −2.9, −2.6 % |
+| 7680x5120 | 16 | 32 → 16 | Phi-4 qkv_proj | −0.7 % / −1.0 % |
+
+**The tables** (`p3b_tables.py compose`, CPU, before registration). Each is the tracked `<gpu>.ko.json` with 'mixed_wB'
+rows and `stock_wB_ko`'s P3 scheduler rows added; every other key is unchanged.
+- `table_p3b/`, the candidate: 1b's rows with the 11 cells above. No scheduler rows for `mixed_wB_ko`.
+- `table_a/`, the fallback (option A): 1b's rows. No scheduler rows for `mixed_wB_ko`.
+
+**The run** (`run_w8p3b.sh`). There is no build and no source change: the libraries are `build_P3freq`'s.
+- **G0:** the registered files and builds.
+- **G4 (`check_bitwise.py --family wB`):** set:mixed_wB_ko on `table_p3b`, 0 differences against n8k64_wB from sm120/build.
+- **G5:** logits bitwise equal on 4 models × 5 shapes, set:mixed_wB_t0 (`build_P2freq`, paper table) vs
+  set:mixed_wB_ko (`build_P3freq`, `table_p3b`).
+- **M1 (`bench_w8p3b_isolated.py`):** amendment 10's method and scope; a fresh run.
+  - Configurations:
+    - stock_ko (`build_7`, tracked table);
+    - stock_wB (sm120/build);
+    - stock_wB_ko (`table_p3b`);
+    - before: `wBp2_{typical,worst}`, P2's path on 1b's rows;
+    - after: `wBp3b_{typical,worst}`, the reduced table.
+  - Both 8x64 configurations run the same libraries.
+  - Checks: M1's own; wBp3b equals wBp2 on the same tags, and stock_wB_ko equals stock_wB, bitwise on the timed operands.
+- **Reported (`w8p3b_report.py`):** after vs before, the gaps to stock_ko and to stock_wB tuned alike (by band and per
+  T), and every (model, projection, T) whose width changed.
+  - The report also evaluates stock_wB tuned alike against stock_wB. That is for information only; it was adopted on
+    amendment 12's result.
+
+**The rule** (amendment 12's form):
+- The reduced table is adopted if the 8x64 units (after vs before, with typical and with worst tags) have negative
+  medians over the 48 (model, T) cells, and no cell is above zero in every round by more than 0.5 %.
+- **Otherwise the fallback is adopted.**
+- Either way, the adopted table becomes the tracked `sm120/configs/<gpu>.ko.json` in a separate adoption commit.
+
+**Disclosed, before registration:** a smoke test of the new M1 and report scripts into a scratch directory, on Llama-3.1-8B
+k_proj and down_proj at T = 128 and 512, 1 round × 2. Every check passed. Nothing from it is used.

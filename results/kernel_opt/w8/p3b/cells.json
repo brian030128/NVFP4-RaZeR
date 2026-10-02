@@ -1,0 +1,741 @@
+{
+ "criterion": "from amendment 12's M1 records (--m1, the gemm/<model>.json files), the P3 width changes kept for the reduced\ntable. A change at (shape, bucket), i.e. a P3 'mixed_wB' width that differs from 1b's paper row, is kept only if it\nwas faster in every round on both tag sets for every (model, projection) of that shape at T = bucket:\n- typical tags: wBw_typical (P3's widths, no scheduler rows) against wBp2_typical (1b's rows);\n- worst tags: wBko_worst (the P3 table: the width, plus P3's scheduler row where it has one) against wBp2_worst.\n  M1 has no widths-only worst configuration.\n'Faster in every round' means every round's per-GEMM median of the change below every round's of 1b's row. A bucket M1\ndid not measure (2, 8) gives no evidence, so its change is not kept. The output lists every change with its evidence,\nand the kept cells.",
+ "source_m1": "/home/dev/n16k64_campaign/kernel_opt/w8p3/gemm",
+ "p3_table": "results/kernel_opt/w8/p3/table/nvidia_rtx_pro_6000_blackwell_workstation_edition.json",
+ "paper_table": "sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.json",
+ "changes": [
+  {
+   "shape": "1024x4096",
+   "bucket": 128,
+   "width_1b": 64,
+   "width_p3": 32,
+   "p3_scheduler_row": [
+    2,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "llama8b",
+     "proj": "k_proj",
+     "typical_pct": -11.070110701114977,
+     "typical_every_round": true,
+     "worst_pct": -12.449955516014155,
+     "worst_every_round": true
+    },
+    {
+     "model": "llama8b",
+     "proj": "v_proj",
+     "typical_pct": -12.043795620433183,
+     "typical_every_round": true,
+     "worst_pct": -12.142857142873243,
+     "worst_every_round": true
+    },
+    {
+     "model": "mistral7b",
+     "proj": "k_proj",
+     "typical_pct": -10.941033223172681,
+     "typical_every_round": true,
+     "worst_pct": -12.866793873455206,
+     "worst_every_round": true
+    },
+    {
+     "model": "mistral7b",
+     "proj": "v_proj",
+     "typical_pct": -11.02941176471479,
+     "typical_every_round": true,
+     "worst_pct": -11.714624420741949,
+     "worst_every_round": true
+    }
+   ],
+   "kept": true
+  },
+  {
+   "shape": "1024x4096",
+   "bucket": 4096,
+   "width_1b": 128,
+   "width_p3": "128x64",
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "llama8b",
+     "proj": "k_proj",
+     "typical_pct": 0.23277467411260133,
+     "typical_every_round": false,
+     "worst_pct": -0.5550416281234427,
+     "worst_every_round": true
+    },
+    {
+     "model": "llama8b",
+     "proj": "v_proj",
+     "typical_pct": -0.32468003073151674,
+     "typical_every_round": true,
+     "worst_pct": 2.616313660162506,
+     "worst_every_round": false
+    },
+    {
+     "model": "mistral7b",
+     "proj": "k_proj",
+     "typical_pct": 0.5154714660175586,
+     "typical_every_round": false,
+     "worst_pct": 1.5319767441888343,
+     "worst_every_round": false
+    },
+    {
+     "model": "mistral7b",
+     "proj": "v_proj",
+     "typical_pct": 0.23131983240438636,
+     "typical_every_round": false,
+     "worst_pct": 2.551984877122404,
+     "worst_every_round": false
+    }
+   ],
+   "kept": false
+  },
+  {
+   "shape": "1024x5120",
+   "bucket": 64,
+   "width_1b": 32,
+   "width_p3": 16,
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "qwen27b",
+     "proj": "k_proj",
+     "typical_pct": -4.841713221598598,
+     "typical_every_round": true,
+     "worst_pct": -6.521739130434778,
+     "worst_every_round": true
+    },
+    {
+     "model": "qwen27b",
+     "proj": "v_proj",
+     "typical_pct": -5.529289667885207,
+     "typical_every_round": true,
+     "worst_pct": -8.132729681980832,
+     "worst_every_round": true
+    }
+   ],
+   "kept": true
+  },
+  {
+   "shape": "1024x5120",
+   "bucket": 256,
+   "width_1b": 64,
+   "width_p3": 32,
+   "p3_scheduler_row": [
+    2,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "qwen27b",
+     "proj": "k_proj",
+     "typical_pct": -0.9708737864123629,
+     "typical_every_round": true,
+     "worst_pct": -5.317382812490945,
+     "worst_every_round": true
+    },
+    {
+     "model": "qwen27b",
+     "proj": "v_proj",
+     "typical_pct": -1.9230769230860312,
+     "typical_every_round": true,
+     "worst_pct": -6.441717791415213,
+     "worst_every_round": true
+    }
+   ],
+   "kept": true
+  },
+  {
+   "shape": "17408x5120",
+   "bucket": 256,
+   "width_1b": 128,
+   "width_p3": "128x64",
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "qwen27b",
+     "proj": "gate_proj",
+     "typical_pct": 1.9472744047272394,
+     "typical_every_round": false,
+     "worst_pct": 0.8932787280170329,
+     "worst_every_round": false
+    },
+    {
+     "model": "qwen27b",
+     "proj": "up_proj",
+     "typical_pct": 1.7114485981284178,
+     "typical_every_round": false,
+     "worst_pct": 0.7079237443035291,
+     "worst_every_round": false
+    }
+   ],
+   "kept": false
+  },
+  {
+   "shape": "35840x5120",
+   "bucket": 4,
+   "width_1b": 32,
+   "width_p3": 16,
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "phi4",
+     "proj": "gate_up_proj",
+     "typical_pct": -0.1434546909687806,
+     "typical_every_round": false,
+     "worst_pct": 0.001511144695842681,
+     "worst_every_round": false
+    }
+   ],
+   "kept": false
+  },
+  {
+   "shape": "4096x14336",
+   "bucket": 32,
+   "width_1b": 16,
+   "width_p3": 32,
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "llama8b",
+     "proj": "down_proj",
+     "typical_pct": -0.5070233585859785,
+     "typical_every_round": true,
+     "worst_pct": -0.4363735984152406,
+     "worst_every_round": false
+    },
+    {
+     "model": "mistral7b",
+     "proj": "down_proj",
+     "typical_pct": -0.8181246066685355,
+     "typical_every_round": true,
+     "worst_pct": -0.2509410288576319,
+     "worst_every_round": false
+    }
+   ],
+   "kept": false
+  },
+  {
+   "shape": "4096x14336",
+   "bucket": 64,
+   "width_1b": 32,
+   "width_p3": 64,
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "llama8b",
+     "proj": "down_proj",
+     "typical_pct": -1.4075887392898556,
+     "typical_every_round": true,
+     "worst_pct": -0.7298157358156199,
+     "worst_every_round": true
+    },
+    {
+     "model": "mistral7b",
+     "proj": "down_proj",
+     "typical_pct": -0.7980356046674908,
+     "typical_every_round": true,
+     "worst_pct": -0.7312614259563643,
+     "worst_every_round": true
+    }
+   ],
+   "kept": true
+  },
+  {
+   "shape": "4096x4096",
+   "bucket": 32,
+   "width_1b": 16,
+   "width_p3": 32,
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "llama8b",
+     "proj": "q_proj",
+     "typical_pct": 0.9041591320064102,
+     "typical_every_round": false,
+     "worst_pct": 1.8116967672545004,
+     "worst_every_round": false
+    },
+    {
+     "model": "llama8b",
+     "proj": "o_proj",
+     "typical_pct": 1.2635379061380236,
+     "typical_every_round": false,
+     "worst_pct": 1.2544802867354488,
+     "worst_every_round": false
+    },
+    {
+     "model": "mistral7b",
+     "proj": "q_proj",
+     "typical_pct": 1.4492753623127852,
+     "typical_every_round": false,
+     "worst_pct": 1.6187050359635746,
+     "worst_every_round": false
+    },
+    {
+     "model": "mistral7b",
+     "proj": "o_proj",
+     "typical_pct": 0.5415162454834865,
+     "typical_every_round": false,
+     "worst_pct": 0.8928571428512555,
+     "worst_every_round": false
+    }
+   ],
+   "kept": false
+  },
+  {
+   "shape": "4096x4096",
+   "bucket": 64,
+   "width_1b": 32,
+   "width_p3": 64,
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "llama8b",
+     "proj": "q_proj",
+     "typical_pct": -0.5208333333383108,
+     "typical_every_round": false,
+     "worst_pct": 0.5135967994848389,
+     "worst_every_round": false
+    },
+    {
+     "model": "llama8b",
+     "proj": "o_proj",
+     "typical_pct": -0.3430531732386166,
+     "typical_every_round": false,
+     "worst_pct": 0.00532396314474326,
+     "worst_every_round": false
+    },
+    {
+     "model": "mistral7b",
+     "proj": "q_proj",
+     "typical_pct": -0.17123287671557685,
+     "typical_every_round": false,
+     "worst_pct": 1.0220462328512259,
+     "worst_every_round": false
+    },
+    {
+     "model": "mistral7b",
+     "proj": "o_proj",
+     "typical_pct": 0.16673838209466663,
+     "typical_every_round": false,
+     "worst_pct": -0.17478813559029804,
+     "worst_every_round": false
+    }
+   ],
+   "kept": false
+  },
+  {
+   "shape": "4096x4096",
+   "bucket": 1024,
+   "width_1b": 128,
+   "width_p3": "128x64",
+   "p3_scheduler_row": [
+    2,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "llama8b",
+     "proj": "q_proj",
+     "typical_pct": -1.006418778859075,
+     "typical_every_round": true,
+     "worst_pct": -3.0706023820443296,
+     "worst_every_round": true
+    },
+    {
+     "model": "llama8b",
+     "proj": "o_proj",
+     "typical_pct": -0.7332722273152847,
+     "typical_every_round": true,
+     "worst_pct": -4.172335600903166,
+     "worst_every_round": true
+    },
+    {
+     "model": "mistral7b",
+     "proj": "q_proj",
+     "typical_pct": -1.6291259385176837,
+     "typical_every_round": true,
+     "worst_pct": -4.330780837951053,
+     "worst_every_round": true
+    },
+    {
+     "model": "mistral7b",
+     "proj": "o_proj",
+     "typical_pct": -1.003611860604614,
+     "typical_every_round": true,
+     "worst_pct": -3.837525924463825,
+     "worst_every_round": true
+    }
+   ],
+   "kept": true
+  },
+  {
+   "shape": "48x5120",
+   "bucket": 1024,
+   "width_1b": 16,
+   "width_p3": 32,
+   "p3_scheduler_row": [
+    1,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "qwen27b",
+     "proj": "in_proj_b",
+     "typical_pct": -3.584229390679061,
+     "typical_every_round": true,
+     "worst_pct": -2.8833183453333078,
+     "worst_every_round": true
+    },
+    {
+     "model": "qwen27b",
+     "proj": "in_proj_a",
+     "typical_pct": -1.4466546112287704,
+     "typical_every_round": true,
+     "worst_pct": -1.969365426704195,
+     "worst_every_round": true
+    }
+   ],
+   "kept": true
+  },
+  {
+   "shape": "48x5120",
+   "bucket": 8192,
+   "width_1b": 64,
+   "width_p3": "128x64",
+   "p3_scheduler_row": [
+    1,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "qwen27b",
+     "proj": "in_proj_b",
+     "typical_pct": -12.45753114383249,
+     "typical_every_round": true,
+     "worst_pct": -11.774803811655632,
+     "worst_every_round": true
+    },
+    {
+     "model": "qwen27b",
+     "proj": "in_proj_a",
+     "typical_pct": -12.48286286779452,
+     "typical_every_round": true,
+     "worst_pct": -11.936936936952902,
+     "worst_every_round": true
+    }
+   ],
+   "kept": true
+  },
+  {
+   "shape": "5120x17408",
+   "bucket": 32,
+   "width_1b": 16,
+   "width_p3": 32,
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "qwen27b",
+     "proj": "down_proj",
+     "typical_pct": -0.7305936073068175,
+     "typical_every_round": true,
+     "worst_pct": -0.7716923425478139,
+     "worst_every_round": true
+    }
+   ],
+   "kept": true
+  },
+  {
+   "shape": "5120x17408",
+   "bucket": 64,
+   "width_1b": 32,
+   "width_p3": 64,
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "qwen27b",
+     "proj": "down_proj",
+     "typical_pct": -0.08884376190014809,
+     "typical_every_round": false,
+     "worst_pct": -0.3120845287236662,
+     "worst_every_round": false
+    }
+   ],
+   "kept": false
+  },
+  {
+   "shape": "5120x17408",
+   "bucket": 128,
+   "width_1b": 64,
+   "width_p3": "128x64",
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "qwen27b",
+     "proj": "down_proj",
+     "typical_pct": 0.08532423208473805,
+     "typical_every_round": false,
+     "worst_pct": 1.3517441860478874,
+     "worst_every_round": false
+    }
+   ],
+   "kept": false
+  },
+  {
+   "shape": "5120x5120",
+   "bucket": 32,
+   "width_1b": 16,
+   "width_p3": 32,
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "phi4",
+     "proj": "o_proj",
+     "typical_pct": 0.505573248407476,
+     "typical_every_round": false,
+     "worst_pct": 0.5115089514090787,
+     "worst_every_round": false
+    }
+   ],
+   "kept": false
+  },
+  {
+   "shape": "5120x5120",
+   "bucket": 64,
+   "width_1b": 32,
+   "width_p3": 64,
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "phi4",
+     "proj": "o_proj",
+     "typical_pct": 0.8844687291145403,
+     "typical_every_round": false,
+     "worst_pct": 2.030456852788043,
+     "worst_every_round": false
+    }
+   ],
+   "kept": false
+  },
+  {
+   "shape": "5120x5120",
+   "bucket": 128,
+   "width_1b": 64,
+   "width_p3": "128x64",
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "phi4",
+     "proj": "o_proj",
+     "typical_pct": -4.481199770379796,
+     "typical_every_round": true,
+     "worst_pct": -4.022988505753244,
+     "worst_every_round": true
+    }
+   ],
+   "kept": true
+  },
+  {
+   "shape": "5120x6144",
+   "bucket": 64,
+   "width_1b": 32,
+   "width_p3": 64,
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "qwen27b",
+     "proj": "out_proj",
+     "typical_pct": 2.286668484190124,
+     "typical_every_round": false,
+     "worst_pct": 2.3749197662255916,
+     "worst_every_round": false
+    },
+    {
+     "model": "qwen27b",
+     "proj": "o_proj",
+     "typical_pct": 2.162052939988013,
+     "typical_every_round": false,
+     "worst_pct": 1.7238482475917971,
+     "worst_every_round": false
+    }
+   ],
+   "kept": false
+  },
+  {
+   "shape": "5120x6144",
+   "bucket": 128,
+   "width_1b": 64,
+   "width_p3": "128x64",
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "qwen27b",
+     "proj": "out_proj",
+     "typical_pct": -2.9060310310369264,
+     "typical_every_round": true,
+     "worst_pct": -2.584493041744962,
+     "worst_every_round": true
+    },
+    {
+     "model": "qwen27b",
+     "proj": "o_proj",
+     "typical_pct": -2.8855721393031386,
+     "typical_every_round": true,
+     "worst_pct": -2.8798411122196055,
+     "worst_every_round": true
+    }
+   ],
+   "kept": true
+  },
+  {
+   "shape": "7680x5120",
+   "bucket": 16,
+   "width_1b": 32,
+   "width_p3": 16,
+   "p3_scheduler_row": [
+    0,
+    1
+   ],
+   "measured": true,
+   "evidence": [
+    {
+     "model": "phi4",
+     "proj": "qkv_proj",
+     "typical_pct": -0.6668660287120876,
+     "typical_every_round": true,
+     "worst_pct": -1.0466364503820103,
+     "worst_every_round": true
+    }
+   ],
+   "kept": true
+  }
+ ],
+ "kept": [
+  {
+   "shape": "1024x4096",
+   "bucket": 128,
+   "width": 32
+  },
+  {
+   "shape": "1024x5120",
+   "bucket": 64,
+   "width": 16
+  },
+  {
+   "shape": "1024x5120",
+   "bucket": 256,
+   "width": 32
+  },
+  {
+   "shape": "4096x14336",
+   "bucket": 64,
+   "width": 64
+  },
+  {
+   "shape": "4096x4096",
+   "bucket": 1024,
+   "width": "128x64"
+  },
+  {
+   "shape": "48x5120",
+   "bucket": 1024,
+   "width": 32
+  },
+  {
+   "shape": "48x5120",
+   "bucket": 8192,
+   "width": "128x64"
+  },
+  {
+   "shape": "5120x17408",
+   "bucket": 32,
+   "width": 32
+  },
+  {
+   "shape": "5120x5120",
+   "bucket": 128,
+   "width": "128x64"
+  },
+  {
+   "shape": "5120x6144",
+   "bucket": 128,
+   "width": "128x64"
+  },
+  {
+   "shape": "7680x5120",
+   "bucket": 16,
+   "width": 16
+  }
+ ]
+}
