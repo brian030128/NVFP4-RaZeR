@@ -52,9 +52,10 @@ FAMILIES = {
     # 'mixed_wB'), on the 'mixed_wB' rows
     'mixed_wB_t0': {16: 'n8k64_wB_m16_t0', 32: 'n8k64_wB_m32_t0', 64: 'n8k64_wB_m64_t0', 128: 'n8k64_wB_t0',
                     '128x64': 'n8k64_wB_n64_t0'},
-    # kernel-opt 8x64 adoption (amendment 11's decision; amendment 12 tunes it): the 8x64 path -- the t0 builds, deployed
-    # with #2's dispatch (MIXFP4_DISPATCH_FREQ=1 in their build directory) -- and stock_wB tuned the same way (#4's
-    # epilogue tile). Both read the adopted table (TABLE_FILE): their own 'mixed_wB' width rows and scheduler rows.
+    # kernel-opt 8x64 adoption (amendments 11-12b, 2026-10-02): the 8x64 path -- the t0 builds, deployed with #2's
+    # dispatch (MIXFP4_DISPATCH_FREQ=1 in their build directory) -- and stock_wB tuned the same way (#4's epilogue tile).
+    # Both read the adopted table (TABLE_FILE): the 8x64 path its 'mixed_wB' width rows (1b's with 11 re-tuned cells; no
+    # scheduler rows), stock_wB_ko its scheduler rows.
     'mixed_wB_ko': {16: 'n8k64_wB_m16_t0', 32: 'n8k64_wB_m32_t0', 64: 'n8k64_wB_m64_t0', 128: 'n8k64_wB_t0',
                     '128x64': 'n8k64_wB_n64_t0'},
     'stock_wB_ko': {128: 'stock_wB_e64'},

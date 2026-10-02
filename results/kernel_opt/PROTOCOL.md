@@ -1587,3 +1587,25 @@ rows and `stock_wB_ko`'s P3 scheduler rows added; every other key is unchanged.
 
 **Disclosed, before registration:** a smoke test of the new M1 and report scripts into a scratch directory, on Llama-3.1-8B
 k_proj and down_proj at T = 128 and 512, 1 round × 2. Every check passed. Nothing from it is used.
+
+### Amendment 12b: the run, and the 8x64 adoption
+
+`run_w8p3b.sh` ran on 2026-10-02 from 17:27 to 17:43 UTC (registration 3ef1699), with no deviation.
+- **Gates:** all passed (G0: 39 files and 17 builds; G4: 28,800 comparisons, 0 differences; G5: equal).
+- **The rule is met.**
+  - After vs before: −0.06 % (typical) and −0.09 % (worst), medians.
+  - No cell is above zero in every round by more than 0.5 %; the largest every-round minimum is +0.20 %.
+  - All 23 GEMMs whose width changed are faster, by −0.4 to −12.6 %. Per forward the gain is −1.1 % at T = 128.
+- **The adoption.** The reduced table (`results/kernel_opt/w8/p3b/table_p3b/`) becomes the tracked
+  `sm120/configs/<gpu>.ko.json`. Its other keys are unchanged.
+- **The adopted 8x64 path (`mixed_wB_ko`):**
+  - t0 builds, deployed with #2's dispatch (`build_P2freq`; the same SASS as `build_P3freq`);
+  - 1b's widths with the 11 cells;
+  - no scheduler rows.
+- **The same-placement stock reference (`stock_wB_ko`):** stock_wB_e64 with its P3 scheduler rows.
+- **Its residual gap** to `stock_ko` (typical, median over the models):
+  - +0.3 … +1.0 % at T ≤ 16;
+  - +1.2 … +2.0 % at 32–128;
+  - +5.7 / +9.0 / +6.0 % at 256 / 512 / 1024;
+  - +7.0 … +7.4 % at T ≥ 2048.
+- **Results:** `results/kernel_opt/w8/p3b/REPORT.md`.
