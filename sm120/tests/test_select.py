@@ -116,3 +116,9 @@ def test_auto_routes_8x64_maps(device):
             assert k.cfg.name == 'n8k64_wB' and 'not built' in note, (spec, note)
     if built('n8k64_wB'):
         assert NM.resolve_kernel('paper_wB', None)[0].cfg.name == 'n8k64_wB'
+    if built('stock_wB_e64'):
+        ks, note = NM.resolve_kernel('auto_stock_wB', None)
+        assert isinstance(ks, KernelSet) and ks.family == 'stock_wB_ko' and '-> stock_wB_ko' in note
+    elif built('stock_wB'):
+        k, note = NM.resolve_kernel('auto_stock_wB', None)
+        assert k.cfg.name == 'stock_wB' and 'not built' in note

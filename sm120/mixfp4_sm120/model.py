@@ -53,6 +53,8 @@ def resolve_kernel(kernel, meta=None):
       - whole 128-row panels (256x64): the 4-arm 'mixed256' set (kernel-opt A', adopted 2026-09-30) on the paper
         table if built, else the paper 'mixed' set -- unchanged by amendment 7 (no 256x64 work for now).
     'auto_stock' -> the stock NVFP4 set tuned the same way: 'stock_ko' (#4 + 4b), else the paper 'stock'.
+    'auto_stock_wB' -> stock with the weights on B, tuned alike (kernel-opt 8x64 plan): 'stock_wB_ko' (stock_wB_e64 with its
+    scheduler rows, amendments 12-12b) if built, else the paper stock_wB.
     'auto_mixed' -> the 16x64 set of 'auto' for any map; 'auto_wB' -> the 8x64 kernel of 'auto' for any map;
     'auto_256' -> 'mixed256' (NativeLinear verifies the tags are uniform over its 128-row panels).
     'paper_mixed' / 'paper_stock' / 'paper_256' -> the paper sets 'mixed' / 'stock' / 'mixed256' with the paper table;
@@ -81,6 +83,11 @@ def resolve_kernel(kernel, meta=None):
     if kernel == 'auto_wB':
         k, note = _deployed_wB()
         return k, f'auto_wB -> {note}'
+    if kernel == 'auto_stock_wB':
+        try:
+            return KernelSet('stock_wB_ko'), 'auto_stock_wB -> stock_wB_ko (kernel-opt, amendments 12-12b)'
+        except LibraryError as e:
+            return Kernel.load('stock_wB'), f'auto_stock_wB -> stock_wB_ko not built ({e}) -> stock_wB (paper kernel)'
     if kernel == 'paper_wB':
         return Kernel.load('n8k64_wB'), None
     if kernel == 'auto_256':
