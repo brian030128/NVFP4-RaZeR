@@ -1336,3 +1336,24 @@ in the order P2 (with P1) → P4 → P3 → P5 → P6 → P7.
     measures all of them.
   - The t0 rule's tolerance was written after the smoke test. It rests on amendment 6's experience above, not on
     the smoke numbers.
+
+### Amendment 11: the run
+
+`run_w8p2.sh` ran on 2026-10-02 from 15:36 to 16:10 UTC (registration 022240a), with no deviation.
+- **Gates:** all passed.
+  - G0: 47 files and 74 builds.
+  - Self-tests: 10 × PASS patched / FAIL unpatched, each rebuild with the registered SASS.
+  - The patcher check: 53 tagged and 32 t0 binaries, 0 failures.
+  - G1 / G2; pytest: 1,013 passed on `build_P2`, 211 on `build_P2freq`.
+  - G4: 2 × 28,800 comparisons, 0 differences. G5: both equal.
+- **Rules:** the t0 adoption rule and the P1 rule are both met; amendment 6's strict form is not met.
+  - t0 per forward: −0.76 % vs 1b, −0.55 % vs #2 (medians); −1.3 to −2.2 % at T ≥ 256.
+  - The strict form flags 41 cells at T ≤ 64, all ≤ +0.68 %.
+  - P1: #2's dispatch on the t0 builds is faster in 48 of 48 typical-tag cells in every round (−0.53 %).
+- **The residual gap** of t0 with #2's dispatch to `stock_ko` (typical, median) is +4.35 % (1b: +5.69 %):
+  - +0.6 … +0.8 % at T ≤ 16;
+  - +2.2 … +2.8 % at 32–128;
+  - +5.4 / +9.3 / +6.3 % at 256 / 512 / 1024;
+  - +7.0 … +7.5 % at T ≥ 2048.
+- **Results:** `results/kernel_opt/w8/p2/REPORT.md`. Adoption of t0 and of #2's dispatch for 8x64 is proposed to the
+  coordinator, not automatic.
