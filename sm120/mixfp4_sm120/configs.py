@@ -283,6 +283,17 @@ CONFIGS['stock_wB_e64'] = dataclasses.replace(
     defines=dict(CONFIGS['stock_wB'].defines, MIXFP4_EPI_TILE_M=64, MIXFP4_EPI_TILE_N=64),
     description='kernel-opt P3: stock_wB with a 64 x 64 epilogue tile.')
 
+# kernel-opt 8x64 plan P5 (decision a): the adopted 8x64 path's no-dispatch ceiling at every width ('nodisp_wB_ko'), the
+# same-placement reference: each width's tile and 1x8 / 1x4 arrangement with the format dispatch compiled out (E2M1
+# only, no site-0 tags), as n8k64_wB_nodisp_t0 is for width 128. Not deployment kernels.
+for _base in ('n8k64_wB_m16', 'n8k64_wB_m32', 'n8k64_wB_m64', 'n8k64_wB_n64'):
+    _c = CONFIGS[_base]
+    CONFIGS[_base + '_nodisp_t0'] = dataclasses.replace(
+        _c, name=_base + '_nodisp_t0', type_block=None, expected_census=None, patch=False,
+        defines=dict(_c.defines, MIXFP4_NO_DISPATCH=1, MIXFP4_PIPE_FLAGS=0), blob_gen=dict(_c.blob_gen, TAG0=0),
+        description=f"kernel-opt P5: {_base}'s tile with the format dispatch compiled out (E2M1 only). "
+                    'Not a deployment kernel.')
+
 DEFAULT = 'n16k64_wA'
 
 

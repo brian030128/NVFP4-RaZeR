@@ -88,3 +88,31 @@ def test_batch_invariance(device, family):
 def test_rules():
     assert [bucket(t) for t in (1, 2, 3, 17, 129, 9000)] == [1, 2, 4, 32, 256, 8192]
     assert [fallback_width(t) for t in (1, 16, 17, 33, 64, 65, 500)] == [16, 16, 32, 64, 64, 128, 128]
+
+
+def test_auto_routes_8x64_maps(device):
+    """kernel-opt 8x64 plan P6 (decision b): install(kernel='auto') runs an 8x64 map on the adopted 8x64 set
+    'mixed_wB_ko' when its builds are in the build directory, else on the paper kernel n8k64_wB; 'auto_wB' follows it, and
+    'paper_wB' is the paper kernel. 16x64 and 256x64 maps keep their routing (test_g32.py)."""
+    from mixfp4_sm120 import model as NM
+    from mixfp4_sm120.lib import Kernel
+
+    def built(*names):
+        try:
+            for n in names:
+                Kernel.load(n)
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+    adopted = built(*FAMILIES['mixed_wB_ko'].values())
+    if not adopted and not built('n8k64_wB'):
+        pytest.skip('neither the adopted 8x64 set nor n8k64_wB is built')
+    for spec, meta in (('auto', dict(type_block=[8, 64])), ('auto', dict(type_block=[8, 64], note=dict(record=dict(unit='8x64')))),
+                       ('auto_wB', None)):
+        k, note = NM.resolve_kernel(spec, meta)
+        if adopted:
+            assert isinstance(k, KernelSet) and k.family == 'mixed_wB_ko' and '-> mixed_wB_ko' in note, (spec, note)
+        else:
+            assert k.cfg.name == 'n8k64_wB' and 'not built' in note, (spec, note)
+    if built('n8k64_wB'):
+        assert NM.resolve_kernel('paper_wB', None)[0].cfg.name == 'n8k64_wB'

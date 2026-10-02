@@ -59,18 +59,23 @@ FAMILIES = {
     'mixed_wB_ko': {16: 'n8k64_wB_m16_t0', 32: 'n8k64_wB_m32_t0', 64: 'n8k64_wB_m64_t0', 128: 'n8k64_wB_t0',
                     '128x64': 'n8k64_wB_n64_t0'},
     'stock_wB_ko': {128: 'stock_wB_e64'},
+    # kernel-opt 8x64 plan P5: the adopted 8x64 path's no-dispatch ceiling (E2M1 only), on the adopted table's 'mixed_wB'
+    # rows and mixed_wB_ko's scheduler rows (it has none)
+    'nodisp_wB_ko': {16: 'n8k64_wB_m16_nodisp_t0', 32: 'n8k64_wB_m32_nodisp_t0', 64: 'n8k64_wB_m64_nodisp_t0',
+                     128: 'n8k64_wB_nodisp_t0', '128x64': 'n8k64_wB_n64_nodisp_t0'},
 }
 # A family that takes another family's tile-table rows: 'mixed256' has the CTA tile of 'mixed' at every width, and uses
 # its widths so that the two differ only in the dispatch granule (kernel-opt A').
 TABLE_FAMILY = {'mixed256': 'mixed', 'mixed_e': 'mixed', 'stock_e': 'stock', 'mixed_t0': 'mixed', 'mixed256_t0': 'mixed',
                 'mixed_ko': 'mixed', 'stock_ko': 'stock', 'nodisp_ko': 'mixed', 'mixed_wB_t0': 'mixed_wB',
-                'mixed_wB_ko': 'mixed_wB', 'stock_wB_ko': 'stock_wB'}
+                'mixed_wB_ko': 'mixed_wB', 'stock_wB_ko': 'stock_wB', 'nodisp_wB_ko': 'mixed_wB'}
 # A family that takes another family's scheduler rows (the same tiles in the same order)
-SCHEDULE_FAMILY = {'nodisp_ko': 'mixed_ko'}
+SCHEDULE_FAMILY = {'nodisp_ko': 'mixed_ko', 'nodisp_wB_ko': 'mixed_wB_ko'}
 TABLE_DIR = Path(__file__).resolve().parents[1] / 'configs'
 # The table file a family reads by default: '<gpu>.<suffix>.json' if listed here and present, else '<gpu>.json' (the
 # paper table). The adopted kernel-opt sets read '<gpu>.ko.json' (amendment 7).
-TABLE_FILE = {'mixed_ko': 'ko', 'stock_ko': 'ko', 'nodisp_ko': 'ko', 'mixed_wB_ko': 'ko', 'stock_wB_ko': 'ko'}
+TABLE_FILE = {'mixed_ko': 'ko', 'stock_ko': 'ko', 'nodisp_ko': 'ko', 'mixed_wB_ko': 'ko', 'stock_wB_ko': 'ko',
+              'nodisp_wB_ko': 'ko'}
 BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
 
 
