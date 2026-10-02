@@ -1210,3 +1210,129 @@ the FlipQuant 8x64 GEMM reach stock latency at all T. Reference: stock_wA, i.e. 
   - At 4096³ the gap splits into the 1x8 arrangement (+2.3 … +3.3 %), the site-0 tags (+1.1 … +1.3 %), the dispatch
     (+3.8 … +4.4 %, or +2.5 … +3.6 % with #2's) and the real map's E0M3 tiles (+0.5 … +1.1 %).
 - Nothing is adopted or tuned from the run.
+
+## Amendment 11 (the 8x64 plan's P2, with P1): t0 for the weights-on-B family, and the 8x64 dispatch
+
+Written 2026-10-02, before any registered GPU run of this amendment. The hashes and time are in `registration_11.json`.
+
+**The request**, relayed by the coordinator: the user's go on the 8x64 plan (`results/kernel_opt/w8/PLAN.md`, a84ab6f),
+in the order P2 (with P1) → P4 → P3 → P5 → P6 → P7.
+- "P2: t0 for the wB family (TAG0=0 + --untagged-site0), default and freq variants; P1 (the freq default for 8x64) is
+  chosen on P2's M1."
+- The goal is unchanged: the FlipQuant 8x64 GEMM at `stock_ko` latency at all T, bitwise-safe. Each item is
+  registered before its measured runs and has its own build directories.
+
+**What changes** (the sources are commit c5bb523):
+- **`configs.py`:** n8k64_wB{,_m64,_m32,_m16,_n64}_t0, each its base with `TAG0=0` and the same census. build.py
+  patches them with `--untagged-site0`.
+- **`select.py`:** the set `mixed_wB_t0` = {16: n8k64_wB_m16_t0, 32: …_m32_t0, 64: …_m64_t0, 128: n8k64_wB_t0,
+  '128x64': n8k64_wB_n64_t0}, on the `mixed_wB` rows (`TABLE_FAMILY`).
+- **Tests:** test_gemm.py's MIXED gets the five builds. test_select.py draws 8x64 maps for every weights-on-B family and
+  checks `mixed_wB_t0`'s batch invariance.
+- **Unchanged:** the library sources, the blob generator and the patcher (amendment 6b's).
+  - The wB blob tags each MMA's scale word as the wA blob does, so `TAG0=0` applies as it is.
+  - Its site-0 MMAs read the scale word directly. The E0M3-on-B site (2) keeps its tag.
+- **New scripts:** `check_patcher_sites.py`, `check_same_sass.py`, `bench_w8p2_isolated.py`, `c2_w8p2.py`,
+  `w8p2_report.py`, `run_w8p2.sh`.
+
+**Builds**, CPU only with no GPU visible, from the clean main checkout at c5bb523 (`results/kernel_opt/w8/p2/build_P2.sh`):
+- `build_P2`: all 50 configurations, 13 parallel `build.py --config` processes;
+- `build_P2freq`: the five wB t0 builds with `MIXFP4_DISPATCH_FREQ=1` (#2's dispatch).
+- All 55 passed build.py's checks. The five t0 builds have their bases' census, mainloop stages and register counts.
+- The GEMM kernel loses 384 PRMTs at width 128 (4,976 → 4,592 SASS instructions) and 192 at '128x64' and width 64. It
+  loses 96 at width 32 and 48 at width 16.
+
+**Gates** (`run_w8p2.sh`; a failure stops P2):
+- **G0 (`check_provenance.py`):** every registered file has its sha256. Every registered build has its library sha256,
+  SASS sha256 and defines, and its library file matches its manifest.
+  - These builds are amendment 10's (kernel-opt `build`, `build_freq`, `build_7`, `build_W`, `sm120/build`),
+    `build_P2`'s 50 and `build_P2freq`'s 5.
+- **G3, the self-tests:** `build.py --selftest` for the five t0 builds, with the default dispatch and with #2's, one
+  process each.
+  - The requirement is PASS patched and FAIL unpatched under random tagging of the weights (`randb`), on the three
+    upstream shapes.
+  - A self-test rebuilds its library first, so these run in the separate directories `build_P2st` and `build_P2stfreq`.
+    The registered builds stay untouched.
+  - `check_same_sass.py`: each rebuilt library carries the registered build's patched and unpatched SASS, patcher and
+    census.
+- **The patcher check (`check_patcher_sites.py`):** 6b's validation, extended to the wB family.
+  - Every tagged weights-on-B library and self-test executable in sm120/build and the kernel-opt `build`, `build_freq`,
+    `build_4`, `build_A1`, `build_e0m3`, `build_T`, `build_7` and `build_P2`: the reaching-definitions analysis gives
+    every OMMA the strict parser's site. The self-test executables carry the BRX jump table.
+  - Every t0 wB library and self-test executable (`build_P2`, `build_P2freq`, `build_P2st`, `build_P2stfreq` and
+    `build_W`'s ceiling): its per-site counts equal its census and the patcher's record.
+- **G1 / G2 (`check_sass.py`):**
+  - G1 on `build_P2`: the 45 existing configurations keep their patched and unpatched SASS. The before roots are
+    sm120/build, then kernel-opt `build`, `build_e0m3`, `build_A1`, `build_4`, `build_T`, `build_7`, `build_W` and
+    `build_C3k`.
+  - G2: the five new builds have their census, with nothing predicated; `build_P2freq`'s five likewise.
+- **G3 pytest:** test_gemm.py and test_select.py on `build_P2`; the same with `-k wB` on `build_P2freq`.
+- **G4 (`check_bitwise.py --family wB`):** 0 differences against n8k64_wB from sm120/build.
+  - Candidates: the five t0 builds each alone, and set:mixed_wB_t0 on the paper table, on `build_P2` and on
+    `build_P2freq`.
+  - Inputs: the densest and the lower-median modules per shape of the 4 TC 8x64 artifacts, and synthetic all-E2M1,
+    all-E0M3 and random maps.
+  - Coverage: 15 token counts; the fused, reuse and unfused paths, and CUDA graphs.
+- **G5 (`check_model_logits.py --unit 8x64`):** whole-model logits bitwise equal, on 4 models × 5 shapes:
+  - set:mixed_wB (kernel-opt `build`) vs set:mixed_wB_t0 (`build_P2`);
+  - with #2's dispatch, set:mixed_wB (`build_freq`) vs set:mixed_wB_t0 (`build_P2freq`).
+
+**M1 (`bench_w8p2_isolated.py`):** amendment 10's method and scope.
+- **Method:** deviation-2: cold weights by rotation plus a 512 MiB flush, activations quantized after the flush,
+  CUPTI, 3 rotated rounds × 30.
+- **Scope:** 4 models, every text-Linear shape, T ∈ {1, 4, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192},
+  typical and worst tags.
+- **Configurations:**
+  - `stock_ko` (`build_7`, adopted table), the target; `stock_wB` (sm120/build), the same placement;
+  - the 8x64 path in four builds, each with typical and worst tags:
+    - 1b's `mixed_wB` (kernel-opt `build`);
+    - #2's (`build_freq`);
+    - t0 (`build_P2`);
+    - t0 with #2's dispatch (`build_P2freq`).
+  - All four 8x64 builds read the paper table's `mixed_wB` rows (1b's), so they run the same widths.
+- **Checks:** M1's own (the isolated path equals NativeLinear's forward). #2's, t0 and t0 #2 each equal 1b bitwise on the
+  timed operands.
+- **Reported (`w8p2_report.py`):** per model and T, the per-forward GEMM sums and their ratios, with the range over the
+  rounds; over all cells and by T band.
+
+**C2w‴ (`c2_w8p2.py`):** amendment 10's C2w with the two t0 builds added.
+- **Configurations:** stock_wA, stock_ko, stock_wB, the two ceilings (`build_W`), and n8k64_wB in four builds (1b, #2,
+  t0, t0 #2) × {all-E2M1, real map (Llama-3.1-8B layer 0 o_proj), all-E0M3}.
+- **Modes:** b2b, isolated and sustained, 3 rotated rounds.
+- **Checks before timing:** the ceilings equal each other, and every build equals 1b's for each tag.
+
+**Rules**, written before the run:
+- **t0 adoption.** Adopt the t0 builds for 8x64, with both dispatch variants, if both hold:
+  - every t0 unit (t0 vs 1b and t0 #2 vs #2, with typical and with worst tags) has a negative median over the 48
+    (model, T) cells;
+  - no cell is above zero in every round by more than 0.5 %.
+  - Why not amendment 6's strict form (no cell above zero in every round): under a zero effect each cell has about a
+    1 in 8 chance of that. On 16x64 the strict form failed on cells of +0.1 to +0.35 %, and the user adopted t0 as a
+    disclosed deviation (amendment 7). The strict form is reported as well, with its cells listed.
+  - Adoption is proposed to the coordinator, not automatic.
+- **P1.** Recommend #2's dispatch as the 8x64 default if, on the t0 builds with typical tags:
+  - its median over the cells is negative;
+  - and more cells are below zero in every round than above.
+  - The worst tags and C2w‴'s all-E0M3 row are reported alongside, as for 16x64.
+  - The choice goes to the coordinator for the user.
+- **In any case:** the residual 8x64 gap per T band against `stock_ko` and against `stock_wB`, before (1b, #2) and after
+  (t0, t0 #2).
+
+**Maps and tags.** The FlipQuant calibration will change later, so the inputs are stated here.
+- The paper's TM-OPT+TC 8x64 artifacts in /home/dev/n16k64_campaign/paper/artifacts (`<model>_tc_8x64`); their
+  artifact.json sha256 are registered.
+- Typical is the lower-median module per projection and worst the densest, as in amendment 10.
+- C2w‴'s real map is the Llama-3.1-8B 8x64 map's layer 0 o_proj. G4 also uses synthetic maps.
+
+**Disclosed, before registration** (nothing from it is used):
+- **CPU pre-checks, into a scratch directory:**
+  - `check_sass.py` on `build_P2` and `build_P2freq`: G1 passed for the 45 existing configurations, G2 for the new five
+    in both;
+  - `check_patcher_sites.py` on the tagged roots above and the new libraries: 53 tagged binaries (8 with a BRX) and 12
+    t0 binaries, 0 failures. A first dry run on 3 roots found the same.
+- **A smoke test of the new M1, C2w‴ and report scripts, into a scratch directory:**
+  - M1: Llama-3.1-8B o_proj and down_proj at T = 16 and 512, 1 round × 2. C2w‴: 1 round. Every bitwise check passed.
+  - The report then failed on the partial projection set, and now sums the measured projections only. A full run
+    measures all of them.
+  - The t0 rule's tolerance was written after the smoke test. It rests on amendment 6's experience above, not on
+    the smoke numbers.
