@@ -1609,3 +1609,54 @@ k_proj and down_proj at T = 128 and 512, 1 round × 2. Every check passed. Nothi
   - +5.7 / +9.0 / +6.0 % at 256 / 512 / 1024;
   - +7.0 … +7.4 % at T ≥ 2048.
 - **Results:** `results/kernel_opt/w8/p3b/REPORT.md`.
+
+## Amendment 13 (the 8x64 plan's P5, decision a): the adopted 8x64 path's no-dispatch ceiling at every width
+
+Written 2026-10-02, before any registered GPU run of this amendment. The hashes and time are in `registration_13.json`.
+
+**The request.** Decision (a), approved by the user and relayed by the coordinator: the same-placement reference is the
+wB family's own no-dispatch t0 ceiling at every width, with no narrow stock_wB. It is descriptive; nothing is tuned
+or adopted from it.
+
+**What changes** (the sources are commit 09f67e4, which also carries amendment 14's routing):
+- **`configs.py`:** n8k64_wB_{m16,m32,m64,n64}_nodisp_t0. Each is its width's dispatch build with
+  `MIXFP4_NO_DISPATCH=1`, `MIXFP4_PIPE_FLAGS=0` and `TAG0=0`: E2M1 only, `patch=False`. This is what
+  n8k64_wB_nodisp_t0 is for width 128 (amendment 10).
+- **`select.py`:** `nodisp_wB_ko` = those four plus n8k64_wB_nodisp_t0. It reads the adopted table's 'mixed_wB' rows
+  (`TABLE_FAMILY`) and `mixed_wB_ko`'s scheduler rows, of which there are none (`SCHEDULE_FAMILY`), as `nodisp_ko` does
+  for 16x64 (amendment 8).
+- **Scripts:** `bench_w8p5_isolated.py`, `w8p5_report.py`, `run_w8p5.sh`.
+
+**Builds.** `build_P5` holds all 55 configurations, built CPU-only from the clean checkout at 09f67e4
+(`results/kernel_opt/w8/p5/build_P5.sh`).
+- The four ceilings keep their dispatch builds' mainloop stages: 13, 10, 7, 6.
+- n8k64_wB_nodisp_t0 has amendment 10's SASS.
+
+**Gates** (`run_w8p5.sh`):
+- **G0:** the registered files and builds.
+- **G1 / G2 (`check_sass.py`):** the 51 existing configurations keep their SASS (before roots as in amendment 12, plus
+  `build_P3`). The four new ceilings are E2M1-only, with nothing predicated.
+- **pytest:** `test_select.py -k nodisp_wB_ko` on `build_P5`: the ceiling's widths are bitwise interchangeable.
+
+**M1 (`bench_w8p5_isolated.py`):** amendment 10's method and scope (deviation-2; 4 models; T ∈ {1, …, 8192}).
+- **Table:** every set reads the tracked adopted table (0c8dbcb). The ceiling runs the 8x64 path's width and scheduler
+  setting in every cell, and the report asserts it.
+- **Configurations:**
+  - stock_ko (`build_7`);
+  - stock_wB_ko (`build_P3freq`);
+  - the ceiling, `nodisp_wB_ko` from `build_P5` on the FourOverSix artifact (E2M1 only);
+  - the adopted 8x64 path, `mixed_wB_ko` from `build_P3freq` (t0 with #2's dispatch; the same SASS as `build_P2freq`),
+    with typical and worst tags.
+- **Checks:** M1's own (each configuration's isolated path equals NativeLinear's forward). The ceiling computes E2M1
+  only, so it has no bitwise counterpart.
+- **Reported (`w8p5_report.py`):** by T band and per T:
+  - 8x64 vs ceiling: what dispatch work could still recover at each width;
+  - the ceiling vs stock_ko and vs stock_wB tuned alike: what the 1x8 / 1x4 tiles cost;
+  - the 8x64 gap to stock_ko.
+
+**Maps and tags:** as in amendment 11.
+
+**Disclosed, before registration:**
+- a CPU pre-check of G1 / G2 on `build_P5`, which passed;
+- a smoke test of the new M1 and report scripts into a scratch directory: Llama-3.1-8B k_proj and down_proj at
+  T = 16, 128 and 512, 1 round × 2. Nothing from it is used.
