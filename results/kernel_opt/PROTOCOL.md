@@ -1489,3 +1489,29 @@ a rule.
   - M1 on o_proj and down_proj at T = 16 and 512 (1 round × 2; all 64 bitwise checks equal), and the report.
   - The first M1 call stopped because the scratch directory did not exist. The chain creates its own, so nothing
     was changed.
+
+### Amendment 12: the run
+
+`run_w8p3.sh` ran on 2026-10-02 from 16:31 to 17:19 UTC (registration 6215946), with no deviation.
+- **Gates:** all passed.
+  - G0: 48 files and 68 builds.
+  - G1 / G2, and both same-SASS checks.
+  - pytest: 1,030 passed on `build_P3`, 228 on `build_P3freq`.
+  - G4: 28,800 comparisons, every scheduler row exercised, 0 differences.
+  - G5: 8x64 and FourOverSix (stock_wB) equal.
+- **The tuning:**
+  - 22 of 224 width cells changed against 1b's rows.
+  - Non-default scheduler rows: 42 cells for `mixed_wB_ko`, 24 for `stock_wB_ko`.
+  - The decisive-margin rule would change 1 width cell (default 128) or 4 (default the fallback width).
+- **The rule:**
+  - The 8x64 rule is NOT met. The after-vs-before medians are −0.01 % (typical) and −0.08 % (worst), but Phi-4 at T = 64
+    (typical tags) is +0.84 %, every round above +0.67 %.
+  - The stock_wB rule is met: −0.52 %.
+  - The re-tune's only clear gain is at T = 128 (−1.0 %). The sensitivity's per-forward effect is +0.03 … +0.04 %.
+- **The residual gap** to `stock_ko` (typical, median): +3.97 % on the P3 table, +4.35 % on P2's path.
+- **Post hoc, not part of the registered analysis:** an A/A check over the 1,654 M1 cells where two configurations
+  run identical computations.
+  - The median |Δ| is 0.15 % and the max 3.0 %. 15 % of the pairs are separated across all rounds, against about
+    10 % under pure noise.
+  - So configuration-level offsets of up to about 2 % on single GEMMs escape the round range.
+- **Results:** `results/kernel_opt/w8/p3/REPORT.md`. Adoption is for the coordinator to decide.
