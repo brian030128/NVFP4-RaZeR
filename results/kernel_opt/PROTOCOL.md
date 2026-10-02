@@ -1357,3 +1357,135 @@ in the order P2 (with P1) → P4 → P3 → P5 → P6 → P7.
   - +7.0 … +7.5 % at T ≥ 2048.
 - **Results:** `results/kernel_opt/w8/p2/REPORT.md`. Adoption of t0 and of #2's dispatch for 8x64 is proposed to the
   coordinator, not automatic.
+
+## Amendment 12 (the 8x64 plan's P3, with P4): the adopted 8x64 path's widths and scheduler rows, stock_wB tuned alike
+
+Written 2026-10-02, before any registered GPU run of this amendment. The hashes and time are in `registration_12.json`.
+
+**The decisions**, relayed by the coordinator after amendment 11:
+1. **8x64 adoption.** Adopt t0 for the 8x64 (wB) family, with #2's dispatch as the 8x64 default (`build_P2freq`), as
+   registered in amendment 11, with the disclosed tolerance.
+2. **P4 is folded into P3, as one amendment.** It covers:
+   - stock_wB_e64, and a stock_wB set tuned alike;
+   - the schedule tuner extended to weights on B, and the wB schedule bitwise tests;
+   - one act-warm tuning of the adopted wB set's widths and scheduler rows, and of stock_wB_e64's rows;
+   - gates and M1.
+3. **The P3 rules.**
+   - The widths are the fastest median, as 4b.
+   - The scheduler rows follow amendment 7's decisive rule against (0, 1).
+   - The decisive-margin rule on the widths is reported as a sensitivity only. Its default is the single 128-wide
+     build, the rule's original proposal ("use a non-128 build only if it is decisively faster"). It is also reported
+     against the fallback width.
+4. **kernel-opt stays local** until the user authorizes a push.
+
+**Why P4 has no mixed build** (disclosed exploration, in worktree `wtP4` with builds in `build_P4x`, CPU only; amendment
+11's report):
+- The 1x8 arrangement already names a 64 × 64 epilogue tile at width 128 (`MIXFP4_EPI_M/N`). n8k64_wB_t0 built with
+  `MIXFP4_EPI_TILE_M/N=64` has n8k64_wB_t0's exact SASS.
+- The '128x64' build takes the builder's auto tile, 64 × 32: an explicit 64 × 32 build has its SASS. With 64 × 64 it
+  drops from 6 mainloop stages to 5, which is the plan's condition for skipping it.
+- stock_wB takes the auto 64 × 32 tile; stock_wB_e64 keeps its 4 stages.
+
+**What changes** (the sources are commit 097d1e5):
+- **`configs.py`:** stock_wB_e64, stock_wB with `MIXFP4_EPI_TILE_M/N=64`.
+- **`select.py`:**
+  - `mixed_wB_ko`: the five t0 builds. It is deployed with #2's dispatch: its build directory holds them built with
+    `MIXFP4_DISPATCH_FREQ=1`.
+  - `stock_wB_ko`: {128: stock_wB_e64}.
+  - Both read the adopted table `<gpu>.ko.json` (`TABLE_FILE`). `mixed_wB_ko` takes that table's 'mixed_wB' width rows
+    and its own scheduler rows. The paper sets and the paper table are unchanged.
+- **`tune_tiles.py`:**
+  - `--schedule` accepts weights-on-B sets; M is the tokens there.
+  - A family on the 'mixed_wB' rows takes the `--maps8` tags in both modes. Every other family is tuned as before.
+- **Tests:** `test_schedules_bitwise_equal` for `mixed_wB_ko` and `stock_wB_ko` (all 12 settings, every width), and
+  batch invariance for `mixed_wB_ko`.
+- **Scripts:**
+  - `p3_tables.py`: composes the adopted table, and computes the sensitivity;
+  - `bench_w8p3_isolated.py`, `w8p3_report.py`, `run_w8p3.sh`;
+  - `check_same_sass.py --no-selftest`.
+
+**Builds**, CPU only with no GPU visible, from the clean main checkout at 097d1e5 (`results/kernel_opt/w8/p3/build_P3.sh`):
+- `build_P3`: all 51 configurations;
+- `build_P3freq`: the five t0 builds with `MIXFP4_DISPATCH_FREQ=1`, and stock_wB_e64 without it (it has no dispatch).
+  The tuning and M1 run from it, and it is the adopted 8x64 path's directory.
+
+**The tuning** (`run_w8p3.sh`, on `build_P3freq`):
+- **Widths** (`tune_tiles.py --families mixed_wB_ko --cold --act-warm --rounds 3 --iters 30`): the 4b method.
+  - Conditions: cold weights; activations quantized after the flush; 3 rotated rounds × 30 isolated launches per width.
+  - Coverage: every Linear shape of the four models, buckets 1 … 8192, all five widths, '128x64' included.
+  - The fastest median wins.
+  - Tags: the tuner's rule, per projection the module with the most E0M3 tiles in the TC 8x64 map, as 1b's tuning
+    used.
+- **The adopted table** (`p3_tables.py compose`): the tracked `<gpu>.ko.json` with those rows added as 'mixed_wB'.
+  Every other key is unchanged.
+- **Scheduler rows** (`tune_tiles.py --schedule --families mixed_wB_ko,stock_wB_ko`), at those widths, with amendment 7's
+  method and rule. A setting replaces (0, 1) only if its median is at least 0.5 % below and every round is below every
+  round of (0, 1).
+- **The sensitivity** (`p3_tables.py sensitivity`), from the width tuning's per-round times. The table the
+  decisive-margin rule would choose (amendment 7's rule, applied to the widths) is computed with two defaults:
+  - `dm128`: the 128-wide build;
+  - `dmfb`: the fallback width.
+  - Recorded: every cell whose width would change, with the tuning's times.
+
+**Gates** (`run_w8p3.sh`; a failure stops P3):
+- **G0 (`check_provenance.py`):** the registered files and builds.
+- **G1 / G2 (`check_sass.py`):**
+  - G1: the 50 existing configurations keep their SASS (before roots as in amendment 11, plus `build_P2`).
+  - G2: stock_wB_e64 is E2M1-only with nothing predicated; `build_P3freq`'s six likewise, with the five t0 builds'
+    census.
+- **The same device code (`check_same_sass.py --no-selftest`):**
+  - `build_P3freq`'s five t0 builds carry `build_P2freq`'s SASS, the 8x64 path amendment 11 gated and the coordinator
+    adopted;
+  - its stock_wB_e64 carries `build_P3`'s.
+- **G3 pytest:** test_gemm.py and test_select.py on `build_P3`, and `-k wB` on `build_P3freq`.
+- **G4 (`check_bitwise.py --family wB`):** on `build_P3freq`, 0 differences against n8k64_wB from sm120/build for the five
+  builds and set:mixed_wB_ko with the P3 table, so every scheduler row runs.
+- **G5 (`check_model_logits.py`):** logits bitwise equal on 4 models × 5 shapes:
+  - 8x64: set:mixed_wB_t0 (`build_P2freq`, paper table) vs set:mixed_wB_ko (`build_P3freq`, P3 table);
+  - FourOverSix: stock_wB (sm120/build) vs set:stock_wB_ko (`build_P3freq`, P3 table).
+
+**M1 (`bench_w8p3_isolated.py`):** amendment 10's method and scope (deviation-2; 4 models; T ∈ {1, …, 8192}; typical and
+worst tags). Every 8x64 configuration runs the same libraries (`build_P3freq`'s t0 builds with #2's dispatch), so only
+the table differs.
+- **The references:**
+  - stock_ko (`build_7`, tracked adopted table);
+  - stock_wB (sm120/build);
+  - `stock_wB_ko`: stock_wB_e64 with its P3 scheduler rows.
+- **The 8x64 path:**
+  - before: `wBp2_{typical,worst}`, P2's adopted path on 1b's rows (paper table), with no scheduler rows;
+  - after: `wBko_{typical,worst}`, the P3 table;
+  - `wBw_typical`: the P3 widths without scheduler rows;
+  - `wBdm128_typical` and `wBdmfb_typical`: the decisive-margin widths, without scheduler rows.
+- **Checks:** M1's own; every 8x64 configuration equals wBp2 on the same tags, and stock_wB_ko equals stock_wB, bitwise on
+  the timed operands.
+- **Reported (`w8p3_report.py`):**
+  - after vs before;
+  - the widths alone, and the rows on top of them;
+  - stock tuned alike;
+  - the sensitivity: its per-forward effect and the tuning's cells;
+  - the gap to stock_ko and to stock_wB tuned alike, by T band and per T;
+  - every (model, projection, T) whose width or scheduler setting changed, with its time change.
+
+**The rule**, written before the run. Adopt the P3 table's 8x64 rows and scheduler rows (as the tracked
+`<gpu>.ko.json`), and stock_wB_e64 with its rows, unit by unit, if:
+- the 8x64 units (after vs before, typical and worst) have negative medians over the 48 (model, T) cells, and no cell
+  is above zero in every round by more than 0.5 % (amendment 11's form);
+- stock_wB tuned alike meets the same rule for its unit.
+Adoption is proposed to the coordinator, not automatic. The sensitivity is reported for the user to decide; it is not
+a rule.
+
+**Maps and tags**, as in amendment 11:
+- the paper's TM-OPT+TC 8x64 artifacts and their 8x64 maps (sha256 registered);
+- typical is the lower-median module, worst the densest;
+- the tuner takes, per projection, the module with the most E0M3 tiles.
+- The FlipQuant calibration will change later, and the tuning depends on the map's E0M3 share through the tags.
+
+**Disclosed, before registration** (nothing from it is used):
+- **The P4 exploration builds** above.
+- **CPU pre-checks** on `build_P3` and `build_P3freq`: G1 for 50 configurations, G2, and both same-SASS checks passed.
+- **A smoke test, into a scratch directory, on Llama-3.1-8B's shapes only:**
+  - the width tuning (2 rounds × 3), the composition, the schedule tuning and the sensitivity;
+  - the new tests (17 passed) and the FourOverSix logits gate for stock_wB_ko on Llama-3.1-8B (equal);
+  - M1 on o_proj and down_proj at T = 16 and 512 (1 round × 2; all 64 bitwise checks equal), and the report.
+  - The first M1 call stopped because the scratch directory did not exist. The chain creates its own, so nothing
+    was changed.
