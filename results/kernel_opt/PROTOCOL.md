@@ -1799,3 +1799,21 @@ calibration will change later.
   registered check passed;
 - `p7_split.py` on Llama-3.1-8B 1x512, 1 pass × 3 replays;
 - both reports.
+
+### Amendment 15: the run
+
+`run_w8p7.sh` ran on 2026-10-02 from 18:15 to 21:24 UTC (registration 417283e), with no deviation. The gates and every
+registered e2e check passed.
+- **Prefill** (32 cells): the adopted 8x64 path is +3.80 % against fo6-ko (median) and −1.27 % against the paper 8x64
+  kernel (24 cells better in every round, none worse). By shape, against fo6-ko:
+  - +0.5 % at 1x128 and +2.0 % at 1x256;
+  - +7.4 % at 1x512 and +5.7 % at 1x1024;
+  - +3.7 … +4.8 % at 1x2048 … 1x8192.
+- **Decode** (18 cells): −0.32 % tokens per second against fo6-ko (range −1.5 … +0.1 %), +18.1 % against the paper 8x64
+  kernel.
+- **The in-graph split:** at Llama 1x2048 / 1x4096 the adopted GEMMs run at a 3.8–4.9 % lower SM clock than fo6-ko's.
+  Their in-graph gap is +9.1 / +11.0 %, against M1's +7.2 / +7.6 %.
+- **Phi-4 1x512:** the adopted path is +0.77 % against the paper kernel, with rounds −0.6 … +1.1 %.
+  - It is not D4's idle artifact (23 of 24 captures are about 2.3 ms), not the clock, and not the tags.
+  - In-graph, its GEMMs are −2.2 % and the adjacent non-GEMM kernels +2.7 %. The item stays open.
+- **Results:** `results/kernel_opt/w8/p7/REPORT.md`. This closes the 8x64 plan (`results/kernel_opt/w8/CLOSING.md`).
