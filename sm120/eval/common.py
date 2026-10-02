@@ -33,6 +33,14 @@ MODELS = {
     'mistral7b': dict(model_id='mistralai/Mistral-7B-v0.3', revision='caa1feb0e54d415e2df31207e5f4e273e33509b1', loader='causal_lm'),
     'phi4': dict(model_id='microsoft/phi-4', revision='2db69c1c3e91a05d2c64a3185acfbaf36f744e25', loader='causal_lm'),
     'qwen27b': dict(model_id='Qwen/Qwen3.8-27B', revision='1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0', loader='qwen3_5_conditional'),
+    # results/main_ppl (the main PPL table): the models of ~/flipquant's registry that the delivered FlipQuant maps were
+    # trained on (prepare_model_data.MODELS, the pinned revisions of results/flipquant_maps)
+    'qwen3_1p7b': dict(model_id='Qwen/Qwen3-1.7B', revision='70d244cc86ccca08cf5af4e1e306ecf908b1ad5e', loader='causal_lm'),
+    'qwen3_8b': dict(model_id='Qwen/Qwen3-8B', revision='b968826d9c46dd6066d109eabc6255188de91218', loader='causal_lm'),
+    'mistral7b_ins': dict(model_id='mistralai/Mistral-7B-Instruct-v0.3', revision='c170c708c41dac9275d15a8fff4eca08d52bab71',
+                          loader='causal_lm'),
+    'nemotron9b': dict(model_id='nvidia/NVIDIA-Nemotron-Nano-9B-v2', revision='6533e8de2c68e4536bf7c411d7a3ce5734111476',
+                       loader='causal_lm'),
 }
 WIKI = ('Salesforce/wikitext', 'b08601e04326c79dfdd32d625aee71d232d685c3', 'wikitext-2-raw-v1/test-00000-of-00001.parquet')
 C4 = ('allenai/c4', '1588ec454efa1a09f29cd18ddd04fe05fc8653a2', 'en/c4-validation.00000-of-00008.json.gz')

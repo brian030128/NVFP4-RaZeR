@@ -29,6 +29,10 @@ Policies, convention (c) (per-token activation scales):
                         or MixFP4 (rule zou, Zou et al.), quantize/adaptive_formats.py, chosen per 16-element block
                         (unit 1x16) or elected per tile (8x64, 16x64, 256x64); FourOverSix per-token activations.
                         The record holds the share of blocks in the uniform format, overall and per projection.
+  fake:w4a4:<rule>      (results/main_ppl) W4A4 under IF4 (if4) or MixFP4 (zou): the rule's 1x16 weights as
+                        fake:format:<rule>:1x16, and every quantized Linear input quantized by the same rule per
+                        16-element block with a per-token tensor scale (quantize/adaptive_formats.quantize_rows); the
+                        record holds the activations' uniform-format share (activation_format).
   native:<artifact>[:<kernel>]
                         NativeLinear: every quantized Linear on the SM120 kernel (the per-token activation quantizer,
                         then the FP4 GEMM with a one-rounding epilogue). Default kernel, by the artifact's type block:
@@ -87,6 +91,8 @@ def parse(spec):
         return dict(label=label, kind='fake', weight='four_over_six', state=':'.join(parts[2:]))
     if parts[0] == 'fake' and parts[1] == 'format':
         return dict(label=label, kind='fake', weight='format', rule=parts[2], unit=parts[3])
+    if parts[0] == 'fake' and parts[1] == 'w4a4':
+        return dict(label=label, kind='fake', weight='format', rule=parts[2], unit='1x16', act='rule')
     if parts[0] == 'native':
         return dict(label=label, kind='native', artifact=parts[1], kernel=parts[2] if len(parts) > 2 else None)
     raise SystemExit(f'bad --evaluate {spec!r}')
@@ -164,10 +170,22 @@ def install_format(fq, pol, C):
                 agg = mix.setdefault(mtile, {}).setdefault(key, dict(tiles=0, mixed=0, minority_sum=0.0))
                 for k2 in agg:
                     agg[k2] += x[k2]
-    for m in fq.modules.values():
-        fq.handles.append(m.register_forward_pre_hook(lambda mod, inp: (C._chunked(quantize_rows, inp[0]), *inp[1:])))
+    if pol.get('act') == 'rule':
+        # results/main_ppl: W4A4 under the rule; every quantized Linear input by the rule per 16-block, tensor scale
+        # per token (AF.quantize_rows)
+        assert pol['rule'] in AF.ACT_RULES and tile == (1, 16), pol
+        pol['_act_stats'] = AF.RowStats()
+        act = f"{pol['rule']}_rows (per 16-block selection, per-token tensor scale)"
+        for m in fq.modules.values():
+            fq.handles.append(m.register_forward_pre_hook(
+                lambda mod, inp, _r=pol['rule'], _st=pol['_act_stats']:
+                    (C._chunked(lambda t: AF.quantize_rows(t, _r, _st), inp[0]), *inp[1:])))
+    else:
+        act = 'four_over_six_rows'
+        for m in fq.modules.values():
+            fq.handles.append(m.register_forward_pre_hook(lambda mod, inp: (C._chunked(quantize_rows, inp[0]), *inp[1:])))
     frac = lambda d: d['uniform'] / d['blocks']  # noqa: E731
-    return dict(backend='fake (c)', installed_weight_sha256=h.hexdigest(), activation='four_over_six_rows',
+    return dict(backend='fake (c)', installed_weight_sha256=h.hexdigest(), activation=act,
                 format=dict(rule=pol['rule'], unit=pol['unit'], tile=list(tile), uniform_fraction=frac(total),
                             uniform_fraction_by_projection={k: frac(v) for k, v in per_proj.items()},
                             blocks=total['blocks'], uniform_blocks=total['uniform'], zero_scale_blocks=zero,
@@ -307,6 +325,9 @@ def main():
         t2 = time.time()
         entry['evaluation'] = evaluate(model, batches, device, pol['label'], first)
         entry['evaluation_seconds'] = time.time() - t2
+        if pol.get('_act_stats') is not None:
+            entry['activation_format'] = pol['_act_stats'].as_dict()
+            entry.pop('_act_stats', None)
         if pol['kind'] == 'native':
             cov = NM.coverage(model)
             windows = sum(len(v) for v in batches.values())

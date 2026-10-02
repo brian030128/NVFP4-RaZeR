@@ -173,3 +173,82 @@ def quantize(w, rule, tile=None):
     if tile is None or tuple(tile) == (1, 16):
         stats['mixing'] = mixing(uni)
     return out, stats
+
+
+# --- activations (results/main_ppl: the simulated W4A4 rows of the main PPL table) ----------------------------------
+
+ACT_RULES = ('if4', 'zou')
+
+
+class RowStats:
+    """Running counts of an activation rule's blocks, kept on the device (no host sync per call)."""
+
+    def __init__(self):
+        self.blocks = self.uniform = self.zero = self.calls = None
+
+    def add(self, blocks, uniform, zero):
+        if self.blocks is None:
+            self.blocks, self.uniform, self.zero, self.calls = blocks, uniform, zero, 1
+        else:
+            self.blocks, self.uniform, self.zero = self.blocks + blocks, self.uniform + uniform, self.zero + zero
+            self.calls += 1
+
+    def as_dict(self):
+        if self.blocks is None:
+            return dict(calls=0)
+        b, u = int(self.blocks), int(self.uniform)
+        return dict(calls=self.calls, blocks=b, uniform_blocks=u, uniform_fraction=u / b if b else None,
+                    zero_scale_blocks=int(self.zero))
+
+
+@torch.no_grad()
+def quantize_rows(x, rule, stats=None):
+    """An activation [..., K] under a rule's own per-block selection, with the tensor scale of every token (row)
+    taken from that row alone; the blocks are the 16 consecutive elements along K.
+
+    The per-token tensor scale is the main PPL table's protocol (the coordinator's decision, for parity with the
+    per-token activations of the native rows). Both papers compute it over the whole tensor: IF4's official code
+    (amax = x.abs().max()) and Zou et al.'s Algorithm 1 (s32 = max|X| / 2688). Everything else is candidates()' rule,
+    operation for operation, with the row's amax in place of the tensor's: for every row r,
+    quantize_rows(x)[r] == quantize(x[r:r+1], rule)[0] bitwise (results/main_ppl/check_act_rules.py).
+    An all-zero row stays zero (candidates() gives a zero tensor a zero scale)."""
+    assert rule in ACT_RULES, rule
+    shape = x.shape
+    k = shape[-1]
+    assert k % 16 == 0, shape
+    rows = x.reshape(-1, k)
+    xf = rows.float().reshape(rows.shape[0], k // 16, 16)
+    amax = rows.float().abs().amax(dim=-1).reshape(-1, 1)          # [R, 1]: one tensor scale per token
+    live = amax != 0
+    bmax = xf.abs().amax(dim=-1)                                    # [R, K/16]
+    if rule == 'if4':
+        encode = torch.tensor(6 * 448 * 1, dtype=torch.float32, device=x.device) / amax
+        s = _e4m3(bmax / torch.tensor(6 * 1, dtype=torch.float32, device=x.device) * encode)
+        s = torch.where(live, s, torch.zeros_like(s))
+        decode = 1 / (torch.tensor(6 * 448 * 1, dtype=torch.float32, device=x.device) / amax)
+        xb = torch.where(s.unsqueeze(-1) != 0, xf * (1 / (decode.unsqueeze(-1) * s.unsqueeze(-1))), 0)
+        q_fp = e2m1_rne(xb)
+        q_int = (xb * IF4_INT_EXPANSION_RCP).clamp(min=-7, max=7).round()
+        d_fp = (q_fp * s.unsqueeze(-1) * amax.unsqueeze(-1)) / (6 * 448 * 1)
+        d_int = ((q_int * s.unsqueeze(-1) * amax.unsqueeze(-1)) * IF4_INT_EXPANSION) / (6 * 448 * 1)
+        e_fp = ((d_fp - xf) ** 2).sum(dim=-1)
+        e_int = ((d_int - xf) ** 2).sum(dim=-1)
+        uni = e_int < e_fp                                          # ties keep FP4
+        zero = (s == 0) & (bmax != 0)
+    else:
+        s32 = amax / 2688
+        x8 = torch.where(live.unsqueeze(-1), xf / s32.unsqueeze(-1), torch.zeros_like(xf))
+        bmax8 = x8.abs().amax(dim=-1)
+        s_fp, s_int = _e4m3(bmax8 / 6), _e4m3(bmax8 / 7)
+        q_fp = e2m1_rne(torch.where(s_fp.unsqueeze(-1) != 0, x8 / s_fp.unsqueeze(-1), 0))
+        q_int = torch.where(s_int.unsqueeze(-1) != 0, x8 / s_int.unsqueeze(-1), 0).round().clamp(min=-7, max=7)
+        d8_fp, d8_int = q_fp * s_fp.unsqueeze(-1), q_int * s_int.unsqueeze(-1)
+        e_fp = ((d8_fp - x8) ** 2).sum(dim=-1)
+        e_int = ((d8_int - x8) ** 2).sum(dim=-1)
+        d_fp, d_int = d8_fp * s32.unsqueeze(-1), d8_int * s32.unsqueeze(-1)
+        uni = e_int <= e_fp                                         # ties go to E1M2
+        zero = ((s_fp == 0) & (bmax8 != 0)).to(torch.int64) + ((s_int == 0) & (bmax8 != 0)).to(torch.int64)
+    out = torch.where(uni.unsqueeze(-1), d_int, d_fp).to(x.dtype).reshape(shape)
+    if stats is not None:
+        stats.add(torch.tensor(uni.numel(), device=x.device), uni.sum(), zero.sum())
+    return out
