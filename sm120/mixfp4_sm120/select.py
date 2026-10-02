@@ -48,11 +48,15 @@ FAMILIES = {
     # kernel-opt C3k: the adopted path's no-dispatch ceiling (E2M1 only); the adopted table and mixed_ko's scheduler rows
     'nodisp_ko': {16: 'n16k64_wA_nodisp_n16_t0', 32: 'n16k64_wA_nodisp_n32_t0', 64: 'n16k64_wA_nodisp_n64_t0',
                   128: 'n16k64_wA_nodisp_e64_t0'},
+    # kernel-opt 8x64 plan P2 (amendment 11): the weights-on-B family without the site-0 prmt tags (bitwise equal to
+    # 'mixed_wB'), on the 'mixed_wB' rows
+    'mixed_wB_t0': {16: 'n8k64_wB_m16_t0', 32: 'n8k64_wB_m32_t0', 64: 'n8k64_wB_m64_t0', 128: 'n8k64_wB_t0',
+                    '128x64': 'n8k64_wB_n64_t0'},
 }
 # A family that takes another family's tile-table rows: 'mixed256' has the CTA tile of 'mixed' at every width, and uses
 # its widths so that the two differ only in the dispatch granule (kernel-opt A').
 TABLE_FAMILY = {'mixed256': 'mixed', 'mixed_e': 'mixed', 'stock_e': 'stock', 'mixed_t0': 'mixed', 'mixed256_t0': 'mixed',
-                'mixed_ko': 'mixed', 'stock_ko': 'stock', 'nodisp_ko': 'mixed'}
+                'mixed_ko': 'mixed', 'stock_ko': 'stock', 'nodisp_ko': 'mixed', 'mixed_wB_t0': 'mixed_wB'}
 # A family that takes another family's scheduler rows (the same tiles in the same order)
 SCHEDULE_FAMILY = {'nodisp_ko': 'mixed_ko'}
 TABLE_DIR = Path(__file__).resolve().parents[1] / 'configs'

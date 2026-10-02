@@ -251,7 +251,10 @@ CONFIGS = {c.name: c for c in [
 # their bases.
 for _base in ('n16k64_wA', 'n16k64_wA_n64', 'n16k64_wA_n32', 'n16k64_wA_n16',
               'n16k64_wA_g32', 'n16k64_wA_g32_n64', 'n16k64_wA_g32_n32', 'n16k64_wA_g32_n16',
-              'n16k64_wA_e64'):   # amendment 7: the adopted 16x64 path's width-128 build (t0 + #4's epilogue tile)
+              'n16k64_wA_e64',    # amendment 7: the adopted 16x64 path's width-128 build (t0 + #4's epilogue tile)
+              # amendment 11 (the 8x64 plan's P2): the weights-on-B family 'mixed_wB', whose blob tags every MMA with
+              # 8 m-atoms per warp (32 identity PRMTs per k_tile and MMA warp, against 8 for 16x64)
+              'n8k64_wB', 'n8k64_wB_m64', 'n8k64_wB_m32', 'n8k64_wB_m16', 'n8k64_wB_n64'):
     _c = CONFIGS[_base]
     CONFIGS[_base + '_t0'] = dataclasses.replace(
         _c, name=_base + '_t0', blob_gen=dict(_c.blob_gen, TAG0=0),
