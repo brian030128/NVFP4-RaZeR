@@ -1660,3 +1660,14 @@ or adopted from it.
 - a CPU pre-check of G1 / G2 on `build_P5`, which passed;
 - a smoke test of the new M1 and report scripts into a scratch directory: Llama-3.1-8B k_proj and down_proj at
   T = 16, 128 and 512, 1 round × 2. Nothing from it is used.
+
+### Amendment 13: the run
+
+`run_w8p5.sh` ran on 2026-10-02 from 17:53 to 18:03 UTC (registration 80cac11), with no deviation.
+- **Gates:** all passed (G0, G1 / G2, pytest).
+- **The ceiling** ran the 8x64 path's width and scheduler setting in every cell.
+- **The split** of the adopted 8x64 path's gap to `stock_ko` (+3.96 % per forward, typical, median):
+  - the dispatch (8x64 vs its no-dispatch ceiling): +2.10 %, from +0.9 % at T ≤ 16 to +3.1 % at 256–1024;
+  - the same-placement tiles (ceiling vs `stock_ko`): +1.29 %, about 0 at T ≤ 128 and +3.4 … +4.2 % at T ≥ 256;
+  - at T = 512: +5.7 % tiles and +3.4 % dispatch.
+- **Results:** `results/kernel_opt/w8/p5/REPORT.md`.
