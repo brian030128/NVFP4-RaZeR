@@ -17,7 +17,8 @@ The tags used per shape are recorded in the table's meta ('tags').
 
 kernel-opt additions:
 - --families mixed_wB: the weights-on-B family (8x64 maps; the width is the CTA tile's M, i.e. the tokens), with the
-  tags of --maps8 MODEL=PATH (8x64 .mixfp4map), same rule.
+  tags of --maps8 MODEL=PATH (8x64 .mixfp4map), same rule. A family on the 'mixed_wB' rows (select.TABLE_FAMILY, e.g.
+  'mixed_wB_ko') takes those tags too; its rows are written under its own name.
 - --cold: time each width by isolated launches on cold weights (every call on the next of K weight copies, K x size
   >= 4x L2, after a 512 MiB read-flush; CUPTI device time, median of 20), the deviation-2 method of
   results/paper/PROTOCOL_GEMM_ISOLATED.md, instead of CUPTI over back-to-back calls on L2-warm weights.
@@ -33,7 +34,8 @@ kernel-opt additions:
   evicts the activations, which inflates small-T times by 1-2.6 us and re-ranks the widths (results/kernel_opt/retune).
 - --schedule (kernel-opt #4; needs --cold --act-warm): instead of widths, tune the persistent tile scheduler's raster
   order (0 heuristic, 1 along M, 2 along N) and maximum swizzle (1, 2, 4, 8) per (shape, bucket), at the width each
-  family's --width-table rows choose (weights on A). Every one of the 12 settings is timed in each of --rounds rotated
+  family's --width-table rows choose. Weights on A, or (kernel-opt 8x64 plan P4) on B, where M is the tokens; a
+  weights-on-B mixed family uses the --maps8 tags. Every one of the 12 settings is timed in each of --rounds rotated
   rounds; a setting replaces the default (0, 1) only if its median is at least 0.5 % below the default's and every one
   of its rounds is below every round of the default's (a decisive margin, so noise does not pick). The output is the
   width table with 'schedule' rows {family: {shape: {bucket: [raster, swizzle]}}} added, plus the raw per-round times.
@@ -103,15 +105,16 @@ def cold_us(launch, wp, wsf, iters=20, warmup=3, act=None):
     return statistics.median(d)
 
 
-def tune_schedule(args, shapes):
-    """--schedule: see the docstring. shapes: {(n, k): mixed tags or None} as main() collects them."""
+def tune_schedule(args, shapes, shapes8=None):
+    """--schedule: see the docstring. shapes / shapes8: {(n, k): 16x64 / 8x64 mixed tags or None} as main() collects
+    them."""
     if not (args.cold and args.act_warm):
         raise SystemExit('--schedule needs --cold --act-warm')
     width_table = Path(args.width_table or S.TABLE_DIR / f'{S.gpu_slug()}.json')
     fams = {f: S.KernelSet(f, table=width_table) for f in args.families.split(',')}
     for f, ks in fams.items():
-        if ks.weight_operand != 0 or not all(k.has_schedule for k in ks.kernels.values()):
-            raise SystemExit(f'{f}: --schedule needs weights-on-A builds with sm120_gemm_ex')
+        if not all(k.has_schedule for k in ks.kernels.values()):
+            raise SystemExit(f'{f}: --schedule needs builds with sm120_gemm_ex')
     combos = [(r, sw) for r in (0, 1, 2) for sw in (1, 2, 4, 8)]
     sched = {f: {} for f in fams}
     raw = {f: {} for f in fams}
@@ -120,15 +123,22 @@ def tune_schedule(args, shapes):
             for f, ks in fams.items():
                 kern = ks.kernels[ks.width(n, k, t)]
                 mixed = kern.type_block is not None
-                op = operands(n, k, t, mask if mixed else None, (16, 64) if mixed and mask is not None else None,
+                m = (shapes8 or {}).get((n, k)) if kern.weight_operand == 1 else mask
+                op = operands(n, k, t, m if mixed else None, kern.type_block if mixed and m is not None else None,
                               seed=n + k + t)
                 act = lambda kern=kern: kern.quant_rows(op['x'], 'four_over_six_rows')  # noqa: E731
                 per = {}
                 for r in range(args.rounds):
                     shift = (r * len(combos) // args.rounds) % len(combos)
                     for c in combos[shift:] + combos[:shift]:
-                        launch = lambda wp, wsf, q, kern=kern, c=c: kern.gemm(  # noqa: E731
-                            wp, wsf, q[0], q[1], n, t, k, scale_m_default=op['gsw'], scale_n=q[2], check=False, schedule=c)
+                        if kern.weight_operand == 0:
+                            launch = lambda wp, wsf, q, kern=kern, c=c: kern.gemm(  # noqa: E731
+                                wp, wsf, q[0], q[1], n, t, k, scale_m_default=op['gsw'], scale_n=q[2], check=False,
+                                schedule=c)
+                        else:
+                            launch = lambda wp, wsf, q, kern=kern, c=c: kern.gemm(  # noqa: E731
+                                q[0], q[1], wp, wsf, t, n, k, scale_m=q[2], scale_n_default=op['gsw'], check=False,
+                                schedule=c)
                         per.setdefault(c, []).append(cold_us(launch, op['wp'], op['wsf'], iters=args.iters, act=act))
                 med = {c: statistics.median(v) for c, v in per.items()}
                 best = min(med, key=med.get)
@@ -200,14 +210,15 @@ def main():
     if (args.rounds > 1 or args.act_warm) and not args.cold:
         raise SystemExit('--rounds / --act-warm need --cold')
     if args.schedule:
-        return tune_schedule(args, shapes)
+        return tune_schedule(args, shapes, shapes8)
     table = {f: {} for f in fams}
     raw = {f: {} for f in fams}
     raw_rounds = {f: {} for f in fams}
     for (n, k), mask in shapes.items():
         for t in S.BUCKETS:
             for f, ks in fams.items():
-                m, tb = {'mixed': (mask, (16, 64)), 'mixed_wB': (shapes8.get((n, k)), (8, 64))}.get(f, (None, None))
+                rows = 'mixed_wB' if S.TABLE_FAMILY.get(f) == 'mixed_wB' else f   # e.g. mixed_wB_ko: 8x64 tags
+                m, tb = {'mixed': (mask, (16, 64)), 'mixed_wB': (shapes8.get((n, k)), (8, 64))}.get(rows, (None, None))
                 op = operands(n, k, t, m, tb if m is not None else None, seed=n + k + t)
                 times, launches, acts = {}, {}, {}
                 for w, kern in ks.kernels.items():
@@ -250,9 +261,10 @@ def main():
     meta = dict(gpu=B.gpu_info(), created_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
                 kernels={f: ks.sha256 for f, ks in fams.items()}, models=args.models, buckets=list(S.BUCKETS),
                 note='value = fastest CTA tile width (tokens) for (out x in) at token counts <= bucket')
-    if 'mixed' in fams or 'mixed_wB' not in fams:
+    wb = any(S.TABLE_FAMILY.get(f, f) == 'mixed_wB' for f in fams)
+    if 'mixed' in fams or not wb:
         meta['tags'] = tags
-    if 'mixed_wB' in fams:
+    if wb:
         meta['tags_mixed_wB'] = tags8
     meta['method'] = 'cold isolated launches (--cold)' if args.cold else 'CUPTI over back-to-back calls'
     if args.cold and (args.rounds, args.iters) != (1, 20):

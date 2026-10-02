@@ -274,6 +274,15 @@ for _name, _defs, _gen in (
         description="kernel-opt C3k: the adopted 16x64 path's tile with the format dispatch compiled out (E2M1 only). "
                     'Not a deployment kernel.')
 
+# kernel-opt 8x64 plan P3 (amendment 12, with P4): stock_wB with #4's 64 x 64 epilogue tile, so the same-placement
+# reference is tuned as stock_ko is; it keeps its 4 mainloop stages. The weights-on-B mixed builds get no counterpart:
+# the 1x8 arrangement already names a 64 x 64 epilogue tile at width 128 (MIXFP4_EPI_M/N), and the '128x64' build would
+# lose a mainloop stage with it (6 -> 5).
+CONFIGS['stock_wB_e64'] = dataclasses.replace(
+    CONFIGS['stock_wB'], name='stock_wB_e64',
+    defines=dict(CONFIGS['stock_wB'].defines, MIXFP4_EPI_TILE_M=64, MIXFP4_EPI_TILE_N=64),
+    description='kernel-opt P3: stock_wB with a 64 x 64 epilogue tile.')
+
 DEFAULT = 'n16k64_wA'
 
 

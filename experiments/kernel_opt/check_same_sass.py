@@ -6,8 +6,8 @@
 `build.py --selftest` rebuilds a configuration's library before building and running its self-test driver, so the chain
 runs it in a separate directory (--root) and leaves the registered builds (--like) untouched. A rebuild's library file
 differs in its ELF bytes; its device code must not. For every configuration named, --root's manifest must carry the
-patched and unpatched SASS sha256, the patcher's per-site census and the extra defines of --like's manifest. A difference
-exits non-zero.
+patched and unpatched SASS sha256, the patcher's per-site census and the extra defines of --like's manifest, and (unless
+--no-selftest; amendment 12's tuning directory has no self-tests) a passed self-test. A difference exits non-zero.
 """
 import argparse
 import json
@@ -22,6 +22,7 @@ def main():
     ap.add_argument('--root', required=True)
     ap.add_argument('--like', required=True)
     ap.add_argument('--configs', required=True)
+    ap.add_argument('--no-selftest', action='store_true', help='do not require a passed self-test in --root')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     res, bad = dict(root=args.root, like=args.like, configs={}), []
@@ -34,7 +35,7 @@ def main():
         row['selftest'] = (a.get('selftest') or {}).get('gate')
         res['configs'][name] = row
         bad += [f'{name}: {k}' for k, v in row.items() if v is False]
-        if row['selftest'] != 'PASS':
+        if not args.no_selftest and row['selftest'] != 'PASS':
             bad.append(f'{name}: self-test gate {row["selftest"]}')
     res['failures'], res['passed'] = bad, not bad
     args.out.parent.mkdir(parents=True, exist_ok=True)
