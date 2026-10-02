@@ -20,10 +20,17 @@ name (from sm120/build, or --before-root / --after-root) or 'set:<family>'. Defa
 Amendment 4 (tile-table re-tune): --unit fo6 selects the FourOverSix artifact (for the stock set), and --before-table /
 --after-table give a set its tile table (default: sm120/configs/<gpu>.json), so the same builds can be compared under
 two tables.
+
+Amendment 14 (the 8x64 plan's P6): --after 'auto:<name>' installs with kernel='<name>' (e.g. 'auto'), so the kernel is
+resolved per artifact by model.resolve_kernel, as deployed, from the default build directory ($SM120_BUILD_DIR) and
+table. --expect-family requires the resolved kernel to be that set, every library of it in $SM120_BUILD_DIR. The routing
+note, the set, its table and its libraries' extra defines are recorded per model.
 """
 import argparse
 import datetime
 import importlib.util
+import json
+import os
 import sys
 from pathlib import Path
 
@@ -61,13 +68,14 @@ def forwards(model):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--after-root', required=True)
+    ap.add_argument('--after-root', default=None, help="required unless --after is 'auto:<name>'")
     ap.add_argument('--unit', default='8x64', choices=('8x64', '16x64', '256x64', 'fo6'))
     ap.add_argument('--before', default='n8k64_wB', help="build name or 'set:<family>' (sm120/build unless --before-root)")
     ap.add_argument('--before-root', default=None)
     ap.add_argument('--after', default='set:mixed_wB', help="build name or 'set:<family>' from --after-root")
     ap.add_argument('--before-table', default=None, help="tile table of a 'set:' before (default: the GPU's table)")
     ap.add_argument('--after-table', default=None, help="tile table of the 'set:' after (default: the GPU's table)")
+    ap.add_argument('--expect-family', default=None, help="with --after auto:<name>: the set the routing must resolve to")
     ap.add_argument('--models', default='llama8b,mistral7b,phi4,qwen27b')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
@@ -83,14 +91,23 @@ def main():
     for k in (before.kernels.values() if isinstance(before, KernelSet) else [before]):
         want = Path(args.before_root) if args.before_root else REPO / 'sm120' / 'build'
         assert Path(k.path).parent.parent == want, k.path
-    after = resolve(args.after, args.after_root, args.after_table)
-    if not isinstance(after, KernelSet):
-        raise SystemExit('--after must be a set (its widths are recorded)')
+    routed = args.after.startswith('auto:')
+    if not routed and args.after_root is None:
+        ap.error('--after-root is required')
+    if routed:
+        assert args.after_root is None and args.after_table is None, 'auto:<name> resolves from the default build dir and table'
+        after = args.after[5:]
+    else:
+        after = resolve(args.after, args.after_root, args.after_table)
+        if not isinstance(after, KernelSet):
+            raise SystemExit('--after must be a set (its widths are recorded)')
     desc = lambda k: k.describe() if isinstance(k, KernelSet) else dict(kernel=k.cfg.name, sha256=k.sha256)  # noqa: E731
     res = dict(status='running', started_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
                gpu=B.gpu_info(), shapes=list(SHAPES), unit=args.unit, before=dict(spec=args.before, root=args.before_root,
                table=args.before_table, describe=desc(before)),
-               after=dict(spec=args.after, build_root=args.after_root, table=args.after_table, describe=after.describe()),
+               after=dict(spec=args.after, build_root=args.after_root, table=args.after_table,
+                          describe=None if routed else after.describe(), expect_family=args.expect_family,
+                          sm120_build_dir=os.environ.get('SM120_BUILD_DIR')),
                models={})
     ok = True
     for model_key in args.models.split(','):
@@ -111,6 +128,17 @@ def main():
             called = sum(1 for m in nat.values() if m.calls > 0)
             rec[label] = dict(install=dict(kernel=rep.kernel, kernel_sha256=rep.kernel_sha256, native_modules=len(rep.native)),
                               native_called=called, native=len(nat))
+            if label == 'after' and routed:
+                meta = json.loads((art / 'artifact.json').read_text())
+                ks, note = NM.resolve_kernel(after, meta)
+                root = Path(os.environ.get('SM120_BUILD_DIR') or REPO / 'sm120' / 'build')
+                libs = ks.kernels.values() if isinstance(ks, KernelSet) else [ks]
+                fam = ks.family if isinstance(ks, KernelSet) else None
+                rec['routing'] = dict(note=rep.routing, family=fam, kernel_set=rep.kernel_set,
+                                      roots=sorted({str(Path(k.path).parent.parent) for k in libs}),
+                                      extra_defines={k.cfg.name: k.manifest.get('extra_defines') for k in libs})
+                ok &= rep.routing == note and (args.expect_family is None or fam == args.expect_family) \
+                    and all(Path(k.path).parent.parent == root for k in libs)
             if isinstance(kern, KernelSet):
                 rec[label]['calls_by_width'] = {str(w): c for w, c in sorted(kern.stats.items(), key=lambda i: key_order(i[0]))}
             ok &= called == len(nat) == len(rep.native)

@@ -1671,3 +1671,43 @@ or adopted from it.
   - the same-placement tiles (ceiling vs `stock_ko`): +1.29 %, about 0 at T ≤ 128 and +3.4 … +4.2 % at T ≥ 256;
   - at T = 512: +5.7 % tiles and +3.4 % dispatch.
 - **Results:** `results/kernel_opt/w8/p5/REPORT.md`.
+
+## Amendment 14 (the 8x64 plan's P6, decision b): 'auto' routes 8x64 maps to the adopted 8x64 set
+
+Written 2026-10-02, after the 8x64 adoption (0c8dbcb) and before any registered GPU run of this amendment. The hashes and
+time are in `registration_14.json`.
+
+**The request.** Decision (b), approved by the user and relayed by the coordinator: after P2–P4 land, `'auto'` routes
+8x64 artifacts to the adopted wB set on kernel-opt, with `'paper_wB'` = n8k64_wB.
+
+**What changes** (`sm120/mixfp4_sm120/model.py`, commit 09f67e4):
+- **`resolve_kernel('auto', meta)`** for a map whose unit rows are not a multiple of 16 (the 8x64 maps): the adopted
+  `mixed_wB_ko` if its builds are in the build directory, else the paper kernel n8k64_wB. The two give the same outputs
+  bit for bit.
+  - The note names the set and its dispatch variant. That variant is a property of the build directory: the adopted
+    one, #2's, is `build_P2freq`'s.
+  - 16x64 and 256x64 maps keep their routing.
+- **`'auto_wB'`** follows `'auto'` for 8x64. It was 1b's `mixed_wB` set.
+- **`'paper_wB'`** is n8k64_wB.
+- **Test:** `test_select.py::test_auto_routes_8x64_maps`.
+- **`check_model_logits.py --after auto:<name>`** installs with `kernel='<name>'`, resolved per artifact from the default
+  build directory and table, as deployed. `--expect-family` requires the resolved set, with every library from that
+  directory. The routing note, set, table and extra defines are recorded. The existing uses are unchanged; only
+  `--after-root` became optional for the routed form.
+
+**Gates** (`run_w8p6.sh`; no build, no timing):
+- **G0:** the registered files and builds.
+- **The routing test** in three build directories:
+  - `build_P2freq`: the adopted path, routed to `mixed_wB_ko`, the note saying #2's dispatch;
+  - sm120/build: the fallback to n8k64_wB, and `'paper_wB'`;
+  - `build_P3`: the default-dispatch builds, routed to `mixed_wB_ko` with its note. There `test_g32.py`'s
+    16x64 / 256x64 routing test runs as well.
+- **G5 routed:** with `SM120_BUILD_DIR` = `build_P2freq`, `install(kernel='auto')` on each model's TC 8x64 artifact gives
+  logits bitwise equal to n8k64_wB from sm120/build, on 4 models × 5 shapes. The routed set must be `mixed_wB_ko`, every
+  library from `build_P2freq`, on the tracked adopted table.
+
+**Disclosed, before registration:** a smoke test.
+- The routing tests in the three directories passed. In `build_P2freq` the 256x64 test cannot run, because that
+  directory has no 16x64 builds; the chain does not run it there.
+- The routed G5 on Llama-3.1-8B gave equal logits at all 5 shapes, routed to `mixed_wB_ko` from `build_P2freq` with #2's
+  dispatch. One fix came from it: `--after-root` is not required for the routed form.
