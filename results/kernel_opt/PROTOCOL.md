@@ -1725,3 +1725,77 @@ time are in `registration_14.json`.
   - Every model was routed to `mixed_wB_ko` from `build_P2freq`, with #2's dispatch and on the tracked adopted table.
   - The note read: "auto: 8x64 map -> mixed_wB_ko (kernel-opt 8x64 adoption, amendments 11-12b; #2's dispatch)".
 - **The 8x64 default** on kernel-opt is now the adopted set, through `'auto'`. `'paper_wB'` keeps the paper kernel.
+
+## Amendment 15 (the 8x64 plan's P7): the cumulative registered 8x64 run
+
+Written 2026-10-02, before any registered GPU run of this amendment. The hashes and time are in `registration_15.json`.
+
+**The request.** The plan's P7: a cumulative registered 8x64 e2e, with prefill on 4 models and decode on 3, the Phi-4
+1x512 check, and D4's in-graph clock.
+- The coordinator's change: the same-placement FourOverSix reference is `stock_wB_ko` (stock_wB_e64 with its tuned rows,
+  adopted in amendment 12b) instead of the paper stock_wB. So both stock references are the tuned "ko" sets, like the
+  adopted 8x64 path.
+- **Descriptive:** nothing is tuned or adopted from it.
+
+**What changes** (`sm120/mixfp4_sm120/model.py`):
+- `'auto_stock_wB'` → `stock_wB_ko` when built, else the paper stock_wB.
+- `test_auto_routes_8x64_maps` checks it.
+- New scripts: `cum8_e2e.py`, `cum8_e2e_report.py`, `p7_split.py`, `p7_split_report.py`, `run_w8p7.sh`.
+- No build. The libraries are:
+  - sm120/build's n8k64_wB;
+  - `build_7`'s `stock_ko`;
+  - `build_P3freq`'s adopted 8x64 path (`mixed_wB_ko`, t0 with #2's dispatch) and `stock_wB_ko`. `build_P3freq`'s
+    8x64 builds carry `build_P2freq`'s SASS (amendment 12's gate), so the two wB policies share a directory.
+
+**The policies** (`cum8_e2e.py`; the paper's per-process scripts, unchanged):
+
+| policy | artifact | kernel | build directory | the install must report |
+|---|---|---|---|---|
+| ours-8x64-paper | TC 8x64 | `'paper_wB'` | sm120/build | the single build n8k64_wB |
+| ours-8x64-adopted | TC 8x64 | `'auto'` | `build_P3freq` | `mixed_wB_ko` on the adopted table |
+| fo6-ko | FourOverSix | `'auto_stock'` | `build_7` | `stock_ko` on the adopted table |
+| fo6-wB-ko | FourOverSix | `'auto_stock_wB'` | `build_P3freq` | `stock_wB_ko` on the adopted table |
+
+**Gates** (`run_w8p7.sh`):
+- **G0:** the registered files and builds.
+- **The routing test** on `build_P3freq`: `'auto'` → `mixed_wB_ko`, and `'auto_stock_wB'` → `stock_wB_ko`.
+
+**The in-graph split** (`p7_split.py`, D4's method):
+- **Procedure:** one loaded model, the four policies installed in turn. Each capture is replayed 20 times under the
+  profiler, with NVML sampled every 5 ms.
+- **Recorded:** wall, GEMM, quantizer, other kernels, idle time, the SM clock (median), power and the power-cap share.
+- **The clock:** Llama-3.1-8B at 1x2048 and 1x4096, one ABCD-DCBA pass, so 2 captures per policy.
+- **The Phi-4 1x512 check:** Phi-4 at 1x512, three passes, so 6 captures per policy. This shows whether 1b's open +1.5-point
+  item is the GEMM or D4's per-capture idle bimodality.
+
+**The end-to-end run** (`cum8_e2e.py`, amendment 9's harness):
+- **Prefill:** 4 models, shapes 1x128 … 1x8192 and 4x2048, 7 repetitions per process.
+- **Decode:** Llama-3.1-8B, Mistral-7B and Phi-4, at Experiment D's settings.
+- **Rounds:** 5, the policy order rotated per round; one process per (model, policy, round).
+- **Registered checks** (amendment 9's):
+  - the graph's logits equal eager's, and the decode tokens equal eager's;
+  - every library loaded is a build of the policy's directory (by sha256);
+  - #2's define is on exactly `build_P3freq`'s 8x64 builds;
+  - the install reports the policy's set on the adopted table, or its single build.
+
+**Reported:**
+- **E2E** (`cum8_e2e_report.py`): per model and shape or setting, the policies' medians and these ratios with their
+  ranges over the rounds:
+  - adopted vs paper (8x64);
+  - adopted vs fo6-ko;
+  - adopted vs fo6-wB-ko;
+  - paper 8x64 vs fo6-ko;
+  - fo6-wB-ko vs fo6-ko.
+  The ratios are also summarized over all cells.
+- **Split** (`p7_split_report.py`): per policy, the capture medians, SM clock and power, the comparison against fo6-ko,
+  and the per-capture idle times.
+
+**Maps and tags:** the paper's TM-OPT+TC 8x64 and FourOverSix artifacts, whose sha256 are registered. The FlipQuant
+calibration will change later.
+
+**Disclosed, before registration:** a smoke test into a scratch directory. Nothing from it is used.
+- the routing test on `build_P3freq` (passed);
+- `cum8_e2e.py` on Llama-3.1-8B, 1 round, prefill 1x512 with 2 repetitions and decode 1x512, all four policies; every
+  registered check passed;
+- `p7_split.py` on Llama-3.1-8B 1x512, 1 pass × 3 replays;
+- both reports.
