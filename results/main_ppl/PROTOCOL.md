@@ -163,3 +163,57 @@ scale taken per token (α_t = amax_t / (6·448); s32_t = amax_t / 2688). Impleme
   are fixed.
 
 ## Deviations (append-only)
+
+1. **2026-10-02 06:55 UTC, during the first model's runs, before any analysis output: formatting-only changes to
+   `experiments/main_ppl/analyze.py`.** The definitions in §5 (the ΔNLL and its SE, loss recovered, the † and bold
+   rules) are unchanged.
+   - The PPL decimals of the main LaTeX tables are a parameter (`--decimals`, default 2).
+   - The Appendix-D ΔNLL cells are in nats per token with 4 decimals (± 2 SE), as the paper's step 07 tables, instead of
+     milli-nats.
+   - A new output, `tables.md`, has every PPL (4 decimals), the ΔNLL table with * for |Δ| > 2 SE, and loss recovered.
+   - The registered sha256 was in registration.json; the new one is 8c253aea5ccbd94e69cb173d84dc2086f8d2c610f466b9a48e52b96886c3234b.
+
+2. **2026-10-02 07:00 UTC: a diagnostic run outside the table, plus robustness in the analysis.** Neither changes a
+   number.
+   - **What prompted it.** On Qwen3-1.7B, all three FlipQuant maps give a lower WikiText-2 PPL than BF16: 8x64 is
+     15.69 vs 16.72, better than BF16 on 141 of 146 windows. NVFP4 and FourOverSix are worse than BF16 on every
+     window.
+   - **The diagnostic.** To separate the map from the native path, the same 8x64 map was evaluated in the fake (c)
+     simulator (`fake:map:` of the exported .mixfp4map; `diagnostics/qwen3_1p7b/ours-8x64-fake`).
+     - It gives WikiText-2 15.6974 and C4 19.5565 (native: 15.6918 and 19.5472).
+     - It is better than BF16 on the same 141 of 146 WikiText-2 windows.
+     - So the effect belongs to the map, not to the kernels. It is reported as found.
+   - **The analysis change.** `analyze.py` now skips a record that is not complete, with a warning, and lists it in the
+     outputs (`incomplete_records_skipped`) instead of stopping. That allows dry runs while rows are still running.
+     The final analysis requires an empty list.
+
+## Amendment 1 (2026-10-02 ~07:30 UTC, before any of its runs): the rules on the weights only, with FourOverSix activations
+
+- **The request.** The user, relayed by nvfp4-razer-c9, asked for two more simulated rows per column, for all 7 columns
+  (the 6 models and the base-Mistral column):
+  - **IF4 (Cook et al.) 1x16 (W) + FO6 act** (label `if4w`);
+  - **MixFP4 (Zou et al.) 1x16 (W) + FO6 act** (label `zouw`).
+- **The setting.** The weights follow the rule's own 1x16 per-block selection, unchanged from the W4A4 rows. The
+  activations are quantized by plain per-token FourOverSix, FlipQuant's activation quantizer (four_over_six_rows,
+  convention (c)), with no per-block format selection.
+  - This is Experiment A's setting (`fake:format:<rule>:1x16`), now run for the table models.
+  - It is simulated (fake (c), BF16 GEMM), with the same windows and harness.
+- **Placement.** The user will decide whether these rows go in the main table or the appendix. The outputs include them
+  in both LaTeX tables, in a block separate from the native rows.
+- **Labels.** The existing W4A4 rows are now titled "(W+A)" to keep the two pairs apart. Their records and labels (`if4`,
+  `zou`) are unchanged.
+- **Comparisons.** Like the other simulated rows, the new rows are compared with the simulated FourOverSix (fo6-fake),
+  like for like, and with native FourOverSix. They are included in the ΔNLL ± 2 SE table, loss recovered, the CSV/JSON
+  and the report.
+- **Cross-check with Experiment A.** Phi-4 and the base Mistral-7B-v0.3 have Experiment A records of the identical
+  setting: the same model, revision, data root, windows and harness. They are `if4-1x16`, `zou-1x16` and A's fake
+  FourOverSix `fo6`, which is the same setting as our `fo6-fake`.
+  - The rows are run anyway, and each run's per-window NLLs are compared with A's record bitwise. The result is logged
+    in commands.log as `CROSSCHECK-A`.
+  - A mismatch is reported, never hidden. A's records are not substituted for this study's runs.
+- **Order.** After the registered queue. Rows of a model the queue has already finished may run concurrently with the
+  queue on the same GPU. Accuracy runs are deterministic, so concurrency changes only the timing, and no timing is
+  reported.
+- **Code.** In `experiments/main_ppl/run.py`: rows `if4w`/`zouw` (`WEIGHT_ONLY`), and `crosscheck_a` for if4w, zouw and
+  fo6-fake. In `experiments/main_ppl/analyze.py`: the two rows, and the "(W+A)" titles. Hashes are in
+  `registration_amendment1.json`.

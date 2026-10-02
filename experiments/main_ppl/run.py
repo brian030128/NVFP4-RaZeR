@@ -11,6 +11,8 @@ Rows (the records' labels):
   ours-16x64, ours-256x64  native (c): the FlipQuant artifacts on the paper mixed set ('auto'; 256x64 as 16x64 granules)
   if4, zou                 simulated W4A4, fake (c): fake:w4a4:if4 (IF4, Cook et al.), fake:w4a4:zou (MixFP4, Zou et al.)
   fo6-fake                 the appendix reference: fake (c) FourOverSix
+  if4w, zouw               amendment 1: IF4 / MixFP4 (Zou) on the weights only, FourOverSix per-token activations
+                           (fake:format:<rule>:1x16, Experiment A's setting)
 Models, in run order: qwen3_1p7b, qwen3_8b, mistral7b_ins, nemotron9b, phi4, qwen27b, then mistral7b (the base model,
 the secondary Mistral column).
 - **The four new models:** the artifacts are exported here, as step 02 does (export_map_artifact.py --ownership), from
@@ -39,7 +41,9 @@ os.environ.setdefault('SM120_BUILD_DIR', '/home/dev/NVFP4-RaZeR/sm120/build')
 NEW = ('qwen3_1p7b', 'qwen3_8b', 'mistral7b_ins', 'nemotron9b')
 PAPER = ('phi4', 'qwen27b', 'mistral7b')
 MODELS = ('qwen3_1p7b', 'qwen3_8b', 'mistral7b_ins', 'nemotron9b', 'phi4', 'qwen27b', 'mistral7b')
-ROWS = ('bf16', 'nvfp4', 'fo6', 'ours-8x64', 'ours-16x64', 'ours-256x64', 'fo6-fake', 'if4', 'zou')
+ROWS = ('bf16', 'nvfp4', 'fo6', 'ours-8x64', 'ours-16x64', 'ours-256x64', 'fo6-fake', 'if4', 'zou', 'if4w', 'zouw')
+# amendment 1 (results/main_ppl/PROTOCOL.md): the rules on the weights only, with FourOverSix per-token activations
+WEIGHT_ONLY = {'if4w': 'if4', 'zouw': 'zou'}
 NATIVE = {'nvfp4': 'nvfp4', 'fo6': 'fo6', 'ours-8x64': 'tc_8x64', 'ours-16x64': 'tc_16x64', 'ours-256x64': 'tc_256x64'}
 UNITS = ('8x64', '16x64', '256x64')
 DATA = dict({m: '/home/dev/n16k64_campaign/fqmaps/data' for m in NEW}, **{m: P.DATA[m] for m in PAPER})
@@ -50,6 +54,9 @@ MAP_RUNS = Path('/home/dev/n16k64_campaign/fqmaps/runs')
 PAPER_ARTIFACTS = Path('/home/dev/n16k64_campaign/paper/artifacts')
 PAPER_PPL = Path('/home/dev/n16k64_campaign/paper/ppl')
 RECHECK = {'phi4': ('bf16', 'fo6'), 'qwen27b': ('ours-8x64',), 'mistral7b': ('bf16', 'fo6')}
+# amendment 1: Experiment A's records of the identical setting (results/paper_extra/A), compared bitwise
+A_PPL = Path('/home/dev/n16k64_campaign/paper_extra/A/ppl')
+A_LABEL = {'if4w': 'if4-1x16', 'zouw': 'zou-1x16', 'fo6-fake': 'fo6'}
 KIND = {'nvfp4': 'nvfp4', 'fo6': 'four_over_six'}
 
 
@@ -97,6 +104,8 @@ def spec(args, model, row):
         return f'{row}=native:{export(args, model, NATIVE[row])}'
     if row == 'fo6-fake':
         return 'fo6-fake=fake:four_over_six'
+    if row in WEIGHT_ONLY:
+        return f'{row}=fake:format:{WEIGHT_ONLY[row]}:1x16'
     return f'{row}=fake:w4a4:{row}'
 
 
@@ -127,6 +136,19 @@ def recheck(args, model, row):
     return same
 
 
+def crosscheck_a(args, model, row):
+    """Amendment 1: where Experiment A ran the identical setting (fake:format:<rule>:1x16 on the same model, windows and
+    harness), its per-window NLLs must equal this run's, bitwise. Logged; a mismatch is reported, not hidden."""
+    a = A_PPL / model / A_LABEL[row] / 'report.json'
+    if not a.exists():
+        return None
+    new = json.loads((args.out / 'ppl' / model / row / 'report.json').read_text())['evaluations'][row]['evaluation']
+    old = json.loads(a.read_text())['evaluations'][A_LABEL[row]]['evaluation']
+    same = {c: new[c]['nll'] == old[c]['nll'] and new[c]['ppl'] == old[c]['ppl'] for c in ('wiki', 'c4')}
+    P.log(args.out, f'CROSSCHECK-A {model} {row} vs {a} {json.dumps(same)}')
+    return same
+
+
 def main():
     ap = P.parser(__doc__)
     ap.add_argument('--rows', default=','.join(ROWS))
@@ -148,6 +170,8 @@ def main():
                     recheck(args, model, row)
                 continue                      # reused: PAPER_PPL/<model>/<row>/report.json
             ppl(args, model, row, args.out / 'ppl' / model / row)
+            if row in A_LABEL:
+                crosscheck_a(args, model, row)
 
 
 if __name__ == '__main__':
