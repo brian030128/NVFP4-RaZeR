@@ -53,7 +53,8 @@ DELIVERED = Path.home() / 'flipquant' / 'maps'
 MAP_RUNS = Path('/home/dev/n16k64_campaign/fqmaps/runs')
 PAPER_ARTIFACTS = Path('/home/dev/n16k64_campaign/paper/artifacts')
 PAPER_PPL = Path('/home/dev/n16k64_campaign/paper/ppl')
-RECHECK = {'phi4': ('bf16', 'fo6'), 'qwen27b': ('ours-8x64',), 'mistral7b': ('bf16', 'fo6')}
+# deviation 3 (scope cut): qwen27b's recheck row is fo6, not ours-8x64 (the FlipQuant rows are deferred)
+RECHECK = {'phi4': ('bf16', 'fo6'), 'qwen27b': ('fo6',), 'mistral7b': ('bf16', 'fo6')}
 # amendment 1: Experiment A's records of the identical setting (results/paper_extra/A), compared bitwise
 A_PPL = Path('/home/dev/n16k64_campaign/paper_extra/A/ppl')
 A_LABEL = {'if4w': 'if4-1x16', 'zouw': 'zou-1x16', 'fo6-fake': 'fo6'}

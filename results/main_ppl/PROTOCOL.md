@@ -217,3 +217,55 @@ scale taken per token (α_t = amax_t / (6·448); s32_t = amax_t / 2688). Impleme
 - **Code.** In `experiments/main_ppl/run.py`: rows `if4w`/`zouw` (`WEIGHT_ONLY`), and `crosscheck_a` for if4w, zouw and
   fo6-fake. In `experiments/main_ppl/analyze.py`: the two rows, and the "(W+A)" titles. Hashes are in
   `registration_amendment1.json`.
+
+3. **2026-10-02 11:41 UTC: the scope is cut to BF16, NVFP4 and FourOverSix (the user's decision, relayed by
+   nvfp4-razer-c9).** The FlipQuant calibration settings are going to change, so the table now holds only NVFP4 and
+   FourOverSix, with BF16 as the reference.
+   - **The queue.** The driver was stopped at 11:41 UTC. Its running process, Nemotron `zou` (W+A), was left to finish,
+     so its record is complete, not partial. The automatic launch of Qwen3.8-27B's `if4w`/`zouw` was cancelled.
+   - **No further rows of these kinds run:** FlipQuant, IF4 / Zou (W+A or W-only), or fake FourOverSix.
+   - **Still run: the registered reuse rechecks.**
+     - Phi-4: bf16 and fo6. Base Mistral-7B-v0.3: bf16 and fo6.
+     - **Qwen3.8-27B: switched from ours-8x64 to fo6,** since the FlipQuant rows are deferred.
+     - The rule is unchanged: per-window bitwise equality with the paper's step 03 record, or nothing of that model is
+       reused.
+   - **Kept as recorded, "deferred / partial, not part of this table":**
+     - the FlipQuant rows of the four new models;
+     - the IF4 / Zou W+A and W-only rows and fake FourOverSix, as far as they ran;
+     - the Qwen3-1.7B fake-map diagnostic and the Nemotron smoke.
+     The new calibration will supersede the FlipQuant rows. `deferred.md` lists every such record without its numbers.
+   - **Deliverables:**
+     - the table with BF16 / NVFP4 / FourOverSix for all 7 columns, in both Mistral variants;
+     - ΔNLL NVFP4 − FourOverSix ± 2 SE per model and corpus (Appendix D);
+     - FourOverSix's loss recovered (NVFP4 is 0 % by definition) over the 12 pairs of each variant;
+     - the deferred-rows appendix.
+   - **`analyze.py`** gained `--scope baselines`, now the default. `--scope full` is the registered scope. Bold now marks
+     the lower PPL of NVFP4 and FourOverSix per column; † does not apply.
+
+## Amendment 2 (2026-10-02 ~11:50 UTC, before any of its runs): the IF4 / MixFP4 rows are restored
+
+- **The user's update** (relayed by nvfp4-razer-c9): the FlipQuant cut of deviation 3 stays, and GPTQ is not run. The
+  IF4 (Cook et al.) and MixFP4 (Zou et al.) rows are restored in both variants for all 7 columns, both Mistral
+  variants:
+  - (a) **W+A** (`if4`, `zou`): the rule on weights and activations, §4;
+  - (b) **(W) + FO6 act** (`if4w`, `zouw`): the rule on the weights with per-token FourOverSix activations, amendment 1.
+- **The appendix reference returns too:** fake FourOverSix (`fo6-fake`) in every column, so that each simulated row has
+  its like-for-like reference.
+- **The runs still missing:**
+  - Phi-4: fo6-fake, if4, zou;
+  - base Mistral-7B-v0.3: fo6-fake, if4, zou;
+  - Qwen3.8-27B: fo6-fake, if4, zou, if4w, zouw.
+  - Every other model already has all of these rows (or the running Nemotron `zou` completes it).
+- **Order and memory:**
+  - first the reuse rechecks of deviation 3;
+  - then Phi-4's and base Mistral's rows, in two concurrent drivers (about 30 + 15 GB);
+  - then Qwen3.8-27B alone: its fo6 reuse recheck (deviation 3), then its five rows.
+- **Cross-checks:** Phi-4's and base Mistral's fo6-fake are compared bitwise with Experiment A's fake FourOverSix
+  (`CROSSCHECK-A`).
+- **Deliverables:**
+  - the table with BF16 / NVFP4 / FourOverSix and the four simulated rows, for all 7 columns, in both Mistral variants;
+  - ΔNLL ± 2 SE vs native FourOverSix, and also vs fake FourOverSix for the simulated rows;
+  - loss recovered per row.
+  - FlipQuant stays deferred (`deferred.md`).
+- **`analyze.py`:** `--scope restored`, now the default, gives these rows plus fo6-fake as the reference; `baselines` and
+  `full` are kept.
