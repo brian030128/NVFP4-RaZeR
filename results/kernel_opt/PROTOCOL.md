@@ -1711,3 +1711,17 @@ time are in `registration_14.json`.
   directory has no 16x64 builds; the chain does not run it there.
 - The routed G5 on Llama-3.1-8B gave equal logits at all 5 shapes, routed to `mixed_wB_ko` from `build_P2freq` with #2's
   dispatch. One fix came from it: `--after-root` is not required for the routed form.
+
+### Amendment 14: the run
+
+`run_w8p6.sh` ran on 2026-10-02 from 18:05 to 18:08 UTC (registration 5d9db9d), with no deviation. Every gate passed.
+- **G0:** 26 files and 6 builds.
+- **The routing tests:**
+  - `build_P2freq`: 1 passed;
+  - sm120/build: 1 passed;
+  - `build_P3`: 2 passed, with the 16x64 / 256x64 routing.
+- **G5 routed:** `install(kernel='auto')` on the four TC 8x64 artifacts gave logits bitwise equal to n8k64_wB on all
+  5 shapes.
+  - Every model was routed to `mixed_wB_ko` from `build_P2freq`, with #2's dispatch and on the tracked adopted table.
+  - The note read: "auto: 8x64 map -> mixed_wB_ko (kernel-opt 8x64 adoption, amendments 11-12b; #2's dispatch)".
+- **The 8x64 default** on kernel-opt is now the adopted set, through `'auto'`. `'paper_wB'` keeps the paper kernel.
