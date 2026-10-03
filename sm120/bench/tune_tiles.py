@@ -20,6 +20,9 @@ kernel-opt additions:
   tags of --maps8 MODEL=PATH (8x64 .mixfp4map), same rule. A family on the 'mixed_wB' rows (select.TABLE_FAMILY, e.g.
   'mixed_wB_ko') takes those tags too; its rows are written under its own name. Likewise a family on the 'mixed' rows
   (e.g. 'mixed_ko') takes the 16x64 tags (amendment 17; before it, such a family was timed on all-E2M1 weights).
+- --maps256 MODEL=PATH (amendment 18): the TC 256x64 maps (stored as 16x64 granules) for the families on the 'mixed256'
+  rows (e.g. 'mixed256_ko', A''s 32-row-granule builds), same rule; their weights are quantized at the stored 16x64
+  granularity, which every 256x64 map is uniform over, in the width and the scheduler tuning alike.
 - --cold: time each width by isolated launches on cold weights (every call on the next of K weight copies, K x size
   >= 4x L2, after a 512 MiB read-flush; CUPTI device time, median of 20), the deviation-2 method of
   results/paper/PROTOCOL_GEMM_ISOLATED.md, instead of CUPTI over back-to-back calls on L2-warm weights.
@@ -122,9 +125,9 @@ def cold_us(launch, wp, wsf, iters=20, warmup=3, act=None):
     return statistics.median(d)
 
 
-def tune_schedule(args, shapes, shapes8=None):
-    """--schedule: see the docstring. shapes / shapes8: {(n, k): 16x64 / 8x64 mixed tags or None} as main() collects
-    them."""
+def tune_schedule(args, shapes, shapes8=None, shapes256=None):
+    """--schedule: see the docstring. shapes / shapes8 / shapes256: {(n, k): 16x64 / 8x64 / 256x64 (as 16x64 granules)
+    mixed tags or None} as main() collects them."""
     if not (args.cold and args.act_warm):
         raise SystemExit('--schedule needs --cold --act-warm')
     width_table = Path(args.width_table or S.TABLE_DIR / f'{S.gpu_slug()}.json')
@@ -143,9 +146,11 @@ def tune_schedule(args, shapes, shapes8=None):
             for f, ks in fams.items():
                 kern = ks.kernels[ks.width(n, k, t)]
                 mixed = kern.type_block is not None
-                m = (shapes8 or {}).get((n, k)) if kern.weight_operand == 1 else mask
-                op = operands(n, k, t, m if mixed else None, kern.type_block if mixed and m is not None else None,
-                              seed=n + k + t)
+                if S.TABLE_FAMILY.get(f, f) == 'mixed256':      # 256x64 maps, quantized at their 16x64 granules
+                    m, tb = (shapes256 or {}).get((n, k)), (16, 64)
+                else:
+                    m, tb = ((shapes8 or {}).get((n, k)) if kern.weight_operand == 1 else mask), kern.type_block
+                op = operands(n, k, t, m if mixed else None, tb if mixed and m is not None else None, seed=n + k + t)
                 act = lambda kern=kern: kern.quant_rows(op['x'], 'four_over_six_rows')  # noqa: E731
                 per = {}
                 for r in range(args.rounds):
@@ -196,6 +201,8 @@ def main():
                     help='16x64 .mixfp4map whose E0M3 tags the mixed family uses for that model')
     ap.add_argument('--maps8', action='append', default=[], metavar='MODEL=PATH',
                     help='8x64 .mixfp4map whose E0M3 tags the mixed_wB family uses for that model')
+    ap.add_argument('--maps256', action='append', default=[], metavar='MODEL=PATH',
+                    help="TC 256x64 .mixfp4map (16x64 granules) for the families on the 'mixed256' rows")
     ap.add_argument('--families', default='mixed,stock')
     ap.add_argument('--cold', action='store_true', help='isolated launches on cold weights (see the docstring)')
     ap.add_argument('--update', action='store_true', help='merge into the existing table (see the docstring)')
@@ -211,9 +218,10 @@ def main():
     if not args.allow_busy:
         B.require_idle()
     fams = {f: S.KernelSet(f, table={}) for f in args.families.split(',')}
-    shapes, tags, shapes8, tags8 = {}, {}, {}, {}
+    shapes, tags, shapes8, tags8, shapes256, tags256 = {}, {}, {}, {}, {}, {}
     maps = dict(spec.split('=', 1) for spec in args.maps)
     maps8 = dict(spec.split('=', 1) for spec in args.maps8)
+    maps256 = dict(spec.split('=', 1) for spec in args.maps256)
     for model in args.models.split(','):
         if model in maps:
             sel, source = map_masks(maps[model]), maps[model]
@@ -221,6 +229,7 @@ def main():
             sel = selector_masks(model, 16)
             source = 'sm120/maps (frozen campaign map)' if sel else 'none (all E2M1)'
         sel8, source8 = (map_masks(maps8[model], 8), maps8[model]) if model in maps8 else ({}, 'none (all E2M1)')
+        sel256, source256 = (map_masks(maps256[model], 16), maps256[model]) if model in maps256 else ({}, 'none (all E2M1)')
         for proj, (n, k) in B.MODEL_SHAPES[model].items():
             if (n, k) not in shapes:
                 entry = sel.get(proj)
@@ -228,6 +237,12 @@ def main():
                 tags[f'{n}x{k}'] = dict(model=model, proj=proj, source=source, module=entry[1] if entry else None,
                                         e0m3_tiles=entry[2] if entry else 0,
                                         tiles=int(entry[0].numel()) if entry else -(-n // 16) * (k // 64))
+            if (n, k) not in shapes256:
+                entry = sel256.get(proj)
+                shapes256[(n, k)] = entry[0] if entry else None
+                tags256[f'{n}x{k}'] = dict(model=model, proj=proj, source=source256, module=entry[1] if entry else None,
+                                           e0m3_tiles=entry[2] if entry else 0,
+                                           tiles=int(entry[0].numel()) if entry else -(-n // 16) * (k // 64))
             if (n, k) not in shapes8:
                 entry = sel8.get(proj)
                 shapes8[(n, k)] = entry[0] if entry else None
@@ -241,7 +256,7 @@ def main():
         if missing:
             raise SystemExit(f"--cells not among the models' shapes: {sorted(missing)}")
     if args.schedule:
-        return tune_schedule(args, shapes, shapes8)
+        return tune_schedule(args, shapes, shapes8, shapes256)
     table = {f: {} for f in fams}
     raw = {f: {} for f in fams}
     raw_rounds = {f: {} for f in fams}
@@ -256,7 +271,8 @@ def main():
                 # the family's table rows decide its tags: 'mixed_wB' rows (e.g. mixed_wB_ko) the 8x64 tags, 'mixed' rows
                 # (e.g. mixed_ko, amendment 17: before it, such a family was timed on all-E2M1 weights) the 16x64 tags
                 rows = S.TABLE_FAMILY.get(f, f)
-                m, tb = {'mixed': (mask, (16, 64)), 'mixed_wB': (shapes8.get((n, k)), (8, 64))}.get(rows, (None, None))
+                m, tb = {'mixed': (mask, (16, 64)), 'mixed_wB': (shapes8.get((n, k)), (8, 64)),
+                         'mixed256': (shapes256.get((n, k)), (16, 64))}.get(rows, (None, None))
                 op = operands(n, k, t, m, tb if m is not None else None, seed=n + k + t)
                 times, launches, acts = {}, {}, {}
                 for w, kern in ks.kernels.items():
@@ -300,10 +316,13 @@ def main():
                 kernels={f: ks.sha256 for f, ks in fams.items()}, models=args.models, buckets=list(S.BUCKETS),
                 note='value = fastest CTA tile width (tokens) for (out x in) at token counts <= bucket')
     wb = any(S.TABLE_FAMILY.get(f, f) == 'mixed_wB' for f in fams)
-    if 'mixed' in fams or not wb:
+    m256 = any(S.TABLE_FAMILY.get(f, f) == 'mixed256' for f in fams)
+    if 'mixed' in fams or not (wb or m256):
         meta['tags'] = tags
     if wb:
         meta['tags_mixed_wB'] = tags8
+    if m256:
+        meta['tags_mixed256'] = tags256
     meta['method'] = 'cold isolated launches (--cold)' if args.cold else 'CUPTI over back-to-back calls'
     if args.cold and (args.rounds, args.iters) != (1, 20):
         meta['method'] += (f', {args.rounds} rotated rounds x {args.iters} launches per width, the median of the '

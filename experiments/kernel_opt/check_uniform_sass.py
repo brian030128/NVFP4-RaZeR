@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
-"""Kernel-opt amendment 17 (U), gate G2u: the uniform-branch dispatch's SASS conditions on amendment 17's build
-directory (CPU only).
+"""Kernel-opt amendments 17 (U) and 18 (V), gate G2u: the uniform-branch dispatch's SASS conditions on the amendment's
+build directory (CPU only).
 
     python experiments/kernel_opt/check_uniform_sass.py --root build_U --like16 build_7freq --like8 build_P3freq --out JSON
+    python experiments/kernel_opt/check_uniform_sass.py --set V --root build_V --like-u build_U --like-a1 build_A1 \
+        --like-stock build_7 --out JSON
+
+Set V (amendment 18's deployment directory, 22 builds): amendment 17's ten carry build_U's patched and unpatched SASS;
+A''s four g32 builds (the paper-table 'mixed256', for 'paper_256') carry build_A1's; stock_ko's four carry build_7's;
+the 256x64 path's four g32 t0 builds have MIXFP4_UNIFORM_DISPATCH=1 and the uniform conditions below.
 
 For every GEMM library in --root, from the patched library's SASS (cuobjdump) and its manifest:
 - every build: no predicated OMMA, and its census equals its configuration's expected census (stock: E2M1 only);
@@ -31,6 +37,10 @@ EXPECT = {'n16k64_wA_n16_t0': FREQ, 'n16k64_wA_n32_t0': FREQ,
           'n8k64_wB_m16_t0': FREQ, 'n8k64_wB_m32_t0': FREQ,
           'n8k64_wB_m64_t0': dict(FREQ, MIXFP4_PIPE_FLAGS=1), 'n8k64_wB_n64_t0': dict(FREQ, MIXFP4_PIPE_FLAGS=1),
           'n8k64_wB_t0': dict(FREQ, MIXFP4_PIPE_FLAGS=1), 'stock_wB_e64': {}}
+G32_T0 = ['n16k64_wA_g32_n16_t0', 'n16k64_wA_g32_n32_t0', 'n16k64_wA_g32_n64_t0', 'n16k64_wA_g32_e64_t0']
+A1 = ['n16k64_wA_g32', 'n16k64_wA_g32_n64', 'n16k64_wA_g32_n32', 'n16k64_wA_g32_n16']
+STOCK_A = ['stock_wA_n16', 'stock_wA_n32', 'stock_wA_n64', 'stock_wA_e64']
+EXPECT_V = dict(EXPECT, **{c: {'MIXFP4_UNIFORM_DISPATCH': 1} for c in G32_T0}, **{c: {} for c in A1 + STOCK_A})
 KINDS = ('BSSY', 'BSYNC', 'WARPSYNC', 'REDUX')
 
 
@@ -50,17 +60,23 @@ def sass_stats(so):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--set', choices=('U', 'V'), default='U')
     ap.add_argument('--root', required=True)
-    ap.add_argument('--like16', required=True)
-    ap.add_argument('--like8', required=True)
+    ap.add_argument('--like16', help='set U: the 16x64 builds with today\'s defines')
+    ap.add_argument('--like8', help='set U: the 8x64 builds and stock_wB_e64')
+    ap.add_argument('--like-u', help="set V: amendment 17's build directory")
+    ap.add_argument('--like-a1', help="set V: A''s build directory")
+    ap.add_argument('--like-stock', help="set V: stock_ko's build directory")
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     root = Path(args.root)
+    expect = EXPECT if args.set == 'U' else EXPECT_V
     present = sorted(d.name for d in root.iterdir() if (d / 'manifest.json').exists())
-    res = dict(root=str(root), like16=args.like16, like8=args.like8, builds={}, passed=True)
-    if present != sorted(EXPECT):
+    res = dict(set=args.set, root=str(root), like16=args.like16, like8=args.like8, like_u=args.like_u,
+               like_a1=args.like_a1, like_stock=args.like_stock, builds={}, passed=True)
+    if present != sorted(expect):
         res['passed'] = False
-        res['error'] = f'builds present {present}, registered {sorted(EXPECT)}'
+        res['error'] = f'builds present {present}, registered {sorted(expect)}'
     for name in present:
         man = json.loads((root / name / 'manifest.json').read_text())
         cfg = CFG.get(name)
@@ -69,8 +85,8 @@ def main():
         st = sass_stats(so)
         defines = man.get('extra_defines') or {}
         row = dict(defines=defines, sass_sha256=man['sass_sha256'], **st, failures=[])
-        if defines != EXPECT.get(name):
-            row['failures'].append(f'defines {defines}, registered {EXPECT.get(name)}')
+        if defines != expect.get(name):
+            row['failures'].append(f'defines {defines}, registered {expect.get(name)}')
         if st['predicated_omma']:
             row['failures'].append(f"{st['predicated_omma']} predicated OMMA")
         if cfg.patch:
@@ -88,8 +104,14 @@ def main():
                 row['failures'].append(f'reconvergence code between the first and the last OMMA: {span}')
             if not span['REDUX']:
                 row['failures'].append('no REDUX between the first and the last OMMA')
-        elif defines in (FREQ, {}):
-            like = Path(args.like16 if name.startswith('n16k64') else args.like8)
+        like = None
+        if args.set == 'V':
+            like = (args.like_u if name in EXPECT else args.like_a1 if name in A1 else args.like_stock if name in STOCK_A
+                    else None)
+        elif not defines.get('MIXFP4_UNIFORM_DISPATCH') and defines in (FREQ, {}):
+            like = args.like16 if name.startswith('n16k64') else args.like8
+        if like is not None:
+            like = Path(like)
             ref = json.loads((like / name / 'manifest.json').read_text())
             row['like'] = dict(root=str(like), **{k: dict(ref=ref[k], got=man[k], equal=ref[k] == man[k])
                                                   for k in ('sass_sha256', 'unpatched_sass_sha256')})

@@ -26,6 +26,23 @@ def _deployed(family, paper):
         return KernelSet(paper), f'{family} not built ({e}) -> {paper} (paper set)'
 
 
+def _deployed256():
+    """kernel-opt amendment 18: the adopted 256x64 set 'mixed256_ko' (A''s g32 builds with t0 and #4's tile at width 128,
+    the uniform-branch dispatch from its build directory, the adopted table's 'mixed256' rows) if its builds are in the
+    build directory, else A''s 'mixed256' (the paper table), else the paper 'mixed'; (set, note). The note says whether
+    the loaded builds carry MIXFP4_UNIFORM_DISPATCH=1."""
+    try:
+        ks = KernelSet('mixed256_ko')
+    except LibraryError as e:
+        try:
+            return KernelSet('mixed256'), f"mixed256_ko not built ({e}) -> mixed256 (kernel-opt A')"
+        except LibraryError as e2:
+            return KernelSet('mixed'), f'mixed256_ko and mixed256 not built ({e2}) -> mixed'
+    uni = all((k.manifest.get('extra_defines') or {}).get('MIXFP4_UNIFORM_DISPATCH') == 1 for k in ks.kernels.values())
+    return ks, ('mixed256_ko (kernel-opt amendment 18; '
+                + ('uniform-branch dispatch' if uni else 'this build directory lacks MIXFP4_UNIFORM_DISPATCH=1') + ')')
+
+
 def _deployed_wB():
     """kernel-opt 8x64 plan P6 (decision b): the adopted 8x64 set 'mixed_wB_ko' (amendments 11-12b: t0, the adopted
     table's 8x64 widths) if its builds are in the build directory, else the paper kernel n8k64_wB; (kernel, note). The
@@ -51,13 +68,15 @@ def resolve_kernel(kernel, meta=None):
       - 16x64 (and finer): 'mixed_ko', the kernel-opt adoption of 2026-10-01 (amendment 7): no site-0 prmt tags (t0),
         #4's 64 x 64 epilogue tile at width 128, the 4b widths and per-call scheduler rows (the '<gpu>.ko.json' table).
         If its builds are not in the build directory, the paper 'mixed' set (the same outputs bit for bit).
-      - whole 128-row panels (256x64): the 4-arm 'mixed256' set (kernel-opt A', adopted 2026-09-30) on the paper
-        table if built, else the paper 'mixed' set -- unchanged by amendment 7 (no 256x64 work for now).
+      - whole 128-row panels (256x64): 'mixed256_ko', the kernel-opt amendment 18 set (A''s builds with t0, #4's tile
+        and the uniform-branch dispatch, its own adopted-table rows), if built; else the 4-arm 'mixed256' set (A',
+        adopted 2026-09-30) on the paper table; else the paper 'mixed' set (the same outputs bit for bit).
     'auto_stock' -> the stock NVFP4 set tuned the same way: 'stock_ko' (#4 + 4b), else the paper 'stock'.
     'auto_stock_wB' -> stock with the weights on B, tuned alike (kernel-opt 8x64 plan): 'stock_wB_ko' (stock_wB_e64 with its
     scheduler rows, amendments 12-12b) if built, else the paper stock_wB.
     'auto_mixed' -> the 16x64 set of 'auto' for any map; 'auto_wB' -> the 8x64 kernel of 'auto' for any map;
-    'auto_256' -> 'mixed256' (NativeLinear verifies the tags are uniform over its 128-row panels).
+    'auto_256' -> the 256x64 set of 'auto': 'mixed256_ko' if built, else 'mixed256' (NativeLinear verifies the tags are
+    uniform over their 128-row panels).
     'paper_mixed' / 'paper_stock' / 'paper_256' -> the paper sets 'mixed' / 'stock' / 'mixed256' with the paper table;
     'paper_wB' -> the paper's 8x64 kernel n8k64_wB.
     A configuration name -> that single build; Kernel / KernelSet instances pass through."""
@@ -69,10 +88,8 @@ def resolve_kernel(kernel, meta=None):
             k, note = _deployed_wB()
             return k, f'auto: {unit[0]}x{unit[1]} map -> {note}'
         if unit is not None and unit[0] % 128 == 0:
-            try:
-                return KernelSet('mixed256'), f'auto: {unit[0]}x{unit[1]} map -> mixed256 (kernel-opt A\')'
-            except LibraryError as e:
-                return KernelSet('mixed'), f'auto: {unit[0]}x{unit[1]} map, mixed256 not built ({e}) -> mixed'
+            ks, note = _deployed256()
+            return ks, f'auto: {unit[0]}x{unit[1]} map -> {note}'
         ks, note = _deployed('mixed_ko', 'mixed')
         return ks, f'auto -> {note}'
     if kernel == 'auto_mixed':
@@ -91,8 +108,11 @@ def resolve_kernel(kernel, meta=None):
             return Kernel.load('stock_wB'), f'auto_stock_wB -> stock_wB_ko not built ({e}) -> stock_wB (paper kernel)'
     if kernel == 'paper_wB':
         return Kernel.load('n8k64_wB'), None
-    if kernel == 'auto_256':
-        return KernelSet('mixed256'), None     # 256x64 maps, 32-row granules, 4 arms (kernel-opt A')
+    if kernel == 'auto_256':                   # 256x64 maps, 32-row granules, 4 arms (kernel-opt A', amendment 18)
+        try:
+            return KernelSet('mixed256_ko'), 'auto_256 -> mixed256_ko (kernel-opt amendment 18)'
+        except LibraryError as e:
+            return KernelSet('mixed256'), f"auto_256 -> mixed256_ko not built ({e}) -> mixed256 (kernel-opt A')"
     if kernel in ('paper_mixed', 'paper_stock', 'paper_256'):
         return KernelSet({'paper_mixed': 'mixed', 'paper_stock': 'stock', 'paper_256': 'mixed256'}[kernel]), None
     return Kernel.load(kernel), None

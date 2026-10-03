@@ -65,19 +65,29 @@ FAMILIES = {
     # rows and mixed_wB_ko's scheduler rows (it has none)
     'nodisp_wB_ko': {16: 'n8k64_wB_m16_nodisp_t0', 32: 'n8k64_wB_m32_nodisp_t0', 64: 'n8k64_wB_m64_nodisp_t0',
                      128: 'n8k64_wB_nodisp_t0', '128x64': 'n8k64_wB_n64_nodisp_t0'},
+    # kernel-opt amendment 18: the 256x64 path brought to the 16x64 state -- A''s 4-arm 32-row-granule builds without the
+    # site-0 tags (t0), #4's 64 x 64 epilogue tile at width 128, deployed with the uniform-branch dispatch
+    # (MIXFP4_UNIFORM_DISPATCH=1 in their build directory; docs/BUILD_AND_USE.md), on its own 'mixed256' width rows and
+    # 'mixed256_ko' scheduler rows of the adopted table. 'mixed256' (A') stays the paper-table set.
+    'mixed256_ko': {16: 'n16k64_wA_g32_n16_t0', 32: 'n16k64_wA_g32_n32_t0', 64: 'n16k64_wA_g32_n64_t0',
+                    128: 'n16k64_wA_g32_e64_t0'},
+    # its no-dispatch ceiling (E2M1 only): the same CTA tiles (C3k's builds) on its widths and scheduler rows
+    'nodisp256_ko': {16: 'n16k64_wA_nodisp_n16_t0', 32: 'n16k64_wA_nodisp_n32_t0', 64: 'n16k64_wA_nodisp_n64_t0',
+                     128: 'n16k64_wA_nodisp_e64_t0'},
 }
 # A family that takes another family's tile-table rows: 'mixed256' has the CTA tile of 'mixed' at every width, and uses
 # its widths so that the two differ only in the dispatch granule (kernel-opt A').
 TABLE_FAMILY = {'mixed256': 'mixed', 'mixed_e': 'mixed', 'stock_e': 'stock', 'mixed_t0': 'mixed', 'mixed256_t0': 'mixed',
                 'mixed_ko': 'mixed', 'stock_ko': 'stock', 'nodisp_ko': 'mixed', 'mixed_wB_t0': 'mixed_wB',
-                'mixed_wB_ko': 'mixed_wB', 'stock_wB_ko': 'stock_wB', 'nodisp_wB_ko': 'mixed_wB'}
+                'mixed_wB_ko': 'mixed_wB', 'stock_wB_ko': 'stock_wB', 'nodisp_wB_ko': 'mixed_wB', 'mixed256_ko': 'mixed256',
+                'nodisp256_ko': 'mixed256'}
 # A family that takes another family's scheduler rows (the same tiles in the same order)
-SCHEDULE_FAMILY = {'nodisp_ko': 'mixed_ko', 'nodisp_wB_ko': 'mixed_wB_ko'}
+SCHEDULE_FAMILY = {'nodisp_ko': 'mixed_ko', 'nodisp_wB_ko': 'mixed_wB_ko', 'nodisp256_ko': 'mixed256_ko'}
 TABLE_DIR = Path(__file__).resolve().parents[1] / 'configs'
 # The table file a family reads by default: '<gpu>.<suffix>.json' if listed here and present, else '<gpu>.json' (the
 # paper table). The adopted kernel-opt sets read '<gpu>.ko.json' (amendment 7).
 TABLE_FILE = {'mixed_ko': 'ko', 'stock_ko': 'ko', 'nodisp_ko': 'ko', 'mixed_wB_ko': 'ko', 'stock_wB_ko': 'ko',
-              'nodisp_wB_ko': 'ko'}
+              'nodisp_wB_ko': 'ko', 'mixed256_ko': 'ko', 'nodisp256_ko': 'ko'}
 BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
 
 

@@ -33,7 +33,9 @@ G32 = ['n16k64_wA_g32', 'n16k64_wA_g32_n64', 'n16k64_wA_g32_n32', 'n16k64_wA_g32
        # kernel-opt t0: without the site-0 prmt tags
        'n16k64_wA_g32_t0', 'n16k64_wA_g32_n64_t0', 'n16k64_wA_g32_n32_t0', 'n16k64_wA_g32_n16_t0',
        # kernel-opt #4 on the 256x64 path (amendment 8)
-       'n16k64_wA_g32_e64']
+       'n16k64_wA_g32_e64',
+       # kernel-opt amendment 18: #4's tile + t0 at width 128 (the 256x64 path's 'mixed256_ko')
+       'n16k64_wA_g32_e64_t0']
 PANEL = 128
 REF_ROOT = Path(os.environ.get('SM120_REF_BUILD_DIR', Path(__file__).resolve().parents[1] / 'build'))
 
@@ -197,9 +199,10 @@ def test_native_linear_requires_uniform_panels(device):
 
 def test_auto_routes_256x64_maps(device):
     """kernel-opt A' adoption: install(kernel='auto') runs a map whose own unit covers whole 128-row panels (the 256x64
-    maps, stored as 16x64 granules) on 'mixed256' when it is built, and every other map on the deployed 16x64 set.
+    maps, stored as 16x64 granules) on the deployed 256x64 set, and every other map on the deployed 16x64 set.
     Amendment 7 (adoption of t0, #4 and 4b): that set is 'mixed_ko' when built, else the paper 'mixed'; 'auto_stock'
-    likewise 'stock_ko', else 'stock'; the 'paper_*' names keep the paper sets."""
+    likewise 'stock_ko', else 'stock'; the 'paper_*' names keep the paper sets. Amendment 18: the 256x64 set is
+    'mixed256_ko' when built, else A''s 'mixed256', else 'mixed'; 'auto_256' follows it (without the 'mixed' fallback)."""
     from mixfp4_sm120 import model as NM
 
     def built(*names):
@@ -216,9 +219,17 @@ def test_auto_routes_256x64_maps(device):
     assert k0.family == deployed16
     k256, note256 = NM.resolve_kernel('auto', dict(type_block=[16, 64], note=dict(record=dict(unit='256x64'))))
     g32 = built('n16k64_wA_g32', 'n16k64_wA_g32_n64', 'n16k64_wA_g32_n32', 'n16k64_wA_g32_n16')
-    assert k256.family == ('mixed256' if g32 else 'mixed'), (k256.family, note256)     # 256x64: unchanged routing
-    assert ('-> mixed256' in note256) if g32 else ('not built' in note256)
+    g32ko = built('n16k64_wA_g32_n16_t0', 'n16k64_wA_g32_n32_t0', 'n16k64_wA_g32_n64_t0', 'n16k64_wA_g32_e64_t0')
+    want256 = 'mixed256_ko' if g32ko else 'mixed256' if g32 else 'mixed'
+    assert k256.family == want256, (k256.family, note256)
+    assert ('-> mixed256_ko' in note256) if g32ko else ('-> mixed256' in note256 if g32 else 'not built' in note256)
+    if g32ko or g32:
+        assert NM.resolve_kernel('auto_256', None)[0].family == ('mixed256_ko' if g32ko else 'mixed256')
+    if g32:
+        assert NM.resolve_kernel('paper_256', None)[0].family == 'mixed256'
     assert NM.resolve_kernel('auto_mixed', None)[0].family == deployed16
     stock = 'stock_ko' if built('stock_wA_n16', 'stock_wA_n32', 'stock_wA_n64', 'stock_wA_e64') else 'stock'
     assert NM.resolve_kernel('auto_stock', None)[0].family == stock
-    assert [NM.resolve_kernel(f'paper_{u}', None)[0].family for u in ('mixed', 'stock')] == ['mixed', 'stock']
+    from mixfp4_sm120.select import FAMILIES
+    if built(*FAMILIES['mixed'].values(), *FAMILIES['stock'].values()):     # a deployment directory may hold neither
+        assert [NM.resolve_kernel(f'paper_{u}', None)[0].family for u in ('mixed', 'stock')] == ['mixed', 'stock']
