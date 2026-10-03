@@ -1831,3 +1831,15 @@ and the hashes are in `results/kernel_opt/c3w/registration.json`.
 - **References:** `stock_ko`, `stock_wB_ko` and the paper stock.
 - **Descriptive only.** There are no new builds.
 - **Disclosed:** a smoke test of the new scripts.
+
+### Amendment 16: the run
+
+`run_c3w.sh` ran on 2026-10-03 from 06:27 to 06:30 UTC (registration 91db345), with no deviation.
+- G0 passed, and all 306 bitwise checks were equal.
+- **At f = 0 the 8x64 gap is mostly the tiles** (the ceiling vs `stock_ko`):
+  - +2.4 … +5.7 % at T ≥ 512;
+  - +10.3 / +14.0 % in two single-wave cells;
+  - about 0 … +2 % at T = 128.
+- **The dispatch** adds +0.3 … +3.0 % (#2's), about as on 16x64.
+- **#2's dispatch wins at f ≤ 2–5 %,** where the real maps lie (1.6–2.9 %); the default wins from about 10–25 %.
+- **Results:** `results/kernel_opt/c3w/REPORT.md`.
