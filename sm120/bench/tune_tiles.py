@@ -18,7 +18,8 @@ The tags used per shape are recorded in the table's meta ('tags').
 kernel-opt additions:
 - --families mixed_wB: the weights-on-B family (8x64 maps; the width is the CTA tile's M, i.e. the tokens), with the
   tags of --maps8 MODEL=PATH (8x64 .mixfp4map), same rule. A family on the 'mixed_wB' rows (select.TABLE_FAMILY, e.g.
-  'mixed_wB_ko') takes those tags too; its rows are written under its own name.
+  'mixed_wB_ko') takes those tags too; its rows are written under its own name. Likewise a family on the 'mixed' rows
+  (e.g. 'mixed_ko') takes the 16x64 tags (amendment 17; before it, such a family was timed on all-E2M1 weights).
 - --cold: time each width by isolated launches on cold weights (every call on the next of K weight copies, K x size
   >= 4x L2, after a 512 MiB read-flush; CUPTI device time, median of 20), the deviation-2 method of
   results/paper/PROTOCOL_GEMM_ISOLATED.md, instead of CUPTI over back-to-back calls on L2-warm weights.
@@ -39,6 +40,9 @@ kernel-opt additions:
   rounds; a setting replaces the default (0, 1) only if its median is at least 0.5 % below the default's and every one
   of its rounds is below every round of the default's (a decisive margin, so noise does not pick). The output is the
   width table with 'schedule' rows {family: {shape: {bucket: [raster, swizzle]}}} added, plus the raw per-round times.
+- --cells NxK@T,... (kernel-opt amendment 17, part B): time only these (shape, bucket) cells. The width table written
+  holds just those cells' rows (a composer merges them); with --schedule, only those cells' scheduler rows are replaced
+  in the --width-table's rows, every other row is kept.
 """
 import argparse
 import datetime
@@ -72,6 +76,19 @@ def map_masks(path, rows=16):
 
 
 _FLUSH = []
+
+
+def parse_cells(spec):
+    """--cells 'NxK@T,...' -> {(n, k, t)}; None when not given."""
+    if not spec:
+        return None
+    cells = set()
+    for c in spec.split(','):
+        shape, t = c.split('@')
+        n, k = (int(v) for v in shape.split('x'))
+        assert int(t) in S.BUCKETS, c
+        cells.add((n, k, int(t)))
+    return cells
 
 
 def cold_us(launch, wp, wsf, iters=20, warmup=3, act=None):
@@ -118,8 +135,11 @@ def tune_schedule(args, shapes, shapes8=None):
     combos = [(r, sw) for r in (0, 1, 2) for sw in (1, 2, 4, 8)]
     sched = {f: {} for f in fams}
     raw = {f: {} for f in fams}
+    cells = parse_cells(args.cells)
     for (n, k), mask in shapes.items():
         for t in S.BUCKETS:
+            if cells is not None and (n, k, t) not in cells:
+                continue
             for f, ks in fams.items():
                 kern = ks.kernels[ks.width(n, k, t)]
                 mixed = kern.type_block is not None
@@ -148,9 +168,15 @@ def tune_schedule(args, shapes, shapes8=None):
                 raw[f].setdefault(f'{n}x{k}', {})[str(t)] = {f'{c[0]},{c[1]}': [round(v, 2) for v in per[c]] for c in combos}
             print(n, k, t, {f: sched[f][f'{n}x{k}'][str(t)] for f in fams}, flush=True)
     data = json.loads(width_table.read_text())
-    data.setdefault('schedule', {}).update(sched)
+    if cells is None:
+        data.setdefault('schedule', {}).update(sched)
+    else:   # --cells: replace only the timed cells' rows
+        for f, rows in sched.items():
+            for shape, row in rows.items():
+                data.setdefault('schedule', {}).setdefault(f, {}).setdefault(shape, {}).update(row)
     meta = dict(gpu=B.gpu_info(), created_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
                 kernels={f: ks.sha256 for f, ks in fams.items()}, width_table=str(width_table), models=args.models,
+                **(dict(cells=sorted(f'{n}x{k}@{t}' for n, k, t in cells)) if cells is not None else {}),
                 method=(f'cold isolated launches, activations quantized after the flush, {args.rounds} rotated rounds x '
                         f'{args.iters} per setting; a setting replaces (0, 1) only if its median is >= 0.5 % below and '
                         f'all its rounds are below all of the default\'s'))
@@ -178,6 +204,7 @@ def main():
     ap.add_argument('--act-warm', action='store_true', help='with --cold: quantize the activations after the flush')
     ap.add_argument('--schedule', action='store_true', help='tune the scheduler setting per shape and bucket (docstring)')
     ap.add_argument('--width-table', default=None, help="with --schedule: the width table (default: the GPU's table)")
+    ap.add_argument('--cells', default=None, help="only these 'NxK@T' cells, comma-separated (see the docstring)")
     ap.add_argument('--out-dir', default=str(S.TABLE_DIR))
     ap.add_argument('--allow-busy', action='store_true')
     args = ap.parse_args()
@@ -209,15 +236,26 @@ def main():
                                          tiles=int(entry[0].numel()) if entry else -(-n // 8) * (k // 64))
     if (args.rounds > 1 or args.act_warm) and not args.cold:
         raise SystemExit('--rounds / --act-warm need --cold')
+    if args.cells:
+        missing = parse_cells(args.cells) - {(n, k, t) for (n, k) in shapes for t in S.BUCKETS}
+        if missing:
+            raise SystemExit(f"--cells not among the models' shapes: {sorted(missing)}")
     if args.schedule:
         return tune_schedule(args, shapes, shapes8)
     table = {f: {} for f in fams}
     raw = {f: {} for f in fams}
     raw_rounds = {f: {} for f in fams}
+    cells = parse_cells(args.cells)
+    if cells is not None and args.update:
+        raise SystemExit('--cells writes the timed cells only; merge them with a composer, not --update')
     for (n, k), mask in shapes.items():
         for t in S.BUCKETS:
+            if cells is not None and (n, k, t) not in cells:
+                continue
             for f, ks in fams.items():
-                rows = 'mixed_wB' if S.TABLE_FAMILY.get(f) == 'mixed_wB' else f   # e.g. mixed_wB_ko: 8x64 tags
+                # the family's table rows decide its tags: 'mixed_wB' rows (e.g. mixed_wB_ko) the 8x64 tags, 'mixed' rows
+                # (e.g. mixed_ko, amendment 17: before it, such a family was timed on all-E2M1 weights) the 16x64 tags
+                rows = S.TABLE_FAMILY.get(f, f)
                 m, tb = {'mixed': (mask, (16, 64)), 'mixed_wB': (shapes8.get((n, k)), (8, 64))}.get(rows, (None, None))
                 op = operands(n, k, t, m, tb if m is not None else None, seed=n + k + t)
                 times, launches, acts = {}, {}, {}
@@ -272,6 +310,8 @@ def main():
                            f'per-round medians')
     if args.act_warm:
         meta['method'] += ', activations quantized after the flush (--act-warm)'
+    if cells is not None:
+        meta['cells'] = sorted(f'{n}x{k}@{t}' for n, k, t in cells)
     if args.update:
         old = json.loads((out / f'{slug}.json').read_text())
         old_raw = json.loads((out / f'{slug}.raw.json').read_text())

@@ -177,6 +177,24 @@ using namespace cute;
 
 namespace mixfp4_detail {
 
+// [NVFP4-RaZeR local hook, kernel-opt U; see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_UNIFORM_DISPATCH=1 makes the
+// dispatch index visibly warp-uniform to ptxas. The index is warp-uniform by construction (every lane of an MMA warp
+// reads the flags of the same granules; see MIXFP4_DEBUG_UNIFORMITY), but ptxas cannot prove it, so it brackets the
+// per-k_tile dispatch with reconvergence code (BSSY/BSYNC around the arms, WARPSYNC before the aligned MMAs). Passing
+// the index through redux.sync.or -- the identity on a warp-uniform value, with all 32 lanes active as they are in the
+// MMA warps -- puts it in a uniform register, and the tree's branches become uniform: no reconvergence code in the
+// k_tile loop. Every arm computes exactly as before. Unset (0), this is the upstream dispatch (identical SASS).
+#ifndef MIXFP4_UNIFORM_DISPATCH
+#define MIXFP4_UNIFORM_DISPATCH 0
+#endif
+CUTLASS_DEVICE uint32_t uniform_index(uint32_t x) {
+#if MIXFP4_UNIFORM_DISPATCH
+  return __reduce_or_sync(0xffffffffu, x);
+#else
+  return x;
+#endif
+}
+
 // Compile-time dispatch on a runtime pattern index, as a balanced binary search so the cost is
 // log2(arms) compares rather than a linear chain. A plain `switch` would be nicer but nvcc turns
 // dense switches back into branch trees here anyway, and a linear if-chain over 64 arms is not
@@ -1544,18 +1562,18 @@ struct CollectiveMma<
       // registers at dispatch time. Reading them back from shared memory put an LDS on the
       // branch's critical path for nothing -- the same fix that was worth ~20 TFLOP/s on
       // joint-K-A.
-      mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(MIXFP4_IX(
+      mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(mixfp4_detail::uniform_index(MIXFP4_IX(
           (kADisp ? read_a_reg(_0{}) : 0u) | (read_b_reg(_0{}) << kADisp)
                                            | (read_b_smem(_1{}) << (kADisp + kBGran)),
-          kNumArms), body);
+          kNumArms)), body);
 #elif defined(MIXFP4_JOINT_KA) && MIXFP4_JOINT_KA
       // A's flags once per k_block, B's once for the whole k_tile. Only k_block 1 needs the smem
       // read; the rest is already in the register fragment.
-      mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(
+      mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(mixfp4_detail::uniform_index(
           read_a_reg(_0{}) | (read_a_smem(_1{}) << kAGran)
-                           | ((kBDisp ? read_b_reg(_0{}) : 0u) << (2 * kAGran)), body);
+                           | ((kBDisp ? read_b_reg(_0{}) : 0u) << (2 * kAGran))), body);
 #else
-      mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(MIXFP4_IX(read_site(_0{}), kNumArms), body);
+      mixfp4_detail::dispatch_pattern<0, kNumArms - 1>(mixfp4_detail::uniform_index(MIXFP4_IX(read_site(_0{}), kNumArms)), body);
 #endif
     };
 
@@ -1719,7 +1737,7 @@ struct CollectiveMma<
 #endif
     };
 
-    uint32_t pattern_cur  = next_pattern();
+    uint32_t pattern_cur  = mixfp4_detail::uniform_index(next_pattern());
     uint32_t pattern_next = 0;
 
     auto k_tile_body_pipe = [&](auto site_c) {
@@ -1744,7 +1762,7 @@ struct CollectiveMma<
         if (k_block == K_BLOCK_MAX - 1) {
           // The stage just waited on is the next k_tile's, and copy_kblock(0) has just refilled
           // the register fragment from it, so every flag the next arm needs is readable now.
-          pattern_next = next_pattern();
+          pattern_next = mixfp4_detail::uniform_index(next_pattern());
         }
 
         gemm_kblock(site_c, k_block);
