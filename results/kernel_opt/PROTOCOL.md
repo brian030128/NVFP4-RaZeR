@@ -2203,3 +2203,25 @@ path (A′, `mixed256`, the g32 builds) up to the current 16x64 state, ideally i
     | 8x64: `'auto'` → `mixed_wB_ko` | `build_U` |
     | `'auto_stock'` → `stock_ko` | `build_7` |
     | `'auto_stock_wB'` → `stock_wB_ko` | `build_U` |
+
+## Amendment 19: the E0M3-fraction sweep on the adopted paths of the three units (C3v)
+
+Written 2026-10-03, after amendment 18's adoption and before any registered GPU run of the sweep. The protocol is
+`results/kernel_opt/c3v/PROTOCOL.md` and the hashes are in `results/kernel_opt/c3v/registration.json`.
+- **The request:** the user, through the coordinator.
+  - C3k (amendment 8) for the 256x64 path adopted with amendment 18, item 7 of the 256x64 work, "so all three units
+    have comparable curves".
+  - Added before registration: C3k and C3w (amendment 16) again on `build_V`'s adopted 16x64 and 8x64 paths, since both
+    ran before amendment 17 part A. The three-unit figure uses the new curves, and C3k's and C3w's records stay
+    unchanged.
+- **Kernels, per unit:**
+  - the adopted path (`'auto'`, from `build_V` on the adopted table);
+  - the path deployed before it: A′ for 256x64, and #2's dispatch alone for 16x64 and 8x64 (C3k's and C3w's deployed
+    paths, on the same table);
+  - the paper kernel;
+  - the adopted path's no-dispatch ceiling.
+- **References:** `stock_ko` and the paper stock; `stock_wB_ko` for 8x64, as C3w.
+- **Grid and method:** C3k's and C3w's. Their 16x64 and 8x64 maps, weights and activations are reproduced exactly; the
+  maps were checked on CPU against their scripts. The three units run one after another in one session.
+- **Descriptive only.** There are no new builds.
+- **Disclosed:** smoke tests of the scripts (`c3v/PROTOCOL.md`), and the post-adoption routed-logits checks.
