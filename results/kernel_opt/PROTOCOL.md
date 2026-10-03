@@ -2004,3 +2004,30 @@ Written 2026-10-03, before any registered GPU run of this amendment. The hashes 
 - **CPU pre-checks** on the registered builds, into a scratch directory: G1 (55 of 55), G2 (10 of 10) and G2u passed.
   Part A's five changed builds carry exactly the SASS of the exploration builds that were timed (`build_U1`,
   `build_U0p`).
+
+### Amendment 17: the run
+
+`run_U.sh` ran on 2026-10-03 from 08:11 to 08:49 UTC (registration aff7829), with no deviation.
+- It was started as `bash run_U.sh`. The file's mode is 100644, and a first start as an executable failed before any
+  step.
+- **Gates:** all passed.
+  - G0: 59 files and 88 builds. Self-tests: 5 × PASS patched / FAIL unpatched, each rebuild with the registered SASS.
+  - The patcher check; G1 (55 of 55); G2 (10 of 10); G2u.
+  - pytest: 403 passed, 633 skipped.
+  - G4: 33,600 + 28,800 comparisons, 0 differences. G5 and G5b: equal.
+- **Part B's table:** of the six cells only 4096x4096 @ 128 changed width, 32 → 64. Its scheduler setting stays (0, 1).
+- **The rules:**
+  - **Part A is met for both families.**
+    - 16x64: −0.37 % (typical) and −0.49 % (worst) per forward, median over the 48 cells.
+    - 8x64: −0.17 % and −0.16 %.
+    - No cell is above +0.5 % in every round.
+    - The strict form is not met. Most of its cells are at widths 16 and 32, whose builds are identical in A and U: an
+      A/A effect of up to +0.4 %.
+  - **Part B is not met.** Its two affected cells (Llama and Mistral at T=128) give −0.13 % (typical) and +0.21 % (worst).
+- **The residual gap to `stock_ko`**, median over all cells, typical / worst:
+  - 16x64: +1.41 / +2.07 % today → +1.02 / +1.74 % with part A;
+  - 8x64: +4.20 / +5.29 % → +3.83 / +5.10 %.
+- **C2U (4096³):** the 16x64 uniform dispatch gains 0.3 … 1.3 % on all-E2M1 and the real map, and loses 0.4 … 0.8 % on
+  all-E0M3. The 8x64 change is neutral.
+- **Results:** `results/kernel_opt/U/REPORT.md`. Adoption of part A for both families (`build_U` as the deployment
+  directory) is proposed to the coordinator, not automatic. Part B is not proposed.

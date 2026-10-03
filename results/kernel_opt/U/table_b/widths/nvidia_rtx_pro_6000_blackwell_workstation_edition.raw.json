@@ -1,0 +1,394 @@
+{
+ "meta": {
+  "buckets": [
+   1,
+   2,
+   4,
+   8,
+   16,
+   32,
+   64,
+   128,
+   256,
+   512,
+   1024,
+   2048,
+   4096,
+   8192
+  ],
+  "cells": [
+   "1024x4096@512",
+   "1024x5120@512",
+   "12288x5120@512",
+   "17408x5120@128",
+   "4096x14336@128",
+   "4096x4096@128"
+  ],
+  "created_utc": "2026-10-03T08:23:27+00:00",
+  "gpu": {
+   "capability": [
+    12,
+    0
+   ],
+   "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+   "clocks.max.mem": "14001 MHz",
+   "clocks.max.sm": "3090 MHz",
+   "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+   "driver_version": "595.71.05",
+   "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+   "memory.used": "9926 MiB",
+   "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+   "persistence_mode": "Enabled",
+   "power.default_limit": "600.00 W",
+   "power.limit": "500.00 W",
+   "sm_count": 188,
+   "temperature.gpu": "57",
+   "torch": "2.9.0+cu128",
+   "torch_cuda": "12.8",
+   "triton": "3.5.0",
+   "utc": "2026-10-03T08:23:27+00:00",
+   "utilization.gpu": "40 %"
+  },
+  "kernels": {
+   "mixed_ko": {
+    "n16k64_wA_e64_t0": "b3c0ab789853b17a201b26f2c4b37a8159a9de85d8f9f7dea395d39c80109cfe",
+    "n16k64_wA_n16_t0": "6ac0701df8030024b620ceb237f095292592b28dfa61ed69bfd16471b786cb06",
+    "n16k64_wA_n32_t0": "4ad1878cf23800b2b16c85ff188d65e38df19479ef910b5ef0c3ec3572a6afa8",
+    "n16k64_wA_n64_t0": "7e0962205e1fdad157a28f2b6f3a4af03d2da40695d1c6c56e441987b30ecbfc"
+   }
+  },
+  "method": "cold isolated launches (--cold), 3 rotated rounds x 30 launches per width, the median of the per-round medians, activations quantized after the flush (--act-warm)",
+  "models": "llama8b,mistral7b,phi4,qwen27b",
+  "note": "value = fastest CTA tile width (tokens) for (out x in) at token counts <= bucket",
+  "tags": {
+   "10240x5120": {
+    "e0m3_tiles": 2141,
+    "model": "qwen27b",
+    "module": "model.language_model.layers.62.linear_attn.in_proj_qkv",
+    "proj": "in_proj_qkv",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/qwen27b_tc_16x64.mixfp4map",
+    "tiles": 51200
+   },
+   "1024x4096": {
+    "e0m3_tiles": 234,
+    "model": "llama8b",
+    "module": "model.layers.31.self_attn.k_proj",
+    "proj": "k_proj",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/llama8b_tc_16x64.mixfp4map",
+    "tiles": 4096
+   },
+   "1024x5120": {
+    "e0m3_tiles": 237,
+    "model": "qwen27b",
+    "module": "model.language_model.layers.63.self_attn.k_proj",
+    "proj": "k_proj",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/qwen27b_tc_16x64.mixfp4map",
+    "tiles": 5120
+   },
+   "12288x5120": {
+    "e0m3_tiles": 3467,
+    "model": "qwen27b",
+    "module": "model.language_model.layers.63.self_attn.q_proj",
+    "proj": "q_proj",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/qwen27b_tc_16x64.mixfp4map",
+    "tiles": 61440
+   },
+   "14336x4096": {
+    "e0m3_tiles": 4745,
+    "model": "llama8b",
+    "module": "model.layers.31.mlp.gate_proj",
+    "proj": "gate_proj",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/llama8b_tc_16x64.mixfp4map",
+    "tiles": 57344
+   },
+   "17408x5120": {
+    "e0m3_tiles": 5515,
+    "model": "qwen27b",
+    "module": "model.language_model.layers.63.mlp.gate_proj",
+    "proj": "gate_proj",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/qwen27b_tc_16x64.mixfp4map",
+    "tiles": 87040
+   },
+   "35840x5120": {
+    "e0m3_tiles": 6555,
+    "model": "phi4",
+    "module": "model.layers.39.mlp.gate_up_proj",
+    "proj": "gate_up_proj",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/phi4_tc_16x64.mixfp4map",
+    "tiles": 179200
+   },
+   "4096x14336": {
+    "e0m3_tiles": 6385,
+    "model": "llama8b",
+    "module": "model.layers.31.mlp.down_proj",
+    "proj": "down_proj",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/llama8b_tc_16x64.mixfp4map",
+    "tiles": 57344
+   },
+   "4096x4096": {
+    "e0m3_tiles": 909,
+    "model": "llama8b",
+    "module": "model.layers.31.self_attn.q_proj",
+    "proj": "q_proj",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/llama8b_tc_16x64.mixfp4map",
+    "tiles": 16384
+   },
+   "48x5120": {
+    "e0m3_tiles": 10,
+    "model": "qwen27b",
+    "module": "model.language_model.layers.21.linear_attn.in_proj_a",
+    "proj": "in_proj_a",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/qwen27b_tc_16x64.mixfp4map",
+    "tiles": 240
+   },
+   "5120x17408": {
+    "e0m3_tiles": 6736,
+    "model": "qwen27b",
+    "module": "model.language_model.layers.63.mlp.down_proj",
+    "proj": "down_proj",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/qwen27b_tc_16x64.mixfp4map",
+    "tiles": 87040
+   },
+   "5120x17920": {
+    "e0m3_tiles": 3407,
+    "model": "phi4",
+    "module": "model.layers.38.mlp.down_proj",
+    "proj": "down_proj",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/phi4_tc_16x64.mixfp4map",
+    "tiles": 89600
+   },
+   "5120x5120": {
+    "e0m3_tiles": 1024,
+    "model": "phi4",
+    "module": "model.layers.35.self_attn.o_proj",
+    "proj": "o_proj",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/phi4_tc_16x64.mixfp4map",
+    "tiles": 25600
+   },
+   "5120x6144": {
+    "e0m3_tiles": 1948,
+    "model": "qwen27b",
+    "module": "model.language_model.layers.63.self_attn.o_proj",
+    "proj": "o_proj",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/qwen27b_tc_16x64.mixfp4map",
+    "tiles": 30720
+   },
+   "6144x5120": {
+    "e0m3_tiles": 1102,
+    "model": "qwen27b",
+    "module": "model.language_model.layers.62.linear_attn.in_proj_z",
+    "proj": "in_proj_z",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/qwen27b_tc_16x64.mixfp4map",
+    "tiles": 30720
+   },
+   "7680x5120": {
+    "e0m3_tiles": 1553,
+    "model": "phi4",
+    "module": "model.layers.32.self_attn.qkv_proj",
+    "proj": "qkv_proj",
+    "source": "/home/dev/n16k64_campaign/paper/artifacts/phi4_tc_16x64.mixfp4map",
+    "tiles": 38400
+   }
+  }
+ },
+ "us": {
+  "mixed_ko": {
+   "1024x4096": {
+    "512": {
+     "128": 15.94,
+     "16": 16.94,
+     "32": 9.92,
+     "64": 10.53
+    }
+   },
+   "1024x5120": {
+    "512": {
+     "128": 18.64,
+     "16": 20.29,
+     "32": 11.87,
+     "64": 12.02
+    }
+   },
+   "12288x5120": {
+    "512": {
+     "128": 77.38,
+     "16": 178.13,
+     "32": 111.12,
+     "64": 79.74
+    }
+   },
+   "17408x5120": {
+    "128": {
+     "128": 35.39,
+     "16": 76.14,
+     "32": 41.41,
+     "64": 36.0
+    }
+   },
+   "4096x14336": {
+    "128": {
+     "128": 47.02,
+     "16": 55.98,
+     "32": 29.57,
+     "64": 29.95
+    }
+   },
+   "4096x4096": {
+    "128": {
+     "128": 15.9,
+     "16": 17.54,
+     "32": 10.83,
+     "64": 10.64
+    }
+   }
+  }
+ },
+ "us_rounds": {
+  "mixed_ko": {
+   "1024x4096": {
+    "512": {
+     "128": [
+      15.9,
+      15.94,
+      15.97
+     ],
+     "16": [
+      16.98,
+      16.94,
+      16.94
+     ],
+     "32": [
+      9.92,
+      9.92,
+      9.89
+     ],
+     "64": [
+      10.53,
+      10.54,
+      10.5
+     ]
+    }
+   },
+   "1024x5120": {
+    "512": {
+     "128": [
+      18.64,
+      18.62,
+      18.66
+     ],
+     "16": [
+      20.3,
+      20.29,
+      20.24
+     ],
+     "32": [
+      11.87,
+      11.89,
+      11.79
+     ],
+     "64": [
+      12.03,
+      12.0,
+      12.02
+     ]
+    }
+   },
+   "12288x5120": {
+    "512": {
+     "128": [
+      77.38,
+      77.54,
+      76.94
+     ],
+     "16": [
+      177.81,
+      178.35,
+      178.13
+     ],
+     "32": [
+      111.28,
+      111.12,
+      111.06
+     ],
+     "64": [
+      79.74,
+      79.81,
+      79.71
+     ]
+    }
+   },
+   "17408x5120": {
+    "128": {
+     "128": [
+      35.39,
+      35.41,
+      35.39
+     ],
+     "16": [
+      76.14,
+      76.08,
+      76.24
+     ],
+     "32": [
+      41.41,
+      41.3,
+      41.42
+     ],
+     "64": [
+      36.0,
+      36.11,
+      35.82
+     ]
+    }
+   },
+   "4096x14336": {
+    "128": {
+     "128": [
+      47.02,
+      47.01,
+      47.07
+     ],
+     "16": [
+      55.95,
+      55.98,
+      56.29
+     ],
+     "32": [
+      29.57,
+      29.44,
+      29.58
+     ],
+     "64": [
+      29.95,
+      29.89,
+      29.97
+     ]
+    }
+   },
+   "4096x4096": {
+    "128": {
+     "128": [
+      15.87,
+      15.9,
+      15.94
+     ],
+     "16": [
+      17.54,
+      17.54,
+      17.73
+     ],
+     "32": [
+      10.85,
+      10.78,
+      10.83
+     ],
+     "64": [
+      10.66,
+      10.64,
+      10.62
+     ]
+    }
+   }
+  }
+ }
+}
