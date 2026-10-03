@@ -77,6 +77,28 @@ for c in n16k64_wA_n16_t0 n16k64_wA_n32_t0 n16k64_wA_n64_t0 n16k64_wA_e64_t0; do
   SM120_BUILD_DIR=sm120/build_freq python sm120/build.py --define MIXFP4_DISPATCH_FREQ=1 --config $c --selftest; done
 ```
 
+The adopted deployment directory today (amendment 17, adopted 2026-10-03) supersedes `build_freq` above. It holds both
+mixed families with #2's dispatch:
+- **The wide tiles:** 16x64 at widths 64 and 128 with the uniform-branch dispatch (`MIXFP4_UNIFORM_DISPATCH=1`); 8x64 at
+  widths 64, '128x64' and 128 with the pipelined flag read (`MIXFP4_PIPE_FLAGS=1`).
+- **The narrow tiles:** widths 16 and 32 keep #2's dispatch alone.
+- **The stock builds** of `stock_ko` and `stock_wB_ko`, so that `auto_stock` and `auto_stock_wB` run from the same
+  directory.
+
+Every build computes the same outputs bit for bit (gates G4/G5; results/kernel_opt/U/REPORT.md).
+
+```bash
+D=sm120/build_ko; F="--define MIXFP4_DISPATCH_FREQ=1"
+for c in n16k64_wA_n16_t0 n16k64_wA_n32_t0 n8k64_wB_m16_t0 n8k64_wB_m32_t0; do
+  SM120_BUILD_DIR=$D python sm120/build.py $F --config $c --selftest; done
+for c in n16k64_wA_n64_t0 n16k64_wA_e64_t0; do
+  SM120_BUILD_DIR=$D python sm120/build.py $F --define MIXFP4_UNIFORM_DISPATCH=1 --config $c --selftest; done
+for c in n8k64_wB_m64_t0 n8k64_wB_n64_t0 n8k64_wB_t0; do
+  SM120_BUILD_DIR=$D python sm120/build.py $F --define MIXFP4_PIPE_FLAGS=1 --config $c --selftest; done
+for c in stock_wA_n16 stock_wA_n32 stock_wA_n64 stock_wA_e64 stock_wB_e64; do SM120_BUILD_DIR=$D python sm120/build.py --config $c; done
+export SM120_BUILD_DIR=$D          # NativeLinear and the evaluators load the libraries from here
+```
+
 The native (a) evaluator (`run_multiround.py --eval-backend native`) has its own library, built from the same
 vendored kernel. The `--tm-opt` preset uses it for its development monitor and its final evaluation:
 
@@ -165,6 +187,12 @@ python run_ppl_deploy.py --model mistral7b --data-root $DATA \
       them.
     - 256x64 artifacts run on the 4-arm `mixed256` set (A′; builds `n16k64_wA_g32`, `_n64`, `_n32`, `_n16`) when it
       is in the build directory, as before.
+    - 8x64 artifacts (amendment 14, adopted 2026-10-02): `auto` runs them on `mixed_wB_ko` when its builds are in the
+      build directory, else on the paper kernel `n8k64_wB`. `paper_wB` selects `n8k64_wB`, and `auto_stock_wB`
+      selects `stock_wB_ko` (stock with the weights on B, tuned alike).
+    - The adopted deployment directory (amendment 17, above) gives `mixed_ko` its uniform-branch dispatch and
+      `mixed_wB_ko` its pipelined flag read on the wide tiles: −0.37 % and −0.17 % GEMM time per forward against
+      `build_freq`'s builds (typical tags, median over 4 models).
     - `paper_mixed` / `paper_stock` / `paper_256` select the paper sets with the paper table.
   - Every set computes the same outputs bit for bit. The install report's `routing` says which set ran
     (results/kernel_opt/A1, 4, retune and t0 REPORT.md).

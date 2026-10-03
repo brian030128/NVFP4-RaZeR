@@ -58,3 +58,13 @@ Every adopted change is bitwise identical to the paper kernel (G4 / G5 at each s
 Every measurement used the paper's TM-OPT+TC 8x64 artifacts (FourOverSix for the stocks); M1 used the typical
 (lower-median) and worst (densest) modules. The FlipQuant calibration will change later. The bitwise results do not
 depend on the map; the dispatch costs and P3b's width choices depend on the E0M3 shares (1.5–3.7 % of tiles here).
+
+## Later: amendment 17 (2026-10-03)
+
+The 8x64 path's widths 64, '128x64' and 128 now take the pipelined flag read (`MIXFP4_PIPE_FLAGS=1`), with #2's dispatch.
+- **The effect:** −0.17 % (typical) and −0.16 % (worst) per forward. The gap to `stock_ko` goes from +4.20 % to +3.83 %
+  (typical, median).
+- **The deployment directory** is `build_U` (adopted by the coordinator per the registered rule), superseding
+  `build_P2freq` / `build_P3freq`.
+- **Details:** `results/kernel_opt/U/REPORT.md`.
+

@@ -7,6 +7,11 @@ aff7829.
 - **Files:** tables in `U_tables.md`, data in `U.json`. The disclosed exploration that chose the design is
   `EXPLORATION.md`.
 
+**Adopted 2026-10-03.** The coordinator adopted part A for both families, per the registered rule. `build_U` (the
+families `mixed_ko` and `mixed_wB_ko`, plus `stock_wB_e64` for `auto_stock_wB`) is the deployment directory of both
+adopted paths; `docs/BUILD_AND_USE.md` lists its builds. Part B is not adopted, since its rule failed, and the table is
+unchanged.
+
 **What was measured:**
 - **A:** today's adopted paths: 16x64 `mixed_ko` from `build_7freq`, and 8x64 `mixed_wB_ko` from `build_P3freq`.
 - **U (part A):** the same families from `build_U`:

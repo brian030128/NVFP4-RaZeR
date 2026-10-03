@@ -152,3 +152,14 @@ with round ranges are in `cum_e2e_tables.md`.
 - **If the paper's latency were re-measured**, the change would be in step 05's 16x64 rows (and the FourOverSix
   reference if `stock_ko` is used). Prefill would be about −0.9 % (−0.5 % on Qwen), and the gap to FourOverSix would
   shrink from about +1.7 % to about +0.9 %.
+
+## Later: amendment 17 (2026-10-03)
+
+The 16x64 path's widths 64 and 128 now take the uniform-branch dispatch (`MIXFP4_UNIFORM_DISPATCH=1`): no BSSY, BSYNC or
+WARPSYNC around the per-k_tile dispatch.
+- **The effect:** −0.37 % (typical) and −0.49 % (worst) per forward, up to −1.6 % at T = 256. The gap to `stock_ko`
+  goes from +1.41 % to +1.02 % (typical, median).
+- **The deployment directory** is `build_U` (adopted by the coordinator per the registered rule), superseding
+  `build_7freq`.
+- **Details:** `results/kernel_opt/U/REPORT.md`.
+

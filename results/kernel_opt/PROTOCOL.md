@@ -2031,3 +2031,8 @@ Written 2026-10-03, before any registered GPU run of this amendment. The hashes 
   all-E0M3. The 8x64 change is neutral.
 - **Results:** `results/kernel_opt/U/REPORT.md`. Adoption of part A for both families (`build_U` as the deployment
   directory) is proposed to the coordinator, not automatic. Part B is not proposed.
+- **The adoption (2026-10-03).** The coordinator adopted part A for both families, per the registered rule.
+  - `build_U` becomes the deployment directory of `mixed_ko` and `mixed_wB_ko`, with `stock_wB_e64` for
+    `auto_stock_wB`. It supersedes `build_7freq` (16x64) and `build_P2freq` / `build_P3freq` (8x64).
+  - Part B is not adopted, and `sm120/configs/<gpu>.ko.json` is unchanged.
+  - The builds are listed in `docs/BUILD_AND_USE.md`.

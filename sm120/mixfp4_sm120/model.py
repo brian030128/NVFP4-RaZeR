@@ -29,8 +29,9 @@ def _deployed(family, paper):
 def _deployed_wB():
     """kernel-opt 8x64 plan P6 (decision b): the adopted 8x64 set 'mixed_wB_ko' (amendments 11-12b: t0, the adopted
     table's 8x64 widths) if its builds are in the build directory, else the paper kernel n8k64_wB; (kernel, note). The
-    dispatch variant is the build directory's: the adopted one is #2's (MIXFP4_DISPATCH_FREQ=1), and the note says
-    which the loaded builds carry."""
+    dispatch variant is the build directory's: the adopted one is #2's (MIXFP4_DISPATCH_FREQ=1; amendment 17 adds the
+    pipelined flag read, MIXFP4_PIPE_FLAGS=1, at widths 64, '128x64' and 128), and the note says whether the loaded
+    builds carry #2's."""
     try:
         ks = KernelSet('mixed_wB_ko')
     except LibraryError as e:
