@@ -2036,3 +2036,130 @@ Written 2026-10-03, before any registered GPU run of this amendment. The hashes 
     `auto_stock_wB`. It supersedes `build_7freq` (16x64) and `build_P2freq` / `build_P3freq` (8x64).
   - Part B is not adopted, and `sm120/configs/<gpu>.ko.json` is unchanged.
   - The builds are listed in `docs/BUILD_AND_USE.md`.
+
+## Amendment 18 (V): the 256x64 path brought to the 16x64 state
+
+Written 2026-10-03, before any registered GPU run of this amendment. The hashes and time are in `registration_18.json`.
+
+**The request**, relayed by the coordinator (the user's go; the 256x64 hold is lifted for this work): bring the 256x64
+path (A′, `mixed256`, the g32 builds) up to the current 16x64 state, ideally in one amendment.
+1. The uniform dispatch on the g32 builds, after a SASS check. A per-width design is allowed, disclosed.
+2. #4: the 64×64 epilogue at width 128 (check the stage count), and per-call scheduler rows.
+3. #2's frequency-aware dispatch, adopted only if it helps with 4 arms.
+4. t0, re-tested only if cheap in combination, and adopted only if the rule is met.
+5. An act-warm re-tune (4b's method) of the widths and scheduler rows on the final builds. The decisive-margin rule on the
+   widths is a sensitivity only, as for 8x64.
+6. M1 (deviation-2, 4 models, the full T list, typical and worst, the TC 256x64 artifacts) against today's 256x64 path
+   and `stock_ko`, and a C2-style 4096³ split with the no-dispatch ceiling.
+7. If adopted: a C3k-style E0M3-fraction sweep for 256x64.
+- **Adoption rule:** amendment 11's form.
+- **Routing:** 256x64 artifacts go to the adopted set through `'auto'`; the paper path stays selectable.
+- Nothing is synced into ~/flipquant.
+
+**The exploration** (disclosed, `results/kernel_opt/V/EXPLORATION.md`; nothing from it is a result):
+- **SASS:** the 4-arm g32 builds still carry BSSY/BSYNC/WARPSYNC between the first and the last OMMA (3–5 / 5–6 / 11).
+  - The uniform index removes all of it, with nothing predicated and the census unchanged.
+  - #4's tile at width 128 keeps 4 mainloop stages.
+- **Timing** (Llama-3.1-8B and Phi-4, typical and worst, at today's widths): REDUX + t0 + #4 gains −0.86 / −0.93 % (Llama)
+  and −0.86 / −0.74 % (Phi-4) per forward against today.
+  - #2's dispatch adds nothing with 4 arms; t0 helps only together with REDUX.
+  - No width showed a consistent loss, so the design has no width cut.
+- **This design was chosen after the exploration. The fresh 4-model M1 is the test.**
+
+**What changes** (the sources are commit ed4c484):
+- **`configs.py`:** n16k64_wA_g32_e64_t0 (A′'s width-128 build with #4's tile, without the site-0 tags).
+- **`select.py`:**
+  - `mixed256_ko` = n16k64_wA_g32_{n16,n32,n64}_t0 and n16k64_wA_g32_e64_t0, deployed with
+    `MIXFP4_UNIFORM_DISPATCH=1`. It reads its own `'mixed256'` width rows and `'mixed256_ko'` scheduler rows of the
+    adopted table (`TABLE_FILE` 'ko').
+  - `nodisp256_ko`, its no-dispatch ceiling: C3k's nodisp t0 builds on those rows.
+  - `mixed256` (A′, the paper table) is unchanged.
+- **`model.py`:**
+  - `'auto'` sends 256x64 maps to `mixed256_ko` when its builds are in the build directory, else to `mixed256`, else
+    to `mixed`.
+  - `'auto_256'` follows it; `'paper_256'` stays `mixed256`.
+- **`tune_tiles.py`:** `--maps256`, the TC 256x64 maps at their stored 16x64 granules, for the `'mixed256'` rows.
+- **Tests:** test_g32.py (the new build; the routing, with the paper-set check only where the paper builds are) and
+  test_select.py (`mixed256_ko`'s scheduler and batch-invariance tests).
+- **New scripts:** `check_uniform_sass.py --set V`, `V_tables.py`, `bench_V_isolated.py`, `c2_V.py`, `V_report.py`,
+  `run_V.sh` and `results/kernel_opt/V/build_V.sh`.
+
+**Builds**, CPU only with no GPU visible, from the clean main checkout at ed4c484 (`results/kernel_opt/V/build_V.sh`):
+- **`build_Vall`:** all 56 configurations, with no extra define.
+- **`build_V`:** the deployment directory with every adopted set, 22 builds:
+  - amendment 17's ten, with their defines;
+  - `mixed256_ko`'s four, with `MIXFP4_UNIFORM_DISPATCH=1`;
+  - A′'s four (for `'paper_256'`), stock_ko's four and stock_wB_e64, with no define.
+
+**Gates** (`run_V.sh`, run with `bash`; a failure stops the run):
+- **G0:** every registered file and build.
+- **G3, the self-tests:** the four new builds, into `build_Vst` (PASS patched / FAIL unpatched), tied to `build_V`'s
+  SASS by `check_same_sass.py`.
+- **The patcher check:** `build_Vall`'s tagged builds; the t0 builds of `build_Vall`, `build_V` and `build_Vst`.
+- **G1:** the 55 existing configurations of `build_Vall` keep their patched and unpatched SASS (amendment 17's before
+  roots). The new configuration gets G2.
+- **G2:** `build_V`'s 22 have their census, with nothing predicated.
+- **G2u (`--set V`):**
+  - amendment 17's ten carry `build_U`'s SASS, A′'s four `build_A1`'s, and stock_ko's four `build_7`'s;
+  - the four uniform g32 builds have no BSSY/BSYNC/WARPSYNC between the first and the last OMMA, and a REDUX there;
+  - the defines are as registered.
+- **G3 pytest:** test_gemm.py, test_select.py and test_g32.py on `build_V`.
+- **G4 (`check_bitwise.py --family g32`):** the four builds and set:mixed256_ko, against n16k64_wA; 0 differences.
+- **G5:** whole-model logits on the 256x64 artifacts, set:mixed256 (`build_A1`) → set:mixed256_ko (`build_V`), and the
+  routed form (`'auto'` → `mixed256_ko`).
+
+**The table**, after the gates (`results/kernel_opt/V/table_v/`):
+- **`table_v0`:** today's widths (the paper table's 'mixed' rows) as the `'mixed256'` rows, with no scheduler rows. It
+  isolates the build effect.
+- **Widths:** `tune_tiles.py --families mixed256_ko` on `build_V`, by 4b's method.
+  - Cold, activations quantized after the flush, 3 rotated rounds × 30; the fastest median wins.
+  - Every shape of the 4 models, all 14 buckets.
+  - Tags: per projection, the densest module of each model's TC 256x64 map.
+- **Scheduler rows:** amendment 7's decisive rule at the tuned widths, every cell (12 settings, 3 rounds × 30).
+- **The decisive-margin rule on the widths:** reported only (P3's dm128 and dmfb).
+- **The candidate table** is the adopted table plus `'mixed256'` and `schedule['mixed256_ko']`. Nothing else differs
+  (checked).
+- **G5b:** whole-model logits on the candidate table.
+
+**M1 (`bench_V_isolated.py`):** the deviation-2 method; 4 models; T ∈ {1, 4, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096,
+8192}; typical and worst tags. Configurations:
+- `stock_ko`, the target;
+- `ceil`: `nodisp256_ko` (`build_C3k`) on the candidate table;
+- A: today's 256x64 path (`mixed256`, `build_A1`, the paper table);
+- B: `mixed256_ko` (`build_V`) on `table_v0` (the build effect);
+- C: `mixed256_ko` on the candidate table (the candidate).
+- **Checks:** M1's own, and B and C equal A bitwise on the timed operands.
+
+**C2V (`c2_V.py`), 4096³, width 128:**
+- **Configurations:** `stock_ko`, the ceiling (n16k64_wA_nodisp_e64_t0), and A (n16k64_wA_g32) and C
+  (n16k64_wA_g32_e64_t0) × {all-E2M1, the real map, all-E0M3}.
+- **Modes:** b2b, isolated and sustained, 3 rotated rounds.
+- **Check before timing:** C = A for every tag.
+
+**The rule**, written before the run (amendment 11's form, TOL = 0.5 %):
+- **Adopt if, for C vs A, with typical and with worst tags:**
+  - the median over the 48 (model, T) cells is negative;
+  - and no cell is above +TOL in every round.
+- **Reported alongside:** the strict form, B vs A, C vs B, and the gaps to `stock_ko` and to the ceiling per T.
+- **Adoption is proposed to the coordinator, not automatic.**
+- **If adopted:**
+  - the candidate table's rows become the tracked `<gpu>.ko.json`'s;
+  - `build_V` becomes the deployment directory;
+  - item 7's sweep follows as a separate descriptive amendment.
+- **If not adopted:** the routing change is reverted.
+
+**Maps and tags.** The FlipQuant calibration will change later, so the inputs are stated here.
+- The paper's TM-OPT+TC 256x64 artifacts; their artifact.json and maps' sha256 are registered.
+- M1: typical is the lower-median module per projection, worst the densest.
+- The tuning uses the densest. C2V's real map is the Llama-3.1-8B map's layer 0 o_proj.
+
+**Disclosed, before registration** (nothing from it is used):
+- **The exploration** (`EXPLORATION.md`).
+- **Smoke tests into a scratch directory,** on a directory of symlinks to the exploration builds:
+  - the table pipeline (three cells, 2 rounds × 3);
+  - M1 (Llama-3.1-8B o_proj and down_proj at T = 16, 128 and 2048, 1 round × 3);
+  - C2V (1 round), the report and the routing tests.
+  - The smoke test showed that test_g32.py's routing test needs the paper builds for its `'paper_*'` check. That check
+    now runs only where those builds are.
+- **CPU pre-checks** on the registered builds: G1 (55 + the new configuration), G2 (22) and G2u passed. The four new
+  builds carry exactly the SASS of the exploration builds that were timed (`build_VU`).

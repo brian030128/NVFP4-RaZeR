@@ -1,0 +1,934 @@
+{
+ "protocol": "results/kernel_opt/PROTOCOL.md",
+ "amendment": "Amendment 18 (V: the 256x64 path brought to the 16x64 state -- 'mixed256_ko', A''s g32 builds with t0, #4's tile at width 128 and the uniform-branch dispatch, with its re-tuned widths and scheduler rows)",
+ "protocol_sha256": "b5071ae60464ad1ae7c02adb4beb3f6ffd8a36a46eb9de00cd540a240751bc36",
+ "registered_utc": "2026-10-03T11:16:42+00:00",
+ "parent_commit": "ed4c484211167e35f5deced623a0819916619363",
+ "branch": "kernel-opt",
+ "note": "before any registered GPU run of amendment 18 (the disclosed exploration and smoke tests excepted); build_V (22) and build_Vall (all 56 configurations) were built CPU-only (no GPU visible) from the clean main checkout at ed4c484; all 1326 source hashes their manifests record equal the files at this registration (checked); today's 256x64 path is build_A1, stock_ko build_7's, the ceiling's builds build_C3k's, amendment 17's adopted builds build_U's",
+ "files": {
+  "results/kernel_opt/PROTOCOL.md": "b5071ae60464ad1ae7c02adb4beb3f6ffd8a36a46eb9de00cd540a240751bc36",
+  "sm120/mixfp4_sm120/__init__.py": "30d41b5e9f966e64ca53a606f77ea7659d21447cf34f79e61bb657c63c9b8225",
+  "sm120/mixfp4_sm120/artifact.py": "d582f8f4559a9a7ee36741d8f40dbf5beee1abb6eb582d040400878acb4333ad",
+  "sm120/mixfp4_sm120/configs.py": "539d36d88e78d3e7cf5ceb1b8254fb6252f420cd23632afdc68c98089a5604ad",
+  "sm120/mixfp4_sm120/lib.py": "86a16253ba4b4256d4cb0563ce5f1a32b5e18cf762d7704ec9105ff56e12fdb1",
+  "sm120/mixfp4_sm120/linear.py": "5d61798a998dce30d25b752674850311206c62ce2b9e122a7e57dc964caf8ed4",
+  "sm120/mixfp4_sm120/mapio.py": "23fc6b30616e2b6bcbe64ca79ba9ee8935800add50c9bb761c3b97b4aeb85951",
+  "sm120/mixfp4_sm120/model.py": "4aaa789e62303240438bd674a22c070a3241e34e00443f43163546f581d5a587",
+  "sm120/mixfp4_sm120/numerics.py": "20232e02a4c85dadc188408ceaa010ea996565a2b3844d4bd4caee35b7d427c0",
+  "sm120/mixfp4_sm120/quant_act.py": "6413b7b539bc1ad7d9ef2c26807965186dd3d1d0c39a914b6202d71990ec730d",
+  "sm120/mixfp4_sm120/select.py": "447fd03b352caca2cb31fed135ac7cda4600d3d31467f20847039c7f07414d9f",
+  "sm120/build.py": "51fd5ce5f4b7b9b5336bf271118dbf69cd0987d679375d18860f6f9d2f17fde7",
+  "sm120/kernel/scripts/patch_mixed_nvfp4_gemm.py": "60ab6e2d69cf972dba89098abe8474680a8b84ae1b0033e525c0b2ff6f4c9be2",
+  "sm120/kernel/scripts/gen_mixed_mma_blob.py": "7e72c76f777229792fb4eee15e64163c9beed9aabac13994d81655f56466585a",
+  "sm120/kernel/src/collective/sm120_blockscaled_mma_tma_mixed.hpp": "b31a8f1835bfa70908df48a3f030703758673535350ca83c1211714636090e0d",
+  "sm120/kernel/src/mixed_nvfp4_gemm.cu": "e190e662aa606a4e3fdde2600d0b5cc7644c03b8f1f6521068972e64c8c01660",
+  "sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.json": "884ddef9bc48c064bfd99efc48bbe07b63f664f0a98a80dbfc118dc73fecd44c",
+  "sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json": "b6d64497962dfbf220832e97c9b4b5ece69878fdcf5ab4d2430e4380d52bd441",
+  "sm120/bench/common.py": "17285ee76273701f73079c14e9b0dbb1f3b27e65638918adfb10def60a6baa9d",
+  "sm120/bench/kernel.py": "6be6f858973d5d9eb6784edf3813384728e6087fed9451ad3a32698db3800eef",
+  "sm120/bench/tune_tiles.py": "1aa2de9db996f29d4ee6c67e9d6521a1381f05ea2d9077856130b06c3bad2305",
+  "experiments/paper/bench_gemm_isolated.py": "c41c4133c9b24e5a500536347414dd0158c55d58dc458006013e2ab8e5e55e88",
+  "sm120/tests/conftest.py": "fcc1c2baf5f7fefe2e7e3feeea1b5605691aea17cf79b6d0ad6f320529f73c16",
+  "sm120/tests/test_gemm.py": "5b722fc40fdc52eba0cad627b76cee47023f92a0bdbd353b07a119b52752a8bd",
+  "sm120/tests/test_select.py": "dca7c5d72cc1e314f3e7cc02290342acdfb5e81b380df3455940d2cd76505e92",
+  "sm120/tests/test_g32.py": "2cc7ef48da391db0008a251c1ffccaba51c062cc386f6cb2f4adc9b59d46d53e",
+  "experiments/kernel_opt/bench_ab_isolated.py": "1de52e739d740b98e677cca556d5b5dc6009a744bfbc0405426c5062dcc05f0e",
+  "experiments/kernel_opt/bench_V_isolated.py": "0a944d1755b67b3e958c2614b8347e824869c29225a25651668c9c73fd03a84d",
+  "experiments/kernel_opt/c2_freq.py": "dde84998100720e345f446374110db87c49362759cb9f5dc5b8297d6009e0adf",
+  "experiments/kernel_opt/c2_V.py": "2ce4a28bdba783773f42d249772e6333519fd36bbedb01b7d79b2f82e4da79f9",
+  "experiments/kernel_opt/V_tables.py": "f45cb7be525b8cf0f088adabc44b94b65d0cba2042b8d5cbf94806c474be7fdc",
+  "experiments/kernel_opt/V_report.py": "97c1bac6e3ab302aa396297b664fe7c001d71554e3bd0a03b805efe2084a30bd",
+  "experiments/kernel_opt/check_provenance.py": "3da0009df67ce61b3904cc06396d356706542a5c48722b97bb06fd4ca54a834c",
+  "experiments/kernel_opt/check_sass.py": "992bf40c3def853217db0a750143520d99d41e0a09d9c03ad6ae04e793b159a1",
+  "experiments/kernel_opt/check_uniform_sass.py": "0a5bf30fbd96f28827539fefe369a4a41d0eb105d9617b4c47c11f94b69961af",
+  "experiments/kernel_opt/check_same_sass.py": "451692dfac77ceb9f4a969ada4384f902211abe6274c73fe5e518a1342e3bfb7",
+  "experiments/kernel_opt/check_patcher_sites.py": "f8d01380727ebd6879ce96459224fb2c30ee68afda1b4fb7a9d1e81cded445e8",
+  "experiments/kernel_opt/check_bitwise.py": "8d2841aceb5254dd56872458b804afbf6c29b4e907fa8b84d8c21ffb2a448ee3",
+  "experiments/kernel_opt/check_model_logits.py": "3d7abadef01965eaf464dd14259a1c5ce8286b75870bd7811656d09d232490d5",
+  "experiments/kernel_opt/run_V.sh": "55d54869149576ba562aa29975fdd264e5adca97e6699d84cc75beb69389e92f",
+  "results/kernel_opt/V/build_V.sh": "a532bf7462b95c4a0348ebd0a70e129c47348edc29d9f3f3f9b63da88971992f",
+  "results/kernel_opt/V/make_registration_18.py": "7635c1db3d660357aa52205f8e98f553562b7fd9df24c4a02a1c338406247541",
+  "results/kernel_opt/V/EXPLORATION.md": "dac1880e7e1c9b747e3d729062ccc363954b4bc5b4f6a61becf3d4d1b5e07415",
+  "/home/dev/n16k64_campaign/paper/artifacts/llama8b_fo6/artifact.json": "ad56bf66f19a599d53d5553ebb74db6716afcab7d1749605d9a8958b2fc6a562",
+  "/home/dev/n16k64_campaign/paper/artifacts/llama8b_tc_256x64/artifact.json": "e4f6262209308a82a65a714c09fc8cabaa2eb0fb7901293f1ebc6bdc88365656",
+  "/home/dev/n16k64_campaign/paper/artifacts/mistral7b_fo6/artifact.json": "90f4de5e395992f4e86cb101f437fb06f65c03101ac2e2f58fed257da2387aab",
+  "/home/dev/n16k64_campaign/paper/artifacts/mistral7b_tc_256x64/artifact.json": "7bfde10a8d48e571248ad09e6911c3fba72ff446bb6f37017ea7c0c47ef3853b",
+  "/home/dev/n16k64_campaign/paper/artifacts/phi4_fo6/artifact.json": "2f35504c937b9ca993a1d9d2850b1bd91efd52c9d916988448fb049d32b00ff6",
+  "/home/dev/n16k64_campaign/paper/artifacts/phi4_tc_256x64/artifact.json": "e896eefd47b31ae184e22b0700778224f42b0f9895886eb2163875648f5301e5",
+  "/home/dev/n16k64_campaign/paper/artifacts/qwen27b_fo6/artifact.json": "396de5003bb62e7b47cf94cfcb13925c0734bc0ec3d993977ad1aca2e280067c",
+  "/home/dev/n16k64_campaign/paper/artifacts/qwen27b_tc_256x64/artifact.json": "dd9ed5e18d84f6cb861226c92debb3a9306e5028801869b8ab5e5b242c099a14",
+  "/home/dev/n16k64_campaign/paper/artifacts/llama8b_tc_256x64.mixfp4map": "83879513dfa5388ab39f62fc3423c388709c1a1a830523200bdeac0b23795d81",
+  "/home/dev/n16k64_campaign/paper/artifacts/mistral7b_tc_256x64.mixfp4map": "3c7f3b660ecc25a9a4b36f94ae347218a300acf0b2e17835cb11b5e37465052f",
+  "/home/dev/n16k64_campaign/paper/artifacts/phi4_tc_256x64.mixfp4map": "01765532ed141cfd5c2945f266bae15d415fd2c96beb4b5b83b7caec54e8f9a7",
+  "/home/dev/n16k64_campaign/paper/artifacts/qwen27b_tc_256x64.mixfp4map": "4ca7a1d6a65b764ce566ba5995d69b71eb9e1b8f9e012d2608d5392198331faa"
+ },
+ "builds": {
+  "/home/dev/n16k64_campaign/kernel_opt/build_7": {
+   "stock_wA_n16": {
+    "library_sha256": "b3b74022464a719d2fe615c92db7f5e3308d5a0507b3ee53f7e3eb5643bbced8",
+    "sass_sha256": "a9bc0ef37b716a9f0638c8f602f581fc83deda5ee6f5154f7d0e50a91bd4b3f7",
+    "unpatched_sass_sha256": "a9bc0ef37b716a9f0638c8f602f581fc83deda5ee6f5154f7d0e50a91bd4b3f7",
+    "extra_defines": null,
+    "built_utc": "2026-10-01T04:40:56+00:00",
+    "repo_head": "fe21c527aa0ffd64574d62f7115c0cf98a9b4c92"
+   },
+   "stock_wA_n32": {
+    "library_sha256": "bcf434870360fd28fa59777c082bb6cfbeb802d25e6e5f300aa5e3f9313b17cf",
+    "sass_sha256": "f853e44cf6a2d9873297a64a2406b8ac392e688c21b8c79b71072fc633d8c48f",
+    "unpatched_sass_sha256": "f853e44cf6a2d9873297a64a2406b8ac392e688c21b8c79b71072fc633d8c48f",
+    "extra_defines": null,
+    "built_utc": "2026-10-01T04:40:56+00:00",
+    "repo_head": "fe21c527aa0ffd64574d62f7115c0cf98a9b4c92"
+   },
+   "stock_wA_n64": {
+    "library_sha256": "04a1aed2076d4978bdeae65ff64ac7323f60a30417fc1bc9c442147fb101e51e",
+    "sass_sha256": "4da7ccc1473e65cb822edee2a5cf6dad837cd83349b7871a6699f74180a48b25",
+    "unpatched_sass_sha256": "4da7ccc1473e65cb822edee2a5cf6dad837cd83349b7871a6699f74180a48b25",
+    "extra_defines": null,
+    "built_utc": "2026-10-01T04:40:56+00:00",
+    "repo_head": "fe21c527aa0ffd64574d62f7115c0cf98a9b4c92"
+   },
+   "stock_wA_e64": {
+    "library_sha256": "8662af876ebd4ab442cba32c59229512463da2bdba9598a08dcaefce4acab17f",
+    "sass_sha256": "a9548229a44cb0b42e7e1a3dc9d107ed8510a9ef26f6523a31b00dd21fbf718c",
+    "unpatched_sass_sha256": "a9548229a44cb0b42e7e1a3dc9d107ed8510a9ef26f6523a31b00dd21fbf718c",
+    "extra_defines": null,
+    "built_utc": "2026-10-01T04:43:58+00:00",
+    "repo_head": "fe21c527aa0ffd64574d62f7115c0cf98a9b4c92"
+   }
+  },
+  "/home/dev/n16k64_campaign/kernel_opt/build_A1": {
+   "n16k64_wA_g32": {
+    "library_sha256": "447c3f6de58ac105a15054eb26fb4f71552d94d15d76a61b0c959c7a7fbad919",
+    "sass_sha256": "d7dcd63ed40536117f1e221e80c8813e17ce33858487ed9a8113871780024b1b",
+    "unpatched_sass_sha256": "e7f9273f423f6c85308afc57e43d42d47068a565b10a9bd94054678711861909",
+    "extra_defines": null,
+    "built_utc": "2026-09-30T19:24:00+00:00",
+    "repo_head": "148425d017b40254fd0dbcd555bda282a62c0419"
+   },
+   "n16k64_wA_g32_n64": {
+    "library_sha256": "64268e9d38b560d4b9ca4bda412a53d3f8998b25e2f939f1fea23d9ca724e53f",
+    "sass_sha256": "debef2eb9810bd2893778bee47a285f7e640158f87ba383be5d44b69577a01ea",
+    "unpatched_sass_sha256": "210998138433ebe46f8bfb9ffb22bef7ca3fdc3c3bebb377e5f5197620de68ac",
+    "extra_defines": null,
+    "built_utc": "2026-09-30T19:26:27+00:00",
+    "repo_head": "148425d017b40254fd0dbcd555bda282a62c0419"
+   },
+   "n16k64_wA_g32_n32": {
+    "library_sha256": "9b3422e69629934a6f5d88c46ef83a381630532e9858738eecfa1bcede722b6f",
+    "sass_sha256": "713e32f68970e1e5ca294260d227d439a449656e78c249a86d719ff03b125624",
+    "unpatched_sass_sha256": "af342409cbe31ff7f91b42f42dc09c54a8f8c4cbd25203e91c74d05cb3184996",
+    "extra_defines": null,
+    "built_utc": "2026-09-30T19:29:00+00:00",
+    "repo_head": "148425d017b40254fd0dbcd555bda282a62c0419"
+   },
+   "n16k64_wA_g32_n16": {
+    "library_sha256": "5306fcf7cb63456ec7a99db8d7f733366637eaa0063a2bb8afdfb607c8740fcf",
+    "sass_sha256": "7defb1dc969784f30a37ca4a52d5820072d16c62344d6f3b137991f7c50aa252",
+    "unpatched_sass_sha256": "f0a1d2e1b5ce3e0b383d30f8e4c2a6655b45490b264f4dbded50c487b405aa6e",
+    "extra_defines": null,
+    "built_utc": "2026-09-30T19:31:29+00:00",
+    "repo_head": "148425d017b40254fd0dbcd555bda282a62c0419"
+   }
+  },
+  "/home/dev/n16k64_campaign/kernel_opt/build_C3k": {
+   "n16k64_wA_nodisp_n16_t0": {
+    "library_sha256": "033c5ec88bb9c60cd16f422b88baedaae2543bd96fbdb8934fd32a94477f7dd9",
+    "sass_sha256": "0ad20bf7a4920e48b16a0279207f020c6f2b219162d1f1ac04149b36b6668f03",
+    "unpatched_sass_sha256": "0ad20bf7a4920e48b16a0279207f020c6f2b219162d1f1ac04149b36b6668f03",
+    "extra_defines": null,
+    "built_utc": "2026-10-01T05:26:24+00:00",
+    "repo_head": "038b44843a45894dd440af5c58e5f912dc702dee"
+   },
+   "n16k64_wA_nodisp_n32_t0": {
+    "library_sha256": "fb1ddd4cb46ce88fee5edcc15fbcc13619c3ecb1fab55fe4ce7a4af8936ac44b",
+    "sass_sha256": "375c4976fa7a1bd1082926d20266eb5ac1df835d4618c093d267b60210f5bfef",
+    "unpatched_sass_sha256": "375c4976fa7a1bd1082926d20266eb5ac1df835d4618c093d267b60210f5bfef",
+    "extra_defines": null,
+    "built_utc": "2026-10-01T05:26:24+00:00",
+    "repo_head": "038b44843a45894dd440af5c58e5f912dc702dee"
+   },
+   "n16k64_wA_nodisp_n64_t0": {
+    "library_sha256": "4229db64f98977c118e0b79ff6f7aff23139fe923018df83c20f6e53d9994109",
+    "sass_sha256": "09ff2d8dd2fd17434ca80d6b8d998b0615afe2e1ed107ec5c28672ae0c44f690",
+    "unpatched_sass_sha256": "09ff2d8dd2fd17434ca80d6b8d998b0615afe2e1ed107ec5c28672ae0c44f690",
+    "extra_defines": null,
+    "built_utc": "2026-10-01T05:26:24+00:00",
+    "repo_head": "038b44843a45894dd440af5c58e5f912dc702dee"
+   },
+   "n16k64_wA_nodisp_e64_t0": {
+    "library_sha256": "bbfc1b05b4297932248fe9a5cd89eab5f5ca4c18d0c18f447bfbaa67bf3a607c",
+    "sass_sha256": "b7b668cd14daeba0c15aa04ffe27ce15045af5723e9828a296701637d3de12cb",
+    "unpatched_sass_sha256": "b7b668cd14daeba0c15aa04ffe27ce15045af5723e9828a296701637d3de12cb",
+    "extra_defines": null,
+    "built_utc": "2026-10-01T05:26:24+00:00",
+    "repo_head": "038b44843a45894dd440af5c58e5f912dc702dee"
+   }
+  },
+  "/home/dev/n16k64_campaign/kernel_opt/build_U": {
+   "n16k64_wA_n16_t0": {
+    "library_sha256": "6ac0701df8030024b620ceb237f095292592b28dfa61ed69bfd16471b786cb06",
+    "sass_sha256": "c5dc022e21e4247f1e8ec389a64872dc1f33061dcb985078529f20aa7ed551c2",
+    "unpatched_sass_sha256": "cc27b019a98c592a4f87dc6204f422b27b4ed9260dc78aa49d05f997ee4d8058",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1
+    },
+    "built_utc": "2026-10-03T08:02:51+00:00",
+    "repo_head": "2e08caac3e15c952a62b97d1313fa3808c5007f9"
+   },
+   "n16k64_wA_n32_t0": {
+    "library_sha256": "4ad1878cf23800b2b16c85ff188d65e38df19479ef910b5ef0c3ec3572a6afa8",
+    "sass_sha256": "23c6940453b2b115c0cb2a7d371169cbf34ad7bf03f925ba3bb1e2c1462b0d2b",
+    "unpatched_sass_sha256": "681b4b3aebb615bdee048619cb75ab275a220e476a7683bacf3e256375eac643",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1
+    },
+    "built_utc": "2026-10-03T08:02:51+00:00",
+    "repo_head": "2e08caac3e15c952a62b97d1313fa3808c5007f9"
+   },
+   "n16k64_wA_n64_t0": {
+    "library_sha256": "7e0962205e1fdad157a28f2b6f3a4af03d2da40695d1c6c56e441987b30ecbfc",
+    "sass_sha256": "bcef0f5ef2a7172267d1194fcd45f7ad6de8336ac0254292046018ed871b0edd",
+    "unpatched_sass_sha256": "3202fc977515793f602905b09f477758951475660e08354c296702b5a52b7719",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1,
+     "MIXFP4_UNIFORM_DISPATCH": 1
+    },
+    "built_utc": "2026-10-03T08:02:51+00:00",
+    "repo_head": "2e08caac3e15c952a62b97d1313fa3808c5007f9"
+   },
+   "n16k64_wA_e64_t0": {
+    "library_sha256": "b3c0ab789853b17a201b26f2c4b37a8159a9de85d8f9f7dea395d39c80109cfe",
+    "sass_sha256": "373b16278bce95e4672a9fde5e39398cb2dabf3d2db2b8b8df8772bd0b2f9515",
+    "unpatched_sass_sha256": "bd87cffb503f88ae32d5264ef96d453885ab0147ff5fa915143e5627a50565b9",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1,
+     "MIXFP4_UNIFORM_DISPATCH": 1
+    },
+    "built_utc": "2026-10-03T08:02:51+00:00",
+    "repo_head": "2e08caac3e15c952a62b97d1313fa3808c5007f9"
+   },
+   "n8k64_wB_m16_t0": {
+    "library_sha256": "47d456b864a6716daa79b8fa694b24931107b84a4c52f216c093f7ea4fac456f",
+    "sass_sha256": "25fd1eeaf85700a62fb0d567f32fb960d2e108e41a1da8d9e2d823769ec5d6ff",
+    "unpatched_sass_sha256": "72db73a60ec04b51659b697465977441f9f5de568a332e86605bc07d3deccb28",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1
+    },
+    "built_utc": "2026-10-03T08:02:51+00:00",
+    "repo_head": "2e08caac3e15c952a62b97d1313fa3808c5007f9"
+   },
+   "n8k64_wB_m32_t0": {
+    "library_sha256": "e455b38574a6003a93207d4e0624c3766c3890e19c811bf54fbbbc9ce97776e5",
+    "sass_sha256": "5cdb44aa3aaaec03f015036a8c4e44dd050dcf80ef182bfb2fe3753f7a00766b",
+    "unpatched_sass_sha256": "f3478570f3a2798ad03e5cf98d3e7dedb97626aacbe3737bd3ca271a65f5b6d7",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1
+    },
+    "built_utc": "2026-10-03T08:02:51+00:00",
+    "repo_head": "2e08caac3e15c952a62b97d1313fa3808c5007f9"
+   },
+   "n8k64_wB_m64_t0": {
+    "library_sha256": "87ab0f73190ac87f5b144924397e91647b7f8f3af69b5a7f01ebc48b56047202",
+    "sass_sha256": "d4e940939f18bdab736f5f9cf3659d0b9359f28d82529e26cf47d3a0f01acc38",
+    "unpatched_sass_sha256": "1678ffd3f5e8dada6a31a82688b946673fe608ad222ced05f2e1dbe6d2a06cc0",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1,
+     "MIXFP4_PIPE_FLAGS": 1
+    },
+    "built_utc": "2026-10-03T08:02:51+00:00",
+    "repo_head": "2e08caac3e15c952a62b97d1313fa3808c5007f9"
+   },
+   "n8k64_wB_n64_t0": {
+    "library_sha256": "a78a85a7eaca9386f9d3b08b02af1016938855319b08bdb124f2317adae48a31",
+    "sass_sha256": "3a4f69db1ec919716687a1a568b4de2a4d56fcf404a647e5632918d6727c2ea2",
+    "unpatched_sass_sha256": "b463136dad08de4d0523cb007583d999aed56305ee18a1fd5768b084e78746c6",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1,
+     "MIXFP4_PIPE_FLAGS": 1
+    },
+    "built_utc": "2026-10-03T08:02:51+00:00",
+    "repo_head": "2e08caac3e15c952a62b97d1313fa3808c5007f9"
+   },
+   "n8k64_wB_t0": {
+    "library_sha256": "435eb9c2d694276388f170ee0baf28b01147490bcc79a33353da7ae665fec0ee",
+    "sass_sha256": "470dba119897d2c8c7082a76339bedfd529343adebd2887102a6116d8efc1e5c",
+    "unpatched_sass_sha256": "9f5d4ce729059b11b257379e5511c629847e9d9d662960e9c94d206f101c0fee",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1,
+     "MIXFP4_PIPE_FLAGS": 1
+    },
+    "built_utc": "2026-10-03T08:02:51+00:00",
+    "repo_head": "2e08caac3e15c952a62b97d1313fa3808c5007f9"
+   },
+   "stock_wB_e64": {
+    "library_sha256": "af80db22f0cb33fbe35269a60adc672ee298f42a98c96919690c6c5e0d0823b7",
+    "sass_sha256": "41c94b8b8a0f183ac1a911419943da86a3ac42046aafae6900f0d896a9e71eae",
+    "unpatched_sass_sha256": "41c94b8b8a0f183ac1a911419943da86a3ac42046aafae6900f0d896a9e71eae",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T08:02:51+00:00",
+    "repo_head": "2e08caac3e15c952a62b97d1313fa3808c5007f9"
+   }
+  },
+  "/home/dev/n16k64_campaign/kernel_opt/build_V": {
+   "n16k64_wA_e64_t0": {
+    "library_sha256": "3e8023de34079956fc1bf0bc8c1355ba6710dc36792dc07f8865bf51bd706609",
+    "sass_sha256": "373b16278bce95e4672a9fde5e39398cb2dabf3d2db2b8b8df8772bd0b2f9515",
+    "unpatched_sass_sha256": "bd87cffb503f88ae32d5264ef96d453885ab0147ff5fa915143e5627a50565b9",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1,
+     "MIXFP4_UNIFORM_DISPATCH": 1
+    },
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32": {
+    "library_sha256": "1cd6efef7483b48a5d1ef96a600313bb2880a02a164a264c649afadca73172e6",
+    "sass_sha256": "d7dcd63ed40536117f1e221e80c8813e17ce33858487ed9a8113871780024b1b",
+    "unpatched_sass_sha256": "e7f9273f423f6c85308afc57e43d42d47068a565b10a9bd94054678711861909",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_e64_t0": {
+    "library_sha256": "cd5facafa1ee4e05e70e688c358fa9b6e5d5e483d32a7f4e1ac3719d32b170d6",
+    "sass_sha256": "76147216f0e053b78f03f644bdaecc6f410c00fc77f41415026e9011096cbeb4",
+    "unpatched_sass_sha256": "2c24e217325abcb43ae1ca7f439f049e7cd044b031b4b8c1ba853e3058c09375",
+    "extra_defines": {
+     "MIXFP4_UNIFORM_DISPATCH": 1
+    },
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_n16": {
+    "library_sha256": "8d65190d45de796e890650fe3c08035083f7fc43bd477b7c44941753e6186e86",
+    "sass_sha256": "7defb1dc969784f30a37ca4a52d5820072d16c62344d6f3b137991f7c50aa252",
+    "unpatched_sass_sha256": "f0a1d2e1b5ce3e0b383d30f8e4c2a6655b45490b264f4dbded50c487b405aa6e",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_n16_t0": {
+    "library_sha256": "6137250ece69f4c0fa7740aff810a51479bad1330a2e638fd89adb5f99863730",
+    "sass_sha256": "359c5a8f2053b9bf843914e3a2cb6a7be73610f85680f7c50ba4e4bd1f7eace6",
+    "unpatched_sass_sha256": "f6d95d7a3cb9c7f0925a440ac5be15acba474c3382b48a5e09178ba9541a3c29",
+    "extra_defines": {
+     "MIXFP4_UNIFORM_DISPATCH": 1
+    },
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_n32": {
+    "library_sha256": "6b23c819ade7a16d2cb801a25dac55fb529836e9f4c39c5759ea412e2ca4b49b",
+    "sass_sha256": "713e32f68970e1e5ca294260d227d439a449656e78c249a86d719ff03b125624",
+    "unpatched_sass_sha256": "af342409cbe31ff7f91b42f42dc09c54a8f8c4cbd25203e91c74d05cb3184996",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_n32_t0": {
+    "library_sha256": "c0ae0eb0a5b99c656f22fad2e2479a96cb586600c955c143331dbb7b22206038",
+    "sass_sha256": "c513803598575c23a908523e008bebf46f6a6e08d1ff5f194cc5453a28a4e13a",
+    "unpatched_sass_sha256": "c437631bbd06c054d8997a35e75334b95d9433d1f47dca58318edddd74124d56",
+    "extra_defines": {
+     "MIXFP4_UNIFORM_DISPATCH": 1
+    },
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_n64": {
+    "library_sha256": "9cc6588d9ce4e98b4eb0dbfbc8e5da5d25183b3ba5603e806062a6d9aea129ec",
+    "sass_sha256": "debef2eb9810bd2893778bee47a285f7e640158f87ba383be5d44b69577a01ea",
+    "unpatched_sass_sha256": "210998138433ebe46f8bfb9ffb22bef7ca3fdc3c3bebb377e5f5197620de68ac",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_n64_t0": {
+    "library_sha256": "1ac38b6058dfec379006ad7bb0e2de87829aa95872b7c2ca5b565e9e57da4cad",
+    "sass_sha256": "2834e2cb1534f526e28f09d06eeb08c4ebbae78caa9f6b2cb7e4847800165ddd",
+    "unpatched_sass_sha256": "d558b015e855a06f46fbef02d51842419d26ab445fbb59a21a5ebb606a391032",
+    "extra_defines": {
+     "MIXFP4_UNIFORM_DISPATCH": 1
+    },
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_n16_t0": {
+    "library_sha256": "d6cff384814ba0d014de561bfb57d739b549f748bdc91c3e2337de16d63133a5",
+    "sass_sha256": "c5dc022e21e4247f1e8ec389a64872dc1f33061dcb985078529f20aa7ed551c2",
+    "unpatched_sass_sha256": "cc27b019a98c592a4f87dc6204f422b27b4ed9260dc78aa49d05f997ee4d8058",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1
+    },
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_n32_t0": {
+    "library_sha256": "e62c5d4035d881b00aced0f03d27f4ec731419f89b3a476d006ec2581d9f67cf",
+    "sass_sha256": "23c6940453b2b115c0cb2a7d371169cbf34ad7bf03f925ba3bb1e2c1462b0d2b",
+    "unpatched_sass_sha256": "681b4b3aebb615bdee048619cb75ab275a220e476a7683bacf3e256375eac643",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1
+    },
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_n64_t0": {
+    "library_sha256": "8f472aa880bb624c0948add8726329abb868ddec22f9e2fcdfd5133150fb7224",
+    "sass_sha256": "bcef0f5ef2a7172267d1194fcd45f7ad6de8336ac0254292046018ed871b0edd",
+    "unpatched_sass_sha256": "3202fc977515793f602905b09f477758951475660e08354c296702b5a52b7719",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1,
+     "MIXFP4_UNIFORM_DISPATCH": 1
+    },
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_m16_t0": {
+    "library_sha256": "28e5321c3ec61dea99c72777a94d1e1c7b2cb84d220938ebebfb556575e6e56e",
+    "sass_sha256": "25fd1eeaf85700a62fb0d567f32fb960d2e108e41a1da8d9e2d823769ec5d6ff",
+    "unpatched_sass_sha256": "72db73a60ec04b51659b697465977441f9f5de568a332e86605bc07d3deccb28",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1
+    },
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_m32_t0": {
+    "library_sha256": "2e0768eb0c3cb899f81eccd7b3d52c374d06c9e383ae905240670605cffa86f4",
+    "sass_sha256": "5cdb44aa3aaaec03f015036a8c4e44dd050dcf80ef182bfb2fe3753f7a00766b",
+    "unpatched_sass_sha256": "f3478570f3a2798ad03e5cf98d3e7dedb97626aacbe3737bd3ca271a65f5b6d7",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1
+    },
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_m64_t0": {
+    "library_sha256": "0005e0b846a36dcbc791c666aa1f18a6582aa74d9a8eec3c4e9b6c8a7ee056a2",
+    "sass_sha256": "d4e940939f18bdab736f5f9cf3659d0b9359f28d82529e26cf47d3a0f01acc38",
+    "unpatched_sass_sha256": "1678ffd3f5e8dada6a31a82688b946673fe608ad222ced05f2e1dbe6d2a06cc0",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1,
+     "MIXFP4_PIPE_FLAGS": 1
+    },
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_n64_t0": {
+    "library_sha256": "2f7271a67c1b7d05a96db3af92892c04e9f7e6a881102834cfc247c3c48fec9e",
+    "sass_sha256": "3a4f69db1ec919716687a1a568b4de2a4d56fcf404a647e5632918d6727c2ea2",
+    "unpatched_sass_sha256": "b463136dad08de4d0523cb007583d999aed56305ee18a1fd5768b084e78746c6",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1,
+     "MIXFP4_PIPE_FLAGS": 1
+    },
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_t0": {
+    "library_sha256": "4cb85620d215a9cf6be6ade9ad4d4f4f0cc12b324960ea337d93912163b1d08c",
+    "sass_sha256": "470dba119897d2c8c7082a76339bedfd529343adebd2887102a6116d8efc1e5c",
+    "unpatched_sass_sha256": "9f5d4ce729059b11b257379e5511c629847e9d9d662960e9c94d206f101c0fee",
+    "extra_defines": {
+     "MIXFP4_DISPATCH_FREQ": 1,
+     "MIXFP4_PIPE_FLAGS": 1
+    },
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "stock_wA_e64": {
+    "library_sha256": "5ccdacea29559b9a68015d50a64c7e429eb9761fcbd401ac0f5cff01b60d1e6a",
+    "sass_sha256": "a9548229a44cb0b42e7e1a3dc9d107ed8510a9ef26f6523a31b00dd21fbf718c",
+    "unpatched_sass_sha256": "a9548229a44cb0b42e7e1a3dc9d107ed8510a9ef26f6523a31b00dd21fbf718c",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "stock_wA_n16": {
+    "library_sha256": "abbc9c15d11cfebb95ddea38e8c03fc5544d6135b8dc7130a9f521ff99faa763",
+    "sass_sha256": "a9bc0ef37b716a9f0638c8f602f581fc83deda5ee6f5154f7d0e50a91bd4b3f7",
+    "unpatched_sass_sha256": "a9bc0ef37b716a9f0638c8f602f581fc83deda5ee6f5154f7d0e50a91bd4b3f7",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "stock_wA_n32": {
+    "library_sha256": "cbf601ccee1a9a9ae7d3ead4692e10182f7964ac9887d08693f182dbda731e48",
+    "sass_sha256": "f853e44cf6a2d9873297a64a2406b8ac392e688c21b8c79b71072fc633d8c48f",
+    "unpatched_sass_sha256": "f853e44cf6a2d9873297a64a2406b8ac392e688c21b8c79b71072fc633d8c48f",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "stock_wA_n64": {
+    "library_sha256": "905e6171fd9a3928523fef54e7aff45f1972adf95fc767930fec48fc0bd53d15",
+    "sass_sha256": "4da7ccc1473e65cb822edee2a5cf6dad837cd83349b7871a6699f74180a48b25",
+    "unpatched_sass_sha256": "4da7ccc1473e65cb822edee2a5cf6dad837cd83349b7871a6699f74180a48b25",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "stock_wB_e64": {
+    "library_sha256": "1387baa92423f38d09751f542dac16c5c44f109ccad969237b171603f35e4aad",
+    "sass_sha256": "41c94b8b8a0f183ac1a911419943da86a3ac42046aafae6900f0d896a9e71eae",
+    "unpatched_sass_sha256": "41c94b8b8a0f183ac1a911419943da86a3ac42046aafae6900f0d896a9e71eae",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   }
+  },
+  "/home/dev/n16k64_campaign/kernel_opt/build_Vall": {
+   "n16k64_wA": {
+    "library_sha256": "837039308cf86788bd0ee06160201443d1d6c025e6b9548a1a76a1abb4399285",
+    "sass_sha256": "d34b36a112d245fc8cede49f6a1c6f69a2c15fac27b968e4ef69fd2b6ef65789",
+    "unpatched_sass_sha256": "7928b3b09bee17703a4194571dac9cb59ba3e0c0938b14374b568a9609bb9c55",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_8x1": {
+    "library_sha256": "2be5226356af5372a5b55cf54c629f9f025563ed4863dca9a11171657d7f6463",
+    "sass_sha256": "09d47f6bcb0709cfc3a2831244e0d06efdcb2a5cdb1acfce8d1f3efa2728074c",
+    "unpatched_sass_sha256": "7f7f801dcdb98b8578ebcaf46b23df3351376b598a72a3eeb577a1e35f310073",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_e64": {
+    "library_sha256": "4be78a04640517918d55ea30bcbd7f49bc27014b8b37dd930c9e4b5751ca678e",
+    "sass_sha256": "d4058517876d2d9dcd8fdf6dddf0761b35cdda3372709a81e9672d99d6d35ed6",
+    "unpatched_sass_sha256": "587f5ac353b27b23eb951acd3f66a89e4d7aa0880d5c708c03f30d74d6d0a52d",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:09:23+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_e64_t0": {
+    "library_sha256": "c6a9e65c369b8e60577316d83e93837897e9494aec3405a2f7f23fee6eae9fc4",
+    "sass_sha256": "ad48006e9eeb1c0d33710d89d479d937dedd5b0d1d7f3ce324e68f0cdd101f98",
+    "unpatched_sass_sha256": "829c80c1ad15c6aad4b844be21e45fb49de5fc8d731528504371b58c1f295131",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:12:20+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32": {
+    "library_sha256": "6100f64478af40f77d10e9af7af31ddd31c8ffd757725be2d9d29e9fbca17b09",
+    "sass_sha256": "d7dcd63ed40536117f1e221e80c8813e17ce33858487ed9a8113871780024b1b",
+    "unpatched_sass_sha256": "e7f9273f423f6c85308afc57e43d42d47068a565b10a9bd94054678711861909",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:09:42+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_e64": {
+    "library_sha256": "9fa85f53e14e99ee5a542847e75a1c5b2aba0fa3f70fee8939b99bcfe140bbe0",
+    "sass_sha256": "a14bea2ed72aa6821a6da3990e486f854d94bf88447dfeb8e7e163c914196231",
+    "unpatched_sass_sha256": "cdc39c05ac91f93df454775205ea5cf48b5003ac319ceee8390431eec8e46bc8",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:09:41+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_e64_t0": {
+    "library_sha256": "4ff222acbc335b242ed5f356874247cb8e77c21926b5a7c874694183c61f79b6",
+    "sass_sha256": "a49318f17e31616160e234e3c3adf41a4df0d483c2563e1f3bd00ec670ff8c2e",
+    "unpatched_sass_sha256": "66813e06c0f6ae732e48bffd311e9d1cda1bc413e502451f1abf5186b15483ce",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:12:28+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_n16": {
+    "library_sha256": "a4723fbf4342f09c738c988d447c5b699eedf6be142bfc6a01654760b3e61735",
+    "sass_sha256": "7defb1dc969784f30a37ca4a52d5820072d16c62344d6f3b137991f7c50aa252",
+    "unpatched_sass_sha256": "f0a1d2e1b5ce3e0b383d30f8e4c2a6655b45490b264f4dbded50c487b405aa6e",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:09:25+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_n16_t0": {
+    "library_sha256": "84f7fb02e281813061004186c0267a31d410c094953e08e28135c46a99180e76",
+    "sass_sha256": "fb52ae2115e15ea4fcd0319e19093de2a8c8405ce9e30b8449415b14132442d1",
+    "unpatched_sass_sha256": "de0fe21220c5ddc59ab70a138e3f1283449b6c647d626b98e89ef750e4579ea4",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:12:26+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_n32": {
+    "library_sha256": "20dd44124fc252057278225bbcb3e78fe8a2663bbca02616199eb66928bbb1dc",
+    "sass_sha256": "713e32f68970e1e5ca294260d227d439a449656e78c249a86d719ff03b125624",
+    "unpatched_sass_sha256": "af342409cbe31ff7f91b42f42dc09c54a8f8c4cbd25203e91c74d05cb3184996",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:09:45+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_n32_t0": {
+    "library_sha256": "ccb72a80b26f91760f28f0198052f9f93b04ca4a4fbbeadf6b193dc6054ae156",
+    "sass_sha256": "117ec8864c55cb75f653a1effb55be41d64c971dae877c1332d34bf6c9074bfb",
+    "unpatched_sass_sha256": "2edb8a478878644bf5eb3fbb4b540eee951a3b51f6d2efa85233dc8dfcaa5690",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:10:59+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_n64": {
+    "library_sha256": "66a2984f20a1f9101f8acb20f9738cfe9b77dd7597534c09eba0984ba36cb395",
+    "sass_sha256": "debef2eb9810bd2893778bee47a285f7e640158f87ba383be5d44b69577a01ea",
+    "unpatched_sass_sha256": "210998138433ebe46f8bfb9ffb22bef7ca3fdc3c3bebb377e5f5197620de68ac",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:09:49+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_n64_t0": {
+    "library_sha256": "e6c64d2204a0fb306e596bc77bf97f3b73c9ffc9c3f553fab469b5dba659fab6",
+    "sass_sha256": "fe40b121de9b558d66a9d21627676de40b8a9067fc7819573a44a82d5ab6f2fc",
+    "unpatched_sass_sha256": "effb52cca04682d9d50bf22d6732adf6199755661c08cab02f0f079ef651385a",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:10:47+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_g32_t0": {
+    "library_sha256": "4f92dbbf6aa7abce554fc8c12442910c9e3707280fcf8f17f891ecc2ba74ad08",
+    "sass_sha256": "1ed0d6e633ab5de9d065274f88d8b16efaeb0b601e32fc5babede790d2252ecc",
+    "unpatched_sass_sha256": "2389c5d68de6343a425dd873d194a085ff01e56c56b5daf777bcde625728d02c",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:11:03+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_n16": {
+    "library_sha256": "d287c89eb40ef68048b0e429aaa920159de21ddd17b23e83836a164215f56dcf",
+    "sass_sha256": "dd35ead655aaa0a7b1fca1694cd93a22b1fb2ce0fcb28da268e896b55e1764d1",
+    "unpatched_sass_sha256": "e6199e432a2358ace724553515aab47da014a603b70d296a8a72dacf86a12d28",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_n16_t0": {
+    "library_sha256": "b5ad5bcc290692d9aa7313cab87dbb4177ebcc308443f94378d4ed260dc99e6f",
+    "sass_sha256": "5ee2ae00b5aeb420044f98776adc456bbfea252bc9a7b87e66ab03a88894425d",
+    "unpatched_sass_sha256": "bb86952bff7e7a999d8ee81175789c20c619cb51e8cb8a561f092a3654867db0",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:10:56+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_n32": {
+    "library_sha256": "19b21df949604e89a7cdc2e3ba8c757cc6baf27e421a99b451444b2dc5b12a14",
+    "sass_sha256": "88b852dec764186b0653cf53359d162e0bee04ffd60f7d99ca5d08e31b3fc550",
+    "unpatched_sass_sha256": "68c097531210b900f421e31452d9c6c4c6250cc901467dfe740486f083c656bb",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_n32_t0": {
+    "library_sha256": "5aa6a417c4e2e5ef0b935ce2f45ab5af55a523596085854a9770f641fd9215cd",
+    "sass_sha256": "5f48eaa1751222c9b1ae8950a6400f5d10007ef4784c0c15b699b81ce0d00f64",
+    "unpatched_sass_sha256": "25a25871b09ab1be0e294032dd6e5381699f191373551fc6ab022478a273e8ae",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:10:55+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_n64": {
+    "library_sha256": "92b619e5006e27a4c7081c7e9ab50c8edeb517997b91b80e2755ded8d9bf5f2b",
+    "sass_sha256": "9310547d76fd5bd1639ff69825d886612efefa68e8951f1fec59e8814b5813f7",
+    "unpatched_sass_sha256": "ae7023b29325959f217ce4c5761d129414b233ecb819741b2e7d2c16544d6471",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_n64_e64": {
+    "library_sha256": "712d782c10110a9862d50c0a53afe6be2149f4324f11068d29ba1ac15ea29434",
+    "sass_sha256": "2c8a82ab97f5512ae8ce2084f74813653b6a2109dff7e275116e6494f0fe8523",
+    "unpatched_sass_sha256": "e17d2bc74cd33a426c5b755955dc10975a2e6eeb6b19b9b361ac9653e053d557",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:09:22+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_n64_t0": {
+    "library_sha256": "b01b2f5ca9a64701fbc51ab7bec4c7dbbffae219c6f0bbd2f8924cd999329484",
+    "sass_sha256": "cbe5540ca651a24da17b2247bc6006712c18008235b0bbbdabb37fe8d32cc651",
+    "unpatched_sass_sha256": "b2c731ac9b217bbf0e50812f1973404e64e30adac49792d421050fce4d33d419",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:10:45+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_nodisp": {
+    "library_sha256": "530ed5983c0ffad56e3613ff5c50b8c091e3484c8b476ab3f8d28476a978d511",
+    "sass_sha256": "ef283c856d0ba30c6cd533c2927f5d1a3d7b50d85f2fe5e714bdf2016f7eb148",
+    "unpatched_sass_sha256": "ef283c856d0ba30c6cd533c2927f5d1a3d7b50d85f2fe5e714bdf2016f7eb148",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:11:11+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_nodisp_e64_t0": {
+    "library_sha256": "767cd59aef1606838a30d383d7c7c23a392598802d6d4a66ef74b4f94f3c28fb",
+    "sass_sha256": "b7b668cd14daeba0c15aa04ffe27ce15045af5723e9828a296701637d3de12cb",
+    "unpatched_sass_sha256": "b7b668cd14daeba0c15aa04ffe27ce15045af5723e9828a296701637d3de12cb",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:12:12+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_nodisp_n16_t0": {
+    "library_sha256": "fd4dd025b9dc7a1582162667467579aaab1bed07620b4af9954b900f074f8881",
+    "sass_sha256": "0ad20bf7a4920e48b16a0279207f020c6f2b219162d1f1ac04149b36b6668f03",
+    "unpatched_sass_sha256": "0ad20bf7a4920e48b16a0279207f020c6f2b219162d1f1ac04149b36b6668f03",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:12:30+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_nodisp_n32_t0": {
+    "library_sha256": "614d7855f40e4d2d9d970663c3535fd736a0f5449fac4d47db98e4bd59ddbd4f",
+    "sass_sha256": "375c4976fa7a1bd1082926d20266eb5ac1df835d4618c093d267b60210f5bfef",
+    "unpatched_sass_sha256": "375c4976fa7a1bd1082926d20266eb5ac1df835d4618c093d267b60210f5bfef",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:12:28+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_nodisp_n64_t0": {
+    "library_sha256": "4569d300ecb62ab77395118d2da203e6b91c2f333a1db34ffcb6d013bfeeb95f",
+    "sass_sha256": "09ff2d8dd2fd17434ca80d6b8d998b0615afe2e1ed107ec5c28672ae0c44f690",
+    "unpatched_sass_sha256": "09ff2d8dd2fd17434ca80d6b8d998b0615afe2e1ed107ec5c28672ae0c44f690",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:12:21+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_nodisp_t0": {
+    "library_sha256": "584d444b62de82a6ec30dc8e28e13fab45ee24579c0696ac9308c9cc503f77a2",
+    "sass_sha256": "7d9c86da591a3596175560d1f003fbb3bf2377faf58266d0b45cbb99e62e01ca",
+    "unpatched_sass_sha256": "7d9c86da591a3596175560d1f003fbb3bf2377faf58266d0b45cbb99e62e01ca",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:11:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_sk": {
+    "library_sha256": "689a274a7cf13fa79aa646bd8f813ff2ee63a2cc42ac94aa34715ab2ff83962e",
+    "sass_sha256": "1a4081f534aa8ea095a6a5cb1601835fd15724218ab79083984000d55ed38809",
+    "unpatched_sass_sha256": "0076a6e58b42287fe691441f53fd92f24d1d29d554805a25287b45e51f3dc9d3",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_t0": {
+    "library_sha256": "90cd2dd64763f027009862b164ae0bd89623236a8646a3d7fa4f158a60aca310",
+    "sass_sha256": "087b5f81d78ef2342ae027d6ae79c95dbccb6f9d116759164e269d17e39ce6df",
+    "unpatched_sass_sha256": "5ee273c0987f22da3bec0cf5c68eb1bdd833979b942c212b8b99ec44827cb291",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:11:08+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n16k64_wA_xor": {
+    "library_sha256": "320f351b6dceb27bd634abcc6b5114ab310010e597fce28e46fd28f01fdbbf23",
+    "sass_sha256": "5928d129669115d7695b0d76707419280dc5d32afa7521919608f1bb0e9d5ea4",
+    "unpatched_sass_sha256": "63a6c9a857dc6474be78b79973092984ab9d9e03f560195b0cdc81f48dc39415",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:09:45+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB": {
+    "library_sha256": "9abe3982e9e5c9e586d2269c773c3831553fb71a59ab9e4e58660b6c53b2a684",
+    "sass_sha256": "846c8878c38e380fb27c2b2b0503a8b0cac2130d1ee586a82752695305db5d0c",
+    "unpatched_sass_sha256": "0080baf79ce0c602f452cc0cc8fc350945a85490943019cb79010809e86f868b",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_m16": {
+    "library_sha256": "84cc85da25787dc849a7db6639d5f119c57303481102abdb0292558d50f1572c",
+    "sass_sha256": "48fe4419dc9c75603c5ea5abf016e6e0fa0e1a7f819376cf59a423df5194398b",
+    "unpatched_sass_sha256": "ca20af29797991cb29e94c4633a08714b7cc397be06aad80beaf5d7e498a2201",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:09:42+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_m16_nodisp_t0": {
+    "library_sha256": "0af09009171f73599d2562fa50f289a8c9d10197db8e6b7b24aa54defec5f179",
+    "sass_sha256": "ab16b7007292dbc404aee9ed5dc7c00974c504473cb107c32104b104c8458a1f",
+    "unpatched_sass_sha256": "ab16b7007292dbc404aee9ed5dc7c00974c504473cb107c32104b104c8458a1f",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:13:48+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_m16_t0": {
+    "library_sha256": "1edcdbeeb74058530b35d2ba3a26da683517b4fdf4a7689c27f570aa820541bc",
+    "sass_sha256": "634fdee4bf898115398a66555e4650fb468e240f12fbeb8b7a858b6c2d6feea5",
+    "unpatched_sass_sha256": "1373eeaa168ecda5cb38207588d2e64fdf9ab992c3da196a6904a8b3566cc330",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:12:39+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_m32": {
+    "library_sha256": "fdc3f33ff07418f3ee7965b2f0913ddd218faa58bb25c76c5b8f6874336eecb9",
+    "sass_sha256": "8a0a6baa530f6b6f394d3e3cfde86b51f24fa7ae696f9030e110e1c421032545",
+    "unpatched_sass_sha256": "9de0b886c19d394c002ff5b3374c8a952bcf56c3150f2bddd22db49c7b843be4",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_m32_nodisp_t0": {
+    "library_sha256": "bab338e4848d0e78ee8325eee428ed0ec4866143425f755ba67b692aaa5e8e4f",
+    "sass_sha256": "58042582365060b799adabbcf1478ff1b6f695339fd2df1f4fd58c7e78f7588d",
+    "unpatched_sass_sha256": "58042582365060b799adabbcf1478ff1b6f695339fd2df1f4fd58c7e78f7588d",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:13:50+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_m32_t0": {
+    "library_sha256": "ddbd0aa13d9990d3e785f0aa67fd81eea6abfacf087a5d7212ac248510c8b819",
+    "sass_sha256": "bc8199a34e190de4f6076ef32f08869fb76457c4f22019ae1f8c4077ac4d99e4",
+    "unpatched_sass_sha256": "bf97e31b93564c2caba6413bd585b925343839e399b3f4a0bb4022aab9bc1990",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:12:21+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_m64": {
+    "library_sha256": "ca52b323a7fe322650671f073dd55e235dc646e8f9826d522f9de7d296c9996a",
+    "sass_sha256": "f1a5b6beedb1cac020511debc527d9eba0fbc17d26de9b68c953319a782671d4",
+    "unpatched_sass_sha256": "bb7c540240fa9fa04a97d066e6f92aed288944e4e849f795065ca081319039b5",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_m64_nodisp_t0": {
+    "library_sha256": "2779a531345d7727df808962d53aae9daee47904bbe7ab7a902ae46f9edb2c76",
+    "sass_sha256": "6f5c389fcda86f82a8d521d2b321b2edfea93fdc23c2b2ee4493f10649791182",
+    "unpatched_sass_sha256": "6f5c389fcda86f82a8d521d2b321b2edfea93fdc23c2b2ee4493f10649791182",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:13:50+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_m64_t0": {
+    "library_sha256": "8027466f62dd2439b4c0b749206bfe800d8cd1b0af70b065980e1fd7061c32ca",
+    "sass_sha256": "4701ecbde7028b24461d81d5ed6e0789178df7986f3073c8d48aa06299304e83",
+    "unpatched_sass_sha256": "8dcd9cb38aa7312f39e38d42761cbd9ee65f9473fb5e1e6b9aa190c81230e5ea",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:12:12+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_n64": {
+    "library_sha256": "9c8c0b415977361b727ce8b5ae84f7f8aa1df5d60090499a045bacaabfc71f1d",
+    "sass_sha256": "e0cdef1b58c6f1349b2997d0d9f66b9c04c20dbe431f83d98d12a4a84dd43b99",
+    "unpatched_sass_sha256": "a2852eac2058463a2f1e84c625e11b683369590c7bc23cffc2cf837b27d74ef5",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:09:34+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_n64_nodisp_t0": {
+    "library_sha256": "b3df0767af1a9e5d318df7fcd43eed9306147ecd2550113b5ce3b45b41c1722e",
+    "sass_sha256": "47383acfeb8239ba8e1da439a48b9956e9ad15a3a6b31689c40c530a515cef2c",
+    "unpatched_sass_sha256": "47383acfeb8239ba8e1da439a48b9956e9ad15a3a6b31689c40c530a515cef2c",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:13:37+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_n64_t0": {
+    "library_sha256": "5ee2136bc879d821623bf234a71e5d9fa14f7343dcc5048213a3f9a35f4a3895",
+    "sass_sha256": "109cce18036faffeb45f9c0cb98b79cb1eb8234727013b73aee47079cd32633e",
+    "unpatched_sass_sha256": "38c6cd95b4d2b086f222321f5b86362d32713128ee861338aac8ebe0f63a9f0c",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:12:17+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_nodisp": {
+    "library_sha256": "56dbe8121324f6833e3651c84aa19132582342706316dd616f9dc090000e228a",
+    "sass_sha256": "9b64016bff84f544393f01bafca2fefa7ca986a40c5c1d3dec39c652462cb89d",
+    "unpatched_sass_sha256": "9b64016bff84f544393f01bafca2fefa7ca986a40c5c1d3dec39c652462cb89d",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:11:14+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_nodisp_t0": {
+    "library_sha256": "5ace3733531c44a148ff0dff6ad5eeec2d73dcc02532bbbe4b7990717b68bb00",
+    "sass_sha256": "cd1338a7ae525447431b7a4a51ea397a0c613e5248df8d4780caf05d5c43fa6e",
+    "unpatched_sass_sha256": "cd1338a7ae525447431b7a4a51ea397a0c613e5248df8d4780caf05d5c43fa6e",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:10:53+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_t0": {
+    "library_sha256": "9980770c2a491c79e546fc76721a949dfba9868d504070c278d9a397e8f1f4e9",
+    "sass_sha256": "a66701945cf0bf2a2d187e80a3f688a39e659770ae87211db2023883272170b3",
+    "unpatched_sass_sha256": "2319ab5c603f4560f847b68601dad78c965d8b452b3b46691e3a8c3d4befbde3",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:12:08+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "n8k64_wB_xor": {
+    "library_sha256": "5ebf1c1c7092cfe36f60f876344682ca1670084a70687bb6af971a7fea862483",
+    "sass_sha256": "751dfc9aad0ae95351a3639b2b3f3111714f22d62819b062d5d59770b5056957",
+    "unpatched_sass_sha256": "668fe114094c5f0f5ccf6ddddeb76215b5551b89772d2a28aa61d97fe49bdd0e",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:09:22+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "stock_wA": {
+    "library_sha256": "8bfe6b6ab812bb0005ba74d456d81777e0f13d5d30e8ea2f216e7b1a648b40cc",
+    "sass_sha256": "9a51fb36358f89c728999324fc82c3a7f883fc28853341ca818afb7c7c8bf69f",
+    "unpatched_sass_sha256": "9a51fb36358f89c728999324fc82c3a7f883fc28853341ca818afb7c7c8bf69f",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:11:03+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "stock_wA_e64": {
+    "library_sha256": "2d7a2e44497b2cea85a332045e244e84fd2ee5204c79263bf65d4bf9bc9944d4",
+    "sass_sha256": "a9548229a44cb0b42e7e1a3dc9d107ed8510a9ef26f6523a31b00dd21fbf718c",
+    "unpatched_sass_sha256": "a9548229a44cb0b42e7e1a3dc9d107ed8510a9ef26f6523a31b00dd21fbf718c",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:09:38+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "stock_wA_n16": {
+    "library_sha256": "5f84837cebb5635313d5238091eb6684d89d16aee3d39fe5e4b523588b0c621a",
+    "sass_sha256": "a9bc0ef37b716a9f0638c8f602f581fc83deda5ee6f5154f7d0e50a91bd4b3f7",
+    "unpatched_sass_sha256": "a9bc0ef37b716a9f0638c8f602f581fc83deda5ee6f5154f7d0e50a91bd4b3f7",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "stock_wA_n32": {
+    "library_sha256": "ca079a9f6816fdf652c416fa7151abba655dcb326c256c9840e0e5c3e975460f",
+    "sass_sha256": "f853e44cf6a2d9873297a64a2406b8ac392e688c21b8c79b71072fc633d8c48f",
+    "unpatched_sass_sha256": "f853e44cf6a2d9873297a64a2406b8ac392e688c21b8c79b71072fc633d8c48f",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "stock_wA_n64": {
+    "library_sha256": "e699f31137eea83ead0ea3e8c8b4b69e25953fd705bf89f0893aabeefd4dda8d",
+    "sass_sha256": "4da7ccc1473e65cb822edee2a5cf6dad837cd83349b7871a6699f74180a48b25",
+    "unpatched_sass_sha256": "4da7ccc1473e65cb822edee2a5cf6dad837cd83349b7871a6699f74180a48b25",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "stock_wA_n64_e64": {
+    "library_sha256": "8f56f39b45afe07186909fdc4e85f8e7ed31a7b9f1a8ad4311ee2f8775c6ef79",
+    "sass_sha256": "e6076118016b6bcff94469e8e9df667a85bd1a834b5cc5a1de831141c6d66366",
+    "unpatched_sass_sha256": "e6076118016b6bcff94469e8e9df667a85bd1a834b5cc5a1de831141c6d66366",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:09:45+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "stock_wA_sk": {
+    "library_sha256": "682e6b677465ddb4520c599d6e9e5bd729cffdf2bcd8de3e7459589cdb3b9755",
+    "sass_sha256": "922bdb87817c9ac43e025c07c36d5fe948340d653346eab561df45d4b6cd8948",
+    "unpatched_sass_sha256": "922bdb87817c9ac43e025c07c36d5fe948340d653346eab561df45d4b6cd8948",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:08:05+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "stock_wB": {
+    "library_sha256": "279b71c3cf8b104156cc381b143abf4cbdf94baa10f67e854fd5614b5173369c",
+    "sass_sha256": "aa9845946447449f0b6ce5689413a2eebba93551f793839f26da32d918db3faa",
+    "unpatched_sass_sha256": "aa9845946447449f0b6ce5689413a2eebba93551f793839f26da32d918db3faa",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:11:12+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   },
+   "stock_wB_e64": {
+    "library_sha256": "7dbbc3d1195b3b65ae27cb8d63b857821e394036008629e572f7581eae70f11a",
+    "sass_sha256": "41c94b8b8a0f183ac1a911419943da86a3ac42046aafae6900f0d896a9e71eae",
+    "unpatched_sass_sha256": "41c94b8b8a0f183ac1a911419943da86a3ac42046aafae6900f0d896a9e71eae",
+    "extra_defines": null,
+    "built_utc": "2026-10-03T11:12:23+00:00",
+    "repo_head": "ed4c484211167e35f5deced623a0819916619363"
+   }
+  }
+ }
+}
