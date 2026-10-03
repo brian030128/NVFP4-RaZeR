@@ -1817,3 +1817,17 @@ registered e2e check passed.
   - It is not D4's idle artifact (23 of 24 captures are about 2.3 ms), not the clock, and not the tags.
   - In-graph, its GEMMs are −2.2 % and the adjacent non-GEMM kernels +2.7 %. The item stays open.
 - **Results:** `results/kernel_opt/w8/p7/REPORT.md`. This closes the 8x64 plan (`results/kernel_opt/w8/CLOSING.md`).
+
+## Amendment 16: the E0M3-fraction sweep on the adopted 8x64 path (C3w)
+
+Written 2026-10-03, before any registered GPU run of the sweep. The protocol is `results/kernel_opt/c3w/PROTOCOL.md`
+and the hashes are in `results/kernel_opt/c3w/registration.json`.
+- **The request:** the user, through the coordinator: C3k (amendment 8) for the adopted 8x64 path, so the 16x64 and
+  8x64 curves are directly comparable. GEMM only.
+- **Kernels:**
+  - the adopted 8x64 path with #2's dispatch (`'auto'`) and with the default dispatch;
+  - its no-dispatch ceiling (P5);
+  - the paper n8k64_wB.
+- **References:** `stock_ko`, `stock_wB_ko` and the paper stock.
+- **Descriptive only.** There are no new builds.
+- **Disclosed:** a smoke test of the new scripts.
