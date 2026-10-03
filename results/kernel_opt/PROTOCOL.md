@@ -2163,3 +2163,23 @@ path (A′, `mixed256`, the g32 builds) up to the current 16x64 state, ideally i
     now runs only where those builds are.
 - **CPU pre-checks** on the registered builds: G1 (55 + the new configuration), G2 (22) and G2u passed. The four new
   builds carry exactly the SASS of the exploration builds that were timed (`build_VU`).
+
+### Amendment 18: the run
+
+`run_V.sh` ran on 2026-10-03 from 11:16 to 11:58 UTC (registration deb0ba8), with no deviation.
+- **Gates:** all passed.
+  - G0: 55 files and 100 builds. Self-tests: 4 × PASS patched / FAIL unpatched, each rebuild with the registered SASS.
+  - The patcher check; G1 (55 of 55, and the new configuration's census); G2 (22 of 22); G2u.
+  - pytest: 749 passed, 694 skipped.
+  - G4: 0 differences. G5, G5 routed and G5b: equal.
+- **The candidate table:** 10 of 224 width cells differ from today's; 75 of 224 scheduler cells moved off (0, 1). The
+  decisive-margin sensitivity would change 0 cells (dm128) or 2 cells (dmfb, +0.20 % median).
+- **The rule is met.**
+  - Candidate vs today: −1.29 % (typical) and −1.26 % (worst) per forward, median over the 48 cells.
+  - Below zero in every round in 48 and 46 cells; none above zero in every round, so the strict form is met as well.
+  - The builds at today's widths account for −1.10 % / −0.99 %, and the table for −0.16 % / −0.22 %.
+- **The residual gap to `stock_ko`** (median over all cells, typical / worst): +2.59 / +2.61 % today → +0.68 / +0.78 %.
+  The ceiling is +0.11 %; what remains is the dispatch at T ≥ 256 (+1.2 … +1.8 %).
+- **C2V (4096³):** the new width-128 build is −1.4 … −2.1 % on all-E2M1, −0.4 … −1.9 % on the real map and
+  0 … −1.3 % on all-E0M3, against A′'s.
+- **Results:** `results/kernel_opt/V/REPORT.md`. Adoption is proposed to the coordinator, not automatic.
