@@ -2225,3 +2225,20 @@ Written 2026-10-03, after amendment 18's adoption and before any registered GPU 
   maps were checked on CPU against their scripts. The three units run one after another in one session.
 - **Descriptive only.** There are no new builds.
 - **Disclosed:** smoke tests of the scripts (`c3v/PROTOCOL.md`), and the post-adoption routed-logits checks.
+
+### Amendment 19: the run
+
+`run_c3v.sh` ran on 2026-10-03 from 16:17 to 16:26 UTC (registration ae90a74), with no deviation.
+- **Checks:** G0 passed, and all 3 × 306 bitwise checks were equal.
+- **256x64 is now as close to stock as 16x64**, mean of the 3 shapes:
+  - against `stock_ko`: +0.4 … +1.7 % at f = 0, and +0.6 … +2.1 % at its real maps (8 % E0M3);
+  - 16x64: +0.7 … +2.8 % and +1.1 … +3.5 %;
+  - 8x64: +1.9 … +8.9 % and +2.4 … +10.2 %.
+- **256x64 barely depends on the E0M3 share:** at most +1.6 points per 100 %, like A′. On 16x64 and 8x64 at T ≥ 512 the
+  share costs +5 … +17 points per 100 %.
+- **Against the previous paths:**
+  - 256x64: about −5 % at T = 128 and −1.5 … −2.5 % at T ≥ 512, at every share.
+  - 16x64 at T ≥ 512: −0.8 % at f = 0, up to −3.2 % at 75 %, and +1.0 % at all-E0M3.
+  - 8x64: neutral, except up to −2.5 % at T = 128.
+- **Cross-session:** C3k's and C3w's records agree with this run on the same builds to +0.1 … +0.5 % (medians).
+- **Results:** `results/kernel_opt/c3v/REPORT.md`. The three-unit figure is `c3v/C3_units_mean.png`.
