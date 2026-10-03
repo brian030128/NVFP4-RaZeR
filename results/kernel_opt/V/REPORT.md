@@ -6,6 +6,17 @@ deb0ba8.
 - **Files:** tables in `V_tables.md`, data in `V.json`, the candidate table in `table_v/`. The disclosed exploration that
   chose the design is `EXPLORATION.md`.
 
+**Adopted 2026-10-03.** The coordinator adopted amendment 18 per the registered rule, which was met including its strict
+form.
+- The tracked `sm120/configs/<gpu>.ko.json` is now `table_v/table_v.json`: the `'mixed256'` width rows and the
+  `'mixed256_ko'` scheduler rows added, nothing else changed. The user copied it in, because a permission check
+  refused this session's write.
+- **The post-adoption check** (`adoption/`): routed as deployed from `build_V` on the tracked table, each unit's
+  whole-model logits equal its previous deployment bitwise, on 4 models × 5 shapes. The units are 256x64, 16x64, 8x64,
+  `stock_ko` and `stock_wB_ko`.
+- `build_V` is the deployment directory of all three units and both stocks. `docs/BUILD_AND_USE.md` lists its builds.
+- `'auto'` routes 256x64 artifacts to `mixed256_ko`. `paper_256` still selects A′'s `mixed256` on the paper table.
+
 **What was measured** (the TM-OPT+TC 256x64 artifacts):
 - **A:** today's 256x64 path, `mixed256` (A′: g32 builds, default dispatch, site-0 tags), on the paper table, from
   `build_A1`.
@@ -112,7 +123,7 @@ All passed.
 
 ## Reading
 
-- **The adoption of amendment 18 is proposed:**
+- **The adoption of amendment 18 was proposed, and adopted on 2026-10-03** (above):
   - `mixed256_ko` with the candidate table's `'mixed256'` and `'mixed256_ko'` rows in the tracked `<gpu>.ko.json`;
   - `build_V` as the deployment directory of all three units;
   - `'auto'` routing 256x64 artifacts to `mixed256_ko` (registered with the sources).

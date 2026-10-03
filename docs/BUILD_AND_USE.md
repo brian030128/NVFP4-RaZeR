@@ -77,15 +77,19 @@ for c in n16k64_wA_n16_t0 n16k64_wA_n32_t0 n16k64_wA_n64_t0 n16k64_wA_e64_t0; do
   SM120_BUILD_DIR=sm120/build_freq python sm120/build.py --define MIXFP4_DISPATCH_FREQ=1 --config $c --selftest; done
 ```
 
-The adopted deployment directory today (amendment 17, adopted 2026-10-03) supersedes `build_freq` above. It holds both
-mixed families with #2's dispatch:
-- **The wide tiles:** 16x64 at widths 64 and 128 with the uniform-branch dispatch (`MIXFP4_UNIFORM_DISPATCH=1`); 8x64 at
-  widths 64, '128x64' and 128 with the pipelined flag read (`MIXFP4_PIPE_FLAGS=1`).
-- **The narrow tiles:** widths 16 and 32 keep #2's dispatch alone.
+The adopted deployment directory today (amendments 17 and 18, adopted 2026-10-03) supersedes `build_freq` above. It
+holds all three mixed units and both stocks:
+- **16x64 and 8x64, the wide tiles:** 16x64 at widths 64 and 128 with the uniform-branch dispatch
+  (`MIXFP4_UNIFORM_DISPATCH=1`); 8x64 at widths 64, '128x64' and 128 with the pipelined flag read (`MIXFP4_PIPE_FLAGS=1`).
+  Both also have #2's dispatch.
+- **16x64 and 8x64, the narrow tiles:** widths 16 and 32 keep #2's dispatch alone.
+- **256x64** (amendment 18): `mixed256_ko`. It takes A′'s 32-row-granule builds without the site-0 tags, with #4's
+  64 x 64 epilogue tile at width 128 and the uniform-branch dispatch at every width (not #2's dispatch). A′'s own builds
+  (`mixed256`) are in the same directory for `paper_256`.
 - **The stock builds** of `stock_ko` and `stock_wB_ko`, so that `auto_stock` and `auto_stock_wB` run from the same
   directory.
 
-Every build computes the same outputs bit for bit (gates G4/G5; results/kernel_opt/U/REPORT.md).
+Every build computes the same outputs bit for bit (gates G4/G5; results/kernel_opt/U/REPORT.md and V/REPORT.md).
 
 ```bash
 D=sm120/build_ko; F="--define MIXFP4_DISPATCH_FREQ=1"
@@ -95,6 +99,10 @@ for c in n16k64_wA_n64_t0 n16k64_wA_e64_t0; do
   SM120_BUILD_DIR=$D python sm120/build.py $F --define MIXFP4_UNIFORM_DISPATCH=1 --config $c --selftest; done
 for c in n8k64_wB_m64_t0 n8k64_wB_n64_t0 n8k64_wB_t0; do
   SM120_BUILD_DIR=$D python sm120/build.py $F --define MIXFP4_PIPE_FLAGS=1 --config $c --selftest; done
+for c in n16k64_wA_g32_n16_t0 n16k64_wA_g32_n32_t0 n16k64_wA_g32_n64_t0 n16k64_wA_g32_e64_t0; do
+  SM120_BUILD_DIR=$D python sm120/build.py --define MIXFP4_UNIFORM_DISPATCH=1 --config $c --selftest; done
+for c in n16k64_wA_g32_n16 n16k64_wA_g32_n32 n16k64_wA_g32_n64 n16k64_wA_g32; do
+  SM120_BUILD_DIR=$D python sm120/build.py --config $c --selftest; done
 for c in stock_wA_n16 stock_wA_n32 stock_wA_n64 stock_wA_e64 stock_wB_e64; do SM120_BUILD_DIR=$D python sm120/build.py --config $c; done
 export SM120_BUILD_DIR=$D          # NativeLinear and the evaluators load the libraries from here
 ```
@@ -185,8 +193,14 @@ python run_ppl_deploy.py --model mistral7b --data-root $DATA \
       builds are in the build directory (above). Otherwise they run on the paper sets `mixed` / `stock`.
     - Both adopted sets read `sm120/configs/<gpu>.ko.json`: the 4b widths and the per-call scheduler rows tuned at
       them.
-    - 256x64 artifacts run on the 4-arm `mixed256` set (A′; builds `n16k64_wA_g32`, `_n64`, `_n32`, `_n16`) when it
-      is in the build directory, as before.
+    - 256x64 artifacts (amendment 18, adopted 2026-10-03) are routed in this order:
+      - `auto` runs them on `mixed256_ko` when its builds are in the build directory;
+      - else on A′'s 4-arm `mixed256` set (builds `n16k64_wA_g32`, `_n64`, `_n32`, `_n16`) with the paper table;
+      - else on the paper `mixed`.
+    - `mixed256_ko` reads the `'mixed256'` width rows and `'mixed256_ko'` scheduler rows of
+      `sm120/configs/<gpu>.ko.json`. `auto_256` selects `mixed256_ko`, or `mixed256` if it is not built; `paper_256`
+      selects `mixed256`. Against `mixed256`, `mixed256_ko` is −1.29 % GEMM time per forward (typical tags, median over 4
+      models), and the gap to `stock_ko` goes from +2.6 % to +0.7 %.
     - 8x64 artifacts (amendment 14, adopted 2026-10-02): `auto` runs them on `mixed_wB_ko` when its builds are in the
       build directory, else on the paper kernel `n8k64_wB`. `paper_wB` selects `n8k64_wB`, and `auto_stock_wB`
       selects `stock_wB_ko` (stock with the weights on B, tuned alike).

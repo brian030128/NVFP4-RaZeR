@@ -2183,3 +2183,23 @@ path (A′, `mixed256`, the g32 builds) up to the current 16x64 state, ideally i
 - **C2V (4096³):** the new width-128 build is −1.4 … −2.1 % on all-E2M1, −0.4 … −1.9 % on the real map and
   0 … −1.3 % on all-E0M3, against A′'s.
 - **Results:** `results/kernel_opt/V/REPORT.md`. Adoption is proposed to the coordinator, not automatic.
+- **The adoption (2026-10-03).** The coordinator adopted amendment 18 per the registered rule, which was met including
+  its strict form.
+  - `sm120/configs/<gpu>.ko.json` gains the candidate table's `'mixed256'` width rows and `'mixed256_ko'` scheduler
+    rows, with their meta entries. Nothing else in it changes: the file equals `V/table_v/table_v.json` byte for byte,
+    and its only semantic difference from the previous version is those four keys (checked).
+  - The user copied the file in, because a permission check refused this session's write.
+  - `build_V` becomes the deployment directory of all three units and both stocks, superseding `build_U`. It holds
+    `build_U`'s ten builds, `mixed256_ko`'s four, A′'s four (for `paper_256`) and `stock_ko`'s four.
+  - `'auto'` routes 256x64 artifacts to `mixed256_ko`, as registered with the sources.
+  - The builds are listed in `docs/BUILD_AND_USE.md`.
+  - **The post-adoption check** (`V/adoption/`): whole-model logits, routed as deployed from `build_V` on the tracked
+    table, equal each unit's previous deployment bitwise, on 4 models × 5 shapes:
+
+    | routed | against |
+    |---|---|
+    | 256x64: `'auto'` → `mixed256_ko` | `set:mixed256` from `build_A1` |
+    | 16x64: `'auto'` → `mixed_ko` | `build_U` |
+    | 8x64: `'auto'` → `mixed_wB_ko` | `build_U` |
+    | `'auto_stock'` → `stock_ko` | `build_7` |
+    | `'auto_stock_wB'` → `stock_wB_ko` | `build_U` |

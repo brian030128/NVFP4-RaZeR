@@ -108,3 +108,14 @@ Checks of the routing change:
 
 M1″ also shows ≥ 1 % per-forward gains at T ≥ 256. By the user's decision (deviation 1 to amendment 2b), the end-to-end
 effect is measured later, once, cumulatively with #2 and A.
+
+## Later: amendment 18 (2026-10-03)
+
+The 256x64 path is now `mixed256_ko`. It runs A′'s builds without the site-0 tags, with #4's 64 x 64 epilogue tile at
+width 128 and the uniform-branch dispatch (`MIXFP4_UNIFORM_DISPATCH=1`) at every width. It reads its own re-tuned widths
+and scheduler rows in the tracked `<gpu>.ko.json`.
+- **The effect:** −1.29 % (typical) and −1.26 % (worst) GEMM time per forward against `mixed256` on the paper table, up
+  to −7.1 % at T = 256. The gap to `stock_ko` goes from +2.59 % to +0.68 % (typical, median).
+- **The routing:** `'auto'` sends 256x64 artifacts to `mixed256_ko`. `paper_256` still selects `mixed256`.
+- **The deployment directory** is `build_V` (adopted by the coordinator per the registered rule).
+- **Details:** `results/kernel_opt/V/REPORT.md`.

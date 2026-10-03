@@ -1,0 +1,547 @@
+{
+ "status": "complete",
+ "started_utc": "2026-10-03T16:07:55+00:00",
+ "gpu": {
+  "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "driver_version": "595.71.05",
+  "power.limit": "500.00 W",
+  "power.default_limit": "600.00 W",
+  "clocks.max.sm": "3090 MHz",
+  "clocks.max.mem": "14001 MHz",
+  "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+  "persistence_mode": "Enabled",
+  "temperature.gpu": "52",
+  "utilization.gpu": "0 %",
+  "memory.used": "4 MiB",
+  "torch": "2.9.0+cu128",
+  "torch_cuda": "12.8",
+  "triton": "3.5.0",
+  "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+  "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "capability": [
+   12,
+   0
+  ],
+  "sm_count": 188,
+  "utc": "2026-10-03T16:07:55+00:00"
+ },
+ "shapes": [
+  "1x1",
+  "1x16",
+  "1x100",
+  "1x2048",
+  "4x512"
+ ],
+ "unit": "16x64",
+ "before": {
+  "spec": "set:mixed_ko",
+  "root": "/home/dev/n16k64_campaign/kernel_opt/build_U",
+  "table": null,
+  "describe": {
+   "family": "mixed_ko",
+   "kernels": {
+    "n16k64_wA_n16_t0": "6ac0701df8030024b620ceb237f095292592b28dfa61ed69bfd16471b786cb06",
+    "n16k64_wA_n32_t0": "4ad1878cf23800b2b16c85ff188d65e38df19479ef910b5ef0c3ec3572a6afa8",
+    "n16k64_wA_n64_t0": "7e0962205e1fdad157a28f2b6f3a4af03d2da40695d1c6c56e441987b30ecbfc",
+    "n16k64_wA_e64_t0": "b3c0ab789853b17a201b26f2c4b37a8159a9de85d8f9f7dea395d39c80109cfe"
+   },
+   "table": "/home/dev/NVFP4-RaZeR/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+   "table_shapes": 16,
+   "table_family": "mixed",
+   "schedule_shapes": 16,
+   "calls_by_width": {}
+  }
+ },
+ "after": {
+  "spec": "auto:auto",
+  "build_root": null,
+  "table": null,
+  "describe": null,
+  "expect_family": "mixed_ko",
+  "sm120_build_dir": "/home/dev/n16k64_campaign/kernel_opt/build_V"
+ },
+ "models": {
+  "llama8b": {
+   "artifact": "/home/dev/n16k64_campaign/paper/artifacts/llama8b_tc_16x64",
+   "shapes": {
+    "1x1": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      1,
+      128256
+     ]
+    },
+    "1x16": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      16,
+      128256
+     ]
+    },
+    "1x100": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      100,
+      128256
+     ]
+    },
+    "1x2048": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      2048,
+      128256
+     ]
+    },
+    "4x512": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      4,
+      512,
+      128256
+     ]
+    }
+   },
+   "before": {
+    "install": {
+     "kernel": "KernelSet(mixed_ko)",
+     "kernel_sha256": {
+      "n16k64_wA_n16_t0": "6ac0701df8030024b620ceb237f095292592b28dfa61ed69bfd16471b786cb06",
+      "n16k64_wA_n32_t0": "4ad1878cf23800b2b16c85ff188d65e38df19479ef910b5ef0c3ec3572a6afa8",
+      "n16k64_wA_n64_t0": "7e0962205e1fdad157a28f2b6f3a4af03d2da40695d1c6c56e441987b30ecbfc",
+      "n16k64_wA_e64_t0": "b3c0ab789853b17a201b26f2c4b37a8159a9de85d8f9f7dea395d39c80109cfe"
+     },
+     "native_modules": 224
+    },
+    "native_called": 224,
+    "native": 224,
+    "calls_by_width": {
+     "16": 512,
+     "32": 96,
+     "128": 512
+    }
+   },
+   "after": {
+    "install": {
+     "kernel": "KernelSet(mixed_ko)",
+     "kernel_sha256": {
+      "n16k64_wA_n16_t0": "d6cff384814ba0d014de561bfb57d739b549f748bdc91c3e2337de16d63133a5",
+      "n16k64_wA_n32_t0": "e62c5d4035d881b00aced0f03d27f4ec731419f89b3a476d006ec2581d9f67cf",
+      "n16k64_wA_n64_t0": "8f472aa880bb624c0948add8726329abb868ddec22f9e2fcdfd5133150fb7224",
+      "n16k64_wA_e64_t0": "3e8023de34079956fc1bf0bc8c1355ba6710dc36792dc07f8865bf51bd706609"
+     },
+     "native_modules": 224
+    },
+    "native_called": 224,
+    "native": 224
+   },
+   "routing": {
+    "note": "auto -> mixed_ko (kernel-opt adoption, amendment 7)",
+    "family": "mixed_ko",
+    "kernel_set": {
+     "family": "mixed_ko",
+     "kernels": {
+      "n16k64_wA_n16_t0": "d6cff384814ba0d014de561bfb57d739b549f748bdc91c3e2337de16d63133a5",
+      "n16k64_wA_n32_t0": "e62c5d4035d881b00aced0f03d27f4ec731419f89b3a476d006ec2581d9f67cf",
+      "n16k64_wA_n64_t0": "8f472aa880bb624c0948add8726329abb868ddec22f9e2fcdfd5133150fb7224",
+      "n16k64_wA_e64_t0": "3e8023de34079956fc1bf0bc8c1355ba6710dc36792dc07f8865bf51bd706609"
+     },
+     "table": "/home/dev/NVFP4-RaZeR/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+     "table_shapes": 16,
+     "table_family": "mixed",
+     "schedule_shapes": 16,
+     "calls_by_width": {}
+    },
+    "roots": [
+     "/home/dev/n16k64_campaign/kernel_opt/build_V"
+    ],
+    "extra_defines": {
+     "n16k64_wA_n16_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1
+     },
+     "n16k64_wA_n32_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1
+     },
+     "n16k64_wA_n64_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1,
+      "MIXFP4_UNIFORM_DISPATCH": 1
+     },
+     "n16k64_wA_e64_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1,
+      "MIXFP4_UNIFORM_DISPATCH": 1
+     }
+    }
+   }
+  },
+  "mistral7b": {
+   "artifact": "/home/dev/n16k64_campaign/paper/artifacts/mistral7b_tc_16x64",
+   "shapes": {
+    "1x1": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      1,
+      32768
+     ]
+    },
+    "1x16": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      16,
+      32768
+     ]
+    },
+    "1x100": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      100,
+      32768
+     ]
+    },
+    "1x2048": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      2048,
+      32768
+     ]
+    },
+    "4x512": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      4,
+      512,
+      32768
+     ]
+    }
+   },
+   "before": {
+    "install": {
+     "kernel": "KernelSet(mixed_ko)",
+     "kernel_sha256": {
+      "n16k64_wA_n16_t0": "6ac0701df8030024b620ceb237f095292592b28dfa61ed69bfd16471b786cb06",
+      "n16k64_wA_n32_t0": "4ad1878cf23800b2b16c85ff188d65e38df19479ef910b5ef0c3ec3572a6afa8",
+      "n16k64_wA_n64_t0": "7e0962205e1fdad157a28f2b6f3a4af03d2da40695d1c6c56e441987b30ecbfc",
+      "n16k64_wA_e64_t0": "b3c0ab789853b17a201b26f2c4b37a8159a9de85d8f9f7dea395d39c80109cfe"
+     },
+     "native_modules": 224
+    },
+    "native_called": 224,
+    "native": 224,
+    "calls_by_width": {
+     "16": 512,
+     "32": 96,
+     "128": 512
+    }
+   },
+   "after": {
+    "install": {
+     "kernel": "KernelSet(mixed_ko)",
+     "kernel_sha256": {
+      "n16k64_wA_n16_t0": "d6cff384814ba0d014de561bfb57d739b549f748bdc91c3e2337de16d63133a5",
+      "n16k64_wA_n32_t0": "e62c5d4035d881b00aced0f03d27f4ec731419f89b3a476d006ec2581d9f67cf",
+      "n16k64_wA_n64_t0": "8f472aa880bb624c0948add8726329abb868ddec22f9e2fcdfd5133150fb7224",
+      "n16k64_wA_e64_t0": "3e8023de34079956fc1bf0bc8c1355ba6710dc36792dc07f8865bf51bd706609"
+     },
+     "native_modules": 224
+    },
+    "native_called": 224,
+    "native": 224
+   },
+   "routing": {
+    "note": "auto -> mixed_ko (kernel-opt adoption, amendment 7)",
+    "family": "mixed_ko",
+    "kernel_set": {
+     "family": "mixed_ko",
+     "kernels": {
+      "n16k64_wA_n16_t0": "d6cff384814ba0d014de561bfb57d739b549f748bdc91c3e2337de16d63133a5",
+      "n16k64_wA_n32_t0": "e62c5d4035d881b00aced0f03d27f4ec731419f89b3a476d006ec2581d9f67cf",
+      "n16k64_wA_n64_t0": "8f472aa880bb624c0948add8726329abb868ddec22f9e2fcdfd5133150fb7224",
+      "n16k64_wA_e64_t0": "3e8023de34079956fc1bf0bc8c1355ba6710dc36792dc07f8865bf51bd706609"
+     },
+     "table": "/home/dev/NVFP4-RaZeR/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+     "table_shapes": 16,
+     "table_family": "mixed",
+     "schedule_shapes": 16,
+     "calls_by_width": {}
+    },
+    "roots": [
+     "/home/dev/n16k64_campaign/kernel_opt/build_V"
+    ],
+    "extra_defines": {
+     "n16k64_wA_n16_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1
+     },
+     "n16k64_wA_n32_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1
+     },
+     "n16k64_wA_n64_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1,
+      "MIXFP4_UNIFORM_DISPATCH": 1
+     },
+     "n16k64_wA_e64_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1,
+      "MIXFP4_UNIFORM_DISPATCH": 1
+     }
+    }
+   }
+  },
+  "phi4": {
+   "artifact": "/home/dev/n16k64_campaign/paper/artifacts/phi4_tc_16x64",
+   "shapes": {
+    "1x1": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      1,
+      100352
+     ]
+    },
+    "1x16": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      16,
+      100352
+     ]
+    },
+    "1x100": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      100,
+      100352
+     ]
+    },
+    "1x2048": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      2048,
+      100352
+     ]
+    },
+    "4x512": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      4,
+      512,
+      100352
+     ]
+    }
+   },
+   "before": {
+    "install": {
+     "kernel": "KernelSet(mixed_ko)",
+     "kernel_sha256": {
+      "n16k64_wA_n16_t0": "6ac0701df8030024b620ceb237f095292592b28dfa61ed69bfd16471b786cb06",
+      "n16k64_wA_n32_t0": "4ad1878cf23800b2b16c85ff188d65e38df19479ef910b5ef0c3ec3572a6afa8",
+      "n16k64_wA_n64_t0": "7e0962205e1fdad157a28f2b6f3a4af03d2da40695d1c6c56e441987b30ecbfc",
+      "n16k64_wA_e64_t0": "b3c0ab789853b17a201b26f2c4b37a8159a9de85d8f9f7dea395d39c80109cfe"
+     },
+     "native_modules": 160
+    },
+    "native_called": 160,
+    "native": 160,
+    "calls_by_width": {
+     "16": 320,
+     "64": 160,
+     "128": 320
+    }
+   },
+   "after": {
+    "install": {
+     "kernel": "KernelSet(mixed_ko)",
+     "kernel_sha256": {
+      "n16k64_wA_n16_t0": "d6cff384814ba0d014de561bfb57d739b549f748bdc91c3e2337de16d63133a5",
+      "n16k64_wA_n32_t0": "e62c5d4035d881b00aced0f03d27f4ec731419f89b3a476d006ec2581d9f67cf",
+      "n16k64_wA_n64_t0": "8f472aa880bb624c0948add8726329abb868ddec22f9e2fcdfd5133150fb7224",
+      "n16k64_wA_e64_t0": "3e8023de34079956fc1bf0bc8c1355ba6710dc36792dc07f8865bf51bd706609"
+     },
+     "native_modules": 160
+    },
+    "native_called": 160,
+    "native": 160
+   },
+   "routing": {
+    "note": "auto -> mixed_ko (kernel-opt adoption, amendment 7)",
+    "family": "mixed_ko",
+    "kernel_set": {
+     "family": "mixed_ko",
+     "kernels": {
+      "n16k64_wA_n16_t0": "d6cff384814ba0d014de561bfb57d739b549f748bdc91c3e2337de16d63133a5",
+      "n16k64_wA_n32_t0": "e62c5d4035d881b00aced0f03d27f4ec731419f89b3a476d006ec2581d9f67cf",
+      "n16k64_wA_n64_t0": "8f472aa880bb624c0948add8726329abb868ddec22f9e2fcdfd5133150fb7224",
+      "n16k64_wA_e64_t0": "3e8023de34079956fc1bf0bc8c1355ba6710dc36792dc07f8865bf51bd706609"
+     },
+     "table": "/home/dev/NVFP4-RaZeR/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+     "table_shapes": 16,
+     "table_family": "mixed",
+     "schedule_shapes": 16,
+     "calls_by_width": {}
+    },
+    "roots": [
+     "/home/dev/n16k64_campaign/kernel_opt/build_V"
+    ],
+    "extra_defines": {
+     "n16k64_wA_n16_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1
+     },
+     "n16k64_wA_n32_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1
+     },
+     "n16k64_wA_n64_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1,
+      "MIXFP4_UNIFORM_DISPATCH": 1
+     },
+     "n16k64_wA_e64_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1,
+      "MIXFP4_UNIFORM_DISPATCH": 1
+     }
+    }
+   }
+  },
+  "qwen27b": {
+   "artifact": "/home/dev/n16k64_campaign/paper/artifacts/qwen27b_tc_16x64",
+   "shapes": {
+    "1x1": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      1,
+      248320
+     ]
+    },
+    "1x16": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      16,
+      248320
+     ]
+    },
+    "1x100": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      100,
+      248320
+     ]
+    },
+    "1x2048": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      1,
+      2048,
+      248320
+     ]
+    },
+    "4x512": {
+     "equal": true,
+     "max_abs_diff": null,
+     "shape": [
+      4,
+      512,
+      248320
+     ]
+    }
+   },
+   "before": {
+    "install": {
+     "kernel": "KernelSet(mixed_ko)",
+     "kernel_sha256": {
+      "n16k64_wA_n16_t0": "6ac0701df8030024b620ceb237f095292592b28dfa61ed69bfd16471b786cb06",
+      "n16k64_wA_n32_t0": "4ad1878cf23800b2b16c85ff188d65e38df19479ef910b5ef0c3ec3572a6afa8",
+      "n16k64_wA_n64_t0": "7e0962205e1fdad157a28f2b6f3a4af03d2da40695d1c6c56e441987b30ecbfc",
+      "n16k64_wA_e64_t0": "b3c0ab789853b17a201b26f2c4b37a8159a9de85d8f9f7dea395d39c80109cfe"
+     },
+     "native_modules": 496
+    },
+    "native_called": 496,
+    "native": 496,
+    "calls_by_width": {
+     "16": 1120,
+     "64": 416,
+     "128": 944
+    }
+   },
+   "after": {
+    "install": {
+     "kernel": "KernelSet(mixed_ko)",
+     "kernel_sha256": {
+      "n16k64_wA_n16_t0": "d6cff384814ba0d014de561bfb57d739b549f748bdc91c3e2337de16d63133a5",
+      "n16k64_wA_n32_t0": "e62c5d4035d881b00aced0f03d27f4ec731419f89b3a476d006ec2581d9f67cf",
+      "n16k64_wA_n64_t0": "8f472aa880bb624c0948add8726329abb868ddec22f9e2fcdfd5133150fb7224",
+      "n16k64_wA_e64_t0": "3e8023de34079956fc1bf0bc8c1355ba6710dc36792dc07f8865bf51bd706609"
+     },
+     "native_modules": 496
+    },
+    "native_called": 496,
+    "native": 496
+   },
+   "routing": {
+    "note": "auto -> mixed_ko (kernel-opt adoption, amendment 7)",
+    "family": "mixed_ko",
+    "kernel_set": {
+     "family": "mixed_ko",
+     "kernels": {
+      "n16k64_wA_n16_t0": "d6cff384814ba0d014de561bfb57d739b549f748bdc91c3e2337de16d63133a5",
+      "n16k64_wA_n32_t0": "e62c5d4035d881b00aced0f03d27f4ec731419f89b3a476d006ec2581d9f67cf",
+      "n16k64_wA_n64_t0": "8f472aa880bb624c0948add8726329abb868ddec22f9e2fcdfd5133150fb7224",
+      "n16k64_wA_e64_t0": "3e8023de34079956fc1bf0bc8c1355ba6710dc36792dc07f8865bf51bd706609"
+     },
+     "table": "/home/dev/NVFP4-RaZeR/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+     "table_shapes": 16,
+     "table_family": "mixed",
+     "schedule_shapes": 16,
+     "calls_by_width": {}
+    },
+    "roots": [
+     "/home/dev/n16k64_campaign/kernel_opt/build_V"
+    ],
+    "extra_defines": {
+     "n16k64_wA_n16_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1
+     },
+     "n16k64_wA_n32_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1
+     },
+     "n16k64_wA_n64_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1,
+      "MIXFP4_UNIFORM_DISPATCH": 1
+     },
+     "n16k64_wA_e64_t0": {
+      "MIXFP4_DISPATCH_FREQ": 1,
+      "MIXFP4_UNIFORM_DISPATCH": 1
+     }
+    }
+   }
+  }
+ },
+ "passed": true,
+ "finished_utc": "2026-10-03T16:09:45+00:00"
+}
