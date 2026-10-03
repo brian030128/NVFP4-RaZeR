@@ -1843,3 +1843,164 @@ and the hashes are in `results/kernel_opt/c3w/registration.json`.
 - **The dispatch** adds +0.3 … +3.0 % (#2's), about as on 16x64.
 - **#2's dispatch wins at f ≤ 2–5 %,** where the real maps lie (1.6–2.9 %); the default wins from about 10–25 %.
 - **Results:** `results/kernel_opt/c3w/REPORT.md`.
+
+## Amendment 17 (U): the uniform-branch dispatch on the wide tiles (part A), and the re-tuned 16x64 width cells (part B)
+
+Written 2026-10-03, before any registered GPU run of this amendment. The hashes and time are in `registration_17.json`.
+
+**The request**, relayed by the coordinator (the user's go on three items, in order):
+- **Item 1:** "Make ptxas emit uniform branches without BSSY/BSYNC/WARPSYNC around the per-k_tile dispatch. Keep the
+  if-conversion poison and the no-predicated-OMMA invariant."
+  - A CPU SASS check first, then a disclosed exploration timing against today's adopted builds and the no-dispatch
+    ceilings.
+  - "Register and run the full chain (gates, M1, C2) only if it beats noise."
+- **Item 2:** why the 16x64 width-64 mixed build is relatively slow. "Fix it bitwise-safely if possible, then re-tune only
+  the affected width cells."
+- **The coordinator approved this amendment's design**, with item 2 folded in as part B: "re-tune the disagreeing cells
+  on the new builds before M1, measure both tables in M1, with a separate rule on the affected cells." Parts A and B are
+  reported separately.
+
+**The exploration** (disclosed, `results/kernel_opt/U/EXPLORATION.md`; nothing from it is a result):
+- **SASS:** `-DMIXFP4_UNIFORM_DISPATCH=1` passes the dispatch index through `__reduce_or_sync`. Every build of both
+  families then has no BSSY, BSYNC or WARPSYNC between its first and last OMMA (today: 81–82), no predicated OMMA and an
+  unchanged census.
+  - The poison (`bar.warp.sync -1` per arm) stays in the source. ptxas elides its WARPSYNC on a provably converged warp,
+    and the arms remain branches.
+  - The tree's compares and taken branches are unchanged.
+- **Timing:** M1's method on Llama-3.1-8B and Phi-4, typical and worst modules.
+  - The 16x64 uniform dispatch and the 8x64 pipelined flag read (`MIXFP4_PIPE_FLAGS=1`, without the uniform index) help
+    on the wide tiles.
+  - On the narrow decode tiles they cost E0M3-heavy modules up to +1.5 % (16x64) and +0.8 % (8x64), in every round.
+  - The uniform index on 8x64 did not help consistently across the two models.
+- **The width cut was chosen after the exploration's worst-tag data.** Widths 64 and wider take the change; 16 and 32 stay
+  as they are.
+  - A composite from the same data estimates the effect per forward: −0.24 … −0.48 % (16x64) and −0.12 … −0.22 % (8x64),
+    with no cell above zero in every round.
+  - **This amendment's fresh 4-model M1 is the test.** The exploration's numbers are not.
+- **Item 2's cause:** the tile is not slow. `n16k64_wA_nodisp_n64_t0` is `stock_wA_n64` up to register allocation, with
+  the same 1,424 instructions, 6 stages and 100,352 B of shared memory, and the same time within ±0.5 %.
+  - The width-64 mixed build's excess is its dispatch's reconvergence code. At 4096x4096 T=128, all-E2M1, it is +6.3 %
+    over its ceiling (+1.5 % at width 32). With the uniform index it is +0.4 %.
+  - With the uniform index, width 64 becomes the fastest at T=128 for 4096x4096 and 4096x14336, as for stock. Today's
+    table picks width 32 there.
+
+**What changes** (the sources are commit 2e08caa):
+- **The collective:** the hook `MIXFP4_UNIFORM_DISPATCH` (`mixfp4_detail::uniform_index`), documented in
+  `LOCAL_CHANGES.md` and `.patch`. Unset, the SASS is identical; this is gate G1.
+- **`tune_tiles.py`:**
+  - `--cells NxK@T` times only the listed cells.
+  - Width tuning gives a family on the 'mixed' rows (e.g. `mixed_ko`) the 16x64 tags. Before, such a family was timed on
+    all-E2M1 weights; no earlier width tuning used one.
+- **`configs.py` and `select.py` are unchanged.** The builds take their defines through `build.py --define`, as #2's do.
+  `build_U` holds `mixed_ko`, `mixed_wB_ko` and `stock_wB_e64`.
+- **New scripts:** `check_uniform_sass.py`, `bench_U_isolated.py`, `c2_U.py`, `U_tables.py`, `U_report.py`, `run_U.sh`
+  and `results/kernel_opt/U/build_U.sh`.
+
+**Builds**, CPU only with no GPU visible, from the clean main checkout at 2e08caa (`results/kernel_opt/U/build_U.sh`):
+- **`build_Uall`:** all 55 configurations, with no extra define.
+- **`build_U`:** part A's deployment directory.
+
+  | builds | defines |
+  |---|---|
+  | `n16k64_wA_{n16,n32}_t0`, `n8k64_wB_{m16,m32}_t0` | `MIXFP4_DISPATCH_FREQ=1`: today's builds, identical SASS |
+  | `n16k64_wA_{n64,e64}_t0` | `MIXFP4_DISPATCH_FREQ=1 MIXFP4_UNIFORM_DISPATCH=1` |
+  | `n8k64_wB_{m64,n64}_t0`, `n8k64_wB_t0` | `MIXFP4_DISPATCH_FREQ=1 MIXFP4_PIPE_FLAGS=1` |
+  | `stock_wB_e64` | none |
+
+**Gates** (`run_U.sh`; a failure stops the run):
+- **G0 (`check_provenance.py`):** every registered file has its sha256. Every registered build matches its library and
+  manifest. The builds are `build_U`, `build_Uall`, today's adopted `build_7freq` and `build_P3freq`, `build_7`'s
+  `stock_ko`, and the ceilings in `build_C3k` and `build_P5`.
+- **G3, the self-tests:** `build.py --selftest` for the five builds with new define sets, into `build_Ust`.
+  - The requirement is PASS patched and FAIL unpatched under random tagging.
+  - `check_same_sass.py` ties each self-test to `build_U`'s SASS.
+- **The patcher check (`check_patcher_sites.py`):** `build_Uall`'s tagged builds; the t0 builds of `build_Uall`,
+  `build_U` and `build_Ust`.
+- **G1 (`check_sass.py`):** all 55 configurations of `build_Uall` keep their patched and unpatched SASS. The before roots
+  are sm120/build, then kernel-opt `build`, `build_e0m3`, `build_A1`, `build_4`, `build_T`, `build_7`, `build_W`,
+  `build_C3k`, `build_P2`, `build_P3` and `build_P5`.
+- **G2:** `build_U`'s ten have their census, with nothing predicated.
+- **G2u (`check_uniform_sass.py`), on `build_U`:**
+  - the defines are as registered;
+  - the uniform builds have no BSSY, BSYNC or WARPSYNC between the first and the last OMMA, and a REDUX there;
+  - the unchanged builds carry today's patched and unpatched SASS (`build_7freq`, `build_P3freq`).
+- **G3 pytest:** test_gemm.py and test_select.py on `build_U`; builds it does not hold are skipped.
+- **G4 (`check_bitwise.py`):** 0 differences against the paper kernels (n16k64_wA / n8k64_wB). The candidates are each
+  build alone and the sets `mixed_ko` and `mixed_wB_ko` on the adopted table.
+- **G5 (`check_model_logits.py`):** whole-model logits bitwise equal, on 4 models × 5 shapes. The comparisons are
+  `set:mixed_ko` `build_7freq` → `build_U`, and `set:mixed_wB_ko` `build_P3freq` → `build_U`.
+
+**Part B**, after the gates:
+- **The cells:** the 16x64 cells where the adopted table's 'mixed' and 'stock' rows choose different widths and one of
+  the two is 64 or 128, the widths whose builds part A changes:
+
+  | cell | today's mixed width | stock's width |
+  |---|---:|---:|
+  | 4096x4096 @ 128 | 32 | 64 |
+  | 4096x14336 @ 128 | 32 | 64 |
+  | 17408x5120 @ 128 | 128 | 64 |
+  | 1024x4096 @ 512 | 32 | 64 |
+  | 1024x5120 @ 512 | 32 | 64 |
+  | 12288x5120 @ 512 | 128 | 64 |
+
+  The seventh disagreeing cell (17408x5120 @ 32: 32 against 16) involves no build that part A changes.
+- **Widths:** `tune_tiles.py --families mixed_ko --cells …` on `build_U`, by amendment 4b's method.
+  - Cold, activations quantized after the flush, 3 rotated rounds × 30; the fastest median wins.
+  - Tags: the tuner's rule, per projection the densest module of the TC 16x64 map.
+- **The table (`U_tables.py`):**
+  - the adopted table with these cells' 'mixed' widths replaced;
+  - for a cell whose width changed, its `mixed_ko` scheduler row re-tuned by amendment 7's decisive rule (12 settings,
+    3 rounds × 30), while the other cells keep their rows;
+  - a check that the table differs from the adopted one only there.
+- **G5b:** whole-model logits on part B's table equal `build_7freq`'s on the adopted table.
+
+**M1 (`bench_U_isolated.py`):** the deviation-2 method of amendments 10–13.
+- **Method:** cold weights by rotation plus a 512 MiB flush, activations quantized after the flush, 3 rotated rounds × 30.
+- **Scope:** 4 models, every text-Linear shape, T ∈ {1, 4, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192}, typical
+  and worst tags.
+- **Configurations:**
+  - `stock_ko`, the target;
+  - the ceilings `c16` (`nodisp_ko`, `build_C3k`) and `c8` (`nodisp_wB_ko`, `build_P5`);
+  - A16, U16 and UB16: `mixed_ko` from `build_7freq` and from `build_U` on the adopted table, and from `build_U` on part
+    B's table;
+  - A8 and U8: `mixed_wB_ko` from `build_P3freq` and from `build_U`.
+- **Checks:** M1's own, and bitwise on the timed operands: U16 = A16, UB16 = A16, U8 = A8.
+
+**C2U (`c2_U.py`), 4096³, width 128:**
+- **Configurations:** `stock_ko`, the two ceilings, and A16/U16 and A8/U8 × {all-E2M1, real map, all-E0M3}. The real
+  map is Llama-3.1-8B layer 0 o_proj.
+- **Modes:** b2b, isolated and sustained, 3 rotated rounds.
+- **Check before timing:** U = A for every tag.
+
+**Rules**, written before the run (TOL = 0.5 %):
+- **Part A, decided per family** (16x64: U16 vs A16; 8x64: U8 vs A8). Adoption is proposed if, with typical and with
+  worst tags:
+  - the median over the 48 (model, T) cells is negative;
+  - and no cell is above +TOL in every round. This is amendment 11's t0 rule.
+  - The strict form (no cell above zero in every round) is reported with its cells.
+- **Part B (UB16 vs U16), over the affected (model, T) cells** (where some projection runs a changed width or scheduler
+  row). The same two conditions, with typical and with worst tags.
+  - If no cell changes, part B is void.
+  - Part B is proposed only together with 16x64's part A, since it runs on part A's builds.
+  - The unaffected cells run identical computations and are reported as an A/A check.
+- **Adoption is proposed to the coordinator, not automatic.**
+- **In any case:** the residual gaps to `stock_ko` per T and per T band (typical and worst), before (A) and after (U,
+  UB), and to the ceilings.
+
+**Maps and tags.** The FlipQuant calibration will change later, so the inputs are stated here.
+- The paper's TM-OPT+TC 16x64 and 8x64 artifacts in /home/dev/n16k64_campaign/paper/artifacts; their artifact.json and
+  maps' sha256 are registered.
+- M1: typical is the lower-median module per projection, worst the densest.
+- Part B's tuning uses the densest. C2U's real maps are the Llama-3.1-8B maps' layer 0 o_proj.
+
+**Disclosed, before registration** (nothing from it is used):
+- **The exploration** (`EXPLORATION.md`).
+- **Smoke tests into a scratch directory,** on a directory of symlinks to the exploration builds:
+  - part B's pipeline: widths at 1 round × 5, the composer, one cell's scheduler row, finalize;
+  - M1: Llama-3.1-8B o_proj and down_proj at T = 16 and 128, 1 round × 3;
+  - C2U: 1 round; and the report. Every bitwise check passed.
+  - The smoke test found the seventh disagreeing cell. The cell rule then got its "one of the two is 64 or 128" clause.
+- **A CPU dry run of `check_uniform_sass.py`** on the same symlink directory passed.
+- **CPU pre-checks** on the registered builds, into a scratch directory: G1 (55 of 55), G2 (10 of 10) and G2u passed.
+  Part A's five changed builds carry exactly the SASS of the exploration builds that were timed (`build_U1`,
+  `build_U0p`).
