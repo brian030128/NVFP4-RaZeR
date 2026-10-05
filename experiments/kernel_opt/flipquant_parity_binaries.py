@@ -3,6 +3,7 @@
 loaded, flipquant's (its deployment directory build_ko) against NVFP4-RaZeR's (kernel-opt build_V). CPU only.
 
     python experiments/kernel_opt/flipquant_parity_binaries.py --timing JSON --out JSON
+    python experiments/kernel_opt/flipquant_parity_binaries.py --dirs FQ_BUILD_DIR RZ_BUILD_DIR --out JSON   # every build
 
 Per build name, from the libraries the two sides recorded in the timing run's checks:
 - the file sha256 of each side's library (and that it is the one its manifest names);
@@ -72,18 +73,26 @@ def run(cmd):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--timing', type=Path, required=True)
+    ap.add_argument('--timing', type=Path, default=None)
+    ap.add_argument('--dirs', nargs=2, type=Path, default=None, metavar=('FQ_DIR', 'RZ_DIR'),
+                    help="instead of a timing run's libraries: every build of RZ_DIR against the same build in FQ_DIR")
     ap.add_argument('--cuobjdump', default='/home/dev/.conda/envs/mixfp4-cuda131/bin/cuobjdump')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
-    timing = json.loads(args.timing.read_text())
     pairs = {}
-    for c in timing['checks']['cells']:
-        name = c['fq']['kernel']
-        assert c['rz']['kernel'] == name, (c['policy'], c['proj'], c['tokens'], c['fq']['kernel'], c['rz']['kernel'])
-        pairs.setdefault(name, (c['fq']['library'], c['rz']['library']))
-        assert pairs[name] == (c['fq']['library'], c['rz']['library']), name
-    res = dict(timing=str(args.timing), cuobjdump=args.cuobjdump,
+    if args.dirs:
+        fq_dir, rz_dir = args.dirs
+        for d in sorted(p for p in rz_dir.iterdir() if (p / 'manifest.json').exists()):
+            lib = json.loads((d / 'manifest.json').read_text())['library']
+            pairs[d.name] = (str(fq_dir / d.name / lib), str(d / lib))
+    else:
+        timing = json.loads(args.timing.read_text())
+        for c in timing['checks']['cells']:
+            name = c['fq']['kernel']
+            assert c['rz']['kernel'] == name, (c['policy'], c['proj'], c['tokens'], c['fq']['kernel'], c['rz']['kernel'])
+            pairs.setdefault(name, (c['fq']['library'], c['rz']['library']))
+            assert pairs[name] == (c['fq']['library'], c['rz']['library']), name
+    res = dict(timing=str(args.timing), dirs=[str(d) for d in args.dirs] if args.dirs else None, cuobjdump=args.cuobjdump,
                cuobjdump_version=run([args.cuobjdump, '--version']).decode().strip().splitlines()[-1], builds={})
     for name, (fq, rz) in sorted(pairs.items()):
         r = dict(fq=fq, rz=rz)

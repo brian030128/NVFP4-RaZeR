@@ -6,8 +6,8 @@
 
 Reads gemm_<run>.json (flipquant_parity_gemm.py) and binaries_<run>.json (flipquant_parity_binaries.py) of each run.
 Writes parity.md (the per-unit tables with every run's ratio, the criteria per run, the cell-level spread per run),
-cells.md (every cell of every run), parity.json (the summary), and copies the raw records as gemm_<run>_raw.json and
-binaries_<run>.json. A run made with --control aa is the A/A control: its 'fq' side is a second NVFP4-RaZeR process.
+cells.md (every cell of every run), parity.json (the summary), and copies the raw records to runs/ (gemm_<run>.json.gz,
+binaries_<run>.json). A run made with --control aa is the A/A control: its 'fq' side is a second NVFP4-RaZeR process.
 
 Per-forward GEMM time of a policy at T: the sum over the projections of (modules of the projection) x (the median GEMM
 time of its timed module), per side; per round, the same with the round's medians.
@@ -19,6 +19,7 @@ Criteria (as asked):
 - no cell where flipquant is slower than RaZeR by more than 2 % in every round.
 """
 import argparse
+import gzip
 import hashlib
 import json
 import shutil
@@ -34,46 +35,52 @@ def file_sha(p):
 
 
 def analyze(gemm, binaries):
+    """One run: the timing comparison per cell (from the timing rows, which record each side's build, width and
+    scheduler row), the per-forward sums, and -- when the run made the per-cell checks -- the identity criteria."""
     tags = gemm['setup']['rz']['tags']
     pols = list(gemm['policies'])
     tokens = gemm['tokens']
     rows = {(r['policy'], r['proj'], r['tokens'], r['side']): r for r in gemm['rows']}
     cells = {(c['policy'], c['proj'], c['tokens']): c for c in gemm['checks']['cells']}
-    out = dict(model=gemm['model'], policies={}, cells=[], criteria={})
-    # ---- selection, quantizer, outputs per cell
-    sel_ok, quant_ok, out_ok, every_round_ok, table_ok = True, True, True, True, True
+    checked = bool(cells)
+    out = dict(model=gemm['model'], policies={}, cells=[], criteria={}, checked=checked)
+    sel_ok, quant_ok, out_ok, every_round_ok, table_ok, launch_ok = True, True, True, True, True, True
     tables = {}
-    for (pol, proj, t), c in cells.items():
-        f, z = c['fq'], c['rz']
-        for side in ('fq', 'rz'):
-            tables.setdefault(c[side]['table'], file_sha(c[side]['table']))
-        rf, rr = rows[(pol, proj, t, 'fq')], rows[(pol, proj, t, 'rz')]
-        same_sel = all(f[k] == z[k] for k in ('kernel', 'width', 'schedule', 'set', 'extra_defines', 'sass_sha256',
-                                              'blob_gen', 'compiled_description'))
-        same_rounds = rf['same_launch_every_round'] and rr['same_launch_every_round'] and \
-            (rf['kernel'], rf['width'], rf['schedule']) == (f['kernel'], f['width'], f['schedule']) and \
-            (rr['kernel'], rr['width'], rr['schedule']) == (z['kernel'], z['width'], z['schedule'])
-        same_table = tables[f['table']] == tables[z['table']]
-        same_quant = (f['quant_mode'] == z['quant_mode'] and rf['quant_names'] == rr['quant_names'] ==
-                      f['forward_quant_names'] == z['forward_quant_names'] and len(rf['quant_names']) == 1)
-        same_gemm_name = rf['gemm_names'] == rr['gemm_names'] == f['forward_gemm_names'] == z['forward_gemm_names'] and \
-            len(rf['gemm_names']) == 1
-        sel_ok &= same_sel and same_gemm_name
-        every_round_ok &= same_rounds
-        table_ok &= same_table
-        quant_ok &= same_quant
-        out_ok &= c['y_equal'] and c['isolated_equals_forward']
-        ratio_rounds = [a['gemm_us'] / b['gemm_us'] for a, b in zip(sorted(rf['rounds'], key=lambda x: x['round']),
-                                                                    sorted(rr['rounds'], key=lambda x: x['round']))]
-        out['cells'].append(dict(policy=pol, proj=proj, tokens=t, kernel=f['kernel'], width=f['width'],
-                                 schedule=f['schedule'], rz_us=rr['gemm_us'], fq_us=rf['gemm_us'],
-                                 ratio=rf['gemm_us'] / rr['gemm_us'], round_ratios=ratio_rounds,
-                                 slower_every_round=all(x > 1 + CELL_TOL for x in ratio_rounds),
-                                 faster_every_round=all(x < 1 - CELL_TOL for x in ratio_rounds),
-                                 rz_quant_us=rr['quant_us'], fq_quant_us=rf['quant_us'],
-                                 same_selection=same_sel, same_gemm_kernel_name=same_gemm_name, same_quantizer=same_quant,
-                                 same_launch_every_round=same_rounds, same_table_content=same_table,
-                                 outputs_equal=c['y_equal'], isolated_equals_forward=c['isolated_equals_forward']))
+    for (pol, proj, t, side), rf in rows.items():
+        if side != 'fq':
+            continue
+        rr = rows[(pol, proj, t, 'rz')]
+        same_launch = (rf['kernel'], rf['width'], rf['schedule']) == (rr['kernel'], rr['width'], rr['schedule']) and \
+            rf['same_launch_every_round'] and rr['same_launch_every_round'] and rf['gemm_names'] == rr['gemm_names'] and \
+            len(rf['gemm_names']) == 1 and rf['quant_names'] == rr['quant_names'] and len(rf['quant_names']) == 1
+        launch_ok &= same_launch
+        cell = dict(policy=pol, proj=proj, tokens=t, kernel=rf['kernel'], width=rf['width'], schedule=rf['schedule'],
+                    rz_us=rr['gemm_us'], fq_us=rf['gemm_us'], ratio=rf['gemm_us'] / rr['gemm_us'],
+                    rz_quant_us=rr['quant_us'], fq_quant_us=rf['quant_us'], same_launch=same_launch)
+        cell['round_ratios'] = [a['gemm_us'] / b['gemm_us'] for a, b in zip(sorted(rf['rounds'], key=lambda x: x['round']),
+                                                                           sorted(rr['rounds'], key=lambda x: x['round']))]
+        cell['slower_every_round'] = all(x > 1 + CELL_TOL for x in cell['round_ratios'])
+        cell['faster_every_round'] = all(x < 1 - CELL_TOL for x in cell['round_ratios'])
+        c = cells.get((pol, proj, t))
+        if c is not None:
+            f, z = c['fq'], c['rz']
+            for sd in ('fq', 'rz'):
+                tables.setdefault(c[sd]['table'], file_sha(c[sd]['table']))
+            same_sel = all(f[k] == z[k] for k in ('kernel', 'width', 'schedule', 'set', 'extra_defines', 'sass_sha256',
+                                                  'blob_gen', 'compiled_description'))
+            same_rounds = (rf['kernel'], rf['width'], rf['schedule']) == (f['kernel'], f['width'], f['schedule']) and \
+                (rr['kernel'], rr['width'], rr['schedule']) == (z['kernel'], z['width'], z['schedule'])
+            same_quant = (f['quant_mode'] == z['quant_mode'] and rf['quant_names'] == f['forward_quant_names'] ==
+                          z['forward_quant_names'])
+            same_gemm_name = rf['gemm_names'] == f['forward_gemm_names'] == z['forward_gemm_names']
+            sel_ok &= same_sel and same_gemm_name
+            every_round_ok &= same_rounds
+            table_ok &= tables[f['table']] == tables[z['table']]
+            quant_ok &= same_quant
+            out_ok &= c['y_equal'] and c['isolated_equals_forward']
+            cell.update(same_selection=same_sel, same_quantizer=same_quant, outputs_equal=c['y_equal'],
+                        isolated_equals_forward=c['isolated_equals_forward'])
+        out['cells'].append(cell)
     # ---- per-forward sums
     sums_ok = True
     for pol in pols:
@@ -111,17 +118,21 @@ def analyze(gemm, binaries):
                                host_sections_differing=sorted(r['host']['differing']),
                                cubin_sections_differing=sorted({s for c in r['cubins'] for s in c['differing']}),
                                extra_defines=r['manifest']['extra_defines']) for n, r in b.items()}
+    na = None if not checked else True          # identity criteria need the per-cell checks
     out['criteria'] = {
         'operands equal bit for bit (every timed module)': all(all(v.values()) for v in gemm['checks']['operands'].values()),
-        'outputs equal bit for bit (fq vs rz; isolated path vs the fused forward)': out_ok,
-        'same kernel selection: build, width, scheduler row, defines, SASS hash, GEMM kernel name': sel_ok,
-        'same launch in every round': every_round_ok,
-        'the tile tables have the same content': table_ok and len(set(tables.values())) == 1,
-        'same activation quantizer (kernel name, build, mode)': quant_ok,
-        'same binaries (SASS, device code, host code; loaded bytes up to the compilation id)': binaries['all_identical'],
+        'outputs equal bit for bit (fq vs rz; isolated path vs the fused forward)': out_ok if checked else na,
+        'same kernel selection: build, width, scheduler row, defines, SASS hash, GEMM kernel name':
+            (sel_ok and launch_ok) if checked else None,
+        'same launch in every round (build, width, scheduler row, GEMM and quantizer kernel names)': launch_ok and
+            every_round_ok,
+        'the tile tables have the same content': (table_ok and len(set(tables.values())) == 1) if checked else na,
+        'same activation quantizer (kernel name, build, mode)': quant_ok if checked else None,
+        'same binaries (SASS, device code, host code; loaded bytes up to the compilation id)':
+            binaries['all_identical'] if checked else None,
         'per-forward GEMM sum within +-1 % for every policy and T': sums_ok,
         'no cell slower in every round by more than 2 %': not slow}
-    out['passed'] = all(out['criteria'].values())
+    out['passed'] = all(v for v in out['criteria'].values() if v is not None)
     out['slower_every_round'] = slow
     out['faster_every_round'] = [c for c in out['cells'] if c['faster_every_round']]
     out['max_abs_cell_deviation'] = max(abs(c['ratio'] - 1) for c in out['cells'])
@@ -147,7 +158,7 @@ def main():
                     'flipquant_parity')
     ap.add_argument('--runs', default='llama8b', help='comma-separated run stems (gemm_<stem>.json, binaries_<stem>.json)')
     args = ap.parse_args()
-    args.out_dir.mkdir(parents=True, exist_ok=True)
+    (args.out_dir / 'runs').mkdir(parents=True, exist_ok=True)
     runs = {}
     for stem in args.runs.split(','):
         g, b = args.src / f'gemm_{stem}.json', args.src / f'binaries_{stem}.json'
@@ -158,8 +169,9 @@ def main():
         a['sides'] = gemm.get('sides')
         a['pair'] = gemm.get('pair') or dict(fq='rz' if a['control'] == 'aa' else 'fq', rz='rz')
         runs[stem] = a
-        shutil.copyfile(g, args.out_dir / f'gemm_{stem}_raw.json')
-        shutil.copyfile(b, args.out_dir / f'binaries_{stem}.json')
+        with open(g, 'rb') as fi, gzip.open(args.out_dir / 'runs' / f'gemm_{stem}.json.gz', 'wb') as fo:
+            shutil.copyfileobj(fi, fo)
+        shutil.copyfile(b, args.out_dir / 'runs' / f'binaries_{stem}.json')
     pairs = [s for s, a in runs.items() if a['pair'] == dict(fq='fq', rz='rz')]
     controls = [s for s in runs if s not in pairs]
     first = runs[pairs[0]]
@@ -181,7 +193,8 @@ def main():
     md += ['## Criteria per run\n', '| criterion | ' + ' | '.join(label(s, a) for s, a in runs.items()) + ' |',
            '|---|' + ':-:|' * len(runs)]
     for k in first['criteria']:
-        md.append(f'| {k} | ' + ' | '.join('pass' if a['criteria'][k] else '**FAIL**' for a in runs.values()) + ' |')
+        md.append(f'| {k} | ' + ' | '.join('not checked' if a['criteria'][k] is None else 'pass' if a['criteria'][k]
+                                            else '**FAIL**' for a in runs.values()) + ' |')
     md += ['', '## Cell-level spread per run\n',
            '| run | cells | max abs deviation | cells beyond 1 % | beyond 2 % | slower (fq) by > 2 % in every round | faster by > 2 % '
            'in every round | per-forward sums: max abs deviation |', '|---|---:|---:|---:|---:|---|---|---:|']
