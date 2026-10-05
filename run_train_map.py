@@ -58,6 +58,12 @@ legacy hook, and its FP32 error is at the noise level of 4,096-token sums (resul
   --base-scales STATE    SCALE->OURS (results/scale_additivity/PROTOCOL.md): candidate B is the E2M1 weight with the learned
                          block scales of run_cost_distill.py --arm scale (quantize/learned_scale.deployed) instead of
                          FourOverSix; candidate A (E0M3 alpha=1) is unchanged. Lean store only.
+  --teacher-topk K       flipquant's top-K teacher (topk_teacher.py; results/topk_cal/PROTOCOL.md). Per fit window it
+                         keeps the top-K of the FP32 teacher log-probabilities (BF16 values, int32 ids) and the exact
+                         FP32 log-mass of the rest, on the GPU, instead of the full-vocabulary BF16 teacher on the host.
+                         Training minimizes KL(teacher || student) over those K tokens plus one tail bucket, through the
+                         chunked loss (chunked_loss.train_kl_gradient_topk) or the whole-batch expression. 0 (the
+                         default) is the full KL, unchanged. The development monitor keeps the full teacher.
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True is set by the caller; the report records it. Locally (no Slurm),
 --data-root points at the data layout of run_multiround.data_paths.
 """
@@ -80,6 +86,7 @@ from transformers import AutoTokenizer
 
 import chunked_loss
 import profile_regions
+import topk_teacher
 from cost_monitor import PhaseMonitor
 from profile_regions import region
 from quantize.causal_four_over_six import quantize_rows
@@ -102,7 +109,7 @@ LEGACY = dict(memory_mode='legacy', fused_act_quant=False, tile_grad_kernel=Fals
               deterministic=False, dev_backend='fake', eval_backend='fake', single_pass_epilogue=False)
 SOURCES = ('run_train_map.py', 'run_multiround.py', 'quantize/quantizer.py', 'quantize/causal_four_over_six.py',
            'quantize/fused_fourover6.py', 'chunked_loss.py', 'repro_local/realquant/candidate_store.py',
-           'repro_local/realquant/native_dev.py', 'repro_local/realquant/tile_score.py')
+           'repro_local/realquant/native_dev.py', 'repro_local/realquant/tile_score.py', 'topk_teacher.py')
 
 
 def tc_matmul(a, b):
@@ -165,6 +172,8 @@ def main():
                     help='No development data, teacher or evaluation (the real calibration scenario); see the docstring')
     ap.add_argument('--no-eval', action='store_true', help='Skip the final WikiText-2 / C4 evaluation')
     ap.add_argument('--base-scales', type=Path, default=None, help='learned E2M1 block-scale factors for candidate B')
+    ap.add_argument('--teacher-topk', type=int, default=0, metavar='K',
+                    help="flipquant's top-K + tail-bucket teacher, kept on the GPU (0: the full-vocabulary teacher)")
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     for key, value in (TM_OPT if args.tm_opt else LEGACY).items():
@@ -248,11 +257,26 @@ def main():
     for r in dev:
         logits = model(input_ids=r['ids'].to(device), use_cache=False).logits
         dev_teacher.append(logits[:, :-1].float().log_softmax(-1).bfloat16().cpu())
-    teacher = []
+    teacher, tail_mass = [], []
     for ids in fit:
         logits = model(input_ids=ids.to(device), use_cache=False).logits
-        teacher.append(logits[:, :-1].float().log_softmax(-1).bfloat16().cpu())
+        if args.teacher_topk:
+            # flipquant's TopKTeacher: the top-K of the FP32 log-probabilities and the tail log-mass, on the GPU
+            rows_k, mass = topk_teacher.topk_rows(logits[:, :-1].float().log_softmax(-1), args.teacher_topk)
+            teacher.append(rows_k)
+            tail_mass.append(mass)
+        else:
+            teacher.append(logits[:, :-1].float().log_softmax(-1).bfloat16().cpu())
     del logits
+    stored = [x for row in teacher for x in (row if args.teacher_topk else (row,))]
+    report['teacher_storage'] = dict(
+        k=args.teacher_topk, windows=len(teacher), bytes=sum(x.numel() * x.element_size() for x in stored),
+        devices=sorted({str(x.device) for x in stored}),
+        layout=('top-K values bf16 + ids int32 + tail log-mass fp32' if args.teacher_topk
+                else 'full-vocabulary log-probabilities bf16'))
+    if args.teacher_topk:
+        report['teacher_storage'].update(mean_tail_mass=sum(tail_mass) / len(tail_mass), max_window_tail_mass=max(tail_mass))
+    del stored
     # Candidates exactly as run_multiround.py: packed 4-bit codes + FP8 scales,
     # verified bitwise by pack(), dense BF16 fallback otherwise.
     monitor.enter('candidate_packing')
@@ -564,7 +588,11 @@ def main():
                         with region('phase: forward'):
                             logits = model(inputs_embeds=embeds, use_cache=False).logits
                         with region('phase: loss'):
-                            grad, kl = chunked_loss.train_kl_gradient(logits, [teacher[i] for i in idx], logits.device, n_seq)
+                            if args.teacher_topk:
+                                grad, kl = chunked_loss.train_kl_gradient_topk(logits, [teacher[i] for i in idx],
+                                                                               logits.device, n_seq)
+                            else:
+                                grad, kl = chunked_loss.train_kl_gradient(logits, [teacher[i] for i in idx], logits.device, n_seq)
                         with region('phase: backward'):
                             logits.backward(grad)
                         losses.extend(kl.tolist())
@@ -573,8 +601,13 @@ def main():
                     with region('phase: forward'):
                         lp = model(inputs_embeds=embeds, use_cache=False).logits[:, :-1].float().log_softmax(-1)
                     with region('phase: loss'):
-                        t = torch.cat([teacher[i] for i in idx]).to(lp.device).float()
-                        kl = per_sequence_kl(lp, t)
+                        if args.teacher_topk:
+                            t = None
+                            kl = topk_teacher.kl_topk_per_sequence(lp, *topk_teacher.batch_rows([teacher[i] for i in idx],
+                                                                                                   lp.device))
+                        else:
+                            t = torch.cat([teacher[i] for i in idx]).to(lp.device).float()
+                            kl = per_sequence_kl(lp, t)
                     # Mean KL over the sequences of one optimizer step.
                     with region('phase: backward'):
                         (kl.sum() / n_seq).backward()

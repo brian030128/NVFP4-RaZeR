@@ -21,6 +21,8 @@ The lm_head GEMM and everything before it are unchanged.
 import torch
 import torch.nn.functional as F
 
+import topk_teacher
+
 
 def document_chunks(batch, per_chunk=2):
     """[(d0, d1)]: consecutive document ranges of per_chunk documents each; the last one absorbs a remainder."""
@@ -91,4 +93,29 @@ def train_kl_gradient(logits, teacher, device, divisor, per_chunk=2):
         grad[d0:d1].copy_(g)
         kl_tok[d0:d1] = tok.detach()
         del leaf, lp, tt, tok, loss, g
+    return grad, kl_tok.mean(-1)
+
+
+def train_kl_gradient_topk(logits, teacher, device, divisor, per_chunk=2):
+    """run_train_map.py --chunked-loss --teacher-topk K: train_kl_gradient with flipquant's top-K + tail-bucket KL
+    (topk_teacher.kl_topk_tokens) in place of the full KL, one chunk of documents at a time. Each chunk's loss is
+    kl_tok.mean(-1).sum() / divisor, as in train_kl_gradient, so every token's upstream gradient is produced by the same
+    DivBackward and MeanBackward as flipquant's (kl_topk_per_sequence(...).sum() / n_seq).backward() on the whole batch.
+    teacher: B (values bf16, ids int32, tail fp32) rows (topk_teacher.topk_rows), GPU-resident, in batch order. Returns
+    the (B, T, V) bf16 gradient buffer for logits.backward() and the (B,) FP32 per-sequence top-K KL. Under
+    torch.enable_grad()."""
+    b, t = logits.shape[0], logits.shape[1] - 1
+    grad = torch.zeros_like(logits, requires_grad=False)
+    kl_tok = torch.empty(b, t, dtype=torch.float32, device=logits.device)
+    source = logits.detach()
+    for d0, d1 in document_chunks(b, per_chunk):
+        leaf = source[d0:d1].requires_grad_()
+        lp = leaf[:, :-1].float().log_softmax(-1)
+        values, idx, tail = topk_teacher.batch_rows(teacher[d0:d1], device)
+        tok = topk_teacher.kl_topk_tokens(lp, values, idx, tail)
+        loss = tok.mean(-1).sum() / divisor
+        g, = torch.autograd.grad(loss, leaf)
+        grad[d0:d1].copy_(g)
+        kl_tok[d0:d1] = tok.detach()
+        del leaf, lp, values, idx, tail, tok, loss, g
     return grad, kl_tok.mean(-1)

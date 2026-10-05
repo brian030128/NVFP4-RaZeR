@@ -1,0 +1,202 @@
+{
+ "flipquant": {
+  "root": "/home/dev/flipquant",
+  "ref": "d2dd92e",
+  "commit": "d2dd92e70bf866ee860aeb9f386637b8e68d43c2",
+  "file_sha256": "54b4fa21b3adbf17d8b954fea3a3b4aa58d5a65f8214d1ba0f22c16c24cfaaea",
+  "functions": [
+   "def tail_logprob(lp, idx):\n    \"\"\"log of the probability mass outside ``idx`` (exact: logsumexp over the masked remainder). The mask is a\n    large finite negative, not -inf, so an empty remainder gives ~-1e30 with a finite gradient.\"\"\"\n    return lp.scatter(-1, idx, -1e30).logsumexp(-1)",
+   "def kl_topk_per_sequence(lp, values, idx, tail):\n    \"\"\"KL(teacher || student) over the teacher's top-k tokens plus one bucket for the rest of the vocabulary:\n    the exact KL of the coarse-grained distributions, a lower bound on the full KL. ``values`` [B,T,k] and\n    ``tail`` [B,T] are teacher log-probs, ``idx`` [B,T,k] their token ids.\"\"\"\n    q_tail = tail_logprob(lp, idx)\n    top = (values.exp() * (values - lp.gather(-1, idx))).sum(-1)\n    rest = torch.where(torch.isfinite(tail), tail.exp() * (tail - q_tail), torch.zeros_like(tail))\n    return (top + rest).mean(-1)",
+   "class TopKTeacher:\n    \"\"\"Teacher log-probabilities as the top-k tokens per position (BF16 values, int32 ids) plus the exact\n    log-mass of the remaining vocabulary (FP32), kept on the GPU: ~3 MB per 512-token window at k=1000\n    instead of 131 MB (Llama vocabulary), so even 20000 windows stay in device memory.\"\"\"\n\n    def __init__(self, k: int, device):\n        self.k, self.device, self.rows, self.tail_mass = k, device, [], []\n\n    def append_logprobs(self, lp):\n        values, idx = lp.topk(self.k, dim=-1)\n        tail = tail_logprob(lp, idx)\n        self.tail_mass.append(float(tail.exp().mean()))\n        self.rows.append((values.bfloat16().to(self.device), idx.int().to(self.device), tail.to(self.device)))\n\n    def __len__(self):\n        return len(self.rows)\n\n    def batch(self, ids, device):\n        values, idx, tail = (torch.cat([self.rows[i][j] for i in ids]).to(device) for j in range(3))\n        return values.float(), idx.long(), tail"
+  ]
+ },
+ "k": 256,
+ "tokens": 512,
+ "tolerance": 1e-06,
+ "random": {
+  "mistral7b_b8": {
+   "rows_bitwise": true,
+   "tail_mass_equal": true,
+   "mean_tail_mass": 0.29457852616906166,
+   "chunked_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "chunked_grad": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "whole_batch_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "kl_mean": 6.780572891235352,
+   "passed": true
+  },
+  "mistral7b_b2": {
+   "rows_bitwise": true,
+   "tail_mass_equal": true,
+   "mean_tail_mass": 0.29422731697559357,
+   "chunked_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "chunked_grad": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "whole_batch_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "kl_mean": 6.8030548095703125,
+   "passed": true
+  },
+  "phi4_b8": {
+   "rows_bitwise": true,
+   "tail_mass_equal": true,
+   "mean_tail_mass": 0.4301069602370262,
+   "chunked_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "chunked_grad": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "whole_batch_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "kl_mean": 5.82763671875,
+   "passed": true
+  },
+  "phi4_b2": {
+   "rows_bitwise": true,
+   "tail_mass_equal": true,
+   "mean_tail_mass": 0.4300851672887802,
+   "chunked_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "chunked_grad": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "whole_batch_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "kl_mean": 5.840131759643555,
+   "passed": true
+  },
+  "llama8b_b8": {
+   "rows_bitwise": true,
+   "tail_mass_equal": true,
+   "mean_tail_mass": 0.4602908119559288,
+   "chunked_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "chunked_grad": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "whole_batch_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "kl_mean": 5.588566780090332,
+   "passed": true
+  },
+  "llama8b_b2": {
+   "rows_bitwise": true,
+   "tail_mass_equal": true,
+   "mean_tail_mass": 0.4591651111841202,
+   "chunked_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "chunked_grad": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "whole_batch_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "kl_mean": 5.623223304748535,
+   "passed": true
+  },
+  "qwen27b_b8": {
+   "rows_bitwise": true,
+   "tail_mass_equal": true,
+   "mean_tail_mass": 0.5385733172297478,
+   "chunked_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "chunked_grad": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "whole_batch_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "kl_mean": 4.945807456970215,
+   "passed": true
+  },
+  "qwen27b_b2": {
+   "rows_bitwise": true,
+   "tail_mass_equal": true,
+   "mean_tail_mass": 0.5408754348754883,
+   "chunked_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "chunked_grad": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "whole_batch_kl": {
+    "bitwise": true,
+    "max_rel": 0.0
+   },
+   "kl_mean": 4.896272659301758,
+   "passed": true
+  }
+ },
+ "failures": [],
+ "finite_differences": {
+  "k8": {
+   "fd_max_rel": 1.276927015639329e-08,
+   "closed_max_rel": 2.5624103131472126e-16
+  },
+  "k64": {
+   "fd_max_rel": 1.2038096087342074e-08,
+   "closed_max_rel": 2.3607539567000567e-16
+  },
+  "passed": true
+ },
+ "real": {
+  "rows_bitwise": true,
+  "tail_mass_equal": true,
+  "mean_tail_mass": 0.019779888330958784,
+  "chunked_kl": {
+   "bitwise": true,
+   "max_rel": 0.0
+  },
+  "chunked_grad": {
+   "bitwise": true,
+   "max_rel": 0.0
+  },
+  "whole_batch_kl": {
+   "bitwise": true,
+   "max_rel": 0.0
+  },
+  "kl_mean": 0.10931196808815002,
+  "passed": true
+ },
+ "passed": true
+}
