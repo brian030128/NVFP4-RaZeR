@@ -583,6 +583,8 @@ def driver_main(args):
             res['checks']['operands'][key] = same
             if not all(same.values()):
                 raise SystemExit(f'operands differ at {key}: {same}')
+        if args.rehome:                              # diagnostic: every timed buffer into fresh segments first
+            res['rehome'] = {side: peers[side]('rehome') for side in ('fq', 'rz')}
         res['rows'] = []
         policies = list(args.policies)
         projs = list(next(iter(rz['modules'].values())))
@@ -590,6 +592,9 @@ def driver_main(args):
             for t in args.tokens:
                 cells = {}
                 for pol in policies:
+                    if args.no_checks:                   # diagnostic only: no record of the selection or outputs
+                        cells[pol] = {side: [] for side in ('fq', 'rz')}
+                        continue
                     c = {side: peers[side]('check', policy=pol, proj=proj, t=t) for side in ('fq', 'rz')}
                     cell = dict(policy=pol, proj=proj, tokens=t, fq=c['fq'], rz=c['rz'],
                                 y_equal=c['fq']['y_sha256'] == c['rz']['y_sha256'],
@@ -681,6 +686,8 @@ def main():
     ap.add_argument('--out', type=Path, default=None)
     ap.add_argument('--control', choices=('none', 'aa'), default='none',
                     help="aa: an A/A control, the 'fq' slot runs a second NVFP4-RaZeR worker (= --pair rz:rz)")
+    ap.add_argument('--rehome', action='store_true', help="diagnostic: both workers 'rehome' before the first cell")
+    ap.add_argument('--no-checks', action='store_true', help='diagnostic: skip the per-cell checks')
     ap.add_argument('--pair', default='fq:rz',
                     help="what the two slots run, '<fq slot>:<rz slot>' from fq (flipquant's real path), rz (the "
                          "kernel-opt harness), rzm (NVFP4-RaZeR's own model path); default fq:rz")
