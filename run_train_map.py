@@ -64,6 +64,11 @@ legacy hook, and its FP32 error is at the noise level of 4,096-token sums (resul
                          Training minimizes KL(teacher || student) over those K tokens plus one tail bucket, through the
                          chunked loss (chunked_loss.train_kl_gradient_topk) or the whole-batch expression. 0 (the
                          default) is the full KL, unchanged. The development monitor keeps the full teacher.
+  --fit-windows N        cost runs (results/topk_cal/fit_windows/NOTE.md): the paper's 128 fit windows, then N - 128 more
+                         by flipquant's extension rule (fit_extension.py: its calibration_sets_extended stream rule, seed
+                         20260930, on the paper record's streams; the paper's fit, development and published C4
+                         documents skipped), half math and half code, each recorded by token hash. 128 (the default) is
+                         the paper's fit set, unchanged.
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True is set by the caller; the report records it. Locally (no Slurm),
 --data-root points at the data layout of run_multiround.data_paths.
 """
@@ -85,6 +90,7 @@ import transformers
 from transformers import AutoTokenizer
 
 import chunked_loss
+import fit_extension
 import profile_regions
 import topk_teacher
 from cost_monitor import PhaseMonitor
@@ -109,7 +115,8 @@ LEGACY = dict(memory_mode='legacy', fused_act_quant=False, tile_grad_kernel=Fals
               deterministic=False, dev_backend='fake', eval_backend='fake', single_pass_epilogue=False)
 SOURCES = ('run_train_map.py', 'run_multiround.py', 'quantize/quantizer.py', 'quantize/causal_four_over_six.py',
            'quantize/fused_fourover6.py', 'chunked_loss.py', 'repro_local/realquant/candidate_store.py',
-           'repro_local/realquant/native_dev.py', 'repro_local/realquant/tile_score.py', 'topk_teacher.py')
+           'repro_local/realquant/native_dev.py', 'repro_local/realquant/tile_score.py', 'topk_teacher.py',
+           'fit_extension.py')
 
 
 def tc_matmul(a, b):
@@ -174,6 +181,8 @@ def main():
     ap.add_argument('--base-scales', type=Path, default=None, help='learned E2M1 block-scale factors for candidate B')
     ap.add_argument('--teacher-topk', type=int, default=0, metavar='K',
                     help="flipquant's top-K + tail-bucket teacher, kept on the GPU (0: the full-vocabulary teacher)")
+    ap.add_argument('--fit-windows', type=int, default=128, metavar='N',
+                    help="the paper's 128 fit windows plus N - 128 by flipquant's extension rule (fit_extension.py)")
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     for key, value in (TM_OPT if args.tm_opt else LEGACY).items():
@@ -250,6 +259,13 @@ def main():
     tok = AutoTokenizer.from_pretrained(prior['source'], revision=prior['revision'])
     fit, _ = math_code_data(tok, prior['fit'])
     fit = [b for source in ('math', 'code') for b in fit[source]]
+    if args.fit_windows != 128:
+        # cost runs: the paper's 128 windows first, then flipquant's extension rule (fit_extension.py)
+        assert args.fit_windows > 128 and args.fit_windows % 2 == 0, '--fit-windows: an even number above 128'
+        skip = fit_extension.skip_documents(prior, development, PUBLISHED.get(args.model))
+        extra, report['fit_extension'] = fit_extension.extend(tok, prior, args.fit_windows, skip)
+        fit += extra
+        save(args.out, report)
     dev, report['development'] = ([], None) if args.no_dev else load_development(development)
     device = model.get_input_embeddings().weight.device
     monitor.enter('teacher_precompute')
