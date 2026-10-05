@@ -218,6 +218,74 @@ class Worker:
             torch.cuda.empty_cache()
         return out
 
+    # ---- device-memory placement (the allocator's segments)
+    def segments(self, msg=None):
+        """The caching allocator's segments that hold the timed buffers: per buffer kind, how many segments and their
+        sizes (GiB); and the process's segments."""
+        snap = self.torch.cuda.memory_snapshot()
+        segs = sorted((s['address'], s['total_size']) for s in snap)
+
+        def seg_of(t):
+            a = t.data_ptr()
+            for base, size in segs:
+                if base <= a < base + size:
+                    return base, size
+            return None
+        kinds = dict(copies=[t for v in self.copies.values() for pair in v for t in pair],
+                     modules=[b for lin in self.lins.values() for b in (lin.packed, lin.sf)],
+                     flush=[self.flush])
+        out = {}
+        for kind, ts in kinds.items():
+            held = {seg_of(t) for t in ts}
+            out[kind] = dict(segments=len(held), largest_gib=max(s for _, s in held) / 2 ** 30,
+                             total_gib=sum(s for _, s in held) / 2 ** 30)
+        out['process'] = dict(segments=len(segs), largest_gib=max(s for _, s in segs) / 2 ** 30,
+                              reserved_gib=self.torch.cuda.memory_reserved() / 2 ** 30)
+        return out
+
+    def rehome(self, msg=None):
+        """Every buffer this worker times (the modules' packed weights, placed scales and bias, the rotation copies, the
+        flush buffer) goes to host memory, the allocator returns its cached segments to the driver, and the buffers
+        come back in a fixed order: per (policy, projection) the module's buffers, then its copies. Afterwards the
+        buffers sit in fresh segments, as in a process that never held anything else."""
+        torch = self.torch
+        host = {}
+        for key, lin in self.lins.items():
+            host[key] = dict(packed=lin.packed.cpu(), sf=lin.sf.cpu(),
+                             bias=None if lin.bias_bf16 is None else lin.bias_bf16.cpu(), copies=len(self.copies[key]))
+            lin.packed = lin.sf = None
+            if lin.bias_bf16 is not None:
+                lin.bias_bf16 = None
+        self.copies, self.flush = {}, None
+        self.pool_key = self.pool = self.x = None
+        for lin in self.lins.values():                 # the kernels' cached workspaces are reallocated on first use
+            for k in (lin.kernel_set.kernels.values() if lin.kernel_set is not None else [lin.kernel]):
+                k._ws.clear()
+        gc.collect()
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        self.flush = torch.ones(self.args.flush_mib * 2 ** 20 // 4, dtype=torch.float32, device='cuda')
+        for key, lin in self.lins.items():
+            h = host[key]
+            lin.packed, lin.sf = h['packed'].cuda(), h['sf'].cuda()
+            if h['bias'] is not None:
+                lin.bias_bf16 = h['bias'].cuda()
+            self.copies[key] = [(lin.packed.clone(), lin.sf.clone()) for _ in range(h['copies'])]
+            self.counter[key] = 0
+        return self.segments()
+
+    def warm(self, msg):
+        """The opposite of rehome: the allocator first caches one segment of msg['gib'] GiB (transformers'
+        caching_allocator_warmup does this before it loads a model), then the rotation copies and the activation
+        buffers are allocated again, so that they are carved out of it."""
+        torch = self.torch
+        big = torch.empty(int(msg['gib'] * 2 ** 30), dtype=torch.uint8, device='cuda')
+        del big
+        self.copies = {k: [(p.clone(), s.clone()) for p, s in v] for k, v in self.copies.items()}
+        self.pool_key = self.pool = self.x = None
+        gc.collect()
+        return self.segments()
+
     # ---- per (policy, projection, T)
     def pools(self, n, k, t):
         torch = self.torch
@@ -344,8 +412,9 @@ def worker_main(args):
 # ------------------------------------------------------------------------------------------------------------- driver
 
 class Peer:
-    def __init__(self, side, args, env, cwd, log):
-        cmd = [args.python, __file__, '--role', 'worker', '--side', side, '--model', args.model, '--fq-root', args.fq_root,
+    def __init__(self, side, args, env, cwd, log, worker_side=None):
+        cmd = [args.python, __file__, '--role', 'worker', '--side', worker_side or side, '--model', args.model,
+               '--fq-root', args.fq_root,
                '--fq-build', str(args.fq_build), '--flush-mib', str(args.flush_mib), '--policies', ','.join(args.policies)]
         if args.projections:
             cmd += ['--projections', ','.join(args.projections)]
@@ -403,7 +472,9 @@ def driver_main(args):
                                  'of a policy back to back, fq first when r + policy index is even'),
                razer=dict(root=str(RAZER), **git_state(RAZER), build=str(args.rz_build)),
                flipquant=dict(root=str(fq_root), **git_state(fq_root), build=str(args.fq_build)),
-               started_utc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
+               started_utc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), control=args.control,
+               sides=dict(fq='a second NVFP4-RaZeR process (A/A control)' if args.control == 'aa' else
+                          "flipquant's real path", rz='NVFP4-RaZeR kernel-opt (the deviation-2 harness)'))
     if not res['flipquant']['clean']:
         raise SystemExit(f'the flipquant worktree is not clean: {res["flipquant"]["status"]}')
     tel = G.Telemetry(Path(str(args.out) + '.telemetry.csv'))
@@ -416,7 +487,11 @@ def driver_main(args):
         t0 = time.time()
         rz = peers['rz']('setup')
         print(f'rz setup {time.time() - t0:.0f} s', flush=True)
-        peers['fq'] = Peer('fq', args, base, str(fq_root), out_dir / 'fq.log')
+        if args.control == 'aa':                     # A/A: the 'fq' slot is a second NVFP4-RaZeR process
+            peers['fq'] = Peer('fq', args, dict(base, SM120_BUILD_DIR=str(args.rz_build)), str(RAZER), out_dir / 'fq.log',
+                               worker_side='rz')
+        else:
+            peers['fq'] = Peer('fq', args, base, str(fq_root), out_dir / 'fq.log')
         t0 = time.time()
         fq = peers['fq']('setup', modules=rz['modules'])
         print(f'fq setup {time.time() - t0:.0f} s', flush=True)
@@ -427,7 +502,8 @@ def driver_main(args):
         def others():
             return [p.pid for p in pynvml.nvmlDeviceGetComputeRunningProcesses(h) if p.pid not in pids]
         # the packages are each side's own, and the operands are equal bit for bit
-        assert Path(fq['package']) == fq_root / 'kernels' / 'razer_sm120' / 'mixfp4_sm120', fq['package']
+        assert Path(fq['package']) == (RAZER / 'sm120' / 'mixfp4_sm120' if args.control == 'aa' else
+                                       fq_root / 'kernels' / 'razer_sm120' / 'mixfp4_sm120'), fq['package']
         assert Path(rz['package']) == RAZER / 'sm120' / 'mixfp4_sm120', rz['package']
         res['checks'] = dict(operands={}, cells=[], counts_ok=True, other_processes=[])
         for key, a in rz['operands'].items():
@@ -533,6 +609,8 @@ def main():
     ap.add_argument('--rounds', type=int, default=3)
     ap.add_argument('--flush-mib', type=int, default=512)
     ap.add_argument('--out', type=Path, default=None)
+    ap.add_argument('--control', choices=('none', 'aa'), default='none',
+                    help="aa: an A/A control, the 'fq' slot runs a second NVFP4-RaZeR worker")
     args = ap.parse_args()
     args.fq_build = Path(args.fq_build or Path(args.fq_root).resolve() / 'kernels' / 'razer_sm120' / 'build_ko')
     args.policies = [p for p in args.policies.split(',') if p]
