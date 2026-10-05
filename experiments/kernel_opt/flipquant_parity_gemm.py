@@ -413,6 +413,34 @@ class Worker:
                     forward_gemm_names=sorted(fwd['gemm']), forward_quant_names=sorted(fwd['quant']),
                     y_sha256=self.tsha(ref))
 
+    def probe(self, msg):
+        """Diagnostic: one part of check() alone -- 'noprof' (the fused forward and the isolated GEMM, no profiler),
+        'forward' (the fused forward under the profiler), 'isolated' (the isolated GEMM on the module's own buffers under
+        the profiler)."""
+        torch = self.torch
+        from torch.profiler import ProfilerActivity, profile
+        key, t, mode = (msg['policy'], msg['proj']), msg['t'], msg['mode']
+        lin, n, k, kern, sched, width = self.call(key, t)
+        pool, x = self.pools(n, k, t)
+        x.copy_(pool[0])
+        torch.cuda.synchronize()
+
+        def fwd():
+            lin(x)
+            torch.cuda.synchronize()
+
+        def iso():
+            y = torch.empty((t, n), dtype=torch.bfloat16, device='cuda')
+            self.gemm(lin, kern, sched, kern.quant_rows(x, lin.act_kind), lin.packed, lin.sf, y, n, k, t)
+            torch.cuda.synchronize()
+        if mode == 'noprof':
+            fwd()
+            iso()
+        else:
+            with profile(activities=[ProfilerActivity.CUDA]):
+                (fwd if mode == 'forward' else iso)()
+        return dict(mode=mode)
+
     def time(self, msg):
         torch = self.torch
         from torch.profiler import ProfilerActivity, profile
@@ -592,7 +620,10 @@ def driver_main(args):
             for t in args.tokens:
                 cells = {}
                 for pol in policies:
-                    if args.no_checks:                   # diagnostic only: no record of the selection or outputs
+                    if args.no_checks or args.check_mode != 'full':     # diagnostics only: no record of the checks
+                        if args.check_mode != 'full':
+                            for side in ('fq', 'rz'):
+                                peers[side]('probe', policy=pol, proj=proj, t=t, mode=args.check_mode)
                         cells[pol] = {side: [] for side in ('fq', 'rz')}
                         continue
                     c = {side: peers[side]('check', policy=pol, proj=proj, t=t) for side in ('fq', 'rz')}
@@ -688,6 +719,8 @@ def main():
                     help="aa: an A/A control, the 'fq' slot runs a second NVFP4-RaZeR worker (= --pair rz:rz)")
     ap.add_argument('--rehome', action='store_true', help="diagnostic: both workers 'rehome' before the first cell")
     ap.add_argument('--no-checks', action='store_true', help='diagnostic: skip the per-cell checks')
+    ap.add_argument('--check-mode', choices=('full', 'noprof', 'forward', 'isolated'), default='full',
+                    help="diagnostic: run only a part of the per-cell check (Worker.probe) and record no checks")
     ap.add_argument('--pair', default='fq:rz',
                     help="what the two slots run, '<fq slot>:<rz slot>' from fq (flipquant's real path), rz (the "
                          "kernel-opt harness), rzm (NVFP4-RaZeR's own model path); default fq:rz")
