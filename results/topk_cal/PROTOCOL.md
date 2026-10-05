@@ -97,3 +97,17 @@ Nothing is tuned or adopted from this study.
   - a teacher of 100.7 MB on the GPU, mean tail mass 0.0184 (at most 0.0557 per window);
   - 41.1 GiB peak GPU allocated and 15.9 GiB host `ru_maxrss`;
   - no E0M3 tile after 16 steps.
+
+### The run
+
+`run_topk_cal.sh` ran on 2026-10-05 from 08:08 to 08:23 UTC (registration 715baa0), with no deviation.
+- **The gate:** A's map is the paper's 16x64 map, bitwise (54070819…).
+- **Total time:** C is 157.2 s, against 518.3 s for A (0.303) and 174.7 s for B (0.900).
+- **Per epoch:** 20.14 s against 23.0 s (0.875).
+- **GPU:** peak allocated 41.07 against 40.48 GiB (1.015).
+- **Host:** the peak RSS is 15.7–15.9 against 18.1–18.2 GiB (0.86–0.88), and in C it is the model load. After the load,
+  host RSS is 2.55 against 18.2 GiB (0.140).
+- **Teacher:** 100.7 MB on the GPU, against 16.8 GB on the host (0.006).
+- **Consistency:** today's A is within 1 % of results/nodev_cost's run in time, equal in GPU memory, and its map is the
+  same.
+- **Results:** `REPORT.md`. The tables and data are in `topk_cal.md` and `topk_cal.json`.
