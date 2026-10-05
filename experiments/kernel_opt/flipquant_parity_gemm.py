@@ -68,6 +68,9 @@ POLICIES = OrderedDict([
                          family='stock_wB_ko')),
 ])
 TOKENS = (1, 16, 128, 512, 2048, 8192)
+IMPL = dict(fq="flipquant's real path (models.cli.build -> models.razer.install)",
+            rz='NVFP4-RaZeR kernel-opt, the deviation-2 harness (NativeLinear from the artifact)',
+            rzm="NVFP4-RaZeR's own model path (eval/common.load_model -> mixfp4_sm120.model.install)")
 
 
 def classify(name):
@@ -100,6 +103,8 @@ class Worker:
         torch = self.torch
         if self.side == 'rz':
             out = self.setup_rz()
+        elif self.side == 'rzm':
+            out = self.setup_rzm()
         else:
             out = self.setup_fq(msg['modules'])
         import mixfp4_sm120
@@ -172,6 +177,65 @@ class Worker:
                                               tiles_per_module=t['tiles_per_module'], choice=cfg['tags'])
         del loaded
         gc.collect()
+        return out
+
+    def setup_rzm(self):
+        """NVFP4-RaZeR's own deployment path, as its evaluations run it: per policy the model is loaded
+        (sm120/eval/common.load_model, transformers) and mixfp4_sm120.model.install puts NativeLinears from the paper
+        artifact into it, routed as the harness routes ('auto', 'auto_stock', 'auto_stock_wB'); the timed modules are
+        the installed NativeLinears of M1's module choice."""
+        import importlib.util
+        torch = self.torch
+        for p in (RAZER / 'experiments' / 'paper', RAZER / 'sm120'):
+            sys.path.insert(0, str(p))
+
+        def load(name, path):
+            spec = importlib.util.spec_from_file_location(name, path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        EC = load('razer_eval_common', RAZER / 'sm120' / 'eval' / 'common.py')
+        import bench_gemm_isolated as G
+        import common as B                           # sm120/bench/common.py (bench_gemm_isolated put it on the path)
+        from mixfp4_sm120 import artifact as A
+        from mixfp4_sm120 import model as RM
+        from mixfp4_sm120.linear import NativeLinear
+        out = dict(gpu=B.gpu_info(), build_dir=os.environ.get('SM120_BUILD_DIR'), routing={}, kernel_sets={}, modules={},
+                   tags={}, install={})
+        for pol, cfg in POLICIES.items():
+            if pol not in self.args.policies:
+                continue
+            art = ART / f"{self.args.model}_{cfg['art']}"
+            meta, weights = A.load(art, device='cpu')
+            tags = G.tag_modules(meta, weights)
+            del weights
+            t0 = time.time()
+            model = EC.load_model(self.args.model)
+            rep = RM.install(model, art, kernel=cfg['rz'], loader=EC.MODELS[self.args.model]['loader'])
+            family = (rep.kernel_set or {}).get('family')
+            if family != cfg['family']:
+                raise SystemExit(f"rzm {pol}: install routed {cfg['rz']!r} to {family}, expected {cfg['family']} "
+                                 f"({rep.routing})")
+            mods = dict(model.named_modules())
+            out['routing'][pol] = dict(route=cfg['rz'], set=family, note=rep.routing)
+            out['kernel_sets'][pol] = rep.kernel_set
+            out['install'][pol] = dict(modules=len(rep.native), e0m3_tiles=rep.e0m3_tiles, seconds=round(time.time() - t0, 1),
+                                       activation_quantizer=rep.activation_quantizer)
+            out['modules'][pol], out['tags'][pol] = {}, {}
+            for proj, t in tags.items():
+                if self.args.projections and proj not in self.args.projections:
+                    continue
+                name, e0 = t[cfg['tags']]
+                lin = mods[name]
+                if not isinstance(lin, NativeLinear) or lin.act_kind != ACT:
+                    raise SystemExit(f'rzm {pol}: {name} is not a FourOverSix NativeLinear')
+                self.lins[(pol, proj)] = lin
+                out['modules'][pol][proj] = name
+                out['tags'][pol][proj] = dict(module=name, e0m3_tiles=e0, modules=t['modules'], shape=t['shape'],
+                                              tiles_per_module=t['tiles_per_module'], choice=cfg['tags'])
+            del model, mods, rep
+            gc.collect()
+            torch.cuda.empty_cache()
         return out
 
     def setup_fq(self, modules):
@@ -475,8 +539,7 @@ def driver_main(args):
                razer=dict(root=str(RAZER), **git_state(RAZER), build=str(args.rz_build)),
                flipquant=dict(root=str(fq_root), **git_state(fq_root), build=str(args.fq_build)),
                started_utc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), control=args.control,
-               sides=dict(fq='a second NVFP4-RaZeR process (A/A control)' if args.control == 'aa' else
-                          "flipquant's real path", rz='NVFP4-RaZeR kernel-opt (the deviation-2 harness)'))
+               pair=args.pair, sides={slot: IMPL[impl] for slot, impl in args.pair.items()})
     if not res['flipquant']['clean']:
         raise SystemExit(f'the flipquant worktree is not clean: {res["flipquant"]["status"]}')
     tel = G.Telemetry(Path(str(args.out) + '.telemetry.csv'))
@@ -485,18 +548,22 @@ def driver_main(args):
     base.update(PYTHONDONTWRITEBYTECODE='1', HF_HUB_OFFLINE='1')
     peers = {}
     try:
-        peers['rz'] = Peer('rz', args, dict(base, SM120_BUILD_DIR=str(args.rz_build)), str(RAZER), out_dir / 'rz.log')
+        def spawn(slot):
+            impl = args.pair[slot]
+            if impl == 'fq':
+                return Peer(slot, args, base, str(fq_root), out_dir / f'{slot}.log', worker_side='fq')
+            return Peer(slot, args, dict(base, SM120_BUILD_DIR=str(args.rz_build)), str(RAZER), out_dir / f'{slot}.log',
+                        worker_side=impl)
+        peers['rz'] = spawn('rz')
         t0 = time.time()
         rz = peers['rz']('setup')
-        print(f'rz setup {time.time() - t0:.0f} s', flush=True)
-        if args.control == 'aa':                     # A/A: the 'fq' slot is a second NVFP4-RaZeR process
-            peers['fq'] = Peer('fq', args, dict(base, SM120_BUILD_DIR=str(args.rz_build)), str(RAZER), out_dir / 'fq.log',
-                               worker_side='rz')
-        else:
-            peers['fq'] = Peer('fq', args, base, str(fq_root), out_dir / 'fq.log')
+        print(f"rz slot ({args.pair['rz']}) setup {time.time() - t0:.0f} s", flush=True)
+        peers['fq'] = spawn('fq')
         t0 = time.time()
         fq = peers['fq']('setup', modules=rz['modules'])
-        print(f'fq setup {time.time() - t0:.0f} s', flush=True)
+        print(f"fq slot ({args.pair['fq']}) setup {time.time() - t0:.0f} s", flush=True)
+        if args.pair['fq'] != 'fq':
+            assert fq['modules'] == rz['modules'], 'the two RaZeR workers chose different modules'
         res['setup'] = dict(rz=rz, fq=fq)
         pids = {os.getpid(), peers['rz'].p.pid, peers['fq'].p.pid}
         h = pynvml.nvmlDeviceGetHandleByIndex(0)
@@ -504,9 +571,10 @@ def driver_main(args):
         def others():
             return [p.pid for p in pynvml.nvmlDeviceGetComputeRunningProcesses(h) if p.pid not in pids]
         # the packages are each side's own, and the operands are equal bit for bit
-        assert Path(fq['package']) == (RAZER / 'sm120' / 'mixfp4_sm120' if args.control == 'aa' else
-                                       fq_root / 'kernels' / 'razer_sm120' / 'mixfp4_sm120'), fq['package']
-        assert Path(rz['package']) == RAZER / 'sm120' / 'mixfp4_sm120', rz['package']
+        package = dict(fq=fq_root / 'kernels' / 'razer_sm120' / 'mixfp4_sm120', rz=RAZER / 'sm120' / 'mixfp4_sm120',
+                       rzm=RAZER / 'sm120' / 'mixfp4_sm120')
+        assert Path(fq['package']) == package[args.pair['fq']], fq['package']
+        assert Path(rz['package']) == package[args.pair['rz']], rz['package']
         res['checks'] = dict(operands={}, cells=[], counts_ok=True, other_processes=[])
         for key, a in rz['operands'].items():
             b = fq['operands'][key]
@@ -597,7 +665,7 @@ def driver_main(args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--role', choices=('driver', 'worker'), default='driver')
-    ap.add_argument('--side', choices=('fq', 'rz'), default=None)
+    ap.add_argument('--side', choices=('fq', 'rz', 'rzm'), default=None)
     ap.add_argument('--model', choices=tuple(MODELS), default='llama8b')
     ap.add_argument('--fq-root', default='/home/dev/n16k64_campaign/fqport/wt', help="a clean flipquant worktree")
     ap.add_argument('--fq-build', default=None, help='default <fq-root>/kernels/razer_sm120/build_ko')
@@ -612,8 +680,16 @@ def main():
     ap.add_argument('--flush-mib', type=int, default=512)
     ap.add_argument('--out', type=Path, default=None)
     ap.add_argument('--control', choices=('none', 'aa'), default='none',
-                    help="aa: an A/A control, the 'fq' slot runs a second NVFP4-RaZeR worker")
+                    help="aa: an A/A control, the 'fq' slot runs a second NVFP4-RaZeR worker (= --pair rz:rz)")
+    ap.add_argument('--pair', default='fq:rz',
+                    help="what the two slots run, '<fq slot>:<rz slot>' from fq (flipquant's real path), rz (the "
+                         "kernel-opt harness), rzm (NVFP4-RaZeR's own model path); default fq:rz")
     args = ap.parse_args()
+    if args.control == 'aa':
+        args.pair = 'rz:rz'
+    a, b = args.pair.split(':')
+    assert a in IMPL and b in ('rz', 'rzm'), args.pair
+    args.pair = dict(fq=a, rz=b)
     args.fq_build = Path(args.fq_build or Path(args.fq_root).resolve() / 'kernels' / 'razer_sm120' / 'build_ko')
     args.policies = [p for p in args.policies.split(',') if p]
     assert all(p in POLICIES for p in args.policies), args.policies

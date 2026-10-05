@@ -12,7 +12,10 @@ the two sides of a policy back to back, the side order alternated):
   swapped    rz 'warm' (one cached 16 GiB segment, then its rotation copies and activation buffers allocated again, out
              of it) and fq 'rehome' (every timed buffer through host memory into fresh segments): the placements swap;
   both_fresh both 'rehome': both sides' timed buffers in fresh segments, allocated in the same order.
-Each phase records the allocator segments that hold each side's buffers.
+With --plan localize (and --full, the parity run's setup), the phases re-place fq's buffers step by step instead:
+  as_is, fq_copies (fq's rotation copies and activation buffers allocated again, in the same segments' free space),
+  fq_fresh (fq 'rehome'), both_fresh (rz 'rehome' too).
+Each phase records the allocator segments that hold each side's buffers, and every launch's time and rotation copy.
 """
 import argparse
 import json
@@ -40,6 +43,9 @@ def main():
     ap.add_argument('--warmup', type=int, default=3)
     ap.add_argument('--rounds', type=int, default=3)
     ap.add_argument('--warm-gib', type=float, default=16.0)
+    ap.add_argument('--plan', choices=('swap', 'localize'), default='swap',
+                    help="swap: as_is, swapped, both_fresh; localize: as_is, fq_copies (fq's rotation copies and activation "
+                         "buffers allocated again), fq_fresh (fq rehome), both_fresh")
     ap.add_argument('--full', action='store_true', help="set up every policy and projection, as the parity run does (the "
                                                         "default sets up only those of CELLS)")
     ap.add_argument('--out', type=Path, required=True)
@@ -57,7 +63,7 @@ def main():
     base = {k: v for k, v in os.environ.items() if k not in ('SM120_BUILD_DIR', 'PYTHONPATH')}
     base.update(PYTHONDONTWRITEBYTECODE='1', HF_HUB_OFFLINE='1')
     res = dict(cells=[list(c) for c in CELLS], method=dict(reps=args.reps, warmup=args.warmup, rounds=args.rounds,
-                                                          warm_gib=args.warm_gib, full=args.full),
+                                                          warm_gib=args.warm_gib, full=args.full, plan=args.plan),
                flipquant=D.git_state(pargs.fq_root), razer=D.git_state(D.RAZER), phases=[])
     peers = {}
     try:
@@ -70,6 +76,9 @@ def main():
         res['modules'] = rz['modules']
         plan = [('as_is', {}), ('swapped', {'rz': ('warm', dict(gib=args.warm_gib)), 'fq': ('rehome', {})}),
                 ('both_fresh', {'rz': ('rehome', {}), 'fq': ('rehome', {})})]
+        if args.plan == 'localize':
+            plan = [('as_is', {}), ('fq_copies', {'fq': ('warm', dict(gib=0))}), ('fq_fresh', {'fq': ('rehome', {})}),
+                    ('both_fresh', {'rz': ('rehome', {}), 'fq': ('rehome', {})})]
         for phase, ops in plan:
             seg = {}
             for side in ('rz', 'fq'):

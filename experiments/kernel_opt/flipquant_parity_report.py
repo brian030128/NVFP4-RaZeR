@@ -132,8 +132,12 @@ def analyze(gemm, binaries):
     return out
 
 
+NAMES = dict(fq='flipquant', rz='RaZeR harness', rzm='RaZeR model path')
+
+
 def label(stem, a):
-    return f"{stem} (A/A control)" if a['control'] == 'aa' else stem
+    pair = a.get('pair') or dict(fq='rz' if a['control'] == 'aa' else 'fq', rz='rz')
+    return f"{stem} ({NAMES[pair['fq']]} / {NAMES[pair['rz']]})"
 
 
 def main():
@@ -152,19 +156,23 @@ def main():
         a = analyze(gemm, binaries)
         a['control'] = gemm.get('control', 'none')
         a['sides'] = gemm.get('sides')
+        a['pair'] = gemm.get('pair') or dict(fq='rz' if a['control'] == 'aa' else 'fq', rz='rz')
         runs[stem] = a
         shutil.copyfile(g, args.out_dir / f'gemm_{stem}_raw.json')
         shutil.copyfile(b, args.out_dir / f'binaries_{stem}.json')
-    pairs = [s for s, a in runs.items() if a['control'] != 'aa']
-    controls = [s for s, a in runs.items() if a['control'] == 'aa']
+    pairs = [s for s, a in runs.items() if a['pair'] == dict(fq='fq', rz='rz')]
+    controls = [s for s in runs if s not in pairs]
     first = runs[pairs[0]]
     md = ['# flipquant GEMM parity: tables\n',
           'Per-forward GEMM time of a policy at T: the sum over the projections of (modules) x (the median GEMM time of the '
           'timed module), in µs. RaZeR and flipquant are the values of ' + pairs[0] + '; then the flipquant / RaZeR ratio '
-          'of every run, and the second / first process ratio of the A/A control (two NVFP4-RaZeR processes).\n']
+          'of every flipquant / RaZeR-harness run, and the ratio of every other pairing (first slot / second slot): the '
+          'A/A control (two RaZeR harness processes), flipquant against RaZeR\'s own model path, RaZeR\'s model path '
+          'against its harness.\n']
     for pol, p in first['policies'].items():
         md += [f"## {p['label']}\n",
-               '| T | RaZeR | flipquant | ' + ' | '.join(f'{s}: fq/rz' for s in pairs) + ''.join(f' | {s}: A/A' for s in controls)
+               '| T | RaZeR | flipquant | ' + ' | '.join(f'{s}: fq/rz' for s in pairs)
+               + ''.join(f" | {s}: {NAMES[runs[s]['pair']['fq']]} / {NAMES[runs[s]['pair']['rz']]}" for s in controls)
                + ' |', '|---:|---:|---:|' + '---:|' * (len(pairs) + len(controls))]
         for i, r in enumerate(p['per_forward']):
             cells = [f"{runs[s]['policies'][pol]['per_forward'][i]['ratio']:.4f}" for s in pairs + controls]
