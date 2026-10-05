@@ -464,6 +464,8 @@ class Worker:
         copies = self.copies[key]
         start = self.counter[key]
 
+        addresses = []
+
         def rep(i, timed):
             self.flush.sum()
             torch.cuda.synchronize()
@@ -473,6 +475,10 @@ class Worker:
             torch.cuda.synchronize()
             wp, wsf = copies[self.counter[key] % len(copies)]
             self.counter[key] += 1
+            if timed and not addresses:
+                addresses.append(dict(x=x.data_ptr(), packed=q[0].data_ptr(), sf=q[1].data_ptr(), gs=q[2].data_ptr(),
+                                      y=y.data_ptr(), weights=wp.data_ptr(), weight_scales=wsf.data_ptr(),
+                                      flush=self.flush.data_ptr()))
             a, b = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
             a.record()
             self.gemm(lin, kern, sched, q, wp, wsf, y, n, k, t)
@@ -492,7 +498,8 @@ class Worker:
                     names[cls].add(e.name)
         return dict(gemm_us=kt['gemm'], quant_us=kt['quant'], event_us=ev, kernel=kern.cfg.name, width=width,
                     schedule=list(sched), gemm_names=sorted(names['gemm']), quant_names=sorted(names['quant']),
-                    copies=[(start + msg['warmup'] + i) % len(copies) for i in range(msg['reps'])])
+                    copies=[(start + msg['warmup'] + i) % len(copies) for i in range(msg['reps'])],
+                    addresses=addresses[0])
 
 
 def worker_main(args):
@@ -689,7 +696,9 @@ def driver_main(args):
                             event_us=statistics.median(e), event=stats(e),
                             rounds=[dict(round=b['round'], position=b['position'], slot=b['slot'],
                                          gemm_us=statistics.median(b['gemm_us']), quant_us=statistics.median(b['quant_us']),
-                                         event_us=statistics.median(b['event_us']), telemetry=b['telemetry'])
+                                         event_us=statistics.median(b['event_us']), telemetry=b['telemetry'],
+                                         addresses={k: hex(v) for k, v in (b.get('addresses') or {}).items()},
+                                         copies=b.get('copies'))
                                     for b in blocks]))
                 line = ' '.join(f"{r['policy']}:{r['side']}={r['gemm_us']:.2f}" for r in res['rows']
                                 if r['proj'] == proj and r['tokens'] == t)
