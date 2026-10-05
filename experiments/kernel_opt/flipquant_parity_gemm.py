@@ -436,9 +436,22 @@ class Worker:
         if mode == 'noprof':
             fwd()
             iso()
-        else:
+        elif mode in ('forward', 'isolated'):
             with profile(activities=[ProfilerActivity.CUDA]):
                 (fwd if mode == 'forward' else iso)()
+        else:                                        # 'P+I', 'P+I+E', 'P+I+H', 'P+I+E+H': check()'s parts in its order
+            parts = mode.split('+')
+            with profile(activities=[ProfilerActivity.CUDA]):
+                ref = lin(x)
+                torch.cuda.synchronize()
+            ref = ref.clone()
+            y = torch.empty((t, n), dtype=torch.bfloat16, device='cuda')
+            got = self.gemm(lin, kern, sched, kern.quant_rows(x, lin.act_kind), lin.packed, lin.sf, y, n, k, t).clone()
+            torch.cuda.synchronize()
+            if 'E' in parts:
+                bool(torch.equal(ref.view(torch.int16), got.view(torch.int16)))
+            if 'H' in parts:
+                self.tsha(ref)
         return dict(mode=mode)
 
     def time(self, msg):
@@ -719,7 +732,8 @@ def main():
                     help="aa: an A/A control, the 'fq' slot runs a second NVFP4-RaZeR worker (= --pair rz:rz)")
     ap.add_argument('--rehome', action='store_true', help="diagnostic: both workers 'rehome' before the first cell")
     ap.add_argument('--no-checks', action='store_true', help='diagnostic: skip the per-cell checks')
-    ap.add_argument('--check-mode', choices=('full', 'noprof', 'forward', 'isolated'), default='full',
+    ap.add_argument('--check-mode', choices=('full', 'noprof', 'forward', 'isolated', 'P+I', 'P+I+E', 'P+I+H', 'P+I+E+H'),
+                    default='full',
                     help="diagnostic: run only a part of the per-cell check (Worker.probe) and record no checks")
     ap.add_argument('--pair', default='fq:rz',
                     help="what the two slots run, '<fq slot>:<rz slot>' from fq (flipquant's real path), rz (the "
