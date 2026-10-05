@@ -2,11 +2,12 @@
 """Tables and criteria of the flipquant GEMM parity check (results/kernel_opt/flipquant_parity/NOTE.md). CPU only.
 
     python experiments/kernel_opt/flipquant_parity_report.py --src /home/dev/n16k64_campaign/kernel_opt/fq_parity \
-        --out-dir results/kernel_opt/flipquant_parity [--models llama8b]
+        --out-dir results/kernel_opt/flipquant_parity --runs llama8b,llama8b_r2,llama8b_r3,llama8b_aa
 
-Reads gemm_<model>.json (flipquant_parity_gemm.py) and binaries_<model>.json (flipquant_parity_binaries.py). Writes
-parity.md (the per-unit tables and the criteria), cells.md (every cell), parity.json (the summary), and copies the two
-raw records as <name>_raw.json.
+Reads gemm_<run>.json (flipquant_parity_gemm.py) and binaries_<run>.json (flipquant_parity_binaries.py) of each run.
+Writes parity.md (the per-unit tables with every run's ratio, the criteria per run, the cell-level spread per run),
+cells.md (every cell of every run), parity.json (the summary), and copies the raw records as gemm_<run>_raw.json and
+binaries_<run>.json. A run made with --control aa is the A/A control: its 'fq' side is a second NVFP4-RaZeR process.
 
 Per-forward GEMM time of a policy at T: the sum over the projections of (modules of the projection) x (the median GEMM
 time of its timed module), per side; per round, the same with the round's medians.
@@ -131,17 +132,8 @@ def analyze(gemm, binaries):
     return out
 
 
-def md_model(a):
-    lines = [f"## {a['model']}\n"]
-    for pol, p in a['policies'].items():
-        lines += [f"### {p['label']}\n", 'Per-forward GEMM time, the sum over the projections of (modules) x (median GEMM '
-                  'time of the timed module), in µs:\n',
-                  '| T | RaZeR | flipquant | flipquant / RaZeR | per round | within ±1 % |', '|---:|---:|---:|---:|---|:-:|']
-        for r in p['per_forward']:
-            lines.append(f"| {r['tokens']} | {r['rz_us']:,.1f} | {r['fq_us']:,.1f} | {r['ratio']:.4f} | "
-                         + ' / '.join(f'{x:.4f}' for x in r['round_ratios']) + f" | {'yes' if r['within_1pct'] else 'NO'} |")
-        lines.append('')
-    return lines
+def label(stem, a):
+    return f"{stem} (A/A control)" if a['control'] == 'aa' else stem
 
 
 def main():
@@ -149,34 +141,65 @@ def main():
     ap.add_argument('--src', type=Path, default=Path('/home/dev/n16k64_campaign/kernel_opt/fq_parity'))
     ap.add_argument('--out-dir', type=Path, default=Path(__file__).resolve().parents[2] / 'results' / 'kernel_opt' /
                     'flipquant_parity')
-    ap.add_argument('--models', default='llama8b')
+    ap.add_argument('--runs', default='llama8b', help='comma-separated run stems (gemm_<stem>.json, binaries_<stem>.json)')
     args = ap.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    res, md, cells = dict(sum_tolerance=SUM_TOL, cell_tolerance=CELL_TOL, models={}), [], []
-    for m in args.models.split(','):
-        g, b = args.src / f'gemm_{m}.json', args.src / f'binaries_{m}.json'
+    runs = {}
+    for stem in args.runs.split(','):
+        g, b = args.src / f'gemm_{stem}.json', args.src / f'binaries_{stem}.json'
         gemm, binaries = json.loads(g.read_text()), json.loads(b.read_text())
-        assert gemm['status'] == 'complete', gemm['status']
+        assert gemm['status'] == 'complete', (stem, gemm['status'])
         a = analyze(gemm, binaries)
-        res['models'][m] = a
-        md += md_model(a)
-        md += ['Criteria: ' + '; '.join(f"{k}: {'pass' if v else 'FAIL'}" for k, v in a['criteria'].items()) + '.\n']
-        cells += [f"## {m}\n", '| policy | projection | T | build | width | scheduler | RaZeR (µs) | flipquant (µs) | ratio | '
-                  'per round | quantizer RaZeR / flipquant (µs) |', '|---|---|---:|---|---|---|---:|---:|---:|---|---|']
+        a['control'] = gemm.get('control', 'none')
+        a['sides'] = gemm.get('sides')
+        runs[stem] = a
+        shutil.copyfile(g, args.out_dir / f'gemm_{stem}_raw.json')
+        shutil.copyfile(b, args.out_dir / f'binaries_{stem}.json')
+    pairs = [s for s, a in runs.items() if a['control'] != 'aa']
+    controls = [s for s, a in runs.items() if a['control'] == 'aa']
+    first = runs[pairs[0]]
+    md = ['# flipquant GEMM parity: tables\n',
+          'Per-forward GEMM time of a policy at T: the sum over the projections of (modules) x (the median GEMM time of the '
+          'timed module), in µs. RaZeR and flipquant are the values of ' + pairs[0] + '; then the flipquant / RaZeR ratio '
+          'of every run, and the second / first process ratio of the A/A control (two NVFP4-RaZeR processes).\n']
+    for pol, p in first['policies'].items():
+        md += [f"## {p['label']}\n",
+               '| T | RaZeR | flipquant | ' + ' | '.join(f'{s}: fq/rz' for s in pairs) + ''.join(f' | {s}: A/A' for s in controls)
+               + ' |', '|---:|---:|---:|' + '---:|' * (len(pairs) + len(controls))]
+        for i, r in enumerate(p['per_forward']):
+            cells = [f"{runs[s]['policies'][pol]['per_forward'][i]['ratio']:.4f}" for s in pairs + controls]
+            md.append(f"| {r['tokens']} | {r['rz_us']:,.1f} | {r['fq_us']:,.1f} | " + ' | '.join(cells) + ' |')
+        md.append('')
+    md += ['## Criteria per run\n', '| criterion | ' + ' | '.join(label(s, a) for s, a in runs.items()) + ' |',
+           '|---|' + ':-:|' * len(runs)]
+    for k in first['criteria']:
+        md.append(f'| {k} | ' + ' | '.join('pass' if a['criteria'][k] else '**FAIL**' for a in runs.values()) + ' |')
+    md += ['', '## Cell-level spread per run\n',
+           '| run | cells | max abs deviation | cells beyond 1 % | beyond 2 % | slower (fq) by > 2 % in every round | faster by > 2 % '
+           'in every round | per-forward sums: max abs deviation |', '|---|---:|---:|---:|---:|---|---|---:|']
+    for s, a in runs.items():
+        n1 = sum(1 for c in a['cells'] if abs(c['ratio'] - 1) > 0.01)
+        n2 = sum(1 for c in a['cells'] if abs(c['ratio'] - 1) > 0.02)
+        fmt = lambda cs: ', '.join(f"{c['policy']} {c['proj']} T={c['tokens']} ({c['ratio']:.3f})" for c in cs) or '—'
+        md.append(f"| {label(s, a)} | {len(a['cells'])} | {a['max_abs_cell_deviation'] * 100:.1f} % | {n1} | {n2} | "
+                  f"{fmt(a['slower_every_round'])} | {fmt(a['faster_every_round'])} | {a['max_abs_sum_deviation'] * 100:.2f} % |")
+    md.append('')
+    cells = []
+    for s, a in runs.items():
+        cells += [f'## {label(s, a)}\n', '| policy | projection | T | build | width | scheduler | RaZeR (µs) | flipquant (µs) | '
+                  'ratio | per round | quantizer RaZeR / flipquant (µs) |', '|---|---|---:|---|---|---|---:|---:|---:|---|---|']
         for c in a['cells']:
             cells.append(f"| {c['policy']} | {c['proj']} | {c['tokens']} | {c['kernel']} | {c['width']} | {c['schedule']} | "
                          f"{c['rz_us']:.2f} | {c['fq_us']:.2f} | {c['ratio']:.4f} | "
                          + ' / '.join(f'{x:.3f}' for x in c['round_ratios'])
                          + f" | {c['rz_quant_us']:.2f} / {c['fq_quant_us']:.2f} |")
         cells.append('')
-        shutil.copyfile(g, args.out_dir / f'gemm_{m}_raw.json')
-        shutil.copyfile(b, args.out_dir / f'binaries_{m}.json')
-    res['passed'] = all(a['passed'] for a in res['models'].values())
+    res = dict(sum_tolerance=SUM_TOL, cell_tolerance=CELL_TOL, runs=runs, pairs=pairs, controls=controls,
+               passed={s: a['passed'] for s, a in runs.items()})
     (args.out_dir / 'parity.json').write_text(json.dumps(res, indent=1, default=str) + '\n')
     (args.out_dir / 'parity.md').write_text('\n'.join(md) + '\n')
     (args.out_dir / 'cells.md').write_text('\n'.join(cells) + '\n')
     print('\n'.join(md))
-    print('ALL PASSED' if res['passed'] else 'NOT ALL PASSED')
 
 
 if __name__ == '__main__':

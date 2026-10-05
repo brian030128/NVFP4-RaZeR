@@ -357,6 +357,7 @@ class Worker:
         pool, x = self.pools(n, k, t)
         y = torch.empty((t, n), dtype=torch.bfloat16, device='cuda')
         copies = self.copies[key]
+        start = self.counter[key]
 
         def rep(i, timed):
             self.flush.sum()
@@ -385,7 +386,8 @@ class Worker:
                     kt[cls].append(e.device_time_total if hasattr(e, 'device_time_total') else e.cuda_time_total)
                     names[cls].add(e.name)
         return dict(gemm_us=kt['gemm'], quant_us=kt['quant'], event_us=ev, kernel=kern.cfg.name, width=width,
-                    schedule=list(sched), gemm_names=sorted(names['gemm']), quant_names=sorted(names['quant']))
+                    schedule=list(sched), gemm_names=sorted(names['gemm']), quant_names=sorted(names['quant']),
+                    copies=[(start + msg['warmup'] + i) % len(copies) for i in range(msg['reps'])])
 
 
 def worker_main(args):

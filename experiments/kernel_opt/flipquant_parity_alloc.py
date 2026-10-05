@@ -40,13 +40,15 @@ def main():
     ap.add_argument('--warmup', type=int, default=3)
     ap.add_argument('--rounds', type=int, default=3)
     ap.add_argument('--warm-gib', type=float, default=16.0)
+    ap.add_argument('--full', action='store_true', help="set up every policy and projection, as the parity run does (the "
+                                                        "default sets up only those of CELLS)")
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     sys.path.insert(0, str(D.RAZER / 'sm120' / 'bench'))
     import common as B
     B.require_idle()
-    pols = [p for p in D.POLICIES if p in {c[0] for c in CELLS}]
-    projs = sorted({c[1] for c in CELLS})
+    pols = [p for p in D.POLICIES if args.full or p in {c[0] for c in CELLS}]
+    projs = None if args.full else sorted({c[1] for c in CELLS})
     pargs = argparse.Namespace(python=args.python, model=args.model, fq_root=str(Path(args.fq_root).resolve()),
                                fq_build=Path(args.fq_root).resolve() / 'kernels' / 'razer_sm120' / 'build_ko',
                                flush_mib=512, policies=pols, projections=projs)
@@ -55,7 +57,7 @@ def main():
     base = {k: v for k, v in os.environ.items() if k not in ('SM120_BUILD_DIR', 'PYTHONPATH')}
     base.update(PYTHONDONTWRITEBYTECODE='1', HF_HUB_OFFLINE='1')
     res = dict(cells=[list(c) for c in CELLS], method=dict(reps=args.reps, warmup=args.warmup, rounds=args.rounds,
-                                                          warm_gib=args.warm_gib),
+                                                          warm_gib=args.warm_gib, full=args.full),
                flipquant=D.git_state(pargs.fq_root), razer=D.git_state(D.RAZER), phases=[])
     peers = {}
     try:
@@ -77,17 +79,19 @@ def main():
             for pol, proj, t in CELLS:
                 vals = {'fq': [], 'rz': []}
                 rounds = {'fq': [], 'rz': []}
+                launches = {'fq': [], 'rz': []}
                 for r in range(args.rounds):
                     order = ('fq', 'rz') if (r + list(D.POLICIES).index(pol)) % 2 == 0 else ('rz', 'fq')
                     for side in order:
                         got = peers[side]('time', policy=pol, proj=proj, t=t, reps=args.reps, warmup=args.warmup)
                         vals[side] += got['gemm_us']
                         rounds[side].append(statistics.median(got['gemm_us']))
+                        launches[side].append(dict(round=r, gemm_us=got['gemm_us'], copies=got['copies']))
                 row['cells'][f'{pol}/{proj}/{t}'] = dict(
                     fq=statistics.median(vals['fq']), rz=statistics.median(vals['rz']),
                     ratio=statistics.median(vals['fq']) / statistics.median(vals['rz']),
                     round_ratios=[a / b for a, b in zip(rounds['fq'], rounds['rz'])], kernel=got['kernel'],
-                    width=got['width'], schedule=got['schedule'])
+                    width=got['width'], schedule=got['schedule'], launches=launches)
             res['phases'].append(row)
             print(f"{phase}: copies' largest segment fq {seg['fq']['copies']['largest_gib']:.2f} GiB "
                   f"({seg['fq']['copies']['segments']} segments), rz {seg['rz']['copies']['largest_gib']:.2f} GiB "
