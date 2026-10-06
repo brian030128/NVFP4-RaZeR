@@ -1,0 +1,87 @@
+{
+ "model": "mistral-7b-base",
+ "unit": "16x64",
+ "checkout": {
+  "commit": "120173a4f67c67f5e67f93ea02fa7a9eaff3ef14",
+  "clean": true
+ },
+ "rc": 0,
+ "command": "/home/dev/.conda/envs/n16k64/bin/python -m calibration.train_map --model mistral-7b-base --unit 16x64 --fit-windows 256 --epochs 5 --teacher-topk 1000 --data-root /home/dev/n16k64_campaign/fqrel/tmopt_data --out /home/dev/n16k64_campaign/fqrel/remeasure/mistral-7b-base_16x64_remeasure",
+ "measure": {
+  "command": [
+   "/home/dev/.conda/envs/n16k64/bin/python",
+   "-m",
+   "calibration.train_map",
+   "--model",
+   "mistral-7b-base",
+   "--unit",
+   "16x64",
+   "--fit-windows",
+   "256",
+   "--epochs",
+   "5",
+   "--teacher-topk",
+   "1000",
+   "--data-root",
+   "/home/dev/n16k64_campaign/fqrel/tmopt_data",
+   "--out",
+   "/home/dev/n16k64_campaign/fqrel/remeasure/mistral-7b-base_16x64_remeasure"
+  ],
+  "cwd": "/home/dev/n16k64_campaign/fqopt/wt",
+  "returncode": 0,
+  "wall_seconds": 270.92372250556946,
+  "rss_samples": 2442,
+  "rss_interval_seconds": 0.1,
+  "peak_rss_gib": {
+   "top": 0.782073974609375,
+   "descendants_sum": 14.28317642211914,
+   "tree": 14.771728515625
+  },
+  "descendants": [
+   {
+    "pid": 1591858,
+    "peak_rss_gib": 14.28317642211914,
+    "cmd": "/home/dev/.conda/envs/n16k64/bin/python run_train_map.py --model mistral7b"
+   }
+  ],
+  "largest_process_ru_maxrss_gib": 14.420658111572266,
+  "gpu_used_mib_by_pid": {
+   "1591858": {
+    "mib": 39056,
+    "role": "descendant"
+   }
+  }
+ },
+ "trainer": {
+  "total_seconds": 259.97213101387024,
+  "setup_seconds": 68.88402199745178,
+  "training_seconds": 191.0428490638733,
+  "epoch_seconds": [
+   37.82719802856445,
+   38.035545349121094,
+   38.38261842727661,
+   38.47608208656311,
+   38.32140517234802
+  ],
+  "phase_seconds": {
+   "model_load": 1.6061248779296875,
+   "data_load": 19.379140853881836,
+   "teacher_precompute": 11.027361631393433,
+   "candidate_packing": 36.87572526931763,
+   "write_output": 0.03141045570373535
+  },
+  "gpu_peak_allocated_gib": 36.61765766143799,
+  "gpu_peak_reserved_gib": 37.416015625,
+  "cpu_peak_rss_gib": 14.420658111572266,
+  "host_rss_after_model_load_gib": 0.9366645812988281,
+  "teacher_storage_bytes": 785419264,
+  "batch": 8,
+  "accum": 1
+ },
+ "train_map_wall_seconds": 268.20699548721313,
+ "run_map_sha256": "cb2a4a055205c8d2cfee8c5f986dab4d007b4da67fe4c7ebe03d3399a6615f4a",
+ "release_run_map_sha256": "cb2a4a055205c8d2cfee8c5f986dab4d007b4da67fe4c7ebe03d3399a6615f4a",
+ "same_run_map": true,
+ "same_tiles": true,
+ "reproduces": true
+}

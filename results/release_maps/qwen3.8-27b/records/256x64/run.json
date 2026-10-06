@@ -1,0 +1,126 @@
+{
+ "model": "qwen3.8-27b",
+ "unit": "256x64",
+ "command": "-m calibration.train_map --model qwen3.8-27b --unit 256x64 --fit-windows 256 --epochs 5 --teacher-topk 1000 --data-root /home/dev/n16k64_campaign/fqrel/tmopt_data --out /home/dev/n16k64_campaign/fqrel/runs/qwen3.8-27b_256x64",
+ "checkout": {
+  "commit": "120173a4f67c67f5e67f93ea02fa7a9eaff3ef14",
+  "clean": true
+ },
+ "rc": 0,
+ "seconds": 2486.5695428848267,
+ "device_peak_mib": 95304,
+ "log": "/home/dev/n16k64_campaign/fqrel/logs/train_qwen3.8-27b_256x64.log",
+ "extension": {
+  "checks": {
+   "windows_128": true,
+   "math_64_code_64": true,
+   "skip_fit_128": true,
+   "skip_development_192": true,
+   "skip_c4_published": true,
+   "distinct_documents": true,
+   "distinct_tokens": true,
+   "disjoint_from_fit": true,
+   "disjoint_from_development": true,
+   "disjoint_from_c4": true,
+   "tokens_not_development": true,
+   "development_disjoint_from_fit": true,
+   "same_as_first_unit": true
+  },
+  "skipped": {
+   "fit": 128,
+   "development": 192,
+   "c4_evaluation": 233
+  },
+  "c4_published": 233,
+  "ok": true
+ },
+ "map_sha256": "914e843b1ce4aa494ff0a093188a4435f45dac81f9cb56fe6147c13901188e5a",
+ "run_map_sha256": "adf60b7e2983be63a7b7995395ab10b1e2c9df36974065026390dcb42b1d4fc8",
+ "settings": {
+  "epochs": 5,
+  "lr": 0.02,
+  "init_logit": -1.0,
+  "teacher_topk": 1000,
+  "fit_windows": 256,
+  "seed": 0,
+  "batch": 2,
+  "accum": 4
+ },
+ "non_default_settings": {
+  "epochs": 5,
+  "teacher_topk": 1000,
+  "fit_windows": 256
+ },
+ "e0m3_share": 0.00921821397941681,
+ "train_map_wall_seconds": 2483.8102724552155,
+ "trainer": {
+  "total_seconds": 2475.0101358890533,
+  "setup_seconds": 319.3446342945099,
+  "training_seconds": 2155.5978870391846,
+  "gpu_peak_allocated_gib": [
+   90.87428092956543
+  ],
+  "gpu_peak_reserved_gib": [
+   92.333984375
+  ],
+  "cpu_peak_rss_gib": 51.894710540771484,
+  "phases": {
+   "model_load": {
+    "seconds": 6.686824560165405,
+    "host_peak_rss": 51.36532211303711,
+    "gpu_peak_allocated": [
+     50.955976486206055
+    ]
+   },
+   "data_load": {
+    "seconds": 19.38793134689331,
+    "host_peak_rss": 1.580963134765625,
+    "gpu_peak_allocated": [
+     50.9559760093689
+    ]
+   },
+   "teacher_precompute": {
+    "seconds": 165.6111478805542,
+    "host_peak_rss": 2.382068634033203,
+    "gpu_peak_allocated": [
+     53.376718044281006
+    ]
+   },
+   "candidate_packing": {
+    "seconds": 127.6653139591217,
+    "host_peak_rss": 2.9746627807617188,
+    "gpu_peak_allocated": [
+     56.713990688323975
+    ]
+   },
+   "training": {
+    "seconds": 428.12535405158997,
+    "host_peak_rss": 2.9281883239746094,
+    "gpu_peak_allocated": [
+     90.79778814315796
+    ]
+   },
+   "write_output": {
+    "seconds": 0.05106759071350098,
+    "host_peak_rss": 2.928325653076172,
+    "gpu_peak_allocated": [
+     31.93816614151001
+    ]
+   }
+  }
+ },
+ "teacher_storage": {
+  "k": 1000,
+  "windows": 256,
+  "bytes": 785419264,
+  "devices": [
+   "cuda:0"
+  ],
+  "layout": "top-K values bf16 + ids int32 + tail log-mass fp32",
+  "mean_tail_mass": 0.006991372621996561,
+  "max_window_tail_mass": 0.03889748826622963
+ },
+ "e0m3_tiles": 13758,
+ "tiles": 1492480,
+ "modules": 496
+}
