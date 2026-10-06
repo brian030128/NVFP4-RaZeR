@@ -17,6 +17,10 @@ the user to upload to Hugging Face. Their sha256 values are in `REPORT.md`.
   - `trainer_report.json`: the trainer's own report (PhaseMonitor phases and epochs, the fit extension's windows).
 - **`<model>/ppl/`**: the evaluation reports (per-window NLLs) and `significance.json` (evaluation.significance against
   FourOverSix).
+- **`dev_kl/`**: development-set KL along the calibration, Llama-3.1-8B and Phi-4 at 16x64. It compares the release
+  setting, run for 10 epochs, with the paper setting, using the trainer's own development evaluation. `NOTE.md` has the
+  tables, paired tests and findings; `dev_kl.json` and `paired.json` the data; `dev_kl.png` the plot. Scripts:
+  `devkl_run.py`, `devkl.sh`, `devkl2.sh`, `devkl_report.py`.
 - **`../../experiments/release_maps/`**: the scripts that produced all of this.
   - `release.py`: the driver.
   - `chain2.sh` and `chain3.sh`: its queues.
