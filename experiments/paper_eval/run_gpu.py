@@ -127,12 +127,16 @@ def check_fq_record(path, pol, libs, require_graph=True):
     if require_graph and (r.get("capture_error") or not r.get("graph_equals_eager")):
         bad.append(f"graph: capture_error={r.get('capture_error')} graph_equals_eager={r.get('graph_equals_eager')}")
     if pol != "bf16":
-        p = r.get("policy") or {}
-        if p.get("kernel") != FAMILY[pol] and FAMILY[pol] not in json.dumps(p.get("kernel_set", {})):
-            bad.append(f"kernel family {p.get('kernel')} != {FAMILY[pol]}")
-        if Path(p.get("build_dir", "")).resolve() != BUILD_V.resolve():
+        p = (r.get("policy") or {}).get("native") or {}             # the install report (models/sm120.install)
+        if p.get("kernel") != FAMILY[pol] or (r.get("kernel_set") or {}).get("family") != FAMILY[pol]:
+            bad.append(f"kernel family {p.get('kernel')} / {(r.get('kernel_set') or {}).get('family')} != {FAMILY[pol]}")
+        if Path(p.get("build_dir") or "/nonexistent").resolve() != BUILD_V.resolve():
             bad.append(f"build_dir {p.get('build_dir')}")
-        foreign = [s for s in shas(p.get("kernel_set", {})) + shas(r.get("kernel_set", {})) if s not in libs]
+        loaded = list(((r.get("kernel_set") or {}).get("kernels") or {}).values()) + \
+            list(((p.get("kernel_set") or {}).get("kernels") or {}).values())
+        if not loaded:
+            bad.append("no loaded kernels recorded")
+        foreign = [s for s in loaded if s not in libs]
         if foreign:
             bad.append(f"libraries not from build_V: {foreign[:3]}")
     return bad

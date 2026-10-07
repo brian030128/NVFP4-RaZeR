@@ -86,3 +86,12 @@ cell agrees when |Δ| ≤ 2 SE. Reported: the count of the 30 cells that agree, 
 
 P, S, A, B, C1, C2, one job at a time. Any deviation (a changed setting, a skipped job, a contingency) is written here
 as an amendment before the affected jobs run, or reported as a deviation if found after.
+
+## Amendment 1 (2026-10-07 19:27 UTC): the record check's field names
+
+The parity run stopped at its first native flipquant record (`parity_flipquant_fo6_r1`) on a driver bug, not a
+measurement: `check_fq_record` read the install report from `policy.kernel` / `policy.build_dir` and the loaded
+libraries from keys named `*sha*`, but flipquant records them under `policy.native.{kernel, build_dir}` and
+`kernel_set.kernels` (name → library sha256). Fixed to read those fields (and to fail when no loaded kernel is
+recorded); the criteria are unchanged. The stopped record passes the corrected check (stock_ko, build_V, all four
+libraries in build_V's manifests). The run resumes; completed records are kept and re-checked by the report.
