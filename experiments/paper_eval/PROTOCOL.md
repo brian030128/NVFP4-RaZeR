@@ -166,3 +166,13 @@ n16k64-fast, `--recommended-decoding` with thinking on, seed 0:
   - The mamba / fla function names are not module attributes of the modeling files; the kernels in the profile are the
     evidence for those paths.
 - `fast_env_verified.json` (in the run directory's `env/`, copied to `results/paper_eval/fast_env/`) now gates the hybrid models in the drivers.
+
+## Amendment 6 (2026-10-07 20:35 UTC): IFEval's scorer dependencies in n16k64-fast
+
+The first D-pilot process (Nemotron BF16, gsm8k + math500 + ifeval) failed when scoring IFEval: lm-eval's IFEval
+checker imports `langdetect` and `immutabledict`, which neither env had (gsm8k and math500 had finished; the first IFEval
+batch was generated, then lost). Installed into n16k64-fast only, pip `--no-deps`: langdetect 1.0.9 and immutabledict
+4.3.1 (nltk was present; its `punkt_tab` data downloaded itself into `~/nltk_data` on the first import). The pilot
+continued with its next jobs; after its first pass, `run_pilot_d.py` runs again and redoes only that job's IFEval
+part (the harness resumes from its `.jsonl`; the partial summary is kept as `main.json.partial_ifeval_failed`). The
+freeze delta in `results/paper_eval/fast_env/` now lists eight packages.
