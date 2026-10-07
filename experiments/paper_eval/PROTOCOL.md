@@ -126,3 +126,20 @@ The user's decisions (relayed 19:5x UTC):
 - **Order:** the four models first: S, then B, C1 and C2 (no timing; they may run while n16k64-fast builds on the CPU),
   then A once no build is running. Then the hybrid models after the env verification: S, F, the D pilot (its own
   registration), A, B, C1, and C2 for Nemotron. A never runs for the hybrid models on the fallback.
+
+## Amendment 4 (2026-10-07 20:20 UTC): the D pilot (timing and lengths; not a result)
+
+The user's design, relayed 2026-10-07: measure the generation lengths before the budgets are chosen; no full D run until
+the user chooses. `run_pilot_d.py`, flipquant `evaluation.accuracy` natively, Nemotron-Nano-9B-v2 and Qwen3.8-27B in
+n16k64-fast, `--recommended-decoding` with thinking on, seed 0:
+- **Lengths** (BF16 and FlipQuant 16x64): `--max-new-tokens 32768` for every task; gsm8k, math500 and ifeval
+  `--limit 16` (one process), aime `--limit 2 --samples 8` (aime24 + aime25: 16 samples each), batch 16.
+- **Batch scaling** (all 6 policies): gsm8k `--limit 64 --max-new-tokens 512` at batch 16, 32 and 64 (with thinking on,
+  nearly every sample reaches 512), giving the per-step decode time per batch size.
+- **Reported:** per task and model the length distribution and the truncation rate at 4k / 8k / 16k / 32k; the time per
+  (model, policy, task) at batch 16 / 32 / 64, extrapolated to the full task sizes (GSM8K 1319, MATH-500 500, AIME 60 × 8,
+  IFEval 541) from the measured lengths and step times; OOMs as they occur (a failed process is recorded and the pilot
+  continues).
+- Every log line carries its wall-clock time (each batch's duration); per-sample tokens and truncation are the harness's
+  `.jsonl`. Order: after the hybrid models' smoke, before F and A.
+- Driver: `run_gpu.py` gained `pplfast` (part F of amendment 3).

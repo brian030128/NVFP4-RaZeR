@@ -233,6 +233,18 @@ def ownership():
                 stop(f"ownership {model} {u}: rc={rc}")
 
 
+def pplfast():
+    """F (amendment 3): the hybrid models' main-table PPL in n16k64-fast, all six policies, both corpora."""
+    for model in [m for m in MODELS if m in HYBRID]:
+        for pol in ["bf16", "nvfp4", "fo6", "fq-8x64", "fq-16x64", "fq-256x64"]:
+            out = RUN / "pplfast" / model / f"{pol}.json"
+            cmd = [py(model), "-m", "evaluation.ppl", "--model", model, *policy_args(model, pol), "--paper-convention",
+                   "--out", out]
+            rc = run(f"pplfast_{model}_{pol}", cmd, out, FQ)
+            if rc not in (None, 0):
+                stop(f"pplfast {model} {pol}: rc={rc}")
+
+
 def fakeppl():
     for model in [m for m in MODELS if m != "qwen3.8-27b"]:
         for u in UNITS:
@@ -265,5 +277,5 @@ if __name__ == "__main__":
     elif what == "latency":
         latency("latency", 5, SHAPES, 7, "latency", no_graph)
     else:
-        {"memory": memory, "ownership": ownership, "fakeppl": fakeppl}[what]()
+        {"memory": memory, "ownership": ownership, "fakeppl": fakeppl, "pplfast": pplfast}[what]()
     log(f"DONE {what}")

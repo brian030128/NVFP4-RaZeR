@@ -1,11 +1,13 @@
-"""D pilot (timing only; not a result): flipquant evaluation.accuracy on Nemotron-Nano-9B-v2 and Qwen3.8-27B, natively,
---recommended-decoding with thinking on, the registry's budgets, batch 16, seed 0.
+"""D pilot (timing and lengths only; not a result): flipquant evaluation.accuracy, natively, on Nemotron-Nano-9B-v2 and
+Qwen3.8-27B in n16k64-fast (amendment 3), --recommended-decoding with thinking on, seed 0. The user's design
+(2026-10-07): every task capped at 32768 new tokens, to measure the lengths before the budgets are chosen.
 
-- Lengths and speed (BF16 and FlipQuant 16x64): gsm8k, math500, ifeval --limit 16 in one process; aime --limit 1
-  --samples 8 (aime24 + aime25: two batches of 8) in a second.
-- Speed only (NVFP4, FourOverSix, FlipQuant 8x64, 256x64): gsm8k --limit 16 (one batch of 16).
-Every log line is prefixed with the wall-clock time, so each batch's duration is in the log; the per-sample records
-(tokens, truncation) are the harness's own .jsonl.
+- Lengths (BF16 and FlipQuant 16x64), batch 16, --max-new-tokens 32768:
+  gsm8k, math500, ifeval --limit 16 (one process); aime --limit 2 --samples 8 (aime24 + aime25, 16 samples each).
+- Batch scaling (all 6 policies): gsm8k --limit 64 --max-new-tokens 512 at batch 16, 32 and 64 (a near-fixed-length
+  workload: with thinking on nearly every sample reaches 512), giving the per-step decode time per batch size.
+Every log line carries its wall-clock time, so each batch's duration is in the log; the per-sample tokens and truncation
+are the harness's own .jsonl.
 
     python run_pilot_d.py
 """
@@ -20,6 +22,7 @@ import run_gpu as G  # noqa: E402
 MODELS_D = ["nemotron-nano-9b-v2", "qwen3.8-27b"]
 POLS = ["bf16", "fq-16x64", "nvfp4", "fo6", "fq-8x64", "fq-256x64"]
 LENGTH = ("bf16", "fq-16x64")
+CAP = 32768
 ROOT = G.RUN / "d_pilot"
 
 
@@ -44,21 +47,26 @@ def run_ts(name, cmd, out):
 
 
 def main():
+    if not (G.RUN / "env" / "fast_env_verified.json").exists():
+        G.stop("the D pilot runs the hybrid models in n16k64-fast, after its verification")
     for model in MODELS_D:
         for pol in POLS:
-            base = [G.PY, "-u", "-m", "evaluation.accuracy", "--model", model, *G.policy_args(model, pol),
-                    "--recommended-decoding", "--batch", "16", "--seed", "0"]
-            tasks = "gsm8k,math500,ifeval" if pol in LENGTH else "gsm8k"
-            out = ROOT / model / pol / "main.json"
-            rc = run_ts(f"dpilot_{model}_{pol}_main", base + ["--tasks", tasks, "--limit", "16", "--out", out], out)
-            if rc not in (None, 0):
-                G.stop(f"d pilot {model} {pol} main: rc={rc}")
+            base = [G.py(model), "-u", "-m", "evaluation.accuracy", "--model", model, *G.policy_args(model, pol),
+                    "--recommended-decoding", "--seed", "0"]
             if pol in LENGTH:
-                out = ROOT / model / pol / "aime.json"
-                rc = run_ts(f"dpilot_{model}_{pol}_aime", base + ["--tasks", "aime", "--limit", "1", "--samples", "8",
-                                                                   "--out", out], out)
+                jobs = [("main", ["--tasks", "gsm8k,math500,ifeval", "--limit", "16", "--batch", "16",
+                                  "--max-new-tokens", str(CAP)]),
+                        ("aime", ["--tasks", "aime", "--limit", "2", "--samples", "8", "--batch", "16",
+                                  "--max-new-tokens", str(CAP)])]
+            else:
+                jobs = []
+            jobs += [(f"batch{b}", ["--tasks", "gsm8k", "--limit", "64", "--batch", str(b), "--max-new-tokens", "512"])
+                     for b in (16, 32, 64)]
+            for tag, extra in jobs:
+                out = ROOT / model / pol / f"{tag}.json"
+                rc = run_ts(f"dpilot_{model}_{pol}_{tag}", base + extra + ["--out", out], out)
                 if rc not in (None, 0):
-                    G.stop(f"d pilot {model} {pol} aime: rc={rc}")
+                    G.log(f"NOTE dpilot {model} {pol} {tag}: rc={rc} (recorded; the pilot continues)")
     G.log("DONE d_pilot")
 
 
