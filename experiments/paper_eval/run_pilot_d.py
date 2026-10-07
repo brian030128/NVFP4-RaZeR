@@ -4,8 +4,9 @@ Qwen3.8-27B in n16k64-fast (amendment 3), --recommended-decoding with thinking o
 
 - Lengths (BF16 and FlipQuant 16x64), batch 16, --max-new-tokens 32768:
   gsm8k, math500, ifeval --limit 16 (one process); aime --limit 2 --samples 8 (aime24 + aime25, 16 samples each).
-- Batch scaling (all 6 policies): gsm8k --limit 64 --max-new-tokens 512 at batch 16, 32 and 64 (a near-fixed-length
-  workload: with thinking on nearly every sample reaches 512), giving the per-step decode time per batch size.
+- Batch scaling (all 6 policies): gsm8k --max-new-tokens 512 at batch 16 and 32 (64 prompts) and 64 (128 prompts, so
+  that a second batch exists), a near-fixed-length workload (with thinking on nearly every sample reaches 512), giving
+  the per-step decode time per batch size.
 Every log line carries its wall-clock time, so each batch's duration is in the log; the per-sample tokens and truncation
 are the harness's own .jsonl.
 
@@ -60,8 +61,10 @@ def main():
                                   "--max-new-tokens", str(CAP)])]
             else:
                 jobs = []
-            jobs += [(f"batch{b}", ["--tasks", "gsm8k", "--limit", "64", "--batch", str(b), "--max-new-tokens", "512"])
-                     for b in (16, 32, 64)]
+            # a batch's duration is the gap between two "generated" lines (the first batch's start is not logged),
+            # so every batch size gets at least two batches: 64 prompts at 16 and 32, 128 at 64
+            jobs += [(f"batch{b}", ["--tasks", "gsm8k", "--limit", str(max(64, 2 * b)), "--batch", str(b),
+                                    "--max-new-tokens", "512"]) for b in (16, 32, 64)]
             for tag, extra in jobs:
                 out = ROOT / model / pol / f"{tag}.json"
                 rc = run_ts(f"dpilot_{model}_{pol}_{tag}", base + extra + ["--out", out], out)

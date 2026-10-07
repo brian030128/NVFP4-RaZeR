@@ -134,8 +134,9 @@ the user chooses. `run_pilot_d.py`, flipquant `evaluation.accuracy` natively, Ne
 n16k64-fast, `--recommended-decoding` with thinking on, seed 0:
 - **Lengths** (BF16 and FlipQuant 16x64): `--max-new-tokens 32768` for every task; gsm8k, math500 and ifeval
   `--limit 16` (one process), aime `--limit 2 --samples 8` (aime24 + aime25: 16 samples each), batch 16.
-- **Batch scaling** (all 6 policies): gsm8k `--limit 64 --max-new-tokens 512` at batch 16, 32 and 64 (with thinking on,
-  nearly every sample reaches 512), giving the per-step decode time per batch size.
+- **Batch scaling** (all 6 policies): gsm8k `--max-new-tokens 512` at batch 16 and 32 (`--limit 64`) and 64 (`--limit
+  128`, so that a second batch exists: a batch's duration is the gap between two logged batch ends), giving the
+  per-step decode time per batch size (with thinking on, nearly every sample reaches 512).
 - **Reported:** per task and model the length distribution and the truncation rate at 4k / 8k / 16k / 32k; the time per
   (model, policy, task) at batch 16 / 32 / 64, extrapolated to the full task sizes (GSM8K 1319, MATH-500 500, AIME 60 × 8,
   IFEval 541) from the measured lengths and step times; OOMs as they occur (a failed process is recorded and the pilot
