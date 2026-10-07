@@ -87,7 +87,7 @@ cell agrees when |Δ| ≤ 2 SE. Reported: the count of the 30 cells that agree, 
 P, S, A, B, C1, C2, one job at a time. Any deviation (a changed setting, a skipped job, a contingency) is written here
 as an amendment before the affected jobs run, or reported as a deviation if found after.
 
-## Amendment 1 (2026-10-07 19:27 UTC): the record check's field names
+## Amendment 1 (2026-10-07 19:23 UTC): the record check's field names
 
 The parity run stopped at its first native flipquant record (`parity_flipquant_fo6_r1`) on a driver bug, not a
 measurement: `check_fq_record` read the install report from `policy.kernel` / `policy.build_dir` and the loaded
