@@ -144,3 +144,25 @@ n16k64-fast, `--recommended-decoding` with thinking on, seed 0:
 - Every log line carries its wall-clock time (each batch's duration); per-sample tokens and truncation are the harness's
   `.jsonl`. Order: after the hybrid models' smoke, before F and A.
 - Driver: `run_gpu.py` gained `pplfast` (part F of amendment 3).
+
+## Amendment 5 (2026-10-07 20:20 UTC): n16k64-fast built and verified (records in `results/paper_eval/fast_env/`)
+
+- **Build (env-local only):** the clone of n16k64; pip `--no-deps`: einops 0.8.2, fla-core 0.5.2,
+  flash-linear-attention 0.5.2, ninja 1.13.2; conda-forge into the env only (`cuda-version=12.8`, cuda-nvcc 12.8.93,
+  cuda-cudart-dev, cuda-cccl, libcublas-dev, libcusparse-dev, libcusolver-dev, openssl pinned; 46 conda packages added,
+  none removed or changed); then causal-conv1d 1.7.0 and mamba-ssm 2.3.2.post1 built from source with that nvcc
+  (gencodes include compute_120 / sm_120; the system g++ 11.4 as host compiler). The pip freeze delta is exactly those
+  six packages; torch 2.9.0+cu128, triton 3.5.0 and transformers 5.16.1 are unchanged. `pip check` notes mamba-ssm's
+  undeclared-optional requirements apache-tvm-ffi, quack-kernels and tilelang (not installed; Mamba3 / newer kernels,
+  unused by Nemotron-H's Mamba2); `import mamba_ssm` succeeds.
+- **Verification (`verify_fast_env.py`, BF16, one 1x2048 prefill under the profiler):**
+  - Nemotron-Nano-9B-v2: causal_conv1d_fn / _update resolve to the causal_conv1d package (fallback env: transformers'
+    torch functions); mamba_ssm's Triton kernels (`_chunk_scan_fwd`, `_chunk_state_fwd`, `_state_passing_fwd`,
+    `_bmm_chunk_fwd`, `_chunk_cumsum_fwd`) and causal_conv1d's CUDA kernel run; 1x2048 prefill 141 ms vs 2,335 ms on
+    the fallback (16.5×).
+  - Qwen3.8-27B: causal_conv1d resolves to the package; fla's gated-delta-rule Triton kernels
+    (`chunk_gated_delta_rule_fwd_kernel_h`, `chunk_fwd_kernel_o`, `..._kkt_solve`) and causal_conv1d's kernel run;
+    1x2048 prefill 428 ms vs 961 ms (2.2×).
+  - The mamba / fla function names are not module attributes of the modeling files; the kernels in the profile are the
+    evidence for those paths.
+- `fast_env_verified.json` (in the run directory's `env/`, copied to `results/paper_eval/fast_env/`) now gates the hybrid models in the drivers.

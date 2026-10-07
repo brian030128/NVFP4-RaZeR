@@ -1,0 +1,100 @@
+{
+ "env": "/home/dev/.conda/envs/n16k64-fast",
+ "verified_utc": "2026-10-07T20:16:42+00:00",
+ "pip_delta": [
+  "9a10",
+  "> causal_conv1d==1.7.0",
+  "21a23",
+  "> einops==0.8.2",
+  "23a26,27",
+  "> fla-core==0.5.2",
+  "> flash-linear-attention==0.5.2",
+  "42a47",
+  "> mamba_ssm==2.3.2.post1",
+  "54a60",
+  "> ninja==1.13.2"
+ ],
+ "pip_check": [
+  "mamba-ssm 2.3.2.post1 requires apache-tvm-ffi, which is not installed.",
+  "mamba-ssm 2.3.2.post1 requires quack-kernels, which is not installed.",
+  "mamba-ssm 2.3.2.post1 requires tilelang, which is not installed."
+ ],
+ "conda_packages_added": 46,
+ "conda_packages_removed_or_changed": 0,
+ "models": {
+  "nemotron-nano-9b-v2": {
+   "resolved_fast": {
+    "causal_conv1d_fn": "causal_conv1d.causal_conv1d_interface.causal_conv1d_fn",
+    "causal_conv1d_update": "causal_conv1d.causal_conv1d_interface.causal_conv1d_update",
+    "mamba_split_conv1d_scan_combined": "missing",
+    "selective_state_update": "missing",
+    "mamba_chunk_scan_combined": "missing"
+   },
+   "resolved_fallback": {
+    "causal_conv1d_fn": "transformers.models.nemotron_h.modeling_nemotron_h.causal_conv1d_fn",
+    "causal_conv1d_update": "transformers.models.nemotron_h.modeling_nemotron_h.causal_conv1d_update",
+    "mamba_split_conv1d_scan_combined": "missing",
+    "selective_state_update": "missing",
+    "mamba_chunk_scan_combined": "missing"
+   },
+   "fast_path_kernels_ms": {
+    "_chunk_scan_fwd_kernel": 3.401,
+    "_chunk_state_fwd_kernel": 1.718,
+    "_state_passing_fwd_kernel": 1.047,
+    "void causal_conv1d_channellast_fwd_kernel<Causal_conv1d_channellast_fwd_kernel_traits<128, 4, 64, true, c10::BFloat16, c": 0.7,
+    "_bmm_chunk_fwd_kernel": 0.298,
+    "_chunk_cumsum_fwd_kernel": 0.076
+   },
+   "fallback_path_kernels_ms": {},
+   "prefill_1x2048_ms": {
+    "fast": 141.11334228515625,
+    "fallback": 2334.655029296875,
+    "speedup": 16.544537826756994
+   },
+   "versions": {
+    "torch": null,
+    "transformers": "5.16.1",
+    "triton": "3.5.0",
+    "mamba_ssm": "2.3.2.post1",
+    "causal_conv1d": "1.7.0",
+    "fla": "0.5.2"
+   }
+  },
+  "qwen3.8-27b": {
+   "resolved_fast": {
+    "causal_conv1d_fn": "causal_conv1d.causal_conv1d_interface.causal_conv1d_fn",
+    "causal_conv1d_update": "causal_conv1d.causal_conv1d_interface.causal_conv1d_update",
+    "chunk_gated_delta_rule": "missing",
+    "fused_recurrent_gated_delta_rule": "missing"
+   },
+   "resolved_fallback": {
+    "causal_conv1d_fn": "transformers.models.qwen3_5.modeling_qwen3_5.causal_conv1d_fn",
+    "causal_conv1d_update": "transformers.models.qwen3_5.modeling_qwen3_5.causal_conv1d_update",
+    "chunk_gated_delta_rule": "missing",
+    "fused_recurrent_gated_delta_rule": "missing"
+   },
+   "fast_path_kernels_ms": {
+    "chunk_gated_delta_rule_fwd_kernel_h_blockdim64": 3.558,
+    "chunk_fwd_kernel_o": 3.228,
+    "chunk_gated_delta_rule_fwd_kkt_solve_kernel": 1.577,
+    "void causal_conv1d_channellast_fwd_kernel<Causal_conv1d_channellast_fwd_kernel_traits<128, 4, 64, true, c10::BFloat16, c": 1.547,
+    "chunk_local_cumsum_scalar_kernel": 0.195
+   },
+   "fallback_path_kernels_ms": {},
+   "prefill_1x2048_ms": {
+    "fast": 428.1416931152344,
+    "fallback": 961.2119750976562,
+    "speedup": 2.2450791187929133
+   },
+   "versions": {
+    "torch": null,
+    "transformers": "5.16.1",
+    "triton": "3.5.0",
+    "mamba_ssm": "2.3.2.post1",
+    "causal_conv1d": "1.7.0",
+    "fla": "0.5.2"
+   }
+  }
+ },
+ "verdict": "fast paths taken for both models"
+}
