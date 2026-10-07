@@ -26,6 +26,8 @@ REL = Path("/home/dev/flipquant_release")
 RUN = Path("/home/dev/n16k64_campaign/paper_eval")
 PAPER = Path("/home/dev/n16k64_campaign/paper")
 PY = "/home/dev/.conda/envs/n16k64/bin/python"
+PY_FAST = "/home/dev/.conda/envs/n16k64-fast/bin/python"   # amendment 3: the hybrid models' env
+HYBRID = ("nemotron-nano-9b-v2", "qwen3.8-27b")
 MODELS = ["qwen3-1.7b", "qwen3-8b", "mistral-7b", "nemotron-nano-9b-v2", "phi4-14b", "qwen3.8-27b"]
 UNITS = ("8x64", "16x64", "256x64")
 SHAPES = "1x128,1x256,1x512,1x1024,1x2048,1x4096,1x8192,4x2048"
@@ -67,6 +69,11 @@ def done(path):
         return json.loads(Path(path).read_text()).get("status", "complete") == "complete"
     except (FileNotFoundError, json.JSONDecodeError):
         return False
+
+
+def py(model):
+    """The interpreter of a model's env (amendment 3): n16k64-fast for the hybrid models, n16k64 otherwise."""
+    return PY_FAST if model in HYBRID else PY
 
 
 def policy_args(model, pol):
@@ -143,7 +150,7 @@ def check_fq_record(path, pol, libs, require_graph=True):
 
 
 def fq_prefill(model, pol, rnd, out, shapes=SHAPES, reps=7, no_graph=False):
-    return [PY, "-m", "evaluation.latency", "prefill", "--model", model, *policy_args(model, pol), "--shapes", shapes,
+    return [py(model), "-m", "evaluation.latency", "prefill", "--model", model, *policy_args(model, pol), "--shapes", shapes,
             "--reps", str(reps), "--label", pol, "--round", str(rnd), "--out", out, *(["--no-graph"] if no_graph else [])]
 
 
@@ -208,7 +215,7 @@ def memory():
     for model in MODELS:
         for pol in ["bf16", "nvfp4", "fo6", "fq-8x64", "fq-16x64", "fq-256x64"]:
             out = RUN / "memory" / model / f"{pol}.json"
-            cmd = [PY, RZ / "experiments" / "paper_eval" / "mem_probe.py", "--model", model, *policy_args(model, pol),
+            cmd = [py(model), RZ / "experiments" / "paper_eval" / "mem_probe.py", "--model", model, *policy_args(model, pol),
                    "--label", pol, "--out", out]
             rc = run(f"memory_{model}_{pol}", cmd, out, FQ)
             if rc not in (None, 0):
@@ -219,7 +226,7 @@ def ownership():
     for model in MODELS:
         for u in UNITS:
             out = RUN / "ownership" / f"{model}_{u}.json"
-            cmd = [PY, "-m", "evaluation.ppl", "--model", model, *policy_args(model, f"fq-{u}"), "--paper-convention",
+            cmd = [py(model), "-m", "evaluation.ppl", "--model", model, *policy_args(model, f"fq-{u}"), "--paper-convention",
                    "--ownership-check", "--limit", "1", "--out", out]
             rc = run(f"ownership_{model}_{u}", cmd, out, FQ)
             if rc not in (None, 0):
@@ -230,7 +237,7 @@ def fakeppl():
     for model in [m for m in MODELS if m != "qwen3.8-27b"]:
         for u in UNITS:
             out = RUN / "fakeppl" / f"{model}_{u}.json"
-            cmd = [PY, "-m", "evaluation.ppl", "--model", model, "--mode", "fake", "--weight", "mixfp4", "--act",
+            cmd = [py(model), "-m", "evaluation.ppl", "--model", model, "--mode", "fake", "--weight", "mixfp4", "--act",
                    "fourover6", "--map", REL / model / f"flipquant_{u}.pt", "--paper-convention", "--out", out]
             rc = run(f"fakeppl_{model}_{u}", cmd, out, FQ)
             if rc not in (None, 0):
@@ -239,8 +246,18 @@ def fakeppl():
 
 if __name__ == "__main__":
     what = sys.argv[1]
-    no_graph = [m for m in (sys.argv[2].split(",") if len(sys.argv) > 2 else []) if m]
+    rest = sys.argv[2:]
+    sel = [a.split("=", 1)[1] for a in rest if a.startswith("--models=")]
+    if sel:                                    # amendment 3: a model subset, in the registered order
+        keep = sel[0].split(",")
+        assert set(keep) <= set(MODELS), keep
+        MODELS[:] = [m for m in MODELS if m in keep]
+    rest = [a for a in rest if not a.startswith("--models=")]
+    no_graph = [m for m in (rest[0].split(",") if rest else []) if m]
     RUN.mkdir(parents=True, exist_ok=True)
+    if what != "parity" and any(m in HYBRID for m in MODELS) and not (RUN / "env" / "fast_env_verified.json").exists():
+        stop("the hybrid models run only in n16k64-fast, after its verification (amendment 3)")
+    log(f"{what} models {','.join(MODELS)}")
     if what == "parity":
         parity()
     elif what == "smoke":

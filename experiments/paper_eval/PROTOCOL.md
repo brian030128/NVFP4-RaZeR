@@ -95,3 +95,34 @@ libraries from keys named `*sha*`, but flipquant records them under `policy.nati
 `kernel_set.kernels` (name → library sha256). Fixed to read those fields (and to fail when no loaded kernel is
 recorded); the criteria are unchanged. The stopped record passes the corrected check (stock_ko, build_V, all four
 libraries in build_V's manifests). The run resumes; completed records are kept and re-checked by the report.
+
+## Amendment 2 (2026-10-07 19:55 UTC): the parity outcome, accepted by the user
+
+P ran 19:16–19:39 UTC (3 rounds, 18 processes, every record passing amendment 1's checks). Graph ms, the median over
+rounds, flipquant vs the step-05 harness: BF16 −0.23 % (worst shape 0.95 %), FourOverSix +0.74 % (2.02 %), FlipQuant
+16x64 **+1.02 %** (1.56 %) against the ±1 % bound; the FlipQuant 16x64 / FourOverSix ratio agrees within **0.06 pt**
+at the median (bound 0.5). Both harnesses load the same libraries, table, widths and activation quantizer; the run order
+and the GPU temperature move absolute times by ±3–5 % (round 1 vs round 2), and a ~+0.6–1.0 % absolute offset remains on
+the FP4 policies. The user accepted flipquant's `evaluation.latency prefill` for A: every paper latency number comes
+from this one harness, whose absolute times are ~1 % above the step-05 harness's on the FP4 policies
+(`results/paper_eval/parity/PARITY.md`).
+
+## Amendment 3 (2026-10-07 19:55 UTC): the hybrid models' env, a model subset, and the order
+
+The user's decisions (relayed 19:5x UTC):
+- **n16k64-fast.** Nemotron-Nano-9B-v2 and Qwen3.8-27B run EVERYTHING of this round in a new env n16k64-fast: a clone of
+  n16k64 plus, inside that env only, flash-linear-attention 0.5.2 (+ fla-core 0.5.2, einops 0.8.2, ninja), the CUDA 12.8
+  compiler and dev headers from conda-forge (no system, driver or /usr/local change), and causal-conv1d 1.7.0 and
+  mamba-ssm 2.3.2.post1 built from source for sm_120; torch 2.9.0+cu128, triton 3.5.0 and transformers 5.16.1 unchanged
+  (the freeze delta is recorded in `env/`). Before any measurement in it, `verify_fast_env.py` must show that
+  transformers resolves the fast implementations (mamba_ssm / causal_conv1d / fla) for both models and that their kernels
+  run in a 1x2048 prefill; its record `env/fast_env_verified.json` gates the driver (`run_gpu.py` refuses the hybrid
+  models without it). The maps stay as calibrated, under the fallback kernels.
+- **F (new): the hybrid models' main-table PPL in n16k64-fast**: BF16, NVFP4, FourOverSix and FlipQuant 8x64 / 16x64 /
+  256x64, both corpora, flipquant `evaluation.ppl --paper-convention`, reported against the fallback numbers.
+- **The other four models** (Qwen3-1.7B, Qwen3-8B, Mistral-7B-Instruct-v0.3, Phi-4) run in n16k64, the env of every
+  earlier record of this study.
+- **Driver:** `run_gpu.py <part> --models=a,b` runs a subset, in the registered model order; each part logs its models.
+- **Order:** the four models first: S, then B, C1 and C2 (no timing; they may run while n16k64-fast builds on the CPU),
+  then A once no build is running. Then the hybrid models after the env verification: S, F, the D pilot (its own
+  registration), A, B, C1, and C2 for Nemotron. A never runs for the hybrid models on the fallback.
