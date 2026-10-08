@@ -38,9 +38,10 @@ def main():
                 continue
             nll.setdefault(key, {})[r] = dict(fallback=T.nll_of(src[r]), fast=T.nll_of(fast[r]))
     L = ["# F: the hybrid models' main-table PPL in n16k64-fast vs the fallback env", "",
-         "flipquant `evaluation.ppl --paper-convention`, the same windows; fallback = the records of the CPU tables "
-         "(main-ppl 44f8cea for BF16 / NVFP4 / FourOverSix, the release records for FlipQuant); fast = n16k64-fast "
-         "(amendments 3 and 5). The maps are as calibrated (under the fallback kernels).", "",
+         "flipquant `evaluation.ppl --paper-convention` (NVFP4: `--act-scope row`, per-token NVFP4 scales, amendment "
+         "11), the same windows; fallback = the records of the CPU tables (main-ppl 44f8cea for BF16 / NVFP4 / "
+         "FourOverSix, the release records for FlipQuant); fast = n16k64-fast (amendments 3 and 5). The maps are as "
+         "calibrated (under the fallback kernels). ✗ = |ΔNLL| beyond 2 SE.", "",
          "| model | policy | WikiText-2 fallback → fast | ΔNLL fast − fallback | C4 fallback → fast | ΔNLL fast − fallback |",
          "|---|---|---:|---:|---:|---:|"]
     for key, _, title in HYBRID:
@@ -55,8 +56,12 @@ def main():
                 pr = T.paired(b, a)
                 rec["ppl"].setdefault(key, {}).setdefault(r, {})[c] = dict(fallback=pa, fast=pb)
                 rec["fast_vs_fallback"].setdefault(key, {}).setdefault(r, {})[c] = pr
-                cells += [f"{pa:.4f} → {pb:.4f}", f"{pr['delta']:+.5f} ± {pr['two_se']:.5f}"]
+                cells += [f"{pa:.4f} → {pb:.4f}", f"{pr['delta']:+.5f} ± {pr['two_se']:.5f}{' ✗' if pr['significant'] else ''}"]
             L.append(f"| {title} | {T.NAMES[r]} | " + " | ".join(cells) + " |")
+    cells = [p for k in rec["fast_vs_fallback"].values() for r in k.values() for p in r.values()]
+    if cells:
+        rec["within_2se"] = sum(not p["significant"] for p in cells)
+        L += ["", f"**{rec['within_2se']} of {len(cells)} fast − fallback differences are within 2 SE.**"]
     L += ["", "The table's comparisons in each env (ΔNLL vs FourOverSix, ± 2 SE; * = beyond 2 SE):", "",
           "| model | policy | WikiText-2 fallback | fast | C4 fallback | fast |", "|---|---|---:|---:|---:|---:|"]
     for key, _, title in HYBRID:
