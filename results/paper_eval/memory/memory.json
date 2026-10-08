@@ -2942,6 +2942,987 @@
    "status": "complete"
   }
  },
+ "nemotron-nano-9b-v2": {
+  "bf16": {
+   "model": "nemotron-nano-9b-v2",
+   "label": "bf16",
+   "mode": "bf16",
+   "weight": "bf16",
+   "policy": {
+    "model": "nemotron-nano-9b-v2",
+    "source": {
+     "hf_id": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+     "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    },
+    "mode": "bf16"
+   },
+   "seconds": {
+    "load": 6.29519510269165,
+    "install": 5.7220458984375e-06
+   },
+   "gpu": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "driver_version": "595.71.05",
+    "power.limit": "500.00 W",
+    "power.default_limit": "600.00 W",
+    "clocks.max.sm": "3090 MHz",
+    "clocks.max.mem": "14001 MHz",
+    "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+    "persistence_mode": "Enabled",
+    "temperature.gpu": "71",
+    "utilization.gpu": "0 %",
+    "memory.used": "17520 MiB",
+    "torch": "2.9.0+cu128",
+    "torch_cuda": "12.8",
+    "triton": "3.5.0",
+    "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+    "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "capability": [
+     12,
+     0
+    ],
+    "sm_count": 188,
+    "utc": "2026-10-08T10:07:28+00:00"
+   },
+   "allocator": "default",
+   "allocated_after_load": 17776489984,
+   "reserved_after_load": 17783848960,
+   "quantized_linears": {
+    "modules": 120,
+    "installed_bytes": 15423242240,
+    "bf16_bytes": 15423242240,
+    "packed_bytes": null,
+    "scales_bytes": null,
+    "bias_bytes": 0,
+    "installed_over_bf16": 1.0
+   },
+   "other_bytes": 2353212416,
+   "model_bytes": 17776454656,
+   "peak_prefill_1x2048": 19592672768,
+   "peak_prefill_over_load": 1816182784,
+   "logits_dtype": "torch.float32",
+   "wall_seconds": 11.283648490905762,
+   "status": "complete"
+  },
+  "nvfp4": {
+   "model": "nemotron-nano-9b-v2",
+   "label": "nvfp4",
+   "mode": "native",
+   "weight": "nvfp4",
+   "policy": {
+    "model": "nemotron-nano-9b-v2",
+    "source": {
+     "hf_id": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+     "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    },
+    "mode": "native",
+    "quant": {
+     "backend": "sm120",
+     "weight": "nvfp4",
+     "act": "nvfp4",
+     "act_scope": "row",
+     "unit": null
+    },
+    "native": {
+     "backend": "sm120",
+     "kernel": "stock_ko",
+     "routing": "auto: nvfp4 weights -> stock_ko, from /home/dev/n16k64_campaign/kernel_opt/build_V",
+     "build_dir": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+     "weight": "nvfp4",
+     "unit": null,
+     "activation_quantizer": "nvfp4_rows",
+     "activation_quantizer_override": false,
+     "modules": 120,
+     "e0m3_tiles": 0,
+     "checked": true,
+     "ownership": {},
+     "kernel_set": {
+      "family": "stock_ko",
+      "kernels": {
+       "stock_wA_n16": "abbc9c15d11cfebb95ddea38e8c03fc5544d6135b8dc7130a9f521ff99faa763",
+       "stock_wA_n32": "cbf601ccee1a9a9ae7d3ead4692e10182f7964ac9887d08693f182dbda731e48",
+       "stock_wA_n64": "905e6171fd9a3928523fef54e7aff45f1972adf95fc767930fec48fc0bd53d15",
+       "stock_wA_e64": "5ccdacea29559b9a68015d50a64c7e429eb9761fcbd401ac0f5cff01b60d1e6a"
+      },
+      "table": "/home/dev/n16k64_campaign/fqopt/wt/kernels/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+      "table_shapes": 16,
+      "table_family": "stock",
+      "schedule_shapes": 16,
+      "calls_by_width": {}
+     },
+     "device_bytes": {
+      "packed": 3855810560,
+      "scales_placed": 482424320,
+      "bias": 0
+     }
+    },
+    "quantized_modules": 120,
+    "native_backend": "sm120"
+   },
+   "seconds": {
+    "load": 5.945369005203247,
+    "install": 4.705103158950806
+   },
+   "gpu": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "driver_version": "595.71.05",
+    "power.limit": "500.00 W",
+    "power.default_limit": "600.00 W",
+    "clocks.max.sm": "3090 MHz",
+    "clocks.max.mem": "14001 MHz",
+    "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+    "persistence_mode": "Enabled",
+    "temperature.gpu": "76",
+    "utilization.gpu": "98 %",
+    "memory.used": "23202 MiB",
+    "torch": "2.9.0+cu128",
+    "torch_cuda": "12.8",
+    "triton": "3.5.0",
+    "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+    "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "capability": [
+     12,
+     0
+    ],
+    "sm_count": 188,
+    "utc": "2026-10-08T10:07:47+00:00"
+   },
+   "allocator": "default",
+   "allocated_after_load": 6710817792,
+   "reserved_after_load": 23611834368,
+   "quantized_linears": {
+    "modules": 120,
+    "installed_bytes": 4338234880,
+    "bf16_bytes": 15423242240,
+    "packed_bytes": 3855810560,
+    "scales_bytes": 482424320,
+    "bias_bytes": 0,
+    "installed_over_bf16": 0.2812790470701963
+   },
+   "other_bytes": 2353212416,
+   "model_bytes": 6691447296,
+   "peak_prefill_1x2048": 8609293312,
+   "peak_prefill_over_load": 1898475520,
+   "logits_dtype": "torch.float32",
+   "coverage": {
+    "native": 120,
+    "native_called": 120,
+    "calls": 120,
+    "tokens": 245760
+   },
+   "wall_seconds": 15.635594606399536,
+   "status": "complete"
+  },
+  "fo6": {
+   "model": "nemotron-nano-9b-v2",
+   "label": "fo6",
+   "mode": "native",
+   "weight": "fourover6",
+   "policy": {
+    "model": "nemotron-nano-9b-v2",
+    "source": {
+     "hf_id": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+     "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    },
+    "mode": "native",
+    "quant": {
+     "backend": "sm120",
+     "weight": "fourover6",
+     "act": "fourover6",
+     "act_scope": "row",
+     "unit": null
+    },
+    "native": {
+     "backend": "sm120",
+     "kernel": "stock_ko",
+     "routing": "auto: fourover6 weights -> stock_ko, from /home/dev/n16k64_campaign/kernel_opt/build_V",
+     "build_dir": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+     "weight": "fourover6",
+     "unit": null,
+     "activation_quantizer": "four_over_six_rows",
+     "activation_quantizer_override": false,
+     "modules": 120,
+     "e0m3_tiles": 0,
+     "checked": true,
+     "ownership": {},
+     "kernel_set": {
+      "family": "stock_ko",
+      "kernels": {
+       "stock_wA_n16": "abbc9c15d11cfebb95ddea38e8c03fc5544d6135b8dc7130a9f521ff99faa763",
+       "stock_wA_n32": "cbf601ccee1a9a9ae7d3ead4692e10182f7964ac9887d08693f182dbda731e48",
+       "stock_wA_n64": "905e6171fd9a3928523fef54e7aff45f1972adf95fc767930fec48fc0bd53d15",
+       "stock_wA_e64": "5ccdacea29559b9a68015d50a64c7e429eb9761fcbd401ac0f5cff01b60d1e6a"
+      },
+      "table": "/home/dev/n16k64_campaign/fqopt/wt/kernels/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+      "table_shapes": 16,
+      "table_family": "stock",
+      "schedule_shapes": 16,
+      "calls_by_width": {}
+     },
+     "device_bytes": {
+      "packed": 3855810560,
+      "scales_placed": 482424320,
+      "bias": 0
+     }
+    },
+    "quantized_modules": 120,
+    "native_backend": "sm120"
+   },
+   "seconds": {
+    "load": 6.543773412704468,
+    "install": 7.208446025848389
+   },
+   "gpu": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "driver_version": "595.71.05",
+    "power.limit": "500.00 W",
+    "power.default_limit": "600.00 W",
+    "clocks.max.sm": "3090 MHz",
+    "clocks.max.mem": "14001 MHz",
+    "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+    "persistence_mode": "Enabled",
+    "temperature.gpu": "75",
+    "utilization.gpu": "99 %",
+    "memory.used": "23494 MiB",
+    "torch": "2.9.0+cu128",
+    "torch_cuda": "12.8",
+    "triton": "3.5.0",
+    "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+    "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "capability": [
+     12,
+     0
+    ],
+    "sm_count": 188,
+    "utc": "2026-10-08T10:08:09+00:00"
+   },
+   "allocator": "default",
+   "allocated_after_load": 6709000704,
+   "reserved_after_load": 23915921408,
+   "quantized_linears": {
+    "modules": 120,
+    "installed_bytes": 4338234880,
+    "bf16_bytes": 15423242240,
+    "packed_bytes": 3855810560,
+    "scales_bytes": 482424320,
+    "bias_bytes": 0,
+    "installed_over_bf16": 0.2812790470701963
+   },
+   "other_bytes": 2353212416,
+   "model_bytes": 6691447296,
+   "peak_prefill_1x2048": 8608545280,
+   "peak_prefill_over_load": 1899544576,
+   "logits_dtype": "torch.float32",
+   "coverage": {
+    "native": 120,
+    "native_called": 120,
+    "calls": 120,
+    "tokens": 245760
+   },
+   "wall_seconds": 18.705976724624634,
+   "status": "complete"
+  },
+  "fq-8x64": {
+   "model": "nemotron-nano-9b-v2",
+   "label": "fq-8x64",
+   "mode": "native",
+   "weight": "mixfp4",
+   "policy": {
+    "model": "nemotron-nano-9b-v2",
+    "source": {
+     "hf_id": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+     "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    },
+    "mode": "native",
+    "map": {
+     "path": "/home/dev/flipquant_release/nemotron-nano-9b-v2/flipquant_8x64.pt",
+     "unit": "8x64",
+     "meta": {
+      "method": "FlipQuant = TM-OPT+TC (the paper's calibration) -- NOT the paper's settings: epochs 5 (paper 20), teacher-topk 1000 (paper 0), fit-windows 256 (paper 128)",
+      "paper_settings": {
+       "epochs": 20,
+       "lr": 0.02,
+       "init_logit": -1.0,
+       "teacher_topk": 0,
+       "fit_windows": 128,
+       "seed": 0,
+       "batch": 2,
+       "accum": 4
+      },
+      "non_default_settings": {
+       "epochs": 5,
+       "teacher_topk": 1000,
+       "fit_windows": 256
+      },
+      "teacher": {
+       "k": 1000,
+       "windows": 256,
+       "bytes": 785419264,
+       "devices": [
+        "cuda:0"
+       ],
+       "layout": "top-K values bf16 + ids int32 + tail log-mass fp32",
+       "mean_tail_mass": 0.006479011763531162,
+       "max_window_tail_mass": 0.05839923769235611
+      },
+      "trainer": "TM-OPT+TC: run_train_map.py --tm-opt --tile-grad-tc (calibration/tmopt/run_train_map.py, vendored from the reference implementation)",
+      "repo": "the reference implementation",
+      "branch": "topk-cal",
+      "commit": "a53ce5596c54534fb7c096f061e3b5df454679ae",
+      "flipquant": {
+       "commit": "120173a4f67c67f5e67f93ea02fa7a9eaff3ef14",
+       "clean": true
+      },
+      "settings": {
+       "param": "ste",
+       "optimizer": "adam",
+       "lr": 0.02,
+       "eps": 1e-12,
+       "betas": [
+        0.9,
+        0.999
+       ],
+       "schedule": "constant",
+       "init_logit": -1.0,
+       "epochs": 5,
+       "batch": 2,
+       "accum": 4,
+       "seed": 0,
+       "tm_opt": true,
+       "tile_grad_tc": true,
+       "no_dev": true,
+       "no_eval": true,
+       "unit": "8x64",
+       "teacher_topk": 1000,
+       "fit_windows": 256,
+       "memory_mode": "lean",
+       "fused_act_quant": true,
+       "tile_grad_kernel": false,
+       "chunked_loss": true,
+       "deterministic": true,
+       "dev_backend": "native",
+       "eval_backend": "native",
+       "single_pass_epilogue": true,
+       "pytorch_cuda_alloc_conf": "expandable_segments:True",
+       "cublas_workspace_config": ":4096:8",
+       "fit_set": "128 windows x 512 tokens: 64 open-web-math @ fde8ef8 + 64 codeparrot-clean @ 35a59fb, then 128 by the extension rule",
+       "activations": "per-token FourOverSix fake quant (STE)",
+       "loss": "KL to the BF16 teacher",
+       "output": "last-epoch map (theta > 0 -> E0M3)"
+      },
+      "model_id": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+      "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+      "registry_key": "nemotron-nano-9b-v2",
+      "unit": "8x64",
+      "e0m3_tiles": 130579,
+      "tiles": 15061760,
+      "e0m3_share": 0.008669571152375287,
+      "modules": 120,
+      "calibration_time": {
+       "wall_seconds": 2608.738691329956,
+       "setup_seconds": 212.5009377002716,
+       "training_seconds": 2396.181134700775
+      },
+      "transformers": "5.16.1",
+      "torch": "2.9.0+cu128",
+      "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+      "deviations": [],
+      "source_map_sha256": "64961dd647690f4f1e71b856a250f36bd4dfc0d903454697b368adbd1fc4114c",
+      "source": {
+       "kind": "trained",
+       "run": "/home/dev/n16k64_campaign/fqrel/runs/nemotron-nano-9b-v2_8x64/run",
+       "report_sha256": "bb3d95934f5374703a827f7efceae266ab221f0461c7e2c8db8770c19957fcc0",
+       "calibration_record": "/home/dev/n16k64_campaign/fqrel/tmopt_data/nemotron9b/calibration/report.json",
+       "calibration_record_sha256": "d530ea8b2518fcfa30ab54e6ae2350d51b2ca28a3b0fabb88379584bc02e7add"
+      },
+      "written_utc": "2026-10-05T19:25:22+00:00",
+      "fit_extension": {
+       "rule": "flipquant calibration_sets_extended's _stream_windows (seed SEED + 2 = 20260930) on the paper record's streams, on top of the paper fit set; skipping the paper fit, development and published C4 documents",
+       "flipquant_reference": "brian030128/flipquant flipquant/data.py calibration_sets_extended @ b1c4123",
+       "seed": 20260930,
+       "windows": 128,
+       "per_source": 64,
+       "skipped_documents": {
+        "fit": 128,
+        "development": 192,
+        "c4_evaluation": 0
+       }
+      }
+     },
+     "modules": 120,
+     "tiles": 15061760,
+     "e0m3_tiles": 130579,
+     "e0m3_fraction": 0.008669571152375287
+    },
+    "quant": {
+     "backend": "sm120",
+     "weight": "mixfp4",
+     "act": "fourover6",
+     "act_scope": "row",
+     "unit": "8x64"
+    },
+    "native": {
+     "backend": "sm120",
+     "kernel": "mixed_wB_ko",
+     "routing": "auto: 8x64 map -> mixed_wB_ko with its optimized dispatch variants, from /home/dev/n16k64_campaign/kernel_opt/build_V",
+     "build_dir": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+     "weight": "mixfp4",
+     "unit": "8x64",
+     "activation_quantizer": "four_over_six_rows",
+     "activation_quantizer_override": false,
+     "modules": 120,
+     "e0m3_tiles": 130579,
+     "checked": true,
+     "ownership": {},
+     "kernel_set": {
+      "family": "mixed_wB_ko",
+      "kernels": {
+       "n8k64_wB_m16_t0": "28e5321c3ec61dea99c72777a94d1e1c7b2cb84d220938ebebfb556575e6e56e",
+       "n8k64_wB_m32_t0": "2e0768eb0c3cb899f81eccd7b3d52c374d06c9e383ae905240670605cffa86f4",
+       "n8k64_wB_m64_t0": "0005e0b846a36dcbc791c666aa1f18a6582aa74d9a8eec3c4e9b6c8a7ee056a2",
+       "n8k64_wB_t0": "4cb85620d215a9cf6be6ade9ad4d4f4f0cc12b324960ea337d93912163b1d08c",
+       "n8k64_wB_n64_t0": "2f7271a67c1b7d05a96db3af92892c04e9f7e6a881102834cfc247c3c48fec9e"
+      },
+      "table": "/home/dev/n16k64_campaign/fqopt/wt/kernels/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+      "table_shapes": 16,
+      "table_family": "mixed_wB",
+      "schedule_shapes": 0,
+      "calls_by_width": {}
+     },
+     "device_bytes": {
+      "packed": 3855810560,
+      "scales_placed": 482424320,
+      "bias": 0
+     }
+    },
+    "quantized_modules": 120,
+    "native_backend": "sm120"
+   },
+   "seconds": {
+    "load": 6.078060626983643,
+    "install": 9.3091561794281
+   },
+   "gpu": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "driver_version": "595.71.05",
+    "power.limit": "500.00 W",
+    "power.default_limit": "600.00 W",
+    "clocks.max.sm": "3090 MHz",
+    "clocks.max.mem": "14001 MHz",
+    "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+    "persistence_mode": "Enabled",
+    "temperature.gpu": "73",
+    "utilization.gpu": "87 %",
+    "memory.used": "23494 MiB",
+    "torch": "2.9.0+cu128",
+    "torch_cuda": "12.8",
+    "triton": "3.5.0",
+    "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+    "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "capability": [
+     12,
+     0
+    ],
+    "sm_count": 188,
+    "utc": "2026-10-08T10:08:32+00:00"
+   },
+   "allocator": "default",
+   "allocated_after_load": 6708287488,
+   "reserved_after_load": 23915921408,
+   "quantized_linears": {
+    "modules": 120,
+    "installed_bytes": 4338234880,
+    "bf16_bytes": 15423242240,
+    "packed_bytes": 3855810560,
+    "scales_bytes": 482424320,
+    "bias_bytes": 0,
+    "installed_over_bf16": 0.2812790470701963
+   },
+   "other_bytes": 2353212416,
+   "model_bytes": 6691447296,
+   "peak_prefill_1x2048": 8609605632,
+   "peak_prefill_over_load": 1901318144,
+   "logits_dtype": "torch.float32",
+   "coverage": {
+    "native": 120,
+    "native_called": 120,
+    "calls": 120,
+    "tokens": 245760
+   },
+   "wall_seconds": 20.333624839782715,
+   "status": "complete"
+  },
+  "fq-16x64": {
+   "model": "nemotron-nano-9b-v2",
+   "label": "fq-16x64",
+   "mode": "native",
+   "weight": "mixfp4",
+   "policy": {
+    "model": "nemotron-nano-9b-v2",
+    "source": {
+     "hf_id": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+     "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    },
+    "mode": "native",
+    "map": {
+     "path": "/home/dev/flipquant_release/nemotron-nano-9b-v2/flipquant_16x64.pt",
+     "unit": "16x64",
+     "meta": {
+      "method": "FlipQuant = TM-OPT+TC (the paper's calibration) -- NOT the paper's settings: epochs 5 (paper 20), teacher-topk 1000 (paper 0), fit-windows 256 (paper 128)",
+      "paper_settings": {
+       "epochs": 20,
+       "lr": 0.02,
+       "init_logit": -1.0,
+       "teacher_topk": 0,
+       "fit_windows": 128,
+       "seed": 0,
+       "batch": 2,
+       "accum": 4
+      },
+      "non_default_settings": {
+       "epochs": 5,
+       "teacher_topk": 1000,
+       "fit_windows": 256
+      },
+      "teacher": {
+       "k": 1000,
+       "windows": 256,
+       "bytes": 785419264,
+       "devices": [
+        "cuda:0"
+       ],
+       "layout": "top-K values bf16 + ids int32 + tail log-mass fp32",
+       "mean_tail_mass": 0.006479011763531162,
+       "max_window_tail_mass": 0.05839923769235611
+      },
+      "trainer": "TM-OPT+TC: run_train_map.py --tm-opt --tile-grad-tc (calibration/tmopt/run_train_map.py, vendored from the reference implementation)",
+      "repo": "the reference implementation",
+      "branch": "topk-cal",
+      "commit": "a53ce5596c54534fb7c096f061e3b5df454679ae",
+      "flipquant": {
+       "commit": "120173a4f67c67f5e67f93ea02fa7a9eaff3ef14",
+       "clean": true
+      },
+      "settings": {
+       "param": "ste",
+       "optimizer": "adam",
+       "lr": 0.02,
+       "eps": 1e-12,
+       "betas": [
+        0.9,
+        0.999
+       ],
+       "schedule": "constant",
+       "init_logit": -1.0,
+       "epochs": 5,
+       "batch": 2,
+       "accum": 4,
+       "seed": 0,
+       "tm_opt": true,
+       "tile_grad_tc": true,
+       "no_dev": true,
+       "no_eval": true,
+       "unit": "16x64",
+       "teacher_topk": 1000,
+       "fit_windows": 256,
+       "memory_mode": "lean",
+       "fused_act_quant": true,
+       "tile_grad_kernel": false,
+       "chunked_loss": true,
+       "deterministic": true,
+       "dev_backend": "native",
+       "eval_backend": "native",
+       "single_pass_epilogue": true,
+       "pytorch_cuda_alloc_conf": "expandable_segments:True",
+       "cublas_workspace_config": ":4096:8",
+       "fit_set": "128 windows x 512 tokens: 64 open-web-math @ fde8ef8 + 64 codeparrot-clean @ 35a59fb, then 128 by the extension rule",
+       "activations": "per-token FourOverSix fake quant (STE)",
+       "loss": "KL to the BF16 teacher",
+       "output": "last-epoch map (theta > 0 -> E0M3)"
+      },
+      "model_id": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+      "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+      "registry_key": "nemotron-nano-9b-v2",
+      "unit": "16x64",
+      "e0m3_tiles": 80098,
+      "tiles": 7530880,
+      "e0m3_share": 0.010635941616384805,
+      "modules": 120,
+      "calibration_time": {
+       "wall_seconds": 2609.6470277309418,
+       "setup_seconds": 215.36844444274902,
+       "training_seconds": 2394.2361834049225
+      },
+      "transformers": "5.16.1",
+      "torch": "2.9.0+cu128",
+      "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+      "deviations": [],
+      "source_map_sha256": "05222ba8433bf4ae73211cf491eecb382883bd5349cd4227b4e6d4535f2fbfe0",
+      "source": {
+       "kind": "trained",
+       "run": "/home/dev/n16k64_campaign/fqrel/runs/nemotron-nano-9b-v2_16x64/run",
+       "report_sha256": "8d3c9cc4c57116ddb0e135ac0afa850c0f59562594b209780471ca81223fdd7b",
+       "calibration_record": "/home/dev/n16k64_campaign/fqrel/tmopt_data/nemotron9b/calibration/report.json",
+       "calibration_record_sha256": "d530ea8b2518fcfa30ab54e6ae2350d51b2ca28a3b0fabb88379584bc02e7add"
+      },
+      "written_utc": "2026-10-05T20:09:03+00:00",
+      "fit_extension": {
+       "rule": "flipquant calibration_sets_extended's _stream_windows (seed SEED + 2 = 20260930) on the paper record's streams, on top of the paper fit set; skipping the paper fit, development and published C4 documents",
+       "flipquant_reference": "brian030128/flipquant flipquant/data.py calibration_sets_extended @ b1c4123",
+       "seed": 20260930,
+       "windows": 128,
+       "per_source": 64,
+       "skipped_documents": {
+        "fit": 128,
+        "development": 192,
+        "c4_evaluation": 0
+       }
+      }
+     },
+     "modules": 120,
+     "tiles": 7530880,
+     "e0m3_tiles": 80098,
+     "e0m3_fraction": 0.010635941616384805
+    },
+    "quant": {
+     "backend": "sm120",
+     "weight": "mixfp4",
+     "act": "fourover6",
+     "act_scope": "row",
+     "unit": "16x64"
+    },
+    "native": {
+     "backend": "sm120",
+     "kernel": "mixed_ko",
+     "routing": "auto: 16x64 map -> mixed_ko with its optimized dispatch variants, from /home/dev/n16k64_campaign/kernel_opt/build_V",
+     "build_dir": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+     "weight": "mixfp4",
+     "unit": "16x64",
+     "activation_quantizer": "four_over_six_rows",
+     "activation_quantizer_override": false,
+     "modules": 120,
+     "e0m3_tiles": 80098,
+     "checked": true,
+     "ownership": {},
+     "kernel_set": {
+      "family": "mixed_ko",
+      "kernels": {
+       "n16k64_wA_n16_t0": "d6cff384814ba0d014de561bfb57d739b549f748bdc91c3e2337de16d63133a5",
+       "n16k64_wA_n32_t0": "e62c5d4035d881b00aced0f03d27f4ec731419f89b3a476d006ec2581d9f67cf",
+       "n16k64_wA_n64_t0": "8f472aa880bb624c0948add8726329abb868ddec22f9e2fcdfd5133150fb7224",
+       "n16k64_wA_e64_t0": "3e8023de34079956fc1bf0bc8c1355ba6710dc36792dc07f8865bf51bd706609"
+      },
+      "table": "/home/dev/n16k64_campaign/fqopt/wt/kernels/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+      "table_shapes": 16,
+      "table_family": "mixed",
+      "schedule_shapes": 16,
+      "calls_by_width": {}
+     },
+     "device_bytes": {
+      "packed": 3855810560,
+      "scales_placed": 482424320,
+      "bias": 0
+     }
+    },
+    "quantized_modules": 120,
+    "native_backend": "sm120"
+   },
+   "seconds": {
+    "load": 5.9693238735198975,
+    "install": 9.298088788986206
+   },
+   "gpu": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "driver_version": "595.71.05",
+    "power.limit": "500.00 W",
+    "power.default_limit": "600.00 W",
+    "clocks.max.sm": "3090 MHz",
+    "clocks.max.mem": "14001 MHz",
+    "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+    "persistence_mode": "Enabled",
+    "temperature.gpu": "73",
+    "utilization.gpu": "84 %",
+    "memory.used": "23494 MiB",
+    "torch": "2.9.0+cu128",
+    "torch_cuda": "12.8",
+    "triton": "3.5.0",
+    "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+    "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "capability": [
+     12,
+     0
+    ],
+    "sm_count": 188,
+    "utc": "2026-10-08T10:08:56+00:00"
+   },
+   "allocator": "default",
+   "allocated_after_load": 6708287488,
+   "reserved_after_load": 23915921408,
+   "quantized_linears": {
+    "modules": 120,
+    "installed_bytes": 4338234880,
+    "bf16_bytes": 15423242240,
+    "packed_bytes": 3855810560,
+    "scales_bytes": 482424320,
+    "bias_bytes": 0,
+    "installed_over_bf16": 0.2812790470701963
+   },
+   "other_bytes": 2353212416,
+   "model_bytes": 6691447296,
+   "peak_prefill_1x2048": 8609605632,
+   "peak_prefill_over_load": 1901318144,
+   "logits_dtype": "torch.float32",
+   "coverage": {
+    "native": 120,
+    "native_called": 120,
+    "calls": 120,
+    "tokens": 245760
+   },
+   "wall_seconds": 20.252241373062134,
+   "status": "complete"
+  },
+  "fq-256x64": {
+   "model": "nemotron-nano-9b-v2",
+   "label": "fq-256x64",
+   "mode": "native",
+   "weight": "mixfp4",
+   "policy": {
+    "model": "nemotron-nano-9b-v2",
+    "source": {
+     "hf_id": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+     "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    },
+    "mode": "native",
+    "map": {
+     "path": "/home/dev/flipquant_release/nemotron-nano-9b-v2/flipquant_256x64.pt",
+     "unit": "256x64",
+     "meta": {
+      "method": "FlipQuant = TM-OPT+TC (the paper's calibration) -- NOT the paper's settings: epochs 5 (paper 20), teacher-topk 1000 (paper 0), fit-windows 256 (paper 128)",
+      "paper_settings": {
+       "epochs": 20,
+       "lr": 0.02,
+       "init_logit": -1.0,
+       "teacher_topk": 0,
+       "fit_windows": 128,
+       "seed": 0,
+       "batch": 2,
+       "accum": 4
+      },
+      "non_default_settings": {
+       "epochs": 5,
+       "teacher_topk": 1000,
+       "fit_windows": 256
+      },
+      "teacher": {
+       "k": 1000,
+       "windows": 256,
+       "bytes": 785419264,
+       "devices": [
+        "cuda:0"
+       ],
+       "layout": "top-K values bf16 + ids int32 + tail log-mass fp32",
+       "mean_tail_mass": 0.006479011763531162,
+       "max_window_tail_mass": 0.05839923769235611
+      },
+      "trainer": "TM-OPT+TC: run_train_map.py --tm-opt --tile-grad-tc (calibration/tmopt/run_train_map.py, vendored from the reference implementation)",
+      "repo": "the reference implementation",
+      "branch": "topk-cal",
+      "commit": "a53ce5596c54534fb7c096f061e3b5df454679ae",
+      "flipquant": {
+       "commit": "120173a4f67c67f5e67f93ea02fa7a9eaff3ef14",
+       "clean": true
+      },
+      "settings": {
+       "param": "ste",
+       "optimizer": "adam",
+       "lr": 0.02,
+       "eps": 1e-12,
+       "betas": [
+        0.9,
+        0.999
+       ],
+       "schedule": "constant",
+       "init_logit": -1.0,
+       "epochs": 5,
+       "batch": 2,
+       "accum": 4,
+       "seed": 0,
+       "tm_opt": true,
+       "tile_grad_tc": true,
+       "no_dev": true,
+       "no_eval": true,
+       "unit": "256x64",
+       "teacher_topk": 1000,
+       "fit_windows": 256,
+       "memory_mode": "lean",
+       "fused_act_quant": true,
+       "tile_grad_kernel": false,
+       "chunked_loss": true,
+       "deterministic": true,
+       "dev_backend": "native",
+       "eval_backend": "native",
+       "single_pass_epilogue": true,
+       "pytorch_cuda_alloc_conf": "expandable_segments:True",
+       "cublas_workspace_config": ":4096:8",
+       "fit_set": "128 windows x 512 tokens: 64 open-web-math @ fde8ef8 + 64 codeparrot-clean @ 35a59fb, then 128 by the extension rule",
+       "activations": "per-token FourOverSix fake quant (STE)",
+       "loss": "KL to the BF16 teacher",
+       "output": "last-epoch map (theta > 0 -> E0M3)"
+      },
+      "model_id": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+      "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+      "registry_key": "nemotron-nano-9b-v2",
+      "unit": "256x64",
+      "e0m3_tiles": 12679,
+      "tiles": 478320,
+      "e0m3_share": 0.026507359090148855,
+      "modules": 120,
+      "calibration_time": {
+       "wall_seconds": 2620.226011276245,
+       "setup_seconds": 214.3106701374054,
+       "training_seconds": 2405.88995718956
+      },
+      "transformers": "5.16.1",
+      "torch": "2.9.0+cu128",
+      "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+      "deviations": [],
+      "source_map_sha256": "0dd1da7e0125d9ccb667a48a6102ca97abd97e9f7fe76da125b2b95269ac27d8",
+      "source": {
+       "kind": "trained",
+       "run": "/home/dev/n16k64_campaign/fqrel/runs/nemotron-nano-9b-v2_256x64/run",
+       "report_sha256": "12efab36fc649d3f8661fa49d22ffe64184d8cd58efc5d7e9ccce63c92ad2280",
+       "calibration_record": "/home/dev/n16k64_campaign/fqrel/tmopt_data/nemotron9b/calibration/report.json",
+       "calibration_record_sha256": "d530ea8b2518fcfa30ab54e6ae2350d51b2ca28a3b0fabb88379584bc02e7add"
+      },
+      "written_utc": "2026-10-05T20:52:55+00:00",
+      "fit_extension": {
+       "rule": "flipquant calibration_sets_extended's _stream_windows (seed SEED + 2 = 20260930) on the paper record's streams, on top of the paper fit set; skipping the paper fit, development and published C4 documents",
+       "flipquant_reference": "brian030128/flipquant flipquant/data.py calibration_sets_extended @ b1c4123",
+       "seed": 20260930,
+       "windows": 128,
+       "per_source": 64,
+       "skipped_documents": {
+        "fit": 128,
+        "development": 192,
+        "c4_evaluation": 0
+       }
+      }
+     },
+     "modules": 120,
+     "tiles": 478320,
+     "e0m3_tiles": 12679,
+     "e0m3_fraction": 0.026507359090148855
+    },
+    "quant": {
+     "backend": "sm120",
+     "weight": "mixfp4",
+     "act": "fourover6",
+     "act_scope": "row",
+     "unit": "256x64"
+    },
+    "native": {
+     "backend": "sm120",
+     "kernel": "mixed256_ko",
+     "routing": "auto: 256x64 map -> mixed256_ko with its optimized dispatch variants, from /home/dev/n16k64_campaign/kernel_opt/build_V",
+     "build_dir": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+     "weight": "mixfp4",
+     "unit": "256x64",
+     "activation_quantizer": "four_over_six_rows",
+     "activation_quantizer_override": false,
+     "modules": 120,
+     "e0m3_tiles": 199960,
+     "checked": true,
+     "ownership": {},
+     "kernel_set": {
+      "family": "mixed256_ko",
+      "kernels": {
+       "n16k64_wA_g32_n16_t0": "6137250ece69f4c0fa7740aff810a51479bad1330a2e638fd89adb5f99863730",
+       "n16k64_wA_g32_n32_t0": "c0ae0eb0a5b99c656f22fad2e2479a96cb586600c955c143331dbb7b22206038",
+       "n16k64_wA_g32_n64_t0": "1ac38b6058dfec379006ad7bb0e2de87829aa95872b7c2ca5b565e9e57da4cad",
+       "n16k64_wA_g32_e64_t0": "cd5facafa1ee4e05e70e688c358fa9b6e5d5e483d32a7f4e1ac3719d32b170d6"
+      },
+      "table": "/home/dev/n16k64_campaign/fqopt/wt/kernels/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+      "table_shapes": 16,
+      "table_family": "mixed256",
+      "schedule_shapes": 16,
+      "calls_by_width": {}
+     },
+     "device_bytes": {
+      "packed": 3855810560,
+      "scales_placed": 482424320,
+      "bias": 0
+     }
+    },
+    "quantized_modules": 120,
+    "native_backend": "sm120"
+   },
+   "seconds": {
+    "load": 6.181032180786133,
+    "install": 9.30971622467041
+   },
+   "gpu": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "driver_version": "595.71.05",
+    "power.limit": "500.00 W",
+    "power.default_limit": "600.00 W",
+    "clocks.max.sm": "3090 MHz",
+    "clocks.max.mem": "14001 MHz",
+    "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+    "persistence_mode": "Enabled",
+    "temperature.gpu": "74",
+    "utilization.gpu": "99 %",
+    "memory.used": "23254 MiB",
+    "torch": "2.9.0+cu128",
+    "torch_cuda": "12.8",
+    "triton": "3.5.0",
+    "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+    "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "capability": [
+     12,
+     0
+    ],
+    "sm_count": 188,
+    "utc": "2026-10-08T10:09:19+00:00"
+   },
+   "allocator": "default",
+   "allocated_after_load": 6707834368,
+   "reserved_after_load": 23664263168,
+   "quantized_linears": {
+    "modules": 120,
+    "installed_bytes": 4338234880,
+    "bf16_bytes": 15423242240,
+    "packed_bytes": 3855810560,
+    "scales_bytes": 482424320,
+    "bias_bytes": 0,
+    "installed_over_bf16": 0.2812790470701963
+   },
+   "other_bytes": 2353212416,
+   "model_bytes": 6691447296,
+   "peak_prefill_1x2048": 8606854656,
+   "peak_prefill_over_load": 1899020288,
+   "logits_dtype": "torch.float32",
+   "coverage": {
+    "native": 120,
+    "native_called": 120,
+    "calls": 120,
+    "tokens": 245760
+   },
+   "wall_seconds": 20.45768404006958,
+   "status": "complete"
+  }
+ },
  "phi4-14b": {
   "bf16": {
    "model": "phi4-14b",
@@ -3920,6 +4901,987 @@
     "tokens": 327680
    },
    "wall_seconds": 24.446141004562378,
+   "status": "complete"
+  }
+ },
+ "qwen3.8-27b": {
+  "bf16": {
+   "model": "qwen3.8-27b",
+   "label": "bf16",
+   "mode": "bf16",
+   "weight": "bf16",
+   "policy": {
+    "model": "qwen3.8-27b",
+    "source": {
+     "hf_id": "Qwen/Qwen3.8-27B",
+     "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    },
+    "mode": "bf16"
+   },
+   "seconds": {
+    "load": 12.762254476547241,
+    "install": 4.5299530029296875e-06
+   },
+   "gpu": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "driver_version": "595.71.05",
+    "power.limit": "500.00 W",
+    "power.default_limit": "600.00 W",
+    "clocks.max.sm": "3090 MHz",
+    "clocks.max.mem": "14001 MHz",
+    "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+    "persistence_mode": "Enabled",
+    "temperature.gpu": "64",
+    "utilization.gpu": "0 %",
+    "memory.used": "52916 MiB",
+    "torch": "2.9.0+cu128",
+    "torch_cuda": "12.8",
+    "triton": "3.5.0",
+    "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+    "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "capability": [
+     12,
+     0
+    ],
+    "sm_count": 188,
+    "utc": "2026-10-08T10:09:40+00:00"
+   },
+   "allocator": "default",
+   "allocated_after_load": 54713562624,
+   "reserved_after_load": 54769221632,
+   "quantized_linears": {
+    "modules": 496,
+    "installed_bytes": 48701112320,
+    "bf16_bytes": 48701112320,
+    "packed_bytes": null,
+    "scales_bytes": null,
+    "bias_bytes": 0,
+    "installed_over_bf16": 1.0
+   },
+   "other_bytes": 6012345128,
+   "model_bytes": 54713457448,
+   "peak_prefill_1x2048": 56078693888,
+   "peak_prefill_over_load": 1365131264,
+   "logits_dtype": "torch.bfloat16",
+   "wall_seconds": 14.052576541900635,
+   "status": "complete"
+  },
+  "nvfp4": {
+   "model": "qwen3.8-27b",
+   "label": "nvfp4",
+   "mode": "native",
+   "weight": "nvfp4",
+   "policy": {
+    "model": "qwen3.8-27b",
+    "source": {
+     "hf_id": "Qwen/Qwen3.8-27B",
+     "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    },
+    "mode": "native",
+    "quant": {
+     "backend": "sm120",
+     "weight": "nvfp4",
+     "act": "nvfp4",
+     "act_scope": "row",
+     "unit": null
+    },
+    "native": {
+     "backend": "sm120",
+     "kernel": "stock_ko",
+     "routing": "auto: nvfp4 weights -> stock_ko, from /home/dev/n16k64_campaign/kernel_opt/build_V",
+     "build_dir": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+     "weight": "nvfp4",
+     "unit": null,
+     "activation_quantizer": "nvfp4_rows",
+     "activation_quantizer_override": false,
+     "modules": 496,
+     "e0m3_tiles": 0,
+     "checked": true,
+     "ownership": {},
+     "kernel_set": {
+      "family": "stock_ko",
+      "kernels": {
+       "stock_wA_n16": "abbc9c15d11cfebb95ddea38e8c03fc5544d6135b8dc7130a9f521ff99faa763",
+       "stock_wA_n32": "cbf601ccee1a9a9ae7d3ead4692e10182f7964ac9887d08693f182dbda731e48",
+       "stock_wA_n64": "905e6171fd9a3928523fef54e7aff45f1972adf95fc767930fec48fc0bd53d15",
+       "stock_wA_e64": "5ccdacea29559b9a68015d50a64c7e429eb9761fcbd401ac0f5cff01b60d1e6a"
+      },
+      "table": "/home/dev/n16k64_campaign/fqopt/wt/kernels/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+      "table_shapes": 16,
+      "table_family": "stock",
+      "schedule_shapes": 16,
+      "calls_by_width": {}
+     },
+     "device_bytes": {
+      "packed": 12175278080,
+      "scales_placed": 1524367360,
+      "bias": 0
+     }
+    },
+    "quantized_modules": 496,
+    "native_backend": "sm120"
+   },
+   "seconds": {
+    "load": 12.671641111373901,
+    "install": 14.469258308410645
+   },
+   "gpu": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "driver_version": "595.71.05",
+    "power.limit": "500.00 W",
+    "power.default_limit": "600.00 W",
+    "clocks.max.sm": "3090 MHz",
+    "clocks.max.mem": "14001 MHz",
+    "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+    "persistence_mode": "Enabled",
+    "temperature.gpu": "72",
+    "utilization.gpu": "99 %",
+    "memory.used": "68044 MiB",
+    "torch": "2.9.0+cu128",
+    "torch_cuda": "12.8",
+    "triton": "3.5.0",
+    "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+    "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "capability": [
+     12,
+     0
+    ],
+    "sm_count": 188,
+    "utc": "2026-10-08T10:10:12+00:00"
+   },
+   "allocator": "default",
+   "allocated_after_load": 19755023872,
+   "reserved_after_load": 70629982208,
+   "quantized_linears": {
+    "modules": 496,
+    "installed_bytes": 13699645440,
+    "bf16_bytes": 48701112320,
+    "packed_bytes": 12175278080,
+    "scales_bytes": 1524367360,
+    "bias_bytes": 0,
+    "installed_over_bf16": 0.28130046291312305
+   },
+   "other_bytes": 6012345128,
+   "model_bytes": 19711990568,
+   "peak_prefill_1x2048": 21206801920,
+   "peak_prefill_over_load": 1451778048,
+   "logits_dtype": "torch.bfloat16",
+   "coverage": {
+    "native": 496,
+    "native_called": 496,
+    "calls": 496,
+    "tokens": 1015808
+   },
+   "wall_seconds": 28.191508769989014,
+   "status": "complete"
+  },
+  "fo6": {
+   "model": "qwen3.8-27b",
+   "label": "fo6",
+   "mode": "native",
+   "weight": "fourover6",
+   "policy": {
+    "model": "qwen3.8-27b",
+    "source": {
+     "hf_id": "Qwen/Qwen3.8-27B",
+     "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    },
+    "mode": "native",
+    "quant": {
+     "backend": "sm120",
+     "weight": "fourover6",
+     "act": "fourover6",
+     "act_scope": "row",
+     "unit": null
+    },
+    "native": {
+     "backend": "sm120",
+     "kernel": "stock_ko",
+     "routing": "auto: fourover6 weights -> stock_ko, from /home/dev/n16k64_campaign/kernel_opt/build_V",
+     "build_dir": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+     "weight": "fourover6",
+     "unit": null,
+     "activation_quantizer": "four_over_six_rows",
+     "activation_quantizer_override": false,
+     "modules": 496,
+     "e0m3_tiles": 0,
+     "checked": true,
+     "ownership": {},
+     "kernel_set": {
+      "family": "stock_ko",
+      "kernels": {
+       "stock_wA_n16": "abbc9c15d11cfebb95ddea38e8c03fc5544d6135b8dc7130a9f521ff99faa763",
+       "stock_wA_n32": "cbf601ccee1a9a9ae7d3ead4692e10182f7964ac9887d08693f182dbda731e48",
+       "stock_wA_n64": "905e6171fd9a3928523fef54e7aff45f1972adf95fc767930fec48fc0bd53d15",
+       "stock_wA_e64": "5ccdacea29559b9a68015d50a64c7e429eb9761fcbd401ac0f5cff01b60d1e6a"
+      },
+      "table": "/home/dev/n16k64_campaign/fqopt/wt/kernels/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+      "table_shapes": 16,
+      "table_family": "stock",
+      "schedule_shapes": 16,
+      "calls_by_width": {}
+     },
+     "device_bytes": {
+      "packed": 12175278080,
+      "scales_placed": 1524367360,
+      "bias": 0
+     }
+    },
+    "quantized_modules": 496,
+    "native_backend": "sm120"
+   },
+   "seconds": {
+    "load": 12.11989164352417,
+    "install": 22.459689378738403
+   },
+   "gpu": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "driver_version": "595.71.05",
+    "power.limit": "500.00 W",
+    "power.default_limit": "600.00 W",
+    "clocks.max.sm": "3090 MHz",
+    "clocks.max.mem": "14001 MHz",
+    "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+    "persistence_mode": "Enabled",
+    "temperature.gpu": "73",
+    "utilization.gpu": "97 %",
+    "memory.used": "66864 MiB",
+    "torch": "2.9.0+cu128",
+    "torch_cuda": "12.8",
+    "triton": "3.5.0",
+    "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+    "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "capability": [
+     12,
+     0
+    ],
+    "sm_count": 188,
+    "utc": "2026-10-08T10:10:52+00:00"
+   },
+   "allocator": "default",
+   "allocated_after_load": 19764198912,
+   "reserved_after_load": 69392662528,
+   "quantized_linears": {
+    "modules": 496,
+    "installed_bytes": 13699645440,
+    "bf16_bytes": 48701112320,
+    "packed_bytes": 12175278080,
+    "scales_bytes": 1524367360,
+    "bias_bytes": 0,
+    "installed_over_bf16": 0.28130046291312305
+   },
+   "other_bytes": 6012345128,
+   "model_bytes": 19711990568,
+   "peak_prefill_1x2048": 21206146560,
+   "peak_prefill_over_load": 1441947648,
+   "logits_dtype": "torch.bfloat16",
+   "coverage": {
+    "native": 496,
+    "native_called": 496,
+    "calls": 496,
+    "tokens": 1015808
+   },
+   "wall_seconds": 35.63530778884888,
+   "status": "complete"
+  },
+  "fq-8x64": {
+   "model": "qwen3.8-27b",
+   "label": "fq-8x64",
+   "mode": "native",
+   "weight": "mixfp4",
+   "policy": {
+    "model": "qwen3.8-27b",
+    "source": {
+     "hf_id": "Qwen/Qwen3.8-27B",
+     "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    },
+    "mode": "native",
+    "map": {
+     "path": "/home/dev/flipquant_release/qwen3.8-27b/flipquant_8x64.pt",
+     "unit": "8x64",
+     "meta": {
+      "method": "FlipQuant = TM-OPT+TC (the paper's calibration) -- NOT the paper's settings: epochs 5 (paper 20), teacher-topk 1000 (paper 0), fit-windows 256 (paper 128)",
+      "paper_settings": {
+       "epochs": 20,
+       "lr": 0.02,
+       "init_logit": -1.0,
+       "teacher_topk": 0,
+       "fit_windows": 128,
+       "seed": 0,
+       "batch": 2,
+       "accum": 4
+      },
+      "non_default_settings": {
+       "epochs": 5,
+       "teacher_topk": 1000,
+       "fit_windows": 256
+      },
+      "teacher": {
+       "k": 1000,
+       "windows": 256,
+       "bytes": 785419264,
+       "devices": [
+        "cuda:0"
+       ],
+       "layout": "top-K values bf16 + ids int32 + tail log-mass fp32",
+       "mean_tail_mass": 0.006991372621996561,
+       "max_window_tail_mass": 0.03889748826622963
+      },
+      "trainer": "TM-OPT+TC: run_train_map.py --tm-opt --tile-grad-tc (calibration/tmopt/run_train_map.py, vendored from the reference implementation)",
+      "repo": "the reference implementation",
+      "branch": "topk-cal",
+      "commit": "a53ce5596c54534fb7c096f061e3b5df454679ae",
+      "flipquant": {
+       "commit": "120173a4f67c67f5e67f93ea02fa7a9eaff3ef14",
+       "clean": true
+      },
+      "settings": {
+       "param": "ste",
+       "optimizer": "adam",
+       "lr": 0.02,
+       "eps": 1e-12,
+       "betas": [
+        0.9,
+        0.999
+       ],
+       "schedule": "constant",
+       "init_logit": -1.0,
+       "epochs": 5,
+       "batch": 2,
+       "accum": 4,
+       "seed": 0,
+       "tm_opt": true,
+       "tile_grad_tc": true,
+       "no_dev": true,
+       "no_eval": true,
+       "unit": "8x64",
+       "teacher_topk": 1000,
+       "fit_windows": 256,
+       "memory_mode": "lean",
+       "fused_act_quant": true,
+       "tile_grad_kernel": false,
+       "chunked_loss": true,
+       "deterministic": true,
+       "dev_backend": "native",
+       "eval_backend": "native",
+       "single_pass_epilogue": true,
+       "pytorch_cuda_alloc_conf": "expandable_segments:True",
+       "cublas_workspace_config": ":4096:8",
+       "fit_set": "128 windows x 512 tokens: 64 open-web-math @ fde8ef8 + 64 codeparrot-clean @ 35a59fb, then 128 by the extension rule",
+       "activations": "per-token FourOverSix fake quant (STE)",
+       "loss": "KL to the BF16 teacher",
+       "output": "last-epoch map (theta > 0 -> E0M3)"
+      },
+      "model_id": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "registry_key": "qwen3.8-27b",
+      "unit": "8x64",
+      "e0m3_tiles": 169073,
+      "tiles": 47559680,
+      "e0m3_share": 0.0035549650460221767,
+      "modules": 496,
+      "calibration_time": {
+       "wall_seconds": 2485.843237400055,
+       "setup_seconds": 321.55679154396057,
+       "training_seconds": 2164.140150785446
+      },
+      "transformers": "5.16.1",
+      "torch": "2.9.0+cu128",
+      "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+      "deviations": [],
+      "source_map_sha256": "658e6b13d504ee8501b10897e8f2a73430f7107c18d016d33246bf796bbf770a",
+      "source": {
+       "kind": "trained",
+       "run": "/home/dev/n16k64_campaign/fqrel/runs/qwen3.8-27b_8x64/run",
+       "report_sha256": "544ffe26f14ef7246b9b3b436b5a306436d7c45ac2badcec55d11fd5f9b5c14e",
+       "calibration_record": "/home/dev/n16k64_campaign/fqrel/tmopt_data/qwen27b/calibration/report.json",
+       "calibration_record_sha256": "050eb1a60a866d3cbcb488cb3fcc3965e45227e09199adaed843f90b34caa8f3"
+      },
+      "written_utc": "2026-10-05T22:55:38+00:00",
+      "fit_extension": {
+       "rule": "flipquant calibration_sets_extended's _stream_windows (seed SEED + 2 = 20260930) on the paper record's streams, on top of the paper fit set; skipping the paper fit, development and published C4 documents",
+       "flipquant_reference": "brian030128/flipquant flipquant/data.py calibration_sets_extended @ b1c4123",
+       "seed": 20260930,
+       "windows": 128,
+       "per_source": 64,
+       "skipped_documents": {
+        "fit": 128,
+        "development": 192,
+        "c4_evaluation": 233
+       }
+      }
+     },
+     "modules": 496,
+     "tiles": 47559680,
+     "e0m3_tiles": 169073,
+     "e0m3_fraction": 0.0035549650460221767
+    },
+    "quant": {
+     "backend": "sm120",
+     "weight": "mixfp4",
+     "act": "fourover6",
+     "act_scope": "row",
+     "unit": "8x64"
+    },
+    "native": {
+     "backend": "sm120",
+     "kernel": "mixed_wB_ko",
+     "routing": "auto: 8x64 map -> mixed_wB_ko with its optimized dispatch variants, from /home/dev/n16k64_campaign/kernel_opt/build_V",
+     "build_dir": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+     "weight": "mixfp4",
+     "unit": "8x64",
+     "activation_quantizer": "four_over_six_rows",
+     "activation_quantizer_override": false,
+     "modules": 496,
+     "e0m3_tiles": 169073,
+     "checked": true,
+     "ownership": {},
+     "kernel_set": {
+      "family": "mixed_wB_ko",
+      "kernels": {
+       "n8k64_wB_m16_t0": "28e5321c3ec61dea99c72777a94d1e1c7b2cb84d220938ebebfb556575e6e56e",
+       "n8k64_wB_m32_t0": "2e0768eb0c3cb899f81eccd7b3d52c374d06c9e383ae905240670605cffa86f4",
+       "n8k64_wB_m64_t0": "0005e0b846a36dcbc791c666aa1f18a6582aa74d9a8eec3c4e9b6c8a7ee056a2",
+       "n8k64_wB_t0": "4cb85620d215a9cf6be6ade9ad4d4f4f0cc12b324960ea337d93912163b1d08c",
+       "n8k64_wB_n64_t0": "2f7271a67c1b7d05a96db3af92892c04e9f7e6a881102834cfc247c3c48fec9e"
+      },
+      "table": "/home/dev/n16k64_campaign/fqopt/wt/kernels/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+      "table_shapes": 16,
+      "table_family": "mixed_wB",
+      "schedule_shapes": 0,
+      "calls_by_width": {}
+     },
+     "device_bytes": {
+      "packed": 12175278080,
+      "scales_placed": 1524367360,
+      "bias": 0
+     }
+    },
+    "quantized_modules": 496,
+    "native_backend": "sm120"
+   },
+   "seconds": {
+    "load": 12.413577795028687,
+    "install": 29.140013217926025
+   },
+   "gpu": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "driver_version": "595.71.05",
+    "power.limit": "500.00 W",
+    "power.default_limit": "600.00 W",
+    "clocks.max.sm": "3090 MHz",
+    "clocks.max.mem": "14001 MHz",
+    "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+    "persistence_mode": "Enabled",
+    "temperature.gpu": "75",
+    "utilization.gpu": "99 %",
+    "memory.used": "70504 MiB",
+    "torch": "2.9.0+cu128",
+    "torch_cuda": "12.8",
+    "triton": "3.5.0",
+    "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+    "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "capability": [
+     12,
+     0
+    ],
+    "sm_count": 188,
+    "utc": "2026-10-08T10:11:38+00:00"
+   },
+   "allocator": "default",
+   "allocated_after_load": 19756662784,
+   "reserved_after_load": 73209479168,
+   "quantized_linears": {
+    "modules": 496,
+    "installed_bytes": 13699645440,
+    "bf16_bytes": 48701112320,
+    "packed_bytes": 12175278080,
+    "scales_bytes": 1524367360,
+    "bias_bytes": 0,
+    "installed_over_bf16": 0.28130046291312305
+   },
+   "other_bytes": 6012345128,
+   "model_bytes": 19711990568,
+   "peak_prefill_1x2048": 21213544448,
+   "peak_prefill_over_load": 1456881664,
+   "logits_dtype": "torch.bfloat16",
+   "coverage": {
+    "native": 496,
+    "native_called": 496,
+    "calls": 496,
+    "tokens": 1015808
+   },
+   "wall_seconds": 42.524181842803955,
+   "status": "complete"
+  },
+  "fq-16x64": {
+   "model": "qwen3.8-27b",
+   "label": "fq-16x64",
+   "mode": "native",
+   "weight": "mixfp4",
+   "policy": {
+    "model": "qwen3.8-27b",
+    "source": {
+     "hf_id": "Qwen/Qwen3.8-27B",
+     "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    },
+    "mode": "native",
+    "map": {
+     "path": "/home/dev/flipquant_release/qwen3.8-27b/flipquant_16x64.pt",
+     "unit": "16x64",
+     "meta": {
+      "method": "FlipQuant = TM-OPT+TC (the paper's calibration) -- NOT the paper's settings: epochs 5 (paper 20), teacher-topk 1000 (paper 0), fit-windows 256 (paper 128)",
+      "paper_settings": {
+       "epochs": 20,
+       "lr": 0.02,
+       "init_logit": -1.0,
+       "teacher_topk": 0,
+       "fit_windows": 128,
+       "seed": 0,
+       "batch": 2,
+       "accum": 4
+      },
+      "non_default_settings": {
+       "epochs": 5,
+       "teacher_topk": 1000,
+       "fit_windows": 256
+      },
+      "teacher": {
+       "k": 1000,
+       "windows": 256,
+       "bytes": 785419264,
+       "devices": [
+        "cuda:0"
+       ],
+       "layout": "top-K values bf16 + ids int32 + tail log-mass fp32",
+       "mean_tail_mass": 0.006991372621996561,
+       "max_window_tail_mass": 0.03889748826622963
+      },
+      "trainer": "TM-OPT+TC: run_train_map.py --tm-opt --tile-grad-tc (calibration/tmopt/run_train_map.py, vendored from the reference implementation)",
+      "repo": "the reference implementation",
+      "branch": "topk-cal",
+      "commit": "a53ce5596c54534fb7c096f061e3b5df454679ae",
+      "flipquant": {
+       "commit": "120173a4f67c67f5e67f93ea02fa7a9eaff3ef14",
+       "clean": true
+      },
+      "settings": {
+       "param": "ste",
+       "optimizer": "adam",
+       "lr": 0.02,
+       "eps": 1e-12,
+       "betas": [
+        0.9,
+        0.999
+       ],
+       "schedule": "constant",
+       "init_logit": -1.0,
+       "epochs": 5,
+       "batch": 2,
+       "accum": 4,
+       "seed": 0,
+       "tm_opt": true,
+       "tile_grad_tc": true,
+       "no_dev": true,
+       "no_eval": true,
+       "unit": "16x64",
+       "teacher_topk": 1000,
+       "fit_windows": 256,
+       "memory_mode": "lean",
+       "fused_act_quant": true,
+       "tile_grad_kernel": false,
+       "chunked_loss": true,
+       "deterministic": true,
+       "dev_backend": "native",
+       "eval_backend": "native",
+       "single_pass_epilogue": true,
+       "pytorch_cuda_alloc_conf": "expandable_segments:True",
+       "cublas_workspace_config": ":4096:8",
+       "fit_set": "128 windows x 512 tokens: 64 open-web-math @ fde8ef8 + 64 codeparrot-clean @ 35a59fb, then 128 by the extension rule",
+       "activations": "per-token FourOverSix fake quant (STE)",
+       "loss": "KL to the BF16 teacher",
+       "output": "last-epoch map (theta > 0 -> E0M3)"
+      },
+      "model_id": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "registry_key": "qwen3.8-27b",
+      "unit": "16x64",
+      "e0m3_tiles": 105278,
+      "tiles": 23779840,
+      "e0m3_share": 0.004427195473140274,
+      "modules": 496,
+      "calibration_time": {
+       "wall_seconds": 2474.3505408763885,
+       "setup_seconds": 319.9315881729126,
+       "training_seconds": 2154.3138902187347
+      },
+      "transformers": "5.16.1",
+      "torch": "2.9.0+cu128",
+      "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+      "deviations": [],
+      "source_map_sha256": "abb2c5987df49c06218e4021c768fe3e22cb8891c186b60c5813023b961d18f1",
+      "source": {
+       "kind": "trained",
+       "run": "/home/dev/n16k64_campaign/fqrel/runs/qwen3.8-27b_16x64/run",
+       "report_sha256": "eaa1734174395f45c1f295358b2a03cf0309d04348ca31c487087c762099410b",
+       "calibration_record": "/home/dev/n16k64_campaign/fqrel/tmopt_data/qwen27b/calibration/report.json",
+       "calibration_record_sha256": "050eb1a60a866d3cbcb488cb3fcc3965e45227e09199adaed843f90b34caa8f3"
+      },
+      "written_utc": "2026-10-05T23:37:05+00:00",
+      "fit_extension": {
+       "rule": "flipquant calibration_sets_extended's _stream_windows (seed SEED + 2 = 20260930) on the paper record's streams, on top of the paper fit set; skipping the paper fit, development and published C4 documents",
+       "flipquant_reference": "brian030128/flipquant flipquant/data.py calibration_sets_extended @ b1c4123",
+       "seed": 20260930,
+       "windows": 128,
+       "per_source": 64,
+       "skipped_documents": {
+        "fit": 128,
+        "development": 192,
+        "c4_evaluation": 233
+       }
+      }
+     },
+     "modules": 496,
+     "tiles": 23779840,
+     "e0m3_tiles": 105278,
+     "e0m3_fraction": 0.004427195473140274
+    },
+    "quant": {
+     "backend": "sm120",
+     "weight": "mixfp4",
+     "act": "fourover6",
+     "act_scope": "row",
+     "unit": "16x64"
+    },
+    "native": {
+     "backend": "sm120",
+     "kernel": "mixed_ko",
+     "routing": "auto: 16x64 map -> mixed_ko with its optimized dispatch variants, from /home/dev/n16k64_campaign/kernel_opt/build_V",
+     "build_dir": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+     "weight": "mixfp4",
+     "unit": "16x64",
+     "activation_quantizer": "four_over_six_rows",
+     "activation_quantizer_override": false,
+     "modules": 496,
+     "e0m3_tiles": 105278,
+     "checked": true,
+     "ownership": {},
+     "kernel_set": {
+      "family": "mixed_ko",
+      "kernels": {
+       "n16k64_wA_n16_t0": "d6cff384814ba0d014de561bfb57d739b549f748bdc91c3e2337de16d63133a5",
+       "n16k64_wA_n32_t0": "e62c5d4035d881b00aced0f03d27f4ec731419f89b3a476d006ec2581d9f67cf",
+       "n16k64_wA_n64_t0": "8f472aa880bb624c0948add8726329abb868ddec22f9e2fcdfd5133150fb7224",
+       "n16k64_wA_e64_t0": "3e8023de34079956fc1bf0bc8c1355ba6710dc36792dc07f8865bf51bd706609"
+      },
+      "table": "/home/dev/n16k64_campaign/fqopt/wt/kernels/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+      "table_shapes": 16,
+      "table_family": "mixed",
+      "schedule_shapes": 16,
+      "calls_by_width": {}
+     },
+     "device_bytes": {
+      "packed": 12175278080,
+      "scales_placed": 1524367360,
+      "bias": 0
+     }
+    },
+    "quantized_modules": 496,
+    "native_backend": "sm120"
+   },
+   "seconds": {
+    "load": 12.543113946914673,
+    "install": 29.139245986938477
+   },
+   "gpu": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "driver_version": "595.71.05",
+    "power.limit": "500.00 W",
+    "power.default_limit": "600.00 W",
+    "clocks.max.sm": "3090 MHz",
+    "clocks.max.mem": "14001 MHz",
+    "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+    "persistence_mode": "Enabled",
+    "temperature.gpu": "72",
+    "utilization.gpu": "4 %",
+    "memory.used": "68468 MiB",
+    "torch": "2.9.0+cu128",
+    "torch_cuda": "12.8",
+    "triton": "3.5.0",
+    "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+    "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "capability": [
+     12,
+     0
+    ],
+    "sm_count": 188,
+    "utc": "2026-10-08T10:12:24+00:00"
+   },
+   "allocator": "default",
+   "allocated_after_load": 19750436864,
+   "reserved_after_load": 71074578432,
+   "quantized_linears": {
+    "modules": 496,
+    "installed_bytes": 13699645440,
+    "bf16_bytes": 48701112320,
+    "packed_bytes": 12175278080,
+    "scales_bytes": 1524367360,
+    "bias_bytes": 0,
+    "installed_over_bf16": 0.28130046291312305
+   },
+   "other_bytes": 6012345128,
+   "model_bytes": 19711990568,
+   "peak_prefill_1x2048": 21203533824,
+   "peak_prefill_over_load": 1453096960,
+   "logits_dtype": "torch.bfloat16",
+   "coverage": {
+    "native": 496,
+    "native_called": 496,
+    "calls": 496,
+    "tokens": 1015808
+   },
+   "wall_seconds": 42.672611951828,
+   "status": "complete"
+  },
+  "fq-256x64": {
+   "model": "qwen3.8-27b",
+   "label": "fq-256x64",
+   "mode": "native",
+   "weight": "mixfp4",
+   "policy": {
+    "model": "qwen3.8-27b",
+    "source": {
+     "hf_id": "Qwen/Qwen3.8-27B",
+     "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    },
+    "mode": "native",
+    "map": {
+     "path": "/home/dev/flipquant_release/qwen3.8-27b/flipquant_256x64.pt",
+     "unit": "256x64",
+     "meta": {
+      "method": "FlipQuant = TM-OPT+TC (the paper's calibration) -- NOT the paper's settings: epochs 5 (paper 20), teacher-topk 1000 (paper 0), fit-windows 256 (paper 128)",
+      "paper_settings": {
+       "epochs": 20,
+       "lr": 0.02,
+       "init_logit": -1.0,
+       "teacher_topk": 0,
+       "fit_windows": 128,
+       "seed": 0,
+       "batch": 2,
+       "accum": 4
+      },
+      "non_default_settings": {
+       "epochs": 5,
+       "teacher_topk": 1000,
+       "fit_windows": 256
+      },
+      "teacher": {
+       "k": 1000,
+       "windows": 256,
+       "bytes": 785419264,
+       "devices": [
+        "cuda:0"
+       ],
+       "layout": "top-K values bf16 + ids int32 + tail log-mass fp32",
+       "mean_tail_mass": 0.006991372621996561,
+       "max_window_tail_mass": 0.03889748826622963
+      },
+      "trainer": "TM-OPT+TC: run_train_map.py --tm-opt --tile-grad-tc (calibration/tmopt/run_train_map.py, vendored from the reference implementation)",
+      "repo": "the reference implementation",
+      "branch": "topk-cal",
+      "commit": "a53ce5596c54534fb7c096f061e3b5df454679ae",
+      "flipquant": {
+       "commit": "120173a4f67c67f5e67f93ea02fa7a9eaff3ef14",
+       "clean": true
+      },
+      "settings": {
+       "param": "ste",
+       "optimizer": "adam",
+       "lr": 0.02,
+       "eps": 1e-12,
+       "betas": [
+        0.9,
+        0.999
+       ],
+       "schedule": "constant",
+       "init_logit": -1.0,
+       "epochs": 5,
+       "batch": 2,
+       "accum": 4,
+       "seed": 0,
+       "tm_opt": true,
+       "tile_grad_tc": true,
+       "no_dev": true,
+       "no_eval": true,
+       "unit": "256x64",
+       "teacher_topk": 1000,
+       "fit_windows": 256,
+       "memory_mode": "lean",
+       "fused_act_quant": true,
+       "tile_grad_kernel": false,
+       "chunked_loss": true,
+       "deterministic": true,
+       "dev_backend": "native",
+       "eval_backend": "native",
+       "single_pass_epilogue": true,
+       "pytorch_cuda_alloc_conf": "expandable_segments:True",
+       "cublas_workspace_config": ":4096:8",
+       "fit_set": "128 windows x 512 tokens: 64 open-web-math @ fde8ef8 + 64 codeparrot-clean @ 35a59fb, then 128 by the extension rule",
+       "activations": "per-token FourOverSix fake quant (STE)",
+       "loss": "KL to the BF16 teacher",
+       "output": "last-epoch map (theta > 0 -> E0M3)"
+      },
+      "model_id": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "registry_key": "qwen3.8-27b",
+      "unit": "256x64",
+      "e0m3_tiles": 13758,
+      "tiles": 1492480,
+      "e0m3_share": 0.00921821397941681,
+      "modules": 496,
+      "calibration_time": {
+       "wall_seconds": 2475.0101358890533,
+       "setup_seconds": 319.3446342945099,
+       "training_seconds": 2155.5978870391846
+      },
+      "transformers": "5.16.1",
+      "torch": "2.9.0+cu128",
+      "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+      "deviations": [],
+      "source_map_sha256": "adf60b7e2983be63a7b7995395ab10b1e2c9df36974065026390dcb42b1d4fc8",
+      "source": {
+       "kind": "trained",
+       "run": "/home/dev/n16k64_campaign/fqrel/runs/qwen3.8-27b_256x64/run",
+       "report_sha256": "7f4330de79ba91682a8db5e8caa6401fad58e935c1a1b9a2412d17f973fe3b7b",
+       "calibration_record": "/home/dev/n16k64_campaign/fqrel/tmopt_data/qwen27b/calibration/report.json",
+       "calibration_record_sha256": "050eb1a60a866d3cbcb488cb3fcc3965e45227e09199adaed843f90b34caa8f3"
+      },
+      "written_utc": "2026-10-06T00:18:32+00:00",
+      "fit_extension": {
+       "rule": "flipquant calibration_sets_extended's _stream_windows (seed SEED + 2 = 20260930) on the paper record's streams, on top of the paper fit set; skipping the paper fit, development and published C4 documents",
+       "flipquant_reference": "brian030128/flipquant flipquant/data.py calibration_sets_extended @ b1c4123",
+       "seed": 20260930,
+       "windows": 128,
+       "per_source": 64,
+       "skipped_documents": {
+        "fit": 128,
+        "development": 192,
+        "c4_evaluation": 233
+       }
+      }
+     },
+     "modules": 496,
+     "tiles": 1492480,
+     "e0m3_tiles": 13758,
+     "e0m3_fraction": 0.00921821397941681
+    },
+    "quant": {
+     "backend": "sm120",
+     "weight": "mixfp4",
+     "act": "fourover6",
+     "act_scope": "row",
+     "unit": "256x64"
+    },
+    "native": {
+     "backend": "sm120",
+     "kernel": "mixed256_ko",
+     "routing": "auto: 256x64 map -> mixed256_ko with its optimized dispatch variants, from /home/dev/n16k64_campaign/kernel_opt/build_V",
+     "build_dir": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+     "weight": "mixfp4",
+     "unit": "256x64",
+     "activation_quantizer": "four_over_six_rows",
+     "activation_quantizer_override": false,
+     "modules": 496,
+     "e0m3_tiles": 219114,
+     "checked": true,
+     "ownership": {},
+     "kernel_set": {
+      "family": "mixed256_ko",
+      "kernels": {
+       "n16k64_wA_g32_n16_t0": "6137250ece69f4c0fa7740aff810a51479bad1330a2e638fd89adb5f99863730",
+       "n16k64_wA_g32_n32_t0": "c0ae0eb0a5b99c656f22fad2e2479a96cb586600c955c143331dbb7b22206038",
+       "n16k64_wA_g32_n64_t0": "1ac38b6058dfec379006ad7bb0e2de87829aa95872b7c2ca5b565e9e57da4cad",
+       "n16k64_wA_g32_e64_t0": "cd5facafa1ee4e05e70e688c358fa9b6e5d5e483d32a7f4e1ac3719d32b170d6"
+      },
+      "table": "/home/dev/n16k64_campaign/fqopt/wt/kernels/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+      "table_shapes": 16,
+      "table_family": "mixed256",
+      "schedule_shapes": 16,
+      "calls_by_width": {}
+     },
+     "device_bytes": {
+      "packed": 12175278080,
+      "scales_placed": 1524367360,
+      "bias": 0
+     }
+    },
+    "quantized_modules": 496,
+    "native_backend": "sm120"
+   },
+   "seconds": {
+    "load": 12.44998812675476,
+    "install": 29.093528985977173
+   },
+   "gpu": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "driver_version": "595.71.05",
+    "power.limit": "500.00 W",
+    "power.default_limit": "600.00 W",
+    "clocks.max.sm": "3090 MHz",
+    "clocks.max.mem": "14001 MHz",
+    "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+    "persistence_mode": "Enabled",
+    "temperature.gpu": "76",
+    "utilization.gpu": "99 %",
+    "memory.used": "69826 MiB",
+    "torch": "2.9.0+cu128",
+    "torch_cuda": "12.8",
+    "triton": "3.5.0",
+    "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+    "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "capability": [
+     12,
+     0
+    ],
+    "sm_count": 188,
+    "utc": "2026-10-08T10:13:10+00:00"
+   },
+   "allocator": "default",
+   "allocated_after_load": 19752402944,
+   "reserved_after_load": 72498544640,
+   "quantized_linears": {
+    "modules": 496,
+    "installed_bytes": 13699645440,
+    "bf16_bytes": 48701112320,
+    "packed_bytes": 12175278080,
+    "scales_bytes": 1524367360,
+    "bias_bytes": 0,
+    "installed_over_bf16": 0.28130046291312305
+   },
+   "other_bytes": 6012345128,
+   "model_bytes": 19711990568,
+   "peak_prefill_1x2048": 21201420288,
+   "peak_prefill_over_load": 1449017344,
+   "logits_dtype": "torch.bfloat16",
+   "coverage": {
+    "native": 496,
+    "native_called": 496,
+    "calls": 496,
+    "tokens": 1015808
+   },
+   "wall_seconds": 42.51058006286621,
    "status": "complete"
   }
  }
