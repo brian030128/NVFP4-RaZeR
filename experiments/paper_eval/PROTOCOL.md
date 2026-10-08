@@ -196,3 +196,13 @@ took 14,905 s, two 16-sample batches of ~2.07 h each, and a BF16 batch-8 rerun w
 `run_pilot_d.py` skips that job (`CANCELLED`); the rerun pass keeps only the Nemotron BF16 IFEval redo (amendment 6).
 The pilot report prices Qwen3.8-27B BF16 AIME from FlipQuant 16x64's AIME lengths and BF16's measured step model, flagged
 as an estimate; at the 32k cap BF16 fits batch ≤ 8 only (or needs a 16k cap for batch 16).
+
+## Amendment 9 (2026-10-08 05:31 UTC): C2's native reference for Nemotron-Nano-9B-v2
+
+Under amendment 3, Nemotron-Nano-9B-v2's simulated run (C2) is in n16k64-fast, while the release evaluation's native
+per-window NLLs were measured in the fallback env. A native − simulated difference across envs would include the
+env change (the fast Mamba2 / conv kernels vs transformers' torch fallback). For Nemotron, C2's agreement count uses the
+native NLLs of part F (`pplfast`, FlipQuant 8x64 / 16x64 / 256x64, the same env and windows); the registered comparison
+against the release records is reported alongside as a secondary table. The four non-hybrid models are unchanged
+(n16k64 on both sides). Report-only: no job changes (C2 for Nemotron runs after F in the chain, so its reference exists).
+`report_bc.py` (C2) and the new `report_f.py` (F vs the fallback numbers) implement this.

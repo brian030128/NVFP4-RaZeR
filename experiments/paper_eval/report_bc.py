@@ -13,6 +13,7 @@ OUT = Path(__file__).resolve().parents[2] / "results" / "paper_eval"
 MODELS = [("qwen3-1.7b", "Qwen3-1.7B"), ("qwen3-8b", "Qwen3-8B"), ("mistral-7b", "Mistral-7B-Instruct-v0.3"),
           ("nemotron-nano-9b-v2", "Nemotron-Nano-9B-v2"), ("phi4-14b", "Phi-4"), ("qwen3.8-27b", "Qwen3.8-27B")]
 UNITS = ("8x64", "16x64", "256x64")
+HYBRID = ("nemotron-nano-9b-v2", "qwen3.8-27b")
 G = 2 ** 30
 
 
@@ -80,7 +81,9 @@ def verify():
             L.append(f"| {title} | {u} | {o['modules']} of {o['map_modules']} | {o['elements']:,} | {o['informative']:,} | "
                      f"{o['e0m3_tiles']:,} | {o['e0m3_elements']:,} | {o['exact']} | {o['mismatches']} |")
     L += ["", "## C2: native vs simulated (fake), per-window NLL, paper convention", "",
-          "Paired ΔNLL native − simulated (nats/token, ± 2 SE) on the same windows; a cell agrees when |Δ| ≤ 2 SE.", "",
+          "Paired ΔNLL native − simulated (nats/token, ± 2 SE) on the same windows; a cell agrees when |Δ| ≤ 2 SE. Both "
+          "sides in one env: n16k64 (the release PPL records) for the four non-hybrid models, n16k64-fast (part F's "
+          "records) for Nemotron-Nano-9B-v2.", "",
           "| model | unit | WikiText-2 | C4 |", "|---|---|---:|---:|"]
     agree = cells = 0
     for m, title in MODELS[:5] if True else MODELS:
@@ -89,7 +92,11 @@ def verify():
             if not f.exists():
                 continue
             fake = json.loads(f.read_text())["results"]
-            nat = json.loads((REL / m / "ppl" / f"flipquant_{u}.json").read_text())["results"]
+            # the native reference from the same env as the simulated run: n16k64-fast (part F) for the hybrid model
+            natf = RUN / "pplfast" / m / f"fq-{u}.json" if m in HYBRID else REL / m / "ppl" / f"flipquant_{u}.json"
+            if not natf.exists():
+                continue
+            nat = json.loads(natf.read_text())["results"]
             row = {}
             for c in ("wiki", "c4"):
                 row[c] = paired(nat[c]["nll"], fake[c]["nll"])
@@ -100,6 +107,25 @@ def verify():
                 f"{row[c]['delta']:+.5f} ± {row[c]['two_se']:.5f}{'' if row[c]['agree'] else ' ✗'}" for c in ("wiki", "c4")) + " |")
     L += ["", f"**{agree} of {cells} cells agree within 2 SE.**"]
     rec["agree"], rec["cells"] = agree, cells
+    # amendment 9: the registered reference (the release records, fallback env) for the hybrid model, as a secondary
+    # comparison; it mixes the env change (fast vs fallback kernels) into the native - simulated difference
+    xs = []
+    for m, title in MODELS:
+        if m not in HYBRID:
+            continue
+        for u in UNITS:
+            f = RUN / "fakeppl" / f"{m}_{u}.json"
+            if not f.exists():
+                continue
+            fake = json.loads(f.read_text())["results"]
+            nat = json.loads((REL / m / "ppl" / f"flipquant_{u}.json").read_text())["results"]
+            row = {c: paired(nat[c]["nll"], fake[c]["nll"]) for c in ("wiki", "c4")}
+            rec.setdefault("native_fallback_vs_fake_fast", {}).setdefault(m, {})[u] = row
+            xs.append(f"| {title} | {u} | " + " | ".join(
+                f"{row[c]['delta']:+.5f} ± {row[c]['two_se']:.5f}{'' if row[c]['agree'] else ' ✗'}" for c in ("wiki", "c4")) + " |")
+    if xs:
+        L += ["", "As registered (amendment 9): the release records' native NLL (fallback env) − simulated (n16k64-fast); "
+              "this includes the env change:", "", "| model | unit | WikiText-2 | C4 |", "|---|---|---:|---:|"] + xs
     (OUT / "verify").mkdir(parents=True, exist_ok=True)
     (OUT / "verify" / "verify.json").write_text(json.dumps(rec, indent=1) + "\n")
     (OUT / "verify" / "VERIFY.md").write_text("\n".join(L) + "\n")
