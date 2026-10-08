@@ -188,3 +188,11 @@ fragmentation the failure reported), and its long-context step time is reported 
 kept as `logs/dpilot_qwen3.8-27b_bf16_aime.pass1.log`. The driver now keeps an earlier pass's log as
 `<job>.pass<k>.log` instead of overwriting it (the rerun of Nemotron BF16's gsm8k / math500 / ifeval job resumes from
 its `.jsonl`, and its first pass's log holds the gsm8k and math500 batch times). The pilot's other jobs are unchanged.
+
+## Amendment 8 (2026-10-08 04:58 UTC): the Qwen3.8-27B BF16 AIME batch-8 rerun cancelled
+
+The user's decision (relayed 04:5x UTC): amendment 7's rerun is cancelled before it ran (FlipQuant 16x64's AIME length job
+took 14,905 s, two 16-sample batches of ~2.07 h each, and a BF16 batch-8 rerun would delay F, A, B and C by hours).
+`run_pilot_d.py` skips that job (`CANCELLED`); the rerun pass keeps only the Nemotron BF16 IFEval redo (amendment 6).
+The pilot report prices Qwen3.8-27B BF16 AIME from FlipQuant 16x64's AIME lengths and BF16's measured step model, flagged
+as an estimate; at the 32k cap BF16 fits batch ≤ 8 only (or needs a 16k cap for batch 16).

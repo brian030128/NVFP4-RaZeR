@@ -29,6 +29,8 @@ ROOT = G.RUN / "d_pilot"
 # 79.7 GiB allocated + 11.6 GiB reserved but unallocated); it runs at batch 8 with the allocator's expandable segments
 LENGTH_BATCH = {("qwen3.8-27b", "bf16", "aime"): 8}
 JOB_ENV = {("qwen3.8-27b", "bf16", "aime"): {"PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"}}
+# amendment 8: the user cancelled that rerun (its AIME lengths are priced from FlipQuant 16x64's instead)
+CANCELLED = {("qwen3.8-27b", "bf16", "aime")}
 
 
 def run_ts(name, cmd, out, extra_env=None):
@@ -78,6 +80,8 @@ def main():
             jobs += [(f"batch{b}", ["--tasks", "gsm8k", "--limit", str(max(64, 2 * b)), "--batch", str(b),
                                     "--max-new-tokens", "512"]) for b in (16, 32, 64)]
             for tag, extra in jobs:
+                if (model, pol, tag) in CANCELLED:
+                    continue
                 out = ROOT / model / pol / f"{tag}.json"
                 rc = run_ts(f"dpilot_{model}_{pol}_{tag}", base + extra + ["--out", out], out, JOB_ENV.get((model, pol, tag)))
                 if rc not in (None, 0):
