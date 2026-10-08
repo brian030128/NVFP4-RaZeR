@@ -241,8 +241,10 @@ def pplfast():
     for model in [m for m in MODELS if m in HYBRID]:
         for pol in ["bf16", "nvfp4", "fo6", "fq-8x64", "fq-16x64", "fq-256x64"]:
             out = RUN / "pplfast" / model / f"{pol}.json"
-            cmd = [py(model), "-m", "evaluation.ppl", "--model", model, *policy_args(model, pol), "--paper-convention",
-                   "--out", out]
+            # amendment 11: --paper-convention is FourOverSix-only; NVFP4 gets the main table's convention (c), per-token
+            # NVFP4 activation scales (main-ppl's nvfp4_rows), which evaluation.ppl spells --act-scope row
+            conv = ["--act-scope", "row"] if pol == "nvfp4" else ["--paper-convention"]
+            cmd = [py(model), "-m", "evaluation.ppl", "--model", model, *policy_args(model, pol), *conv, "--out", out]
             rc = run(f"pplfast_{model}_{pol}", cmd, out, FQ)
             if rc not in (None, 0):
                 stop(f"pplfast {model} {pol}: rc={rc}")

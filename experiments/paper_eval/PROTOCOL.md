@@ -216,3 +216,13 @@ the one D-pilot case was handled by hand under amendment 6). `done()` now requir
 record has a status (latency, memory) and `resources` otherwise; `report_bc.py` and `report_f.py` skip unfinished
 records. Applies to the chain's parts that start after this change (fakeppl, then A, F, B, C1 and C2 for the hybrids);
 no measurement changes.
+
+## Amendment 11 (2026-10-08 08:01 UTC): F's NVFP4 row
+
+F stopped at 08:00:54 on its NVFP4 job (exit 1 before loading: flipquant's `--paper-convention` is defined for FourOverSix
+activations only). The main table's NVFP4 rows (main-ppl 44f8cea and the paper's Qwen3.8-27B record) use convention
+(c), per-token NVFP4 activation scales (`nvfp4_rows`), as A's NVFP4 does (`evaluation.latency`'s default
+`--act-scope row`). F's NVFP4 job therefore runs `--weight nvfp4 --act nvfp4 --act-scope row` without
+`--paper-convention` (`evaluation.ppl` defaults to `--act-scope document`); every other F job is unchanged. Nemotron's
+finished BF16 record is kept; the failed log is kept as `logs/pplfast_nemotron-nano-9b-v2_nvfp4.failed_convention.log`.
+The chain resumes from F (F, A, B, C1 for the hybrid models, C2 for Nemotron).
