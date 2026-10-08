@@ -276,3 +276,68 @@ E0M3 tiles, `k_l` from the release map of the same model and unit (`--match`):
   and FourOverSix / FlipQuant are re-measured on paper-sm120-runs).
 - **Checks:** every baseline map has exactly `k_l` E0M3 tiles per layer (the scripts assert it); every PPL record has
   F's window count; the one-shot run used 256 fit windows and top-1000 (its trainer report).
+
+### H: tab:ptq (PPL only; the GSM8K column is not run)
+
+Nemotron-Nano-9B-v2 and Qwen3.8-27B at 16x64, n16k64-fast, native (build_V, `--kernel-set auto`), the release
+revisions. Rows {RTN, GPTQ, Hadamard} x {NVFP4 (NVFP4 activations, per-token scales), FourOverSix, FlipQuant 16x64}:
+- **RTN:** part F's records (the same env, windows and conventions; check G0).
+- **Hadamard (block 16):** `--rotate hadamard --rotate-block 16` on every quantized linear's input (W H offline, x H
+  before the activation quantizer; RotatedNativeLinear: the rotation runs in PyTorch before the native kernel, it is not
+  fused -- for the caption). NVFP4: `--weight nvfp4 --act nvfp4 --act-scope row`; FourOverSix and FlipQuant:
+  `--paper-convention`. FlipQuant's map is retrained in the rotated basis with the release settings
+  (`calibration.tmopt_ext train --unit 16x64 --rotate hadamard --rotate-block 16`, 5 epochs, `--fit-windows 256`,
+  `--teacher-topk 1000`, the release runs' data root); the map's meta records rotate / rotate_block, and `--map` accepts
+  it only with the same rotation.
+- **GPTQ** (the user's decision, relayed before 20:28 UTC: option (b)): flipquant `gptq.py` on the fixed RTN grid, block 128, damp
+  0.01 x mean diag(H), no act-order, sequential layerwise, the release 256 x 512 fit set (`--gptq-calib release`), and
+  **BF16 propagation** (`--gptq-propagate bf16 --gptq-hessian-input bf16`): during calibration every activation
+  quantizer is off -- the layers already done run with quantized weights and BF16 activations, as in weight-only GPTQ
+  -- so a weight format's codes do not depend on the activation format it is evaluated with. This is a deviation from
+  the co-author's / NVIDIA ModelOpt's default (`quantized`: the layers propagate as they will be evaluated), recorded
+  as such. FlipQuant 16x64: the release map fixed, each tile GPTQ-rounded on its format's grid. Native evaluation of
+  the codes as they are (`sm120.pack_codes`). Batch 8 (Qwen3.8-27B: 1, batch1_only).
+- **Check H1 (codes):** for each hybrid model the NVFP4 codes are computed twice, inside the NVFP4-activation run and
+  inside the FourOverSix-activation run (separate caches); their sha256 (`gptq.codes_sha256` in the reports, and the
+  code files' tensors) must be equal. The FourOverSix-activation run is the hybrid model's GPTQ‡ cell (J).
+- Reported: WikiText-2 and C4 PPL per row, and paired ΔNLL vs the RTN FourOverSix row (± 2 SE).
+
+### I: main table, IF4 and MixFP4 (Zou), simulated
+
+All six models (Nemotron-Nano-9B-v2 and Qwen3.8-27B in n16k64-fast), `evaluation.ppl --mode fake --weight if4` /
+`--weight zou_mixfp4` with `--act-method own --unit 1x16` and the default `--e2m1 own` (each method's own weight and
+activation rules: per-16-block selection, its own E2M1, per-token activation scales; not the + FourOverSix variant),
+the release revisions. Spot check (the four non-hybrid models): per-window NLL equal to the main-ppl (44f8cea) IF4 / Zou
+records bit for bit on both corpora, and the installed weight sha256 equal where both record it; any difference is
+reported. A Qwen3.8-27B OOM leaves that cell empty and is reported (no setting is changed).
+
+
+### J: main table, GPTQ‡
+
+NVFP4 weights from `gptq.py` with the settings of H's GPTQ (BF16 propagation, the release fit set, block 128, damp
+0.01, no act-order), evaluated natively with FourOverSix per-token activations (`--weight nvfp4 --act fourover6
+--any-act --paper-convention`), all six models (the hybrid models' cells are H's FourOverSix-activation NVFP4 runs,
+check H1). Batch 8 (Qwen3.8-27B: 1).
+
+### K: main table, FOCUS
+
+`calibration.train_focus` with FOCUS's own settings (FOCUS_PAPER_RUNBOOK.md: `--epochs 1 --batch 32 --lr-scale 5e-3
+--lr-sub 1e-3 --topk 1000 --num-sub 2 --init-q 6 --act fourover6 --act-scope row --seed 42`) on the release 256 x 512
+fit set (`--data release`): 8 optimizer steps. Micro-batch 8, halved on OOM (the global batch stays 32; any change is
+recorded). Deployed as NVFP4 codes (`--focus-deploy`) on the sm120 path with FourOverSix per-token activations
+(`--paper-convention`). Five models; Qwen3.8-27B is TBD (FOCUS does not fit one 96 GB GPU; accepted by the user).
+
+### L: the final table main-ppl
+
+`tables_final.py` from per-window NLL: all rows (BF16, NVFP4, FourOverSix, IF4, MixFP4 (Zou), GPTQ‡, FOCUS,
+FlipQuant x 3; the hybrid models' BF16 / NVFP4 / FourOverSix / FlipQuant from part F), the 12-pair loss recovered,
+daggers (FlipQuant not significantly better than FourOverSix) and FlipQuant vs NVFP4 significance, and the tile
+granularity statistics (|8x64 - 16x64| paired ΔNLL: max, mean, significance; 256x64's share of the 16x64 gain overall and
+per model).
+
+### Order and code for H-L (registered 2026-10-08 20:31 UTC)
+
+H (Hadamard, then GPTQ for the two hybrid models), I, J (the four non-hybrid models), K, then L; one job at a time,
+after G. Code: flipquant paper-sm120-runs @ 1a2094e (7b1cfe3 + `--gptq-propagate` and `gptq.codes_sha256`, with a test:
+the codes are equal for NVFP4 and FourOverSix activations with BF16 propagation and differ with the default). G's jobs
+from 20:28 UTC ran on the worktree at 1a2094e; its diff from 7b1cfe3 touches only the GPTQ path, which G does not use.
