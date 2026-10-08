@@ -207,7 +207,7 @@ against the release records is reported alongside as a secondary table. The four
 (n16k64 on both sides). Report-only: no job changes (C2 for Nemotron runs after F in the chain, so its reference exists).
 `report_bc.py` (C2) and the new `report_f.py` (F vs the fallback numbers) implement this.
 
-## Amendment 10 (2026-10-08 06:05 UTC): the driver's completion check
+## Amendment 10 (2026-10-08 06:00 UTC): the driver's completion check
 
 flipquant's `evaluation.ppl` and `evaluation.accuracy` rewrite their report after every corpus / task and add
 `resources` only when the process finishes, while `run_gpu.py`'s `done()` took any record without a `status` field as
