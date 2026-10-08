@@ -33,7 +33,7 @@ def main():
         fast = {r: RUN / "pplfast" / key / f"{POL[r]}.json" for r in T.ROWS}
         rec["sources"][key] = dict(fallback=src, fast={r: str(p) for r, p in fast.items()})
         for r in T.ROWS:
-            if not fast[r].exists():
+            if not fast[r].exists() or "resources" not in json.loads(fast[r].read_text()):
                 rec["missing"].append(f"{key} {r}")
                 continue
             nll.setdefault(key, {})[r] = dict(fallback=T.nll_of(src[r]), fast=T.nll_of(fast[r]))

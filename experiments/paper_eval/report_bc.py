@@ -91,7 +91,10 @@ def verify():
             f = RUN / "fakeppl" / f"{m}_{u}.json"
             if not f.exists():
                 continue
-            fake = json.loads(f.read_text())["results"]
+            fr = json.loads(f.read_text())
+            if "resources" not in fr:                      # still running (rewritten after every corpus)
+                continue
+            fake = fr["results"]
             # the native reference from the same env as the simulated run: n16k64-fast (part F) for the hybrid model
             natf = RUN / "pplfast" / m / f"fq-{u}.json" if m in HYBRID else REL / m / "ppl" / f"flipquant_{u}.json"
             if not natf.exists():
@@ -117,7 +120,10 @@ def verify():
             f = RUN / "fakeppl" / f"{m}_{u}.json"
             if not f.exists():
                 continue
-            fake = json.loads(f.read_text())["results"]
+            fr = json.loads(f.read_text())
+            if "resources" not in fr:
+                continue
+            fake = fr["results"]
             nat = json.loads((REL / m / "ppl" / f"flipquant_{u}.json").read_text())["results"]
             row = {c: paired(nat[c]["nll"], fake[c]["nll"]) for c in ("wiki", "c4")}
             rec.setdefault("native_fallback_vs_fake_fast", {}).setdefault(m, {})[u] = row

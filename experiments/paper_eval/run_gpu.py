@@ -66,9 +66,12 @@ def idle():
 
 def done(path):
     try:
-        return json.loads(Path(path).read_text()).get("status", "complete") == "complete"
+        r = json.loads(Path(path).read_text())
     except (FileNotFoundError, json.JSONDecodeError):
         return False
+    # latency / memory records carry a status; flipquant's ppl / accuracy reports are rewritten after every corpus or
+    # task and gain "resources" only when the process finishes
+    return r.get("status") == "complete" if "status" in r else "resources" in r
 
 
 def py(model):
