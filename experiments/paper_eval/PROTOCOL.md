@@ -226,3 +226,53 @@ activations only). The main table's NVFP4 rows (main-ppl 44f8cea and the paper's
 `--paper-convention` (`evaluation.ppl` defaults to `--act-scope document`); every other F job is unchanged. Nemotron's
 finished BF16 record is kept; the failed log is kept as `logs/pplfast_nemotron-nano-9b-v2_nvfp4.failed_convention.log`.
 The chain resumes from F (F, A, B, C1 for the hybrid models, C2 for Nemotron).
+
+## Parts G-L (registered 2026-10-08 19:42 UTC): the remaining SM120 tables on flipquant paper-sm120-runs
+
+The user's request (relayed 19:0x UTC): the remaining SM120 paper tables on this machine with the co-author's flipquant
+branches (map-ablation, ptq-combo, IF4, MIXFP4, FOCUS), merged onto main 120173a as branch `paper-sm120-runs` and
+adapted to the paper's final settings. Common settings (all user-approved):
+- **Maps (A1):** FlipQuant = the 5-epoch release maps (`/home/dev/flipquant_release`). Everything that trains or takes
+  gradients uses the release settings: `--fit-windows 256 --teacher-topk 1000`, 5 epochs, lr 0.02, init -1, seed 0,
+  deterministic.
+- **Calibration data (A2):** GPTQ, FOCUS, the activation-weighted statistics and the one-shot gradient use the release
+  maps' 256 x 512 fit set: the reference calibration record's 128 windows, then the 128 of the release trainer's fit
+  extension, rebuilt by `flipquant.data.calibration_release` from the release run's own records (every window's token
+  sha256 checked against them); the trainer-based one-shot uses the release runs' data root
+  (`/home/dev/n16k64_campaign/fqrel/tmopt_data`) and so the same windows.
+- **Environment (A5):** Nemotron-Nano-9B-v2 and Qwen3.8-27B in n16k64-fast, the others in n16k64; native = build_V with
+  `--kernel-set auto`, the paper convention (per-token FourOverSix activations; NVFP4 with per-token NVFP4 scales,
+  amendment 11). One GPU job at a time. Driver: `run_sm120.py`; records under the run directory's `<part>/`.
+- **Code:** flipquant `paper-sm120-runs` @ 7b1cfe3 (pushed; worktree `/home/dev/n16k64_campaign/sm120runs/wt`): main
+  120173a + map-ablation dc7ae28 + ptq-combo 05267c6 + IF4 8513264 + MIXFP4 8ec3fbd + FOCUS a06e835 (moved onto main's
+  names; its native deployment on main's sm120 path), with the settings above (`calibration_release`,
+  `baseline_maps --calib-extension`, `--gptq-calib release`, `train_focus --data release`, `tmopt_ext` with the release
+  settings, `mapcheck.is_release`). Tests: n16k64, the whole suite: 1 failure, `test_teacher_topk.py::
+  test_topk_kl_bounds_full_kl`, which fails identically on main 120173a (the legacy trainer, not used here), and the
+  IFEval scorer test deselected (langdetect is only in n16k64-fast); n16k64-fast, the hybrid / GPTQ / rotation / FOCUS /
+  IF4 / Zou / mapcheck / baseline-map / benchmark tests: 129 passed, 17 skipped.
+- Stop and report on: a blocked push, installs outside n16k64(-fast), an OOM that would need a changed setting, any
+  failing check, an implausible result.
+
+### G: tab:ablation (map selection)
+
+Nemotron-Nano-9B-v2 and Qwen3.8-27B x 8x64 / 16x64 / 256x64. Every baseline map has, in every layer, exactly `k_l`
+E0M3 tiles, `k_l` from the release map of the same model and unit (`--match`):
+- **Random:** `calibration.baseline_maps --method random --seed 0 / 1 / 2`; the three seeds' per-window NLLs are
+  averaged per window before the comparison.
+- **Activation-weighted:** `baseline_maps --method act --calib-record <record> --calib-extension <release trainer
+  report>`: X = the BF16 inputs on the 256 windows; per tile the drop in the layer-output error from E2M1 to E0M3
+  (`H_cc = X_c^T X_c` blocks); top `k_l`. Batch 8 (Qwen3.8-27B: 1, batch1_only).
+- **One-shot gradient:** `calibration.tmopt_ext oneshot`: the vendored TM-OPT+TC trainer with the release settings,
+  one epoch over the 256 windows with the top-1000 teacher, every optimizer step intercepted before its update (the
+  tile gradients summed, no logit moves, all-E2M1 start); per module the `k_l` most negative tiles.
+- **FlipQuant:** the release map. **FourOverSix:** part F's records (n16k64-fast, the same windows and convention),
+  reused after check G0.
+- **Measured:** `evaluation.ppl --mode native --weight mixfp4 --act fourover6 --map <map> --paper-convention`,
+  WikiText-2 and C4. **Reported:** paired ΔNLL vs FourOverSix on the same windows, x 1e-3 nats/token, ± 2 SE (WikiText-2
+  for the main table, C4 for Appendix A), with every cell's PPL.
+- **Check G0 (before the maps):** the FlipQuant 16x64 release map of Nemotron-Nano-9B-v2 evaluated through
+  paper-sm120-runs gives part F's per-window NLL bit for bit on both corpora (otherwise F's records are not reused
+  and FourOverSix / FlipQuant are re-measured on paper-sm120-runs).
+- **Checks:** every baseline map has exactly `k_l` E0M3 tiles per layer (the scripts assert it); every PPL record has
+  F's window count; the one-shot run used 256 fit windows and top-1000 (its trainer report).
