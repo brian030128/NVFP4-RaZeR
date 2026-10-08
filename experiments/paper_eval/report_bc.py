@@ -4,6 +4,7 @@
 """
 import json
 import math
+import struct
 import sys
 from pathlib import Path
 
@@ -15,6 +16,33 @@ MODELS = [("qwen3-1.7b", "Qwen3-1.7B"), ("qwen3-8b", "Qwen3-8B"), ("mistral-7b",
 UNITS = ("8x64", "16x64", "256x64")
 HYBRID = ("nemotron-nano-9b-v2", "qwen3.8-27b")
 G = 2 ** 30
+HUB = Path("/home/dev/.cache/huggingface/hub")
+RENAMES = {"nemotron-nano-9b-v2": (("backbone.", "model."),)}   # checkpoint prefix -> loaded module prefix
+
+
+def weight_shapes(source):
+    """Tensor shapes from the checkpoint's safetensors headers at the record's revision."""
+    snap = HUB / ("models--" + source["hf_id"].replace("/", "--")) / "snapshots" / source["revision"]
+    idx = snap / "model.safetensors.index.json"
+    files = sorted(set(json.loads(idx.read_text())["weight_map"].values())) if idx.exists() else ["model.safetensors"]
+    shapes = {}
+    for f in files:
+        with open(snap / f, "rb") as fh:
+            n = struct.unpack("<Q", fh.read(8))[0]
+            shapes.update({k: v["shape"] for k, v in json.loads(fh.read(n)).items() if k != "__metadata__"})
+    return shapes
+
+
+def weight_elements(model, source, modules):
+    """The modules' weight elements (out x in), unpadded; None if a module is not found in the checkpoint."""
+    shapes, tot = weight_shapes(source), 0
+    for mod in modules:
+        cands = [mod] + [mod.replace(new, old, 1) for old, new in RENAMES.get(model, ()) if mod.startswith(new)]
+        s = next((shapes[c + ".weight"] for c in cands if c + ".weight" in shapes), None)
+        if s is None:
+            return None
+        tot += s[0] * s[1]
+    return tot
 
 
 def memory():
@@ -56,7 +84,8 @@ def verify():
     rec = dict(ownership={}, native_vs_fake={})
     L = ["# C: verification (Section 4.3)", "", "## C1: ownership check of the 18 release artifacts", "",
          "Every weight element decoded by the kernel itself (an identity activation through the GEMM) must equal its "
-         "stored value under the map's format (flipquant `--ownership-check`; the install raises on any mismatch).", "",
+         "stored value under the map's format (flipquant `--ownership-check`; the install raises on any mismatch). "
+         "Weight elements: the checked modules' out x in from the checkpoint's safetensors headers.", "",
          "| model | unit | modules | weight elements checked | informative elements | E0M3 tiles | E0M3 elements observed | exact | format mismatches |",
          "|---|---|---:|---:|---:|---:|---:|---|---:|"]
     sys.path.insert(0, "/home/dev/n16k64_campaign/fqopt/wt")
@@ -69,8 +98,7 @@ def verify():
             r = json.loads(f.read_text())
             own = r["native"]["ownership"]
             tiles, unit, _ = M.load(REL / m / f"flipquant_{u}.pt")
-            rows, cols = M.parse_unit(unit)
-            elements = sum(t.numel() for t in tiles.values()) * rows * cols
+            elements = weight_elements(m, r["source"], own)       # from the checkpoint, unpadded
             o = dict(modules=len(own), elements=elements, informative=sum(v["informative_elements"] for v in own.values()),
                      e0m3_tiles=sum(v["e0m3_tiles"] for v in own.values()),
                      e0m3_elements=sum(v["e0m3_elements_observed"] for v in own.values()),
@@ -78,7 +106,8 @@ def verify():
                      mismatches=sum(v["format_mismatches"] for v in own.values()),
                      map_modules=len(tiles))
             rec["ownership"].setdefault(m, {})[u] = o
-            L.append(f"| {title} | {u} | {o['modules']} of {o['map_modules']} | {o['elements']:,} | {o['informative']:,} | "
+            L.append(f"| {title} | {u} | {o['modules']} of {o['map_modules']} | "
+                     f"{'—' if o['elements'] is None else format(o['elements'], ',')} | {o['informative']:,} | "
                      f"{o['e0m3_tiles']:,} | {o['e0m3_elements']:,} | {o['exact']} | {o['mismatches']} |")
     L += ["", "## C2: native vs simulated (fake), per-window NLL, paper convention", "",
           "Paired ΔNLL native − simulated (nats/token, ± 2 SE) on the same windows; a cell agrees when |Δ| ≤ 2 SE. Both "

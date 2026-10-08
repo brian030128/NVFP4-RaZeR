@@ -2,7 +2,7 @@
 
 ## C1: ownership check of the 18 release artifacts
 
-Every weight element decoded by the kernel itself (an identity activation through the GEMM) must equal its stored value under the map's format (flipquant `--ownership-check`; the install raises on any mismatch).
+Every weight element decoded by the kernel itself (an identity activation through the GEMM) must equal its stored value under the map's format (flipquant `--ownership-check`; the install raises on any mismatch). Weight elements: the checked modules' out x in from the checkpoint's safetensors headers.
 
 | model | unit | modules | weight elements checked | informative elements | E0M3 tiles | E0M3 elements observed | exact | format mismatches |
 |---|---|---:|---:|---:|---:|---:|---|---:|
@@ -15,9 +15,15 @@ Every weight element decoded by the kernel itself (an identity activation throug
 | Mistral-7B-Instruct-v0.3 | 8x64 | 224 of 224 | 6,979,321,856 | 6,383,511,757 | 116,977 | 52,333,106 | True | 0 |
 | Mistral-7B-Instruct-v0.3 | 16x64 | 224 of 224 | 6,979,321,856 | 6,382,853,652 | 75,906 | 67,942,508 | True | 0 |
 | Mistral-7B-Instruct-v0.3 | 256x64 | 224 of 224 | 6,979,321,856 | 6,378,794,042 | 183,856 | 164,259,903 | True | 0 |
+| Nemotron-Nano-9B-v2 | 8x64 | 120 of 120 | 7,711,621,120 | 7,067,362,797 | 130,579 | 58,659,256 | True | 0 |
+| Nemotron-Nano-9B-v2 | 16x64 | 120 of 120 | 7,711,621,120 | 7,066,782,964 | 80,098 | 71,951,278 | True | 0 |
+| Nemotron-Nano-9B-v2 | 256x64 | 120 of 120 | 7,711,621,120 | 7,062,044,642 | 199,960 | 179,440,041 | True | 0 |
 | Phi-4 | 8x64 | 160 of 160 | 13,631,488,000 | 12,519,536,650 | 129,730 | 58,635,010 | True | 0 |
 | Phi-4 | 16x64 | 160 of 160 | 13,631,488,000 | 12,518,999,412 | 79,591 | 71,945,587 | True | 0 |
 | Phi-4 | 256x64 | 160 of 160 | 13,631,488,000 | 12,515,456,916 | 176,944 | 159,943,086 | True | 0 |
+| Qwen3.8-27B | 8x64 | 496 of 496 | 24,350,556,160 | 22,329,050,471 | 169,073 | 76,171,152 | True | 0 |
+| Qwen3.8-27B | 16x64 | 496 of 496 | 24,350,556,160 | 22,328,273,377 | 105,278 | 94,862,919 | True | 0 |
+| Qwen3.8-27B | 256x64 | 496 of 496 | 24,350,556,160 | 22,323,998,545 | 219,114 | 197,395,832 | True | 0 |
 
 ## C2: native vs simulated (fake), per-window NLL, paper convention
 
@@ -34,8 +40,19 @@ Paired ΔNLL native − simulated (nats/token, ± 2 SE) on the same windows; a c
 | Mistral-7B-Instruct-v0.3 | 8x64 | -0.00024 ± 0.00099 | +0.00012 ± 0.00066 |
 | Mistral-7B-Instruct-v0.3 | 16x64 | -0.00016 ± 0.00094 | +0.00066 ± 0.00124 |
 | Mistral-7B-Instruct-v0.3 | 256x64 | +0.00026 ± 0.00095 | -0.00001 ± 0.00071 |
+| Nemotron-Nano-9B-v2 | 8x64 | +0.00062 ± 0.00112 | -0.00040 ± 0.00071 |
+| Nemotron-Nano-9B-v2 | 16x64 | +0.00004 ± 0.00098 | +0.00026 ± 0.00071 |
+| Nemotron-Nano-9B-v2 | 256x64 | +0.00095 ± 0.00105 | -0.00070 ± 0.00070 ✗ |
 | Phi-4 | 8x64 | +0.00008 ± 0.00127 | +0.00028 ± 0.00073 |
 | Phi-4 | 16x64 | -0.00050 ± 0.00129 | +0.00025 ± 0.00072 |
 | Phi-4 | 256x64 | -0.00045 ± 0.00129 | -0.00057 ± 0.00071 |
 
-**23 of 24 cells agree within 2 SE.**
+**28 of 30 cells agree within 2 SE.**
+
+As registered (amendment 9): the release records' native NLL (fallback env) − simulated (n16k64-fast); this includes the env change:
+
+| model | unit | WikiText-2 | C4 |
+|---|---|---:|---:|
+| Nemotron-Nano-9B-v2 | 8x64 | -0.00008 ± 0.00103 | +0.00038 ± 0.00067 |
+| Nemotron-Nano-9B-v2 | 16x64 | +0.00049 ± 0.00104 | +0.00040 ± 0.00072 |
+| Nemotron-Nano-9B-v2 | 256x64 | -0.00013 ± 0.00097 | -0.00034 ± 0.00070 |
