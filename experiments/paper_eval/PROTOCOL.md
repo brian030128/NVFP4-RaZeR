@@ -341,3 +341,15 @@ H (Hadamard, then GPTQ for the two hybrid models), I, J (the four non-hybrid mod
 after G. Code: flipquant paper-sm120-runs @ 1a2094e (7b1cfe3 + `--gptq-propagate` and `gptq.codes_sha256`, with a test:
 the codes are equal for NVFP4 and FourOverSix activations with BF16 propagation and differ with the default). G's jobs
 from 20:28 UTC ran on the worktree at 1a2094e; its diff from 7b1cfe3 touches only the GPTQ path, which G does not use.
+
+### Amendment 12 (2026-10-08 23:13 UTC): GPTQ's memory for Qwen3.8-27B
+
+H's first Qwen3.8-27B GPTQ job (NVFP4, NVFP4 activations) stopped at 23:10:50 UTC with a CUDA OOM after its last layer
+(the codes were complete and saved to the job's code file): the sm120 install packs the codes while GPTQ's collected
+codes (unpacked, ~1.25 bytes per weight: ~30 GB for 24.4 G weights) were still on the GPU next to the calibration
+layers. Fix, memory only (flipquant paper-sm120-runs c67a5bd): the collected codes are kept on the host (the sm120
+install moves each module's codes back itself; the digest reads the host copies), and the cache-load path releases
+each original BF16 linear as its layer is installed, as the compute path does. No setting changes. Check: Nemotron's
+GPTQ NVFP4 row re-evaluated from its code file with the fix gives the same codes_sha256 and bit-identical per-window NLL
+on both corpora (`ptq/nemotron-nano-9b-v2/verify_memfix_gptq_nvfp4.json`). The chain resumes at Qwen3.8-27B's GPTQ (its
+first job reloads the saved codes), then I, J, K as registered.
