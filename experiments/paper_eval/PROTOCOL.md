@@ -176,3 +176,15 @@ batch was generated, then lost). Installed into n16k64-fast only, pip `--no-deps
 continued with its next jobs; after its first pass, `run_pilot_d.py` runs again and redoes only that job's IFEval
 part (the harness resumes from its `.jsonl`; the partial summary is kept as `main.json.partial_ifeval_failed`). The
 freeze delta in `results/paper_eval/fast_env/` now lists eight packages.
+
+## Amendment 7 (2026-10-08 00:41 UTC): the Qwen3.8-27B BF16 AIME length job at batch 8
+
+The pilot's Qwen3.8-27B BF16 AIME length job (batch 16) ran out of memory after 70 min, in SDPA's `repeat_kv` at about
+22.7k tokens of context (`Tried to allocate 4.16 GiB`; 79.70 GiB allocated by PyTorch, 11.55 GiB reserved but
+unallocated, of 94.97 GiB); no sample was recorded. A repeat at batch 16 would fail the same way: weights (51 GiB) plus
+the KV cache and `repeat_kv`'s copies (88 KiB per token and sequence) need 95 GiB at 16 x 32k. The rerun pass runs this
+one job at **batch 8** (73 GiB predicted at 32k) with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` (the
+fragmentation the failure reported), and its long-context step time is reported as batch 8. The failed run's log is
+kept as `logs/dpilot_qwen3.8-27b_bf16_aime.pass1.log`. The driver now keeps an earlier pass's log as
+`<job>.pass<k>.log` instead of overwriting it (the rerun of Nemotron BF16's gsm8k / math500 / ifeval job resumes from
+its `.jsonl`, and its first pass's log holds the gsm8k and math500 batch times). The pilot's other jobs are unchanged.
