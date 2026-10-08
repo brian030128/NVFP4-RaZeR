@@ -98,6 +98,26 @@ def main():
             pp = rec["ppl"].get(model, {}).get(row, {})
             md.append(f"| {title} | {label} | " + " | ".join(
                 " / ".join(f"{pp[u][c]:.4f}" for c, _ in CORPORA) if u in pp else "TBD" for u in UNITS) + " |")
+    # FlipQuant against each baseline directly (paired on the same windows)
+    md += ["", "## FlipQuant vs each baseline (paired ΔNLL FlipQuant − baseline, x 1e-3, ± 2 SE; negative = FlipQuant "
+           "better)", "", "| model | unit | vs Random | vs Activation-weighted | vs One-shot (WikiText-2; C4) |",
+           "|---|---|---:|---:|---:|"]
+    for model, title in MODELS:
+        for u in UNITS:
+            fq = nll(model, u, "flipquant")
+            if fq is None:
+                continue
+            cells = []
+            for row in ("random", "act", "oneshot"):
+                b = nll(model, u, row)
+                if b is None:
+                    cells.append("TBD")
+                    continue
+                ps = [paired(fq[c], b[c]) for c, _ in CORPORA]
+                rec.setdefault("fq_vs", {}).setdefault(model, {}).setdefault(u, {})[row] = dict(zip(("wiki", "c4"), ps))
+                cells.append("; ".join(f"{q['delta_milli']:+.2f} ± {q['two_se_milli']:.2f}{'*' if q['significant'] else ''}"
+                                       for q in ps))
+            md.append(f"| {title} | {u} | " + " | ".join(cells) + " |")
     # the maps' own records: k_l matching, positives / negatives, the one-shot run's settings
     for model, _ in MODELS:
         for u in UNITS:
