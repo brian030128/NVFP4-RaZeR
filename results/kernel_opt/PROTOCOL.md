@@ -2242,3 +2242,19 @@ Written 2026-10-03, after amendment 18's adoption and before any registered GPU 
   - 8x64: neutral, except up to −2.5 % at T = 128.
 - **Cross-session:** C3k's and C3w's records agree with this run on the same builds to +0.1 … +0.5 % (medians).
 - **Results:** `results/kernel_opt/c3v/REPORT.md`. The three-unit figure is `c3v/C3_units_mean.png`.
+
+## Amendment 20: the K-tile dispatch ablation at 4096³ (the paper's Figure 2(a))
+
+Written 2026-10-09, before any timing. The protocol is `results/kernel_opt/ktile_ablation/PROTOCOL.md` and the hashes
+are in `results/kernel_opt/ktile_ablation/registration.json`.
+- **The request:** the user, through the coordinator: what one format dispatch per K-tile buys over choosing the format
+  per MMA, on this GPU; the slim scope (4096³ only).
+- **Kernels:** `stock_ko`; FP8 (cuBLAS via `torch._scaled_mm`); new per-MMA-branch builds (`build_KT`) of the 16x64
+  (weights on A) and 8x64 (weights on B) units with their deployed counterparts' tiles, placement, epilogue and
+  schedule; `build_V`'s per-K-tile `mixed_ko` and `mixed_wB_ko` at their deployed 4096³ configurations.
+- **New, inactive unless asked for:** the blob generator's `BRANCH=a|b`, the mainloop's `-DMIXFP4_PER_MMA_BRANCH=1`, the
+  patcher's `--predicate-aware`, `KernelConfig.allow_predicated` (sm120/kernel/LOCAL_CHANGES.md). Gate: the deployed
+  configurations rebuilt from these sources have `build_V`'s SASS.
+- **Checks before registration (no timing):** per-MMA output == per-K-tile output bitwise (real, all-E2M1, all-E0M3,
+  random 30 % tags, both units); the static SASS census (per-MMA: 64 OMMAs per k-iteration, all predicated, against 32).
+- **Method:** C2U / M1 (CUPTI, cold weights, isolated and back-to-back, 3 rotated rounds), after GSM8K M1 is paused.

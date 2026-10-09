@@ -271,7 +271,31 @@ def jump_tables(cuobjdump, binary):
     return out
 
 
-def parse_ommas_cfg(sass: str, tables=None):
+# --predicate-aware [NVFP4-RaZeR local change, kernel-opt K-tile ablation; see sm120/kernel/LOCAL_CHANGES.md], with
+# --untagged-site0. The per-MMA-branch builds (-DMIXFP4_PER_MMA_BRANCH=1) are if-converted by ptxas into
+# `@P PRMT Rt, Rs, <tag>; @P OMMA .., Rt, ..; @!P OMMA .., Rs, ..`: the E0M3 tag is a predicated (may) definition, so the
+# reaching definitions of Rt at the @P OMMA also hold an older, untagged write of Rt, and the plain analysis reports a mix
+# of sites. With this flag, a predicated OMMA whose SFA register was last written, earlier in the same basic block, by an
+# instruction under the same predicate -- with that predicate not written in between -- reads exactly that definition
+# (whenever the OMMA executes, so did it). Every other OMMA is resolved as before. Without the flag, the analysis is the
+# one above.
+PRED_TOKEN_RE = re.compile(r"!?(U?P[0-6])")
+
+
+def _pred_writes(opcode, operands):
+    """Predicate registers an instruction may write: a predicate in its first two operands (setp/lop3 destinations,
+    carry-outs). 'ALL' for R2P, which writes the predicate file."""
+    if opcode.split(".")[0] == "R2P":
+        return {"ALL"}
+    out = set()
+    for tok in [t.strip() for t in operands.split(",")[:2]]:
+        m = PRED_TOKEN_RE.fullmatch(tok)
+        if m:
+            out.add(m.group(1))
+    return out
+
+
+def parse_ommas_cfg(sass: str, tables=None, predicate_aware=False):
     """--untagged-site0: [(sass_address, word0, word1, site, selector or None)] for every OMMA, its site read from the
     reaching definitions of its SFA register (see above). tables: jump_tables() of the binary, for BRX."""
     tables = tables or {}
@@ -322,10 +346,14 @@ def parse_ommas_cfg(sass: str, tables=None):
                         changed = True
         for b, (s, e) in enumerate(blocks):
             st = dict(ins_state[b])
+            guard = {}                                   # --predicate-aware: register -> (predicate, writer)
             for j in range(s, e + 1):
                 if j in sfa_of:
                     addr, reg = ins[j][0], sfa_of[j]
                     reaching = st.get(reg, frozenset())
+                    pred_j = ins[j][1]
+                    if predicate_aware and pred_j and pred_j != "@PT" and guard.get(reg, (None,))[0] == pred_j:
+                        reaching = frozenset({guard[reg][1]})
                     if not reaching:
                         raise RuntimeError(f"{fname}: OMMA at 0x{addr:x} reads R{reg} with no reaching definition")
                     found = set()
@@ -347,6 +375,17 @@ def parse_ommas_cfg(sass: str, tables=None):
                         raise RuntimeError(f"no second encoding word after OMMA at 0x{addr:x}")
                     out.append((addr, words[0], words[1], site, sel))
                 step(j, st)
+                if predicate_aware:
+                    _, pred, op, operands, _ = ins[j]
+                    for r in _dest_regs(op, operands):
+                        if pred and pred != "@PT":
+                            guard[r] = (pred, j)
+                        else:
+                            guard.pop(r, None)
+                    written = _pred_writes(op, operands)
+                    if written:
+                        guard = {r: g for r, g in guard.items()
+                                 if "ALL" not in written and g[0].lstrip("@!") not in written}
     return sorted(out)
 
 
@@ -397,7 +436,13 @@ def main() -> int:
         "--untagged-site0", action="store_true",
         help="the blob was generated with TAG0=0: site-0 OMMAs carry no prmt tag, and every OMMA's site is read "
              "from the reaching definitions of its SFA register (see parse_ommas_cfg)")
+    parser.add_argument(
+        "--predicate-aware", action="store_true",
+        help="with --untagged-site0: a predicated OMMA reads the same-predicate definition of its SFA register earlier "
+             "in its basic block, if that predicate is unchanged since (the per-MMA-branch builds' if-converted pairs)")
     args = parser.parse_args()
+    if args.predicate_aware and not args.untagged_site0:
+        parser.error("--predicate-aware needs --untagged-site0")
 
     data = bytearray(args.baseline.read_bytes())
     sass = subprocess.run(
@@ -405,8 +450,8 @@ def main() -> int:
         check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     ).stdout
 
-    ommas = (parse_ommas_cfg(sass, jump_tables(args.cuobjdump, args.baseline)) if args.untagged_site0
-             else parse_ommas(sass))
+    ommas = (parse_ommas_cfg(sass, jump_tables(args.cuobjdump, args.baseline), predicate_aware=args.predicate_aware)
+             if args.untagged_site0 else parse_ommas(sass))
     if not ommas:
         raise RuntimeError("cuobjdump found no OMMA instructions")
 

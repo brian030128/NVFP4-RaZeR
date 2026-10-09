@@ -213,6 +213,17 @@ dispatch_pattern_tree(uint32_t pattern, Body&& body) {
   }
 }
 
+// [NVFP4-RaZeR local hook, kernel-opt K-tile ablation; see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_PER_MMA_BRANCH=1
+// replaces the per-k_tile pattern dispatch with the per-MMA branch of docs/mixed_nvfp4_report.md section 1: one k_tile
+// body for every format, in which each MMA's format is chosen by an ordinary C++ if/else on its own granule's flag
+// (mixfp4::mma_kblock_branch, from a blob header generated with BRANCH=a|b). ptxas if-converts each if/else into a pair
+// of predicated OMMAs, so every useful MMA costs two tensor-pipe issues -- the codegen the per-k_tile dispatch exists
+// to avoid; this build measures it. Every MMA computes exactly as in the per-k_tile build (same atoms, same order per
+// accumulator). Unset (0), the dispatch is the upstream one (identical SASS). Never deployed.
+#ifndef MIXFP4_PER_MMA_BRANCH
+#define MIXFP4_PER_MMA_BRANCH 0
+#endif
+
 // [NVFP4-RaZeR local hook, diagnostic only; see sm120/kernel/LOCAL_CHANGES.md] -DMIXFP4_ARM_XOR=<mask> permutes
 // where each pattern's arm sits in the branch tree: the tree is searched on (pattern ^ mask) and the leaf at position
 // L runs the arm of pattern L ^ mask. Every arm computes exactly as before; only its code position (and so which
@@ -1389,7 +1400,20 @@ struct CollectiveMma<
     // (cute/algorithm/gemm.hpp), which exists to maximise operand register reuse between
     // consecutive MMAs -- reproducing it keeps the .reuse flags ptxas emits unchanged.
     auto gemm_kblock = [&](auto pattern_c, auto k_block) {
-#if defined(MIXFP4_PTX) && MIXFP4_PTX
+#if MIXFP4_PER_MMA_BRANCH
+      // One k_tile body for every format: each MMA reads its own granule's flag and branches.
+      (void) pattern_c;
+#if !defined(MIXFP4_BLOBGEN_BRANCH)
+#error "MIXFP4_PER_MMA_BRANCH needs a blob header generated with BRANCH=a|b (mixfp4::mma_kblock_branch)"
+#endif
+      static_assert(kMmaM == MIXFP4_BLOBGEN_MMA_M && kMmaN == MIXFP4_BLOBGEN_MMA_N,
+                    "blob header was built for a different warp tile");
+      mixfp4::mma_kblock_branch(accum,
+                                recast<uint32_t>(tCrA(_,_,k_block)),
+                                recast<uint32_t>(tCrB(_,_,k_block)),
+                                recast<uint32_t>(tCrSFA(_,_,k_block)),
+                                recast<uint32_t>(tCrSFB(_,_,k_block)));
+#elif defined(MIXFP4_PTX) && MIXFP4_PTX
       // The generated asm does its own dispatch, so the C++ pattern is unused here.
       (void) pattern_c;
       // Tagging finer than the granule makes lanes of one warp disagree on the jump index, and
@@ -1546,7 +1570,7 @@ struct CollectiveMma<
     // a same-source A/B rather than against a separately-built binary.
     auto dispatch = [&](auto body) {
 #if (defined(MIXFP4_NO_DISPATCH) && MIXFP4_NO_DISPATCH) || \
-    (defined(MIXFP4_PTX) && MIXFP4_PTX)
+    (defined(MIXFP4_PTX) && MIXFP4_PTX) || MIXFP4_PER_MMA_BRANCH
       // PTX path: the dispatch lives inside the generated asm, so there is exactly one arm here.
       (void) &read_site;
       body(C<0>{});
@@ -1715,7 +1739,7 @@ struct CollectiveMma<
     }
 #elif ((defined(MIXFP4_JOINT_KA) && MIXFP4_JOINT_KA) || \
        (defined(MIXFP4_JOINT_KB) && MIXFP4_JOINT_KB)) && \
-      defined(MIXFP4_PIPE_FLAGS) && MIXFP4_PIPE_FLAGS
+      defined(MIXFP4_PIPE_FLAGS) && MIXFP4_PIPE_FLAGS && !MIXFP4_PER_MMA_BRANCH
     // ---------------------------------------------------------------------------------------
     // Software-pipeline the dispatch index itself.
     // ---------------------------------------------------------------------------------------

@@ -1,0 +1,173 @@
+{
+ "protocol": "results/kernel_opt/PROTOCOL.md, amendment 20 (K-tile ablation): check",
+ "gpu": {
+  "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "driver_version": "595.71.05",
+  "power.limit": "500.00 W",
+  "power.default_limit": "600.00 W",
+  "clocks.max.sm": "3090 MHz",
+  "clocks.max.mem": "14001 MHz",
+  "clocks.applications.graphics": "[Requested functionality has been deprecated]",
+  "persistence_mode": "Enabled",
+  "temperature.gpu": "87",
+  "utilization.gpu": "99 %",
+  "memory.used": "70419 MiB",
+  "torch": "2.9.0+cu128",
+  "torch_cuda": "12.8",
+  "triton": "3.5.0",
+  "host": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+  "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "capability": [
+   12,
+   0
+  ],
+  "sm_count": 188,
+  "utc": "2026-10-09T12:40:28+00:00"
+ },
+ "kernels": {
+  "stock_ko": {
+   "config": "stock_wA_e64",
+   "sha256": "5ccdacea29559b9a68015d50a64c7e429eb9761fcbd401ac0f5cff01b60d1e6a",
+   "root": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+   "defines": null,
+   "schedule": [
+    1,
+    1
+   ]
+  },
+  "ktile16": {
+   "config": "n16k64_wA_e64_t0",
+   "sha256": "3e8023de34079956fc1bf0bc8c1355ba6710dc36792dc07f8865bf51bd706609",
+   "root": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+   "defines": {
+    "MIXFP4_DISPATCH_FREQ": 1,
+    "MIXFP4_UNIFORM_DISPATCH": 1
+   },
+   "schedule": [
+    0,
+    1
+   ]
+  },
+  "permma16": {
+   "config": "n16k64_wA_e64_t0_permma",
+   "sha256": "fe5afcf3c9cf673620fd3cb2f92f330b110d1e4a6e6458fd784cd69e773e3f39",
+   "root": "/home/dev/n16k64_campaign/kernel_opt/build_KT",
+   "defines": {
+    "MIXFP4_DISPATCH_FREQ": 1,
+    "MIXFP4_UNIFORM_DISPATCH": 1
+   },
+   "schedule": [
+    0,
+    1
+   ]
+  },
+  "ktile8": {
+   "config": "n8k64_wB_t0",
+   "sha256": "4cb85620d215a9cf6be6ade9ad4d4f4f0cc12b324960ea337d93912163b1d08c",
+   "root": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+   "defines": {
+    "MIXFP4_DISPATCH_FREQ": 1,
+    "MIXFP4_PIPE_FLAGS": 1
+   },
+   "schedule": [
+    0,
+    1
+   ]
+  },
+  "permma8": {
+   "config": "n8k64_wB_t0_permma",
+   "sha256": "5e7337ea93682295c5872309232f64fdec306e25c3d0b1ea2883ea80554f45c8",
+   "root": "/home/dev/n16k64_campaign/kernel_opt/build_KT",
+   "defines": {
+    "MIXFP4_DISPATCH_FREQ": 1,
+    "MIXFP4_PIPE_FLAGS": 1
+   },
+   "schedule": [
+    0,
+    1
+   ]
+  }
+ },
+ "table": "/home/dev/NVFP4-RaZeR/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+ "checks": [
+  {
+   "unit": "16x64",
+   "tags": "real",
+   "e0m3_fraction": 0.04437255859375,
+   "equal": true,
+   "finite": true,
+   "ref": "n16k64_wA_e64_t0",
+   "new": "n16k64_wA_e64_t0_permma"
+  },
+  {
+   "unit": "16x64",
+   "tags": "e2m1",
+   "e0m3_fraction": 0.0,
+   "equal": true,
+   "finite": true,
+   "ref": "n16k64_wA_e64_t0",
+   "new": "n16k64_wA_e64_t0_permma"
+  },
+  {
+   "unit": "16x64",
+   "tags": "e0m3",
+   "e0m3_fraction": 1.0,
+   "equal": true,
+   "finite": true,
+   "ref": "n16k64_wA_e64_t0",
+   "new": "n16k64_wA_e64_t0_permma"
+  },
+  {
+   "unit": "16x64",
+   "tags": "rand30",
+   "e0m3_fraction": 0.3056640625,
+   "equal": true,
+   "finite": true,
+   "ref": "n16k64_wA_e64_t0",
+   "new": "n16k64_wA_e64_t0_permma"
+  },
+  {
+   "unit": "8x64",
+   "tags": "real",
+   "e0m3_fraction": 0.033416748046875,
+   "equal": true,
+   "finite": true,
+   "ref": "n8k64_wB_t0",
+   "new": "n8k64_wB_t0_permma"
+  },
+  {
+   "unit": "8x64",
+   "tags": "e2m1",
+   "e0m3_fraction": 0.0,
+   "equal": true,
+   "finite": true,
+   "ref": "n8k64_wB_t0",
+   "new": "n8k64_wB_t0_permma"
+  },
+  {
+   "unit": "8x64",
+   "tags": "e0m3",
+   "e0m3_fraction": 1.0,
+   "equal": true,
+   "finite": true,
+   "ref": "n8k64_wB_t0",
+   "new": "n8k64_wB_t0_permma"
+  },
+  {
+   "unit": "8x64",
+   "tags": "rand30",
+   "e0m3_fraction": 0.305694580078125,
+   "equal": true,
+   "finite": true,
+   "ref": "n8k64_wB_t0",
+   "new": "n8k64_wB_t0_permma"
+  }
+ ],
+ "fp8": {
+  "rel_err": 0.03747493028640747,
+  "kernels": [
+   "sm89_xmma_gemm_e4m3bf16_e4m3f32_f32_tn_n_tilesize256x64x64_stage4_warpsize4x1x1_tensor16x8x32_execute_kernel__5x_cublas"
+  ]
+ },
+ "status": "pass"
+}

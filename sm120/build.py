@@ -180,7 +180,8 @@ def patcher_flags(cfg):
     if str(cfg.blob_gen.get('TAG0', 1)) == '0':
         if cfg.patch and cfg.expected_census is None:
             raise BuildError(f'{cfg.name}: a TAG0=0 configuration must declare expected_census')
-        return ['--untagged-site0']
+        # kernel-opt K-tile ablation: the per-MMA-branch builds' if-converted OMMA pairs (see the patcher)
+        return ['--untagged-site0'] + (['--predicate-aware'] if cfg.allow_predicated else [])
     return []
 
 
@@ -276,7 +277,7 @@ def build(cfg, tc, selftest=False):
     blob = generate(cfg, out)
     lib, cmd, clog = compile_lib(cfg, tc, out)
     pinfo = patch(cfg, tc, lib)
-    if pinfo['census_patched']['predicated']:
+    if pinfo['census_patched']['predicated'] and not cfg.allow_predicated:
         raise BuildError(f'{cfg.name}: {pinfo["census_patched"]["predicated"]} predicated OMMAs '
                          f'(each wastes a tensor-pipe issue slot)')
     desc = describe(lib)
@@ -284,7 +285,7 @@ def build(cfg, tc, selftest=False):
     res = resource_usage(tc['cuobjdump'], lib)
     manifest = dict(
         config=cfg.name, description=cfg.description, kind=cfg.kind, weight_operand=cfg.weight_operand,
-        type_block=cfg.type_block, defines=cfg.defines, blob_gen=cfg.blob_gen,
+        type_block=cfg.type_block, defines=cfg.defines, blob_gen=cfg.blob_gen, allow_predicated=cfg.allow_predicated,
         built_utc=t0.isoformat(timespec='seconds'), host=platform.node(),
         repo_head=git('rev-parse', 'HEAD'), repo_dirty=bool(git('status', '--porcelain', '--untracked-files=no')),
         toolchain=tc, nvcc_command=[str(c) for c in cmd], nvcc_warnings=clog.strip()[-4000:],

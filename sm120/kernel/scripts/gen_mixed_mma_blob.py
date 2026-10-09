@@ -74,6 +74,14 @@ SEL = ["0x3210", "0x3214", "0x3254", "0x3654"]
 ORDER = os.environ.get("ORDER", "m")
 TAG0 = os.environ.get("TAG0", "1") == "1"
 assert ORDER in ("m", "n"), ORDER
+# [NVFP4-RaZeR local change, kernel-opt K-tile ablation; see sm120/kernel/LOCAL_CHANGES.md] BRANCH: 'a' or 'b' appends
+# mma_kblock_branch() to the header: the same k_block of MMAs, in the same order and with the same per-MMA PTX as the
+# blob arms, but each MMA's format chosen at run time by an ordinary C++ if/else on the format flag of the weight
+# operand's granule ('a': A's, sites 0/1; 'b': B's, sites 0/2) -- the per-MMA branch of docs/mixed_nvfp4_report.md
+# section 1, which ptxas if-converts into predicated OMMA pairs. The mainloop uses it with -DMIXFP4_PER_MMA_BRANCH=1.
+# Unset, the output is the blob header byte for byte.
+BRANCH = os.environ.get("BRANCH", "")
+assert BRANCH in ("", "a", "b"), BRANCH
 # Inline-asm operand numbering, derived from the warp tile: accumulators first (4 per MMA), then
 # the A fragments (4 regs per m-atom), B (2 per n-atom), and one scale word per atom.
 N_OUT = 4 * MMA_M * MMA_N
@@ -123,6 +131,49 @@ def emit_pattern(p):
     return out
 
 
+def emit_branch():
+    """mma_kblock_branch(): one asm statement per MMA, in the blob's issue order, behind a C++ if/else on the weight
+    operand's per-granule flag (bit 7 of the granule's first atom's scale word, as the mainloop's read_site)."""
+    body = []
+    for i in range(MMA_M * MMA_N):
+        m, ns = serpentine(i)
+        if BRANCH == "a":
+            flag = "sfa(cute::Int<0>{}, cute::Int<%d>{})" % ((m // A_ATOMS) * A_ATOMS)
+            site_w = 1
+        else:
+            flag = "sfb(cute::Int<0>{}, cute::Int<%d>{})" % ((ns // B_ATOMS) * B_ATOMS)
+            site_w = 2
+        outs = ", ".join('"+f"(acc(cute::Int<%d>{}, cute::Int<%d>{}, cute::Int<%d>{}))' % (v, m, ns) for v in range(4))
+        ins = ", ".join(['"r"(a(cute::Int<%d>{}, cute::Int<%d>{}))' % (v, m) for v in range(4)]
+                        + ['"r"(b(cute::Int<%d>{}, cute::Int<%d>{}))' % (v, ns) for v in range(2)]
+                        + ['"r"(sfa(cute::Int<0>{}, cute::Int<%d>{}))' % m, '"r"(sfb(cute::Int<0>{}, cute::Int<%d>{}))' % ns])
+
+        def one(site):
+            # operands: %0-%3 accumulators, %4-%7 A, %8-%9 B, %10 SFA, %11 SFB
+            asm = ["{"]
+            if site == 0 and not TAG0:
+                sfa = "%10"
+            else:
+                asm += ["  .reg .b32 %sf;", "  prmt.b32 %%sf, %%10, %%10, %s;" % SEL[site]]
+                sfa = "%sf"
+            asm.append("  %s {%%0,%%1,%%2,%%3}, {%%4,%%5,%%6,%%7}, {%%8,%%9}, {%%0,%%1,%%2,%%3}, {%s}, {0, 0}, {%%11}, "
+                       "{0, 0};" % (MMA, sfa))
+            asm.append("}")
+            text = "\n".join('        "%s\\n"' % ln for ln in asm)
+            return "      asm volatile(\n%s\n        : %s\n        : %s);" % (text, outs, ins)
+        body.append("    if ((%s & 0x80u) != 0u) {\n%s\n    } else {\n%s\n    }" % (flag, one(site_w), one(0)))
+    return (
+        "// Per-MMA branch (BRANCH=%s): each MMA's format chosen at run time by its own C++ if/else.\n"
+        "#define MIXFP4_BLOBGEN_BRANCH %d\n"
+        "namespace mixfp4 {\n"
+        "template <class TAcc, class TA, class TB, class TSFA, class TSFB>\n"
+        "CUTLASS_DEVICE void\n"
+        "mma_kblock_branch(TAcc& acc, TA const& a, TB const& b, TSFA const& sfa, TSFB const& sfb) {\n"
+        "%s\n"
+        "}\n"
+        "} // namespace mixfp4\n" % (BRANCH, 1 if BRANCH == "a" else 2, "\n".join(body)))
+
+
 def main():
     outs = ",\n".join(
         '        "+f"(acc(cute::Int<%d>{}, cute::Int<%d>{}, cute::Int<%d>{}))' % (v, m, n)
@@ -169,6 +220,8 @@ def main():
         "} // namespace mixfp4\n"
         % (A_ATOMS * 16, B_ATOMS * 8, NPAT, MMA_M, MMA_N, MMA_M, MMA_N, "\n".join(arms)))
 
+    if BRANCH:
+        header += emit_branch()
     dst = (pathlib.Path(__file__).resolve().parent.parent
            / "src/collective/mixed_mma_blob_generated.hpp")
     dst.write_text(header)

@@ -31,6 +31,9 @@ class KernelConfig:
     # contiguous (kernel-opt A': a warp's two m-atoms are 64 rows apart, so a 32-row granule tiles 128-row panels).
     # A map is compatible only if its tile rows are a multiple of it. None = type_block[0] (contiguous granules).
     map_tile_rows: int | None = None
+    # kernel-opt K-tile ablation: the per-MMA-branch builds are expected to carry predicated OMMA pairs (that is what they
+    # measure); every other build must have none (build.py's gate).
+    allow_predicated: bool = False
 
     @property
     def d_colmajor(self):
@@ -293,6 +296,19 @@ for _base in ('n8k64_wB_m16', 'n8k64_wB_m32', 'n8k64_wB_m64', 'n8k64_wB_n64'):
         _c, name=_base + '_nodisp_t0', type_block=None, expected_census=None, patch=False,
         defines=dict(_c.defines, MIXFP4_NO_DISPATCH=1, MIXFP4_PIPE_FLAGS=0), blob_gen=dict(_c.blob_gen, TAG0=0),
         description=f"kernel-opt P5: {_base}'s tile with the format dispatch compiled out (E2M1 only). "
+                    'Not a deployment kernel.')
+
+# kernel-opt K-tile ablation (the paper's Figure 2(a)): the deployed width-128 builds' per-MMA-branch counterparts. Same
+# tile, warp arrangement, placement, epilogue and k_tile body; each MMA's format is chosen by its own C++ if/else
+# (blob header BRANCH=a|b, -DMIXFP4_PER_MMA_BRANCH=1) instead of one dispatch per k_tile. ptxas if-converts each into a
+# predicated OMMA pair, so the census holds both sites' OMMAs in equal number, all predicated. Not deployment kernels.
+for _base, _w in (('n16k64_wA_e64_t0', 'a'), ('n8k64_wB_t0', 'b')):
+    _c = CONFIGS[_base]
+    _site = 1 if _w == 'a' else 2
+    CONFIGS[_base + '_permma'] = dataclasses.replace(
+        _c, name=_base + '_permma', defines=dict(_c.defines, MIXFP4_PER_MMA_BRANCH=1),
+        blob_gen=dict(_c.blob_gen, BRANCH=_w), expected_census={0: 64, _site: 64}, allow_predicated=True,
+        description=f'kernel-opt K-tile ablation: {_base} with a per-MMA branch instead of the per-k_tile dispatch. '
                     'Not a deployment kernel.')
 
 DEFAULT = 'n16k64_wA'
