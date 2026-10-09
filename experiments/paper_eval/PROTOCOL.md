@@ -353,3 +353,10 @@ each original BF16 linear as its layer is installed, as the compute path does. N
 GPTQ NVFP4 row re-evaluated from its code file with the fix gives the same codes_sha256 and bit-identical per-window NLL
 on both corpora (`ptq/nemotron-nano-9b-v2/verify_memfix_gptq_nvfp4.json`). The chain resumes at Qwen3.8-27B's GPTQ (its
 first job reloads the saved codes), then I, J, K as registered.
+
+### Amendment 13 (2026-10-09 03:00 UTC): K's training job and its output directory
+
+K's first job (Qwen3-1.7B FOCUS training) stopped at 02:59:29 UTC before training: `calibration.train_focus` requires a
+new `--out` directory, and the driver's job runner had created it (as the parent of the job's record). The driver now
+runs the FOCUS training without creating that directory (`run_fresh_dir`); nothing else changes. The failed log is
+kept as `logs/focus_train_qwen3-1.7b_micro8.failed_existing_dir.log`. The chain resumes with K.

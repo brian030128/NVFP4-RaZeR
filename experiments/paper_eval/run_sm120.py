@@ -187,6 +187,26 @@ def gptq(models):
             (d / "ppl.json").write_text((d / "gptq_nvfp4-fo6.json").read_text())
 
 
+def run_fresh_dir(name, cmd, out, cwd):
+    """run_gpu.run for a job whose output directory must not exist (calibration.train_focus --out): the record's
+    parent is not created beforehand."""
+    import subprocess
+    import time
+    if G.done(out):
+        return None
+    G.idle()
+    (G.RUN / "logs").mkdir(parents=True, exist_ok=True)
+    G.log(f"START {name}")
+    t0 = time.time()
+    with open(G.RUN / "logs" / f"{name}.log", "w") as f:
+        f.write(" ".join(map(str, cmd)) + "\n")
+        f.flush()
+        rc = subprocess.run(list(map(str, cmd)), cwd=cwd, env=G.env(), stdout=f, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL).returncode
+    G.log(f"END {name} rc={rc} {time.time() - t0:.0f}s")
+    return rc
+
+
 FOCUS_COMMON = ["--epochs", 1, "--batch", 32, "--lr-scale", "5e-3", "--lr-sub", "1e-3", "--topk", 1000, "--num-sub", 2,
                 "--init-q", 6, "--act", "fourover6", "--act-scope", "row", "--seed", 42, "--ppl-datasets", ""]
 
@@ -210,7 +230,8 @@ def focus(models):
                 cmd = [G.py(model), "-m", "calibration.train_focus", "--model", model, "--revision", REV[model],
                        "--data", "release", "--calib-record", record(model), "--calib-extension", trainer_report(model),
                        *FOCUS_COMMON, "--micro", micro, "--out", state]
-                rc = G.run(f"focus_train_{model}_micro{micro}", cmd, rep_, FQ2)
+                d.mkdir(parents=True, exist_ok=True)
+                rc = run_fresh_dir(f"focus_train_{model}_micro{micro}", cmd, rep_, FQ2)
                 if rc in (None, 0):
                     break
                 logf = (G.RUN / "logs" / f"focus_train_{model}_micro{micro}.log").read_text(errors="replace")
