@@ -101,8 +101,9 @@ def mainrows():
                 cells.append("TBD")
                 continue
             ppl = {c: ppl_of(r, c) for c, _ in T.CORPORA}
-            rec["rows"].setdefault(key, {})[row] = dict(ppl=ppl, installed_weight_sha256=(r.get("adaptive") or {}).get(
-                "installed_weight_sha256"))
+            ad = r.get("adaptive") or {}
+            rec["rows"].setdefault(key, {})[row] = dict(ppl=ppl, installed_weight_sha256=(ad.get("method") or {}).get(
+                "installed_weight_sha256") or ad.get("installed_weight_sha256"))
             cells.append(" / ".join(f"{ppl[c]:.4f}" for c, _ in T.CORPORA))
             if key not in ("nemotron-nano-9b-v2", "qwen3.8-27b"):
                 ref_path = mp[mkey]["sources"].get(row)
