@@ -5,7 +5,9 @@
 
 tab:ptq: Nemotron-Nano-9B-v2 and Qwen3.8-27B at 16x64, rows {RTN, GPTQ, Hadamard} x {NVFP4 (NVFP4 activations),
 FourOverSix, FlipQuant 16x64}: WikiText-2 / C4 PPL, and the paired ΔNLL vs RTN FourOverSix (x 1e-3, ± 2 SE). RTN = part
-F's records. Check H1: the NVFP4 GPTQ codes equal under NVFP4 / FourOverSix activations.
+F's records. Check H1: the NVFP4 GPTQ codes equal under NVFP4 / FourOverSix activations. GSM8K (%): part N's
+strict-match accuracy (lm-eval gsm8k_llama, thinking off; results/paper_eval/ptq_gsm8k_lmeval/gsm8k_lmeval.json from
+report_gsm8k_lmeval.py report), TBD while a configuration is missing. Part M (superseded) does not feed it.
 
 mainrows: IF4 and MixFP4 (Zou), fake, 1x16, the methods' own rules, all six models; the spot check against main-ppl
 44f8cea's records for the four non-hybrid models (per-window NLL and the installed weight sha256, bit for bit).
@@ -41,16 +43,21 @@ def ptq():
     out = OUT / "ptq"
     out.mkdir(parents=True, exist_ok=True)
     rec = dict(rows={}, check_h1={})
-    md = ["# tab:ptq: FlipQuant with PTQ methods (16x64; PPL only)", "",
+    gp = OUT / "ptq_gsm8k_lmeval" / "gsm8k_lmeval.json"
+    gsm = {k: v["strict_match"] for k, v in json.loads(gp.read_text())["configs"].items()} if gp.exists() else {}
+    md = ["# tab:ptq: FlipQuant with PTQ methods (16x64; PPL and GSM8K)", "",
           "Native (build_V, --kernel-set auto), n16k64-fast, flipquant paper-sm120-runs. RTN: part F's records. GPTQ: "
           "fixed RTN grid, block 128, damp 0.01, no act-order, the release 256 x 512 fit set, BF16 propagation (the "
           "user's decision). Hadamard: block 16, applied in PyTorch before the native kernel (not fused); FlipQuant's "
           "map retrained in the rotated basis with the release settings. NVFP4 rows: NVFP4 activations (per-token "
           "scales); the others: per-token FourOverSix. Cells: WikiText-2 / C4 PPL; ΔNLL vs RTN FourOverSix x 1e-3 ± 2 SE "
-          "(* beyond 2 SE).", "", "| model | method | format | WikiText-2 | C4 | ΔNLL wiki | ΔNLL C4 |",
-          "|---|---|---|---:|---:|---:|---:|"]
+          "(* beyond 2 SE). GSM8K: lm-eval gsm8k_llama (8-shot CoT, chat template, greedy, 1024 tokens), thinking off, "
+          "strict-match accuracy (%) ± 2 SE, 1,319 problems (part N).", "",
+          "| model | method | format | WikiText-2 | C4 | ΔNLL wiki | ΔNLL C4 | GSM8K (%) |",
+          "|---|---|---|---:|---:|---:|---:|---:|"]
     tex = ["% tab:ptq: WikiText-2 / C4 PPL at 16x64 (native sm120); GPTQ with BF16 propagation; Hadamard block 16 "
-           "(rotation in PyTorch before the kernel, not fused)"]
+           "(rotation in PyTorch before the kernel, not fused); GSM8K: lm-eval gsm8k_llama strict-match accuracy (%), "
+           "8-shot CoT with the chat template, greedy, thinking off (part N)"]
     for model, title in HYB:
         ref = load(RUN / "pplfast" / model / "fo6.json")
         tex.append(f"\\multicolumn{{5}}{{l}}{{\\textit{{{title}}}}} \\\\")
@@ -59,19 +66,24 @@ def ptq():
                 path = (RUN / "pplfast" / model / f"{fmt}.json" if method == "rtn" else
                         RUN / "ptq" / model / f"{method}_{fmt}.json")
                 r = load(path)
+                g = gsm.get(f"{model}/{method}_{fmt}")
+                gmd = f"{100 * g['accuracy']:.2f} ± {100 * g['two_se']:.2f}" if g else "TBD"
+                gtex = f"{100 * g['accuracy']:.1f}" if g else "TBD"
                 if r is None:
-                    md.append(f"| {title} | {method} | {label} | TBD | TBD | | |")
-                    tex.append(f"{method.upper() if method != 'hadamard' else 'Hadamard'} & {label} & TBD & TBD \\\\")
+                    md.append(f"| {title} | {method} | {label} | TBD | TBD | | | {gmd} |")
+                    tex.append(f"{method.upper() if method != 'hadamard' else 'Hadamard'} & {label} & TBD & TBD & {gtex} \\\\")
                     continue
                 cells = {c: ppl_of(r, c) for c, _ in T.CORPORA}
                 d = {c: T.paired(r["results"][c]["nll"], ref["results"][c]["nll"]) for c, _ in T.CORPORA} if ref else {}
                 rec["rows"].setdefault(model, {}).setdefault(method, {})[fmt] = dict(
-                    ppl=cells, vs_rtn_fo6=d, source=str(path), ptq=r.get("ptq"))
+                    ppl=cells, vs_rtn_fo6=d, source=str(path), ptq=r.get("ptq"),
+                    **({"gsm8k": dict(accuracy=g["accuracy"], two_se=g["two_se"], n=g["n"])} if g else {}))
                 ds = [f"{1e3 * d[c]['delta']:+.2f} ± {1e3 * d[c]['two_se']:.2f}{'*' if d[c]['significant'] else ''}"
                       for c, _ in T.CORPORA] if d else ["", ""]
-                md.append(f"| {title} | {method} | {label} | {cells['wiki']:.4f} | {cells['c4']:.4f} | " + " | ".join(ds) + " |")
+                md.append(f"| {title} | {method} | {label} | {cells['wiki']:.4f} | {cells['c4']:.4f} | " + " | ".join(ds)
+                          + f" | {gmd} |")
                 mname = {"rtn": "RTN", "gptq": "GPTQ", "hadamard": "Hadamard"}[method]
-                tex.append(f"{mname} & {label} & {cells['wiki']:.2f} & {cells['c4']:.2f} \\\\")
+                tex.append(f"{mname} & {label} & {cells['wiki']:.2f} & {cells['c4']:.2f} & {gtex} \\\\")
         a, b = (load(RUN / "ptq" / model / f"gptq_{r}.json") for r in ("nvfp4", "nvfp4-fo6"))
         if a and b:
             sa, sb = (x.get("ptq", {}).get("codes_sha256") for x in (a, b))
