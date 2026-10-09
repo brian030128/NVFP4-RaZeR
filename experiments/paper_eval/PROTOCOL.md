@@ -360,3 +360,7 @@ K's first job (Qwen3-1.7B FOCUS training) stopped at 02:59:29 UTC before trainin
 new `--out` directory, and the driver's job runner had created it (as the parent of the job's record). The driver now
 runs the FOCUS training without creating that directory (`run_fresh_dir`); nothing else changes. The failed log is
 kept as `logs/focus_train_qwen3-1.7b_micro8.failed_existing_dir.log`. The chain resumes with K.
+K's restarted training (03:00 UTC) was stopped after 3 steps at 03:01 UTC: it trained on the release windows (512
+tokens), but `train_focus` records `--seqlen` (default 2048) in its report and log. flipquant paper-sm120-runs 46dc5a7
+makes `--data release` require `--seqlen` equal to the windows' length, and the driver passes `--seqlen 512`; the stopped
+log is kept as `logs/focus_train_qwen3-1.7b_micro8.stopped_seqlen_record.log`. K restarts from its first model.

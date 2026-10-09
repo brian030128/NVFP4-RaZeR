@@ -208,7 +208,8 @@ def run_fresh_dir(name, cmd, out, cwd):
 
 
 FOCUS_COMMON = ["--epochs", 1, "--batch", 32, "--lr-scale", "5e-3", "--lr-sub", "1e-3", "--topk", 1000, "--num-sub", 2,
-                "--init-q", 6, "--act", "fourover6", "--act-scope", "row", "--seed", 42, "--ppl-datasets", ""]
+                "--init-q", 6, "--act", "fourover6", "--act-scope", "row", "--seed", 42, "--ppl-datasets", "",
+                "--seqlen", 512]       # the release windows are 512 tokens (train_focus records it)
 
 
 def focus(models):
