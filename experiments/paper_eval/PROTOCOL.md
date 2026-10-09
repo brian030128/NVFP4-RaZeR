@@ -428,3 +428,26 @@ above the ~24 h limit, so M1 stopped and the options went to the user, who chose
 - Batch 64 against batch 16 on the shared pilot problems is reported as a side note, not a gate.
 - Everything else as registered: greedy, EOS or 2048 new tokens, thinking off, the 1,319 problems, the report (paired
   per-problem comparisons, truncation, unparseable answers) and checks M1-M4.
+
+### Amendment 15 (2026-10-09 13:21 UTC): part M paused for kernel-opt's K-tile ablation (the user's decision)
+
+The user's decision (relayed 2026-10-09 12:2x UTC): pause M1, give the GPU to the K-tile dispatch ablation (kernel-opt
+amendment 20), then resume M1 automatically. Keep the protocol's batch identity: every configuration sees the same
+64-problem batches and padding as an uninterrupted run.
+- **The stop.** This session's attempt to stop the M1 processes was refused by its permission settings; the user stopped
+  them (`kill -TERM` of the driver 1949674 and of the running job 1973147) between 13:17:48 and 13:20:53 UTC. The
+  queue log has no END line for that job.
+- **Finished (complete records):** Nemotron-Nano-9B-v2 9 / 9; Qwen3.8-27B RTN NVFP4 / FourOverSix / FlipQuant 16x64 and
+  GPTQ NVFP4 (check M2 passed: codes loaded from part H's cache, codes_sha256 equal).
+- **Partial:** Qwen3.8-27B GPTQ FourOverSix: 576 records, 9 whole batches of 64 (`gsm8k_resume_check.py`,
+  `results/paper_eval/ptq_gsm8k/pause/`). The harness writes a batch's records only after the whole batch is generated,
+  and on a rerun it skips the recorded problems and sorts the rest by prompt length as a fresh run sorts all of them (a
+  stable sort); the 576 records are exactly the first 576 problems of that order, written in it, every line parsed, no
+  duplicate. So the resumed run's batches are the uninterrupted run's batches 10 ... 21 (the same problems, the same
+  left padding; greedy decoding does not read the per-batch seed). **Rule:** a partial configuration resumes only if its
+  records pass this check; otherwise they are moved aside (kept) and it reruns from the start. This one passes and
+  resumes.
+- **Not started:** Qwen3.8-27B GPTQ FlipQuant 16x64 and the three Hadamard configurations.
+- **Resume:** after the ablation's timing, `run_gsm8k.py run --batch nemotron-nano-9b-v2:64,qwen3.8-27b:64` (finished
+  configurations are skipped by their complete records). Post-hoc check: GPTQ FourOverSix's records, in file order,
+  equal the harness's full order (the batches continued the partition).
