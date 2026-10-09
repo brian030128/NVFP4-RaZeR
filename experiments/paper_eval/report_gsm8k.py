@@ -296,12 +296,19 @@ def report():
             a, b = recs.get((model, method, "fq-16x64")), recs.get((model, "rtn", "fq-16x64"))
             if a and b:
                 rec["paired"][f"{model}/fq-16x64: {method} vs rtn"] = paired(a, b)
-    md = ["# tab:ptq, GSM8K (part M)", "",
+    md = ["# tab:ptq, GSM8K (part M) -- SUPERSEDED", "",
+          "> **Superseded (paper-eval amendment 16), not a failure:** the user re-measures tab:ptq's GSM8K column with "
+          "lm-eval's `gsm8k_llama` (part N, `results/paper_eval/ptq_gsm8k_lmeval/`). Part M stopped at 16 of 18 "
+          "configurations; its records are kept as they are (Qwen3.8-27B Hadamard FourOverSix partial, 768 problems; "
+          "Hadamard FlipQuant not run). This page summarizes the complete ones for a possible appendix.", "",
           "Greedy, thinking off (Qwen3.8-27B: `enable_thinking=False`; Nemotron-Nano-9B-v2: `/no_think`), EOS or 2048 new "
           "tokens, the full GSM8K test set (1,319 problems), flipquant `evaluation.accuracy` (its prompt and scorer), "
           "native 16x64, n16k64-fast, build_V, `--kernel-set auto`; the artifacts and activations of part H's PPL runs. "
-          "Accuracy ± 2 SE (binomial). Truncated: 2048 tokens generated without EOS. Unparseable: no `\\boxed{}` and no "
-          "number in the completion.", "",
+          "Batch 64 for every configuration (amendment 14): the same batches and left padding for a model's 9 "
+          "configurations; greedy outputs depend on the batch size (pilot: `pilot/PILOT.md`), so these are the accuracies "
+          "of greedy decoding at batch 64. Accuracy ± 2 SE (binomial). Truncated: the harness's flag, the 2048-token "
+          "budget used up (generated tokens other than the pad token >= 2048). Unparseable: no `\\boxed{}` and no number "
+          "in the completion.", "",
           "| model | method | format | batch | accuracy (%) | truncated | unparseable | mean / max tokens |",
           "|---|---|---|---:|---:|---:|---:|---|"]
     for key, s in rec["configs"].items():
@@ -315,9 +322,23 @@ def report():
     for k, p in rec["paired"].items():
         md.append(f"| {k} | {100 * p['delta']:+.2f} ± {100 * p['two_se']:.2f}{' *' if p['significant'] else ''} | "
                   f"{p['a_only']} | {p['b_only']} | {p['mcnemar_p']:.3g} |")
-    md += ["", "Checks: " + json.dumps({k: (all(v.values()) if k in ("M1", "M4") else
-                                           all(x["equal"] if k == "M2" else x["equal_to_h"] for x in v.values()))
-                                       for k, v in rec["checks"].items()}), ""]
+    want = {"M1": 18, "M4": 18, "M2": 6, "M3": 6}
+    ok = {k: sum(bool(x) if k in ("M1", "M4") else bool(x["equal"] if k == "M2" else x["equal_to_h"]) for x in v.values())
+          for k, v in rec["checks"].items()}
+    rec["checks_summary"] = {k: dict(passed=ok[k], of=want[k], complete=ok[k] == want[k] == len(rec["checks"][k]))
+                             for k in want}
+    md += ["", "Checks: M1 thinking off (no think markers) {M1}; M2 GPTQ codes_sha256 equal to part H's {M2}; M3 FlipQuant "
+           "map installs equal to part H's {M3}; M4 1,319 problems {M4}.".format(
+               **{k: f"{ok[k]} of {want[k]}" for k in want}), ""]
+    pil = json.loads((OUT / "pilot" / "pilot.json").read_text()) if (OUT / "pilot" / "pilot.json").exists() else {}
+    ident = {m: (r.get("batch_identity") or {}) for m, r in pil.items()}
+    if ident:
+        md += ["## Caption note (amendment 14)", "",
+               "GSM8K: greedy decoding, thinking off, at most 2048 new tokens, batch 64 with the same batches for every "
+               "configuration of a model. Greedy outputs depend on the batch size on both models: in the pilot (RTN "
+               "FourOverSix), " + "; ".join(f"{TITLES[m]}: {g['identical']} of {g['problems']} completions identical "
+                                             f"at batch 16 and batch 1 ({g['answer_differs']} extracted answers differed)"
+                                             for m, g in ident.items() if g) + ".", ""]
     (OUT / "gsm8k.json").write_text(json.dumps(rec, indent=1) + "\n")
     (OUT / "GSM8K.md").write_text("\n".join(md) + "\n")
     print("\n".join(md))

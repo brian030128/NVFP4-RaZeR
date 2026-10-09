@@ -7,6 +7,9 @@ run's batches are the uninterrupted run's batches m, m + 1, ...: the same proble
 decoding does not read the per-batch seed. This script checks that condition from the records alone (CPU only):
 
     python gsm8k_resume_check.py <model> <config> [--batch 64]   ->  prints and writes <out>.resume_check.json
+    python gsm8k_resume_check.py --full [--out JSON]              ->  every finished configuration: its records, in file
+                                                                     order, are the harness's full order (the post-hoc
+                                                                     check of amendment 15)
 
 Every line must parse, no problem may appear twice, and the set of recorded problems must be the order's first
 m x batch entries for some m >= 0.
@@ -30,7 +33,24 @@ def harness_order():
     return order
 
 
+def full(out):
+    """Every configuration with a complete record: 1,319 problems written in the harness's order, no duplicate."""
+    order = harness_order()
+    res = {}
+    for js in sorted(ROOT.glob("*/*.jsonl")):
+        if js.parent.name == "pilot" or not js.with_suffix(".json").exists():
+            continue
+        ids = [json.loads(line)["id"] for line in js.read_text().splitlines() if line.strip()]
+        res[f"{js.parent.name}/{js.stem}"] = dict(records=len(ids), duplicates=len(ids) - len(set(ids)),
+                                                  in_harness_order=ids == order)
+    Path(out).write_text(json.dumps(res, indent=1) + "\n")
+    print(json.dumps(res, indent=1))
+
+
 def main():
+    if "--full" in sys.argv:
+        out = sys.argv[sys.argv.index("--out") + 1] if "--out" in sys.argv else str(ROOT / "order_check.json")
+        return full(out)
     ap = argparse.ArgumentParser()
     ap.add_argument("model")
     ap.add_argument("config")

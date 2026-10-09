@@ -451,3 +451,19 @@ amendment 20), then resume M1 automatically. Keep the protocol's batch identity:
 - **Resume:** after the ablation's timing, `run_gsm8k.py run --batch nemotron-nano-9b-v2:64,qwen3.8-27b:64` (finished
   configurations are skipped by their complete records). Post-hoc check: GPTQ FourOverSix's records, in file order,
   equal the harness's full order (the batches continued the partition).
+
+### Amendment 16 (2026-10-09 16:52 UTC): part M closed as superseded (the user's decision); part N replaces it
+
+The user's decision (relayed 2026-10-09 16:4x UTC): re-measure tab:ptq's GSM8K column with lm-eval's own method, task
+`gsm8k_llama` (part N). Part M (flipquant `evaluation.accuracy`, 0-shot `\boxed{}` prompt) is superseded, not failed; its
+records are kept as they are, finished and partial, and M1 is not completed. It can go in an appendix.
+- **The stop:** the user stopped the M1 driver (1975430) and its job (1984890) at ~16:50 UTC (`kill -TERM`, typed by the
+  user); the coordinator saw no process and an idle GPU at 16:50:53 UTC, this session at 16:51:09 UTC. The queue log has
+  no END line for that job.
+- **State:** 16 of 18 configurations complete -- Nemotron-Nano-9B-v2 9 / 9; Qwen3.8-27B RTN x 3, GPTQ x 3 (GPTQ
+  FourOverSix resumed after amendment 15's pause), Hadamard NVFP4. Qwen3.8-27B Hadamard FourOverSix: partial, 768
+  records = 12 whole batches in the harness's order, no report file. Qwen3.8-27B Hadamard FlipQuant: not run.
+- **Amendment 15's post-hoc check passed:** every complete configuration's records, in file order, are the harness's full
+  order (`results/paper_eval/ptq_gsm8k/order_check.json`); the paused one continued the batch partition.
+- **Archived:** `results/paper_eval/ptq_gsm8k/GSM8K.md` (marked superseded), `gsm8k.json`, the per-problem records of the
+  16 complete configurations (`records/`). They do not feed tab:ptq; part N does.
