@@ -365,7 +365,7 @@ tokens), but `train_focus` records `--seqlen` (default 2048) in its report and l
 makes `--data release` require `--seqlen` equal to the windows' length, and the driver passes `--seqlen 512`; the stopped
 log is kept as `logs/focus_train_qwen3-1.7b_micro8.stopped_seqlen_record.log`. K restarts from its first model.
 
-## Part M (registered 2026-10-09 07:35 UTC): tab:ptq's GSM8K column
+## Part M (registered 2026-10-09 07:29 UTC, commit 352ff6a): tab:ptq's GSM8K column
 
 The user's request (relayed 2026-10-09 07:1x UTC): fill tab:ptq's GSM8K column; independent of the FOCUS upload.
 - **Scope:** the 18 tab:ptq configurations of part H, nothing else (no BF16 or other rows): Nemotron-Nano-9B-v2 and
