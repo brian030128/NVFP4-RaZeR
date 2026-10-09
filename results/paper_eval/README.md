@@ -26,3 +26,20 @@ Notes for the text:
 - Qwen3.8-27B at 1x128: the stock weights-on-B FourOverSix kernel is +11.5 % vs FourOverSix (all 5 rounds), so
   "FlipQuant 8x64 vs FourOverSix (wB)" is −10 % at that shape; FlipQuant 8x64's own kernel is +0.4 % vs FourOverSix.
 - F's NVFP4 rows use per-token NVFP4 scales (the main table's convention (c); amendment 11).
+
+
+## The remaining SM120 tables (parts G-L, 2026-10-08/09; flipquant paper-sm120-runs 46dc5a7)
+
+The co-author's branches map-ablation, ptq-combo, IF4, MIXFP4 and FOCUS merged onto main 120173a and adapted to the
+final settings (release maps; the release 256 x 512 fit set via `calibration_release`, token sha256 checked;
+n16k64 / n16k64-fast; build_V, `--kernel-set auto`). Protocol: `experiments/paper_eval/PROTOCOL.md` parts G-L,
+amendments 12-13.
+
+| part | directory | result |
+|---|---|---|
+| G: tab:ablation | `ablation/` | FlipQuant beats Random and Activation-weighted in all 12 cells and One-shot in 10 of 12 (the two exceptions: 256x64 WikiText-2, not significant); One-shot is far worse than FourOverSix at 8x64 / 16x64 on Nemotron (verified: not a sign error) |
+| H: tab:ptq | `ptq/` | GPTQ (BF16 propagation, the user's decision; check H1: codes identical under NVFP4 / FourOverSix activations) helps NVFP4, but GPTQ + FlipQuant ≈ GPTQ + FourOverSix; Hadamard (block 16, not fused) hurts every format, FlipQuant stays best under it |
+| I: IF4, MixFP4 (Zou) | `mainrows/` | all 6 models; the 4 non-hybrid models bit-identical to main-ppl (per-window NLL and installed weights) |
+| J: GPTQ‡ | `final/` | NVFP4 GPTQ codes with FourOverSix activations, 6 models: 4.6 % loss recovered |
+| K: FOCUS | `final/` | 5 models (Qwen3.8-27B TBD), 8 steps on the release set, deployed natively: 83.3 % over its 10 pairs vs FlipQuant 82.1 / 82.4 / 67.4 % on the same pairs |
+| L: final main-ppl | `final/` | loss recovered (12 pairs): FourOverSix 6.7 %, IF4 13.4 %, MixFP4 (Zou) 9.4 %, GPTQ‡ 4.6 %, FlipQuant 78.9 / 78.2 / 64.7 %; FlipQuant vs NVFP4 significant in 36 / 36 cells, 0 daggers; \|8x64 − 16x64\| max 0.0064; 256x64 keeps 81.1 % (62.7-84.7 % per model) |

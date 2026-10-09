@@ -34,6 +34,7 @@ EXTRA = {"if4": ("mainrows", "if4.json"), "zou": ("mainrows", "zou.json"), "gptq
          "focus": ("focus", "ppl.json")}
 ROWS = ["bf16", "nvfp4", "fo6", "if4", "zou", "gptq", "focus", "fq_8x64", "fq_16x64", "fq_256x64"]
 NAMES = dict(T.NAMES, if4="IF4", zou="MixFP4 (Zou)", gptq="GPTQ‡", focus="FOCUS")
+DDAG = "$^\\ddagger$"
 
 
 def finished(path):
@@ -89,6 +90,22 @@ def main():
         lost = sum(nm[k]["nvfp4"][c] - nm[k]["bf16"][c] for k, c in have)
         rec["loss_recovered"][r] = dict(value=sum(nm[k]["nvfp4"][c] - nm[k][r][c] for k, c in have) / lost,
                                         pairs=len(have))
+    # every row on the pairs FOCUS has (Qwen3.8-27B's FOCUS cell is TBD), for a like-for-like comparison
+    fpairs = [(k, c) for k, c in pairs if "focus" in nm[k]]
+    if fpairs:
+        lost_f = sum(nm[k]["nvfp4"][c] - nm[k]["bf16"][c] for k, c in fpairs)
+        rec["loss_recovered_focus_pairs"] = {r: sum(nm[k]["nvfp4"][c] - nm[k][r][c] for k, c in fpairs) / lost_f
+                                             for r in ROWS if all(r in nm[k] for k, _ in fpairs)}
+        rec["loss_recovered_focus_pairs_n"] = len(fpairs)
+    # FOCUS against FlipQuant, and GPTQ-double-dagger against NVFP4 / FourOverSix, per cell (paired)
+    rec["focus_vs_fq"], rec["gptq_vs"] = {}, {}
+    for k, _, _ in T.MODELS:
+        if "focus" in nll[k]:
+            rec["focus_vs_fq"][k] = {u: {c: T.paired(nll[k]["focus"][c], nll[k][f"fq_{u}"][c]) for c, _ in T.CORPORA}
+                                     for u in T.UNITS}
+        if "gptq" in nll[k]:
+            rec["gptq_vs"][k] = {ref: {c: T.paired(nll[k]["gptq"][c], nll[k][ref][c]) for c, _ in T.CORPORA}
+                                 for ref in ("nvfp4", "fo6")}
     # daggers and FlipQuant vs NVFP4
     rec["daggers"] = {k: {u: {c: not (rec["vs_fo6"][k][f"fq_{u}"][c]["delta"] < 0 and
                                       rec["vs_fo6"][k][f"fq_{u}"][c]["significant"]) for c, _ in T.CORPORA}
@@ -139,8 +156,43 @@ def main():
               v for k in rec["fq_vs_nvfp4_significantly_better"].values() for u in k.values() for v in u.values()))
           + " of 36 cells; daggers (vs FourOverSix): " + str(sum(
               v for k in rec["daggers"].values() for u in k.values() for v in u.values())) + " of 36 cells."]
+    if rec.get("loss_recovered_focus_pairs"):
+        L += ["", f"Loss recovered over the {rec['loss_recovered_focus_pairs_n']} pairs FOCUS has (without Qwen3.8-27B): "
+              + "; ".join(f"{NAMES[r]} {100 * v:.1f} %" for r, v in rec["loss_recovered_focus_pairs"].items()
+                          if r not in ("bf16", "nvfp4")) + "."]
+    if rec["focus_vs_fq"]:
+        L += ["", "FOCUS − FlipQuant, paired ΔNLL x 1e-3 ± 2 SE (negative: FOCUS better; * beyond 2 SE), WikiText-2 / C4:", "",
+              "| model | vs 8x64 | vs 16x64 | vs 256x64 |", "|---|---:|---:|---:|"]
+        for k, d in rec["focus_vs_fq"].items():
+            L.append(f"| {k} | " + " | ".join(" / ".join(
+                f"{1e3 * d[u][c]['delta']:+.2f} ± {1e3 * d[u][c]['two_se']:.2f}{'*' if d[u][c]['significant'] else ''}"
+                for c, _ in T.CORPORA) for u in T.UNITS) + " |")
+    if rec["gptq_vs"]:
+        L += ["", "GPTQ‡ − NVFP4 and GPTQ‡ − FourOverSix, paired ΔNLL x 1e-3 ± 2 SE, WikiText-2 / C4:", "",
+              "| model | vs NVFP4 | vs FourOverSix |", "|---|---:|---:|"]
+        for k, d in rec["gptq_vs"].items():
+            L.append(f"| {k} | " + " | ".join(" / ".join(
+                f"{1e3 * d[r][c]['delta']:+.2f} ± {1e3 * d[r][c]['two_se']:.2f}{'*' if d[r][c]['significant'] else ''}"
+                for c, _ in T.CORPORA) for r in ("nvfp4", "fo6")) + " |")
     if rec["missing"]:
         L += ["", "Missing (TBD): " + ", ".join(rec["missing"]) + "."]
+    # LaTeX: one row per method, WikiText-2 / C4 PPL per model, the loss recovered; daggers on FlipQuant cells
+    tex = ["% table main-ppl (final): WikiText-2 / C4 PPL; loss recovered over the 12 model-corpus pairs (FOCUS: the 10 "
+           "it has, Qwen3.8-27B TBD); \\dag: FlipQuant not significantly better than FourOverSix",
+           "Method & " + " & ".join(t for _, _, t in T.MODELS) + " & Loss rec. \\\\"]
+    for r in ROWS:
+        cells = []
+        for k, _, _ in T.MODELS:
+            if r not in rec["ppl"][k]:
+                cells.append("TBD")
+                continue
+            dag = "$^\\dag$" if r.startswith("fq_") and any(rec["daggers"][k][r[3:]][c] for c, _ in T.CORPORA) else ""
+            cells.append(" / ".join(f"{rec['ppl'][k][r][c]:.2f}" for c, _ in T.CORPORA) + dag)
+        lr = rec["loss_recovered"].get(r)
+        lrs = "--" if lr is None else f"{100 * lr['value']:.1f}\\%" + ("" if lr["pairs"] == 12 else "$^{*}$")
+        label = NAMES[r].replace("‡", DDAG)
+        tex.append(f"{label} & " + " & ".join(cells) + f" & {lrs} \\\\")
+    (OUT / "table_main_ppl_final.tex").write_text("\n".join(tex) + "\n")
     (OUT / "final.json").write_text(json.dumps(rec, indent=1) + "\n")
     (OUT / "FINAL.md").write_text("\n".join(L) + "\n")
     print("\n".join(L))
