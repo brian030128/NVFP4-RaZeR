@@ -2258,3 +2258,17 @@ are in `results/kernel_opt/ktile_ablation/registration.json`.
 - **Checks before registration (no timing):** per-MMA output == per-K-tile output bitwise (real, all-E2M1, all-E0M3,
   random 30 % tags, both units); the static SASS census (per-MMA: 64 OMMAs per k-iteration, all predicated, against 32).
 - **Method:** C2U / M1 (CUPTI, cold weights, isolated and back-to-back, 3 rotated rounds), after GSM8K M1 is paused.
+
+### Amendment 20: the run
+
+The timing ran on 2026-10-09 at 13:22 UTC on the idle GPU (registration 4ec02b9, 12:42 UTC), with paper-eval's GSM8K M1
+paused (paper-eval amendment 15) and resumed right after.
+- **Deviation 1:** the first timing run stopped at the registered count check (isolated, round 0, FP8: 60 kernels
+  profiled, 30 expected): its FP8 filter also counted the read-flush's memset. Every configuration now counts only the
+  GEMM kernel by name, as the NVFP4 configurations already did; the run restarted from the beginning
+  (`ktile_ablation/time_run1_stopped.json`).
+- **Checks:** every bitwise check equal (before registration and on the timed operands); the SASS gates passed.
+- **Results (isolated, real tags):** per-MMA branch 768 / 740 TFLOP/s (16x64 / 8x64), +49.5 / +55.1 % against
+  `stock_ko` (1148); per-K-tile 1127 / 1074, +1.8 / +6.9 %; per-K-tile 1.47x / 1.45x faster than the per-MMA branch
+  (b2b: 1.58x / 1.57x); cuBLAS FP8 575 TFLOP/s. Static census: per-MMA 64 predicated OMMAs per k-iteration against 32
+  (2x tensor issues). Report: `results/kernel_opt/ktile_ablation/REPORT.md`.

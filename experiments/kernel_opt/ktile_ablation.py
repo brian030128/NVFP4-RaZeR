@@ -309,17 +309,10 @@ def timing(args):
         return c
 
     def kernel_us(prof, nm):
-        out = []
-        for e in prof.events():
-            if e.device_type.name != 'CUDA':
-                continue
-            if nm == 'fp8':
-                if 'reduce' in e.name.lower() or 'memcpy' in e.name.lower() or 'copy' in e.name.lower():
-                    continue
-                out.append(e.device_time_total)
-            elif G.classify(e.name) == 'gemm':
-                out.append(e.device_time_total)
-        return out
+        # every configuration: the GEMM kernel only (bench_gemm_isolated.classify: a name with 'cutlass', 'device_kernel'
+        # or 'gemm' -- the cuBLAS FP8 kernel is sm89_xmma_gemm_...); not the flush's reduce kernel or its memset
+        # (deviation 1: the first run also counted the memset for fp8 and stopped at the count check)
+        return [e.device_time_total for e in prof.events() if e.device_type.name == 'CUDA' and G.classify(e.name) == 'gemm']
 
     for mode in ('isolated', 'b2b'):
         per = {nm: [] for nm in names}
@@ -445,8 +438,8 @@ def plot(out, path):
     ax.set_xticklabels([f'{g} format unit' for g, _ in groups])
     ax.set_ylabel('TFLOP/s (4096³, isolated, CUPTI)')
     ax.set_title('RTX PRO 6000: per-MMA branch vs per-K-tile dispatch (real tags)', fontsize=9)
-    ax.legend(fontsize=7, ncol=2, loc='lower right')
-    ax.set_ylim(0, max(m[k]['tflops'] for k in m) * 1.15)
+    ax.legend(fontsize=7, ncol=4, loc='upper center', frameon=False)
+    ax.set_ylim(0, max(m[k]['tflops'] for k in m) * 1.25)
     fig.tight_layout()
     fig.savefig(path, dpi=200)
 
