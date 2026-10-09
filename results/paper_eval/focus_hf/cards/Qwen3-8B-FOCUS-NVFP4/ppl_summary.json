@@ -1,0 +1,144 @@
+{
+ "model": "Qwen/Qwen3-8B",
+ "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+ "model_key": "qwen3-8b",
+ "method": "FOCUS (arXiv:2608.01847), our reproduction; not an official release by the FOCUS authors",
+ "evaluation": {
+  "mode": "native sm_120 kernels; FOCUS deployed as standard NVFP4 codes",
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "quantized_modules": 252,
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "corpora": {
+   "wiki": {
+    "dataset": "Salesforce/wikitext, wikitext-2-raw-v1, test split",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "total_tokens": 299078,
+    "used_tokens": 299008,
+    "windows": 146,
+    "window_tokens": 2048
+   },
+   "c4": {
+    "dataset": "allenai/c4, validation shard en/c4-validation.00000-of-00008.json.gz",
+    "revision": "1588ec454efa1a09f29cd18ddd04fe05fc8653a2",
+    "path": "en/c4-validation.00000-of-00008.json.gz",
+    "seed": 0,
+    "windows": 256,
+    "window_tokens": 2048
+   }
+  },
+  "c4_documents": "the documents are drawn with the recorded seed from the listed shard",
+  "rows": {
+   "bf16": "the unquantized model",
+   "nvfp4": "round-to-nearest NVFP4 weights, NVFP4 activations with one scale per token",
+   "fo6": "round-to-nearest FourOverSix weights, per-token FourOverSix activations",
+   "focus": "this state deployed as NVFP4 codes, per-token FourOverSix activations"
+  }
+ },
+ "ppl": {
+  "bf16": {
+   "wiki": 9.725121920178488,
+   "c4": 13.300391920375732
+  },
+  "nvfp4": {
+   "wiki": 10.048446283399334,
+   "c4": 13.770452086112247
+  },
+  "fo6": {
+   "wiki": 10.007051200773041,
+   "c4": 13.75748502886575
+  },
+  "focus": {
+   "wiki": 9.568721788679085,
+   "c4": 13.571466589822089
+  }
+ },
+ "paired_vs_fourover6": {
+  "bf16": {
+   "wiki": {
+    "delta_nll": -0.028577538385783155,
+    "two_se": 0.003176237733880967,
+    "n": 146,
+    "significant": true,
+    "verdict": "better"
+   },
+   "c4": {
+    "delta_nll": -0.033789539244025946,
+    "two_se": 0.00284281534132134,
+    "n": 256,
+    "significant": true,
+    "verdict": "better"
+   }
+  },
+  "nvfp4": {
+   "wiki": {
+    "delta_nll": 0.004128059295758809,
+    "two_se": 0.00263811329187439,
+    "n": 146,
+    "significant": true,
+    "verdict": "worse"
+   },
+   "c4": {
+    "delta_nll": 0.0009421017020940781,
+    "two_se": 0.0017752431106191845,
+    "n": 256,
+    "significant": false,
+    "verdict": "inconclusive"
+   }
+  },
+  "focus": {
+   "wiki": {
+    "delta_nll": -0.04479033244799261,
+    "two_se": 0.003462015387698774,
+    "n": 146,
+    "significant": true,
+    "verdict": "better"
+   },
+   "c4": {
+    "delta_nll": -0.013613497838377953,
+    "two_se": 0.002522478139468993,
+    "n": 256,
+    "significant": true,
+    "verdict": "better"
+   }
+  }
+ },
+ "state": {
+  "focus.pt": {
+   "sha256": "e4689e64c66fe50afa6022485604efc01c5bf21e369ab54dbc4f7775f4a1b7ae",
+   "bytes": 5209511899,
+   "modules": 252,
+   "block_factors_m": 434110464,
+   "subblock_logits_q": 868220928,
+   "tensor_scales_s2": 252,
+   "dtype": "float32"
+  }
+ },
+ "calibration": {
+  "model": "qwen3-8b",
+  "num_sub": 2,
+  "init_q": 6.0,
+  "act": "fourover6",
+  "act_scope": "row",
+  "data": "release",
+  "seqlen": 512,
+  "windows": 256,
+  "epochs": 1,
+  "batch": 32,
+  "lr_scale": 0.005,
+  "lr_sub": 0.001,
+  "topk": 1000,
+  "seed": 42,
+  "steps": 8,
+  "micro_batch": 8,
+  "data_description": "the FlipQuant release fit set: 256 windows of 512 tokens of math and code text (OpenWebMath, CodeParrot-clean)",
+  "data_tokens": 131072,
+  "optimizer": "AdamW (0.9, 0.999), weight decay 0, constant LR",
+  "teacher": "the unquantized BF16 model",
+  "training_seconds": 235.77717185020447,
+  "end_to_end_seconds": 246.26458883285522,
+  "gpu_peak_allocated_gib": 52.61808967590332,
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+ }
+}

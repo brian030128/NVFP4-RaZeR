@@ -1,0 +1,826 @@
+{
+ "namespace": "edgeai-lab",
+ "staged_utc": "2026-10-09T07:22:48+00:00",
+ "licenses_fetched": {
+  "phi4": {
+   "source": "microsoft/phi-4@2db69c1c3e91a05d2c64a3185acfbaf36f744e25: LICENSE",
+   "retrieved": "2026-10-09 07:22 UTC",
+   "sha256": "fa8235e5b48faca34e3ca98cf4f694ef08bd216d28b58071a1f85b1d50cb814d"
+  },
+  "mistral": {
+   "source": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+   "retrieved": "2026-10-09 07:22 UTC",
+   "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  }
+ },
+ "repos": {
+  "edgeai-lab/Qwen3-1.7B-FOCUS-NVFP4": {
+   "model": "qwen3-1.7b",
+   "base_model": "Qwen/Qwen3-1.7B",
+   "revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+   "state": {
+    "source": "/home/dev/n16k64_campaign/paper_eval/focus/qwen3-1.7b/state/focus.pt",
+    "sha256_source": "5fa877acad86e7b9f64a39936717f8032cab0696d0e657b0525010b4f06a4945",
+    "sha256_staged": "5fa877acad86e7b9f64a39936717f8032cab0696d0e657b0525010b4f06a4945",
+    "identical": true,
+    "metadata_changes": [],
+    "modules": 196,
+    "block_factors_m": 88080384,
+    "subblock_logits_q": 176160768,
+    "tensor_scales_s2": 196,
+    "dtypes": [
+     "torch.float32"
+    ],
+    "first_layer": "model.layers.0.self_attn.q_proj",
+    "archive_records": 594,
+    "archive_prefix": [
+     "focus"
+    ],
+    "metadata_strings_scanned": 820,
+    "config": {
+     "model": "qwen3-1.7b",
+     "num_sub": 2,
+     "init_q": 6.0,
+     "act": "fourover6",
+     "act_scope": "row",
+     "data": "release",
+     "seqlen": 512,
+     "windows": 256,
+     "epochs": 1,
+     "batch": 32,
+     "lr_scale": 0.005,
+     "lr_sub": 0.001,
+     "topk": 1000,
+     "seed": 42
+    },
+    "source_meta": {
+     "hf_id": "Qwen/Qwen3-1.7B",
+     "revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    }
+   },
+   "license_files": {
+    "LICENSE": {
+     "source": "/home/dev/flipquant_hf/Qwen3-1.7B-FlipQuant/LICENSE",
+     "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e"
+    }
+   },
+   "files": {
+    "LICENSE": {
+     "bytes": 11343,
+     "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e"
+    },
+    "README.md": {
+     "bytes": 7112,
+     "sha256": "3961ca38a27354bb3e7d7e82bf969788bb30c4604509750e105b532e9f854431"
+    },
+    "focus.pt": {
+     "bytes": 1057104195,
+     "sha256": "5fa877acad86e7b9f64a39936717f8032cab0696d0e657b0525010b4f06a4945"
+    },
+    "ppl_summary.json": {
+     "bytes": 3865,
+     "sha256": "ec585b2d65572e918eb36d08e7c7d78bc3f0d1bb191e70ca20caf6e917e8b245"
+    }
+   },
+   "scan": [],
+   "ppl": {
+    "bf16": {
+     "wiki": 16.71621165948511,
+     "c4": 19.24625666806624
+    },
+    "nvfp4": {
+     "wiki": 18.87128643892733,
+     "c4": 21.034857058494364
+    },
+    "fo6": {
+     "wiki": 19.474500584649626,
+     "c4": 20.907220172425195
+    },
+    "focus": {
+     "wiki": 15.089030810659773,
+     "c4": 19.534543006324316
+    }
+   },
+   "paired_vs_fourover6": {
+    "bf16": {
+     "wiki": {
+      "delta_nll": -0.15272694091274314,
+      "two_se": 0.01115524699847736,
+      "n": 146,
+      "significant": true,
+      "verdict": "better"
+     },
+     "c4": {
+      "delta_nll": -0.08277797908522189,
+      "two_se": 0.004172861440563035,
+      "n": 256,
+      "significant": true,
+      "verdict": "better"
+     }
+    },
+    "nvfp4": {
+     "wiki": {
+      "delta_nll": -0.03146441668680269,
+      "two_se": 0.011154448813855704,
+      "n": 146,
+      "significant": true,
+      "verdict": "better"
+     },
+     "c4": {
+      "delta_nll": 0.006086359499022365,
+      "two_se": 0.002798568750399133,
+      "n": 256,
+      "significant": true,
+      "verdict": "worse"
+     }
+    },
+    "focus": {
+     "wiki": {
+      "delta_nll": -0.255137904049599,
+      "two_se": 0.01446883614554765,
+      "n": 146,
+      "significant": true,
+      "verdict": "better"
+     },
+     "c4": {
+      "delta_nll": -0.06791022745892406,
+      "two_se": 0.004330089440477971,
+      "n": 256,
+      "significant": true,
+      "verdict": "better"
+     }
+    }
+   },
+   "calibration_cost": {
+    "steps": 8,
+    "micro_batch": 8,
+    "training_seconds": 49.55437898635864,
+    "end_to_end_seconds": 55.442931175231934,
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "gpu_peak_allocated_gib": 15.927301406860352,
+    "parameters": {
+     "modules": 196,
+     "crs": 88080384,
+     "dgs": 176160768
+    },
+    "checkpointed_layers": 28,
+    "data_windows": 256,
+    "data_tokens": 131072,
+    "kl_top_first_last": [
+     0.169237919151783,
+     0.13903691247105598
+    ]
+   }
+  },
+  "edgeai-lab/Qwen3-8B-FOCUS-NVFP4": {
+   "model": "qwen3-8b",
+   "base_model": "Qwen/Qwen3-8B",
+   "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+   "state": {
+    "source": "/home/dev/n16k64_campaign/paper_eval/focus/qwen3-8b/state/focus.pt",
+    "sha256_source": "e4689e64c66fe50afa6022485604efc01c5bf21e369ab54dbc4f7775f4a1b7ae",
+    "sha256_staged": "e4689e64c66fe50afa6022485604efc01c5bf21e369ab54dbc4f7775f4a1b7ae",
+    "identical": true,
+    "metadata_changes": [],
+    "modules": 252,
+    "block_factors_m": 434110464,
+    "subblock_logits_q": 868220928,
+    "tensor_scales_s2": 252,
+    "dtypes": [
+     "torch.float32"
+    ],
+    "first_layer": "model.layers.0.self_attn.q_proj",
+    "archive_records": 762,
+    "archive_prefix": [
+     "focus"
+    ],
+    "metadata_strings_scanned": 1044,
+    "config": {
+     "model": "qwen3-8b",
+     "num_sub": 2,
+     "init_q": 6.0,
+     "act": "fourover6",
+     "act_scope": "row",
+     "data": "release",
+     "seqlen": 512,
+     "windows": 256,
+     "epochs": 1,
+     "batch": 32,
+     "lr_scale": 0.005,
+     "lr_sub": 0.001,
+     "topk": 1000,
+     "seed": 42
+    },
+    "source_meta": {
+     "hf_id": "Qwen/Qwen3-8B",
+     "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    }
+   },
+   "license_files": {
+    "LICENSE": {
+     "source": "/home/dev/flipquant_hf/Qwen3-8B-FlipQuant/LICENSE",
+     "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e"
+    }
+   },
+   "files": {
+    "LICENSE": {
+     "bytes": 11343,
+     "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e"
+    },
+    "README.md": {
+     "bytes": 7111,
+     "sha256": "3b1cd2f265ff13a51114ebd0f5cece9d2375549fa07282f1bf2afbeed4b190a9"
+    },
+    "focus.pt": {
+     "bytes": 5209511899,
+     "sha256": "e4689e64c66fe50afa6022485604efc01c5bf21e369ab54dbc4f7775f4a1b7ae"
+    },
+    "ppl_summary.json": {
+     "bytes": 3874,
+     "sha256": "b048f42b266ec5ee4e84b9a52ec225c2011a24ebd22f60a40dc49bd5c430f98e"
+    }
+   },
+   "scan": [],
+   "ppl": {
+    "bf16": {
+     "wiki": 9.725121920178488,
+     "c4": 13.300391920375732
+    },
+    "nvfp4": {
+     "wiki": 10.048446283399334,
+     "c4": 13.770452086112247
+    },
+    "fo6": {
+     "wiki": 10.007051200773041,
+     "c4": 13.75748502886575
+    },
+    "focus": {
+     "wiki": 9.568721788679085,
+     "c4": 13.571466589822089
+    }
+   },
+   "paired_vs_fourover6": {
+    "bf16": {
+     "wiki": {
+      "delta_nll": -0.028577538385783155,
+      "two_se": 0.003176237733880967,
+      "n": 146,
+      "significant": true,
+      "verdict": "better"
+     },
+     "c4": {
+      "delta_nll": -0.033789539244025946,
+      "two_se": 0.00284281534132134,
+      "n": 256,
+      "significant": true,
+      "verdict": "better"
+     }
+    },
+    "nvfp4": {
+     "wiki": {
+      "delta_nll": 0.004128059295758809,
+      "two_se": 0.00263811329187439,
+      "n": 146,
+      "significant": true,
+      "verdict": "worse"
+     },
+     "c4": {
+      "delta_nll": 0.0009421017020940781,
+      "two_se": 0.0017752431106191845,
+      "n": 256,
+      "significant": false,
+      "verdict": "inconclusive"
+     }
+    },
+    "focus": {
+     "wiki": {
+      "delta_nll": -0.04479033244799261,
+      "two_se": 0.003462015387698774,
+      "n": 146,
+      "significant": true,
+      "verdict": "better"
+     },
+     "c4": {
+      "delta_nll": -0.013613497838377953,
+      "two_se": 0.002522478139468993,
+      "n": 256,
+      "significant": true,
+      "verdict": "better"
+     }
+    }
+   },
+   "calibration_cost": {
+    "steps": 8,
+    "micro_batch": 8,
+    "training_seconds": 235.77717185020447,
+    "end_to_end_seconds": 246.26458883285522,
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "gpu_peak_allocated_gib": 52.61808967590332,
+    "parameters": {
+     "modules": 252,
+     "crs": 434110464,
+     "dgs": 868220928
+    },
+    "checkpointed_layers": 36,
+    "data_windows": 256,
+    "data_tokens": 131072,
+    "kl_top_first_last": [
+     0.09861475322395563,
+     0.08559290319681168
+    ]
+   }
+  },
+  "edgeai-lab/Mistral-7B-Instruct-v0.3-FOCUS-NVFP4": {
+   "model": "mistral-7b",
+   "base_model": "mistralai/Mistral-7B-Instruct-v0.3",
+   "revision": "c170c708c41dac9275d15a8fff4eca08d52bab71",
+   "state": {
+    "source": "/home/dev/n16k64_campaign/paper_eval/focus/mistral-7b/state/focus.pt",
+    "sha256_source": "7963825abb5a23c9d38082c76063d477ee249f5b652f0e3edb5393d1dea376aa",
+    "sha256_staged": "7963825abb5a23c9d38082c76063d477ee249f5b652f0e3edb5393d1dea376aa",
+    "identical": true,
+    "metadata_changes": [],
+    "modules": 224,
+    "block_factors_m": 436207616,
+    "subblock_logits_q": 872415232,
+    "tensor_scales_s2": 224,
+    "dtypes": [
+     "torch.float32"
+    ],
+    "first_layer": "model.layers.0.self_attn.q_proj",
+    "archive_records": 678,
+    "archive_prefix": [
+     "focus"
+    ],
+    "metadata_strings_scanned": 932,
+    "config": {
+     "model": "mistral-7b",
+     "num_sub": 2,
+     "init_q": 6.0,
+     "act": "fourover6",
+     "act_scope": "row",
+     "data": "release",
+     "seqlen": 512,
+     "windows": 256,
+     "epochs": 1,
+     "batch": 32,
+     "lr_scale": 0.005,
+     "lr_sub": 0.001,
+     "topk": 1000,
+     "seed": 42
+    },
+    "source_meta": {
+     "hf_id": "mistralai/Mistral-7B-Instruct-v0.3",
+     "revision": "c170c708c41dac9275d15a8fff4eca08d52bab71",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    }
+   },
+   "license_files": {
+    "LICENSE": {
+     "source": "/home/dev/focus_hf_licenses/mistral/LICENSE",
+     "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    }
+   },
+   "files": {
+    "LICENSE": {
+     "bytes": 11358,
+     "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    "README.md": {
+     "bytes": 7094,
+     "sha256": "d55702cca7253fb744dbb0ccb54c4bda47ea8fe543b5a1c0ab1b60587a8105aa"
+    },
+    "focus.pt": {
+     "bytes": 5234657055,
+     "sha256": "7963825abb5a23c9d38082c76063d477ee249f5b652f0e3edb5393d1dea376aa"
+    },
+    "ppl_summary.json": {
+     "bytes": 3891,
+     "sha256": "1474ba91417cfccea8ebfaf5e20aaa53ec251a7baf38925f4c74091ae65f4308"
+    }
+   },
+   "scan": [],
+   "ppl": {
+    "bf16": {
+     "wiki": 5.496113314784826,
+     "c4": 8.135140348359002
+    },
+    "nvfp4": {
+     "wiki": 5.730362782072144,
+     "c4": 8.415552255107725
+    },
+    "fo6": {
+     "wiki": 5.708273815402617,
+     "c4": 8.398695949874403
+    },
+    "focus": {
+     "wiki": 5.678413111746167,
+     "c4": 8.340756989661074
+    }
+   },
+   "paired_vs_fourover6": {
+    "bf16": {
+     "wiki": {
+      "delta_nll": -0.037875496536676136,
+      "two_se": 0.0015128359247604587,
+      "n": 163,
+      "significant": true,
+      "verdict": "better"
+     },
+     "c4": {
+      "delta_nll": -0.031883456802461296,
+      "two_se": 0.0017445927396491363,
+      "n": 256,
+      "significant": true,
+      "verdict": "better"
+     }
+    },
+    "nvfp4": {
+     "wiki": {
+      "delta_nll": 0.0038621725480249324,
+      "two_se": 0.0011586930781823344,
+      "n": 163,
+      "significant": true,
+      "verdict": "worse"
+     },
+     "c4": {
+      "delta_nll": 0.002005003218073398,
+      "two_se": 0.0011828629887690575,
+      "n": 256,
+      "significant": true,
+      "verdict": "worse"
+     }
+    },
+    "focus": {
+     "wiki": {
+      "delta_nll": -0.0052448569631284,
+      "two_se": 0.0016993631224864155,
+      "n": 163,
+      "significant": true,
+      "verdict": "better"
+     },
+     "c4": {
+      "delta_nll": -0.006922471337020397,
+      "two_se": 0.0015164196310049733,
+      "n": 256,
+      "significant": true,
+      "verdict": "better"
+     }
+    }
+   },
+   "calibration_cost": {
+    "steps": 8,
+    "micro_batch": 8,
+    "training_seconds": 230.2218849658966,
+    "end_to_end_seconds": 239.86382722854614,
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "gpu_peak_allocated_gib": 48.67596435546875,
+    "parameters": {
+     "modules": 224,
+     "crs": 436207616,
+     "dgs": 872415232
+    },
+    "checkpointed_layers": 32,
+    "data_windows": 256,
+    "data_tokens": 131072,
+    "kl_top_first_last": [
+     0.053240491077303886,
+     0.046287328004837036
+    ]
+   }
+  },
+  "edgeai-lab/NVIDIA-Nemotron-Nano-9B-v2-FOCUS-NVFP4": {
+   "model": "nemotron-nano-9b-v2",
+   "base_model": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+   "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+   "state": {
+    "source": "/home/dev/n16k64_campaign/paper_eval/focus/nemotron-nano-9b-v2/state/focus.pt",
+    "sha256_source": "cb772e159dd8d6a5fb72f3ab63c14bb58a481db39bfa4aca48ca0600bd510c3f",
+    "sha256_staged": "cb772e159dd8d6a5fb72f3ab63c14bb58a481db39bfa4aca48ca0600bd510c3f",
+    "identical": true,
+    "metadata_changes": [],
+    "modules": 120,
+    "block_factors_m": 481976320,
+    "subblock_logits_q": 963952640,
+    "tensor_scales_s2": 120,
+    "dtypes": [
+     "torch.float32"
+    ],
+    "first_layer": "model.layers.0.mixer.in_proj",
+    "archive_records": 366,
+    "archive_prefix": [
+     "focus"
+    ],
+    "metadata_strings_scanned": 516,
+    "config": {
+     "model": "nemotron-nano-9b-v2",
+     "num_sub": 2,
+     "init_q": 6.0,
+     "act": "fourover6",
+     "act_scope": "row",
+     "data": "release",
+     "seqlen": 512,
+     "windows": 256,
+     "epochs": 1,
+     "batch": 32,
+     "lr_scale": 0.005,
+     "lr_sub": 0.001,
+     "topk": 1000,
+     "seed": 42
+    },
+    "source_meta": {
+     "hf_id": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+     "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    }
+   },
+   "license_files": {
+    "LICENSE": {
+     "source": "/home/dev/flipquant_hf/NVIDIA-Nemotron-Nano-9B-v2-FlipQuant/LICENSE",
+     "sha256": "8cf5f9a673059fc727c03fae31c0d6e365bbf4ef1b7fd9b3099fefe1b49fdda1"
+    },
+    "NOTICE": {
+     "source": "/home/dev/flipquant_hf/NVIDIA-Nemotron-Nano-9B-v2-FlipQuant/NOTICE",
+     "sha256": "5fc60716a9ba57f3792e71ed776b4065671c64d0c2db716698f4d646ad833eb1"
+    }
+   },
+   "files": {
+    "LICENSE": {
+     "bytes": 10254,
+     "sha256": "8cf5f9a673059fc727c03fae31c0d6e365bbf4ef1b7fd9b3099fefe1b49fdda1"
+    },
+    "NOTICE": {
+     "bytes": 67,
+     "sha256": "5fc60716a9ba57f3792e71ed776b4065671c64d0c2db716698f4d646ad833eb1"
+    },
+    "README.md": {
+     "bytes": 7802,
+     "sha256": "70864504ac0d12ec750c21bd7c7a3a25fc9a1700f5aece10a1c15495d6b7f95c"
+    },
+    "focus.pt": {
+     "bytes": 5783806155,
+     "sha256": "cb772e159dd8d6a5fb72f3ab63c14bb58a481db39bfa4aca48ca0600bd510c3f"
+    },
+    "ppl_summary.json": {
+     "bytes": 3911,
+     "sha256": "ff5702fc4950b6d26a2665be78f4c468a77a159a69509a87de05cf8c47b2fb26"
+    }
+   },
+   "scan": [],
+   "ppl": {
+    "bf16": {
+     "wiki": 8.086256731263783,
+     "c4": 11.152774595866308
+    },
+    "nvfp4": {
+     "wiki": 8.453483871445108,
+     "c4": 11.543722787140462
+    },
+    "fo6": {
+     "wiki": 8.425979560250349,
+     "c4": 11.50341028180243
+    },
+    "focus": {
+     "wiki": 8.368471027621329,
+     "c4": 11.473397026378935
+    }
+   },
+   "paired_vs_fourover6": {
+    "bf16": {
+     "wiki": {
+      "delta_nll": -0.041153816949753536,
+      "two_se": 0.0016421991432052777,
+      "n": 147,
+      "significant": true,
+      "verdict": "better"
+     },
+     "c4": {
+      "delta_nll": -0.03095522802323103,
+      "two_se": 0.0013415231817701843,
+      "n": 256,
+      "significant": true,
+      "verdict": "better"
+     }
+    },
+    "nvfp4": {
+     "wiki": {
+      "delta_nll": 0.003258911119837339,
+      "two_se": 0.0015136504937621152,
+      "n": 147,
+      "significant": true,
+      "verdict": "worse"
+     },
+     "c4": {
+      "delta_nll": 0.0034982699435204268,
+      "two_se": 0.0009995637110178197,
+      "n": 256,
+      "significant": true,
+      "verdict": "worse"
+     }
+    },
+    "focus": {
+     "wiki": {
+      "delta_nll": -0.00684854286868556,
+      "two_se": 0.0015798143730220958,
+      "n": 147,
+      "significant": true,
+      "verdict": "better"
+     },
+     "c4": {
+      "delta_nll": -0.0026124841533601284,
+      "two_se": 0.0010676769882698486,
+      "n": 256,
+      "significant": true,
+      "verdict": "better"
+     }
+    }
+   },
+   "calibration_cost": {
+    "steps": 8,
+    "micro_batch": 8,
+    "training_seconds": 294.6340992450714,
+    "end_to_end_seconds": 307.2175645828247,
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "gpu_peak_allocated_gib": 53.94291877746582,
+    "parameters": {
+     "modules": 120,
+     "crs": 481976320,
+     "dgs": 963952640
+    },
+    "checkpointed_layers": 56,
+    "data_windows": 256,
+    "data_tokens": 131072,
+    "kl_top_first_last": [
+     0.03710154723376036,
+     0.03536424273625016
+    ]
+   }
+  },
+  "edgeai-lab/phi-4-FOCUS-NVFP4": {
+   "model": "phi4-14b",
+   "base_model": "microsoft/phi-4",
+   "revision": "2db69c1c3e91a05d2c64a3185acfbaf36f744e25",
+   "state": {
+    "source": "/home/dev/n16k64_campaign/paper_eval/focus/phi4-14b/state/focus.pt",
+    "sha256_source": "be66f52576587c0c71473e19c378bb71b2a48d89802ffa0d3e24c1c4690cd38f",
+    "sha256_staged": "be66f52576587c0c71473e19c378bb71b2a48d89802ffa0d3e24c1c4690cd38f",
+    "identical": true,
+    "metadata_changes": [],
+    "modules": 160,
+    "block_factors_m": 851968000,
+    "subblock_logits_q": 1703936000,
+    "tensor_scales_s2": 160,
+    "dtypes": [
+     "torch.float32"
+    ],
+    "first_layer": "model.layers.0.self_attn.o_proj",
+    "archive_records": 486,
+    "archive_prefix": [
+     "focus"
+    ],
+    "metadata_strings_scanned": 676,
+    "config": {
+     "model": "phi4-14b",
+     "num_sub": 2,
+     "init_q": 6.0,
+     "act": "fourover6",
+     "act_scope": "row",
+     "data": "release",
+     "seqlen": 512,
+     "windows": 256,
+     "epochs": 1,
+     "batch": 32,
+     "lr_scale": 0.005,
+     "lr_sub": 0.001,
+     "topk": 1000,
+     "seed": 42
+    },
+    "source_meta": {
+     "hf_id": "microsoft/phi-4",
+     "revision": "2db69c1c3e91a05d2c64a3185acfbaf36f744e25",
+     "transformers": "5.16.1",
+     "torch": "2.9.0+cu128"
+    }
+   },
+   "license_files": {
+    "LICENSE": {
+     "source": "/home/dev/focus_hf_licenses/phi4/LICENSE",
+     "sha256": "fa8235e5b48faca34e3ca98cf4f694ef08bd216d28b58071a1f85b1d50cb814d"
+    }
+   },
+   "files": {
+    "LICENSE": {
+     "bytes": 1084,
+     "sha256": "fa8235e5b48faca34e3ca98cf4f694ef08bd216d28b58071a1f85b1d50cb814d"
+    },
+    "README.md": {
+     "bytes": 6961,
+     "sha256": "3fac711e59e6ffcd21bde943533619ba61da8d6226f222328ab646c177db55b6"
+    },
+    "focus.pt": {
+     "bytes": 10223745627,
+     "sha256": "be66f52576587c0c71473e19c378bb71b2a48d89802ffa0d3e24c1c4690cd38f"
+    },
+    "ppl_summary.json": {
+     "bytes": 3872,
+     "sha256": "a6736001dbfc49b613c5b38d9caf1c9b0cefb94db3dbf33934a5230f9a6fba0a"
+    }
+   },
+   "scan": [],
+   "ppl": {
+    "bf16": {
+     "wiki": 6.46151240363403,
+     "c4": 10.3098094444712
+    },
+    "nvfp4": {
+     "wiki": 6.693378021361507,
+     "c4": 10.579515761380442
+    },
+    "fo6": {
+     "wiki": 6.661734651161868,
+     "c4": 10.544115699896242
+    },
+    "focus": {
+     "wiki": 6.627923774046377,
+     "c4": 10.523442319863571
+    }
+   },
+   "paired_vs_fourover6": {
+    "bf16": {
+     "wiki": {
+      "delta_nll": -0.03051650016865832,
+      "two_se": 0.002170510242467142,
+      "n": 141,
+      "significant": true,
+      "verdict": "better"
+     },
+     "c4": {
+      "delta_nll": -0.022472135489806533,
+      "two_se": 0.0013891787909336083,
+      "n": 256,
+      "significant": true,
+      "verdict": "better"
+     }
+    },
+    "nvfp4": {
+     "wiki": {
+      "delta_nll": 0.0047387738599844855,
+      "two_se": 0.0017711807679653669,
+      "n": 141,
+      "significant": true,
+      "verdict": "worse"
+     },
+     "c4": {
+      "delta_nll": 0.0033517053816467524,
+      "two_se": 0.0010720649987827958,
+      "n": 256,
+      "significant": true,
+      "verdict": "worse"
+     }
+    },
+    "focus": {
+     "wiki": {
+      "delta_nll": -0.005088309869698599,
+      "two_se": 0.0017500264389263096,
+      "n": 141,
+      "significant": true,
+      "verdict": "better"
+     },
+     "c4": {
+      "delta_nll": -0.0019625802524387836,
+      "two_se": 0.0012250012354882713,
+      "n": 256,
+      "significant": true,
+      "verdict": "better"
+     }
+    }
+   },
+   "calibration_cost": {
+    "steps": 8,
+    "micro_batch": 8,
+    "training_seconds": 413.3219664096832,
+    "end_to_end_seconds": 431.1342067718506,
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "gpu_peak_allocated_gib": 91.04260444641113,
+    "parameters": {
+     "modules": 160,
+     "crs": 851968000,
+     "dgs": 1703936000
+    },
+    "checkpointed_layers": 40,
+    "data_windows": 256,
+    "data_tokens": 131072,
+    "kl_top_first_last": [
+     0.037619713228195906,
+     0.03933229483664036
+    ]
+   }
+  }
+ }
+}

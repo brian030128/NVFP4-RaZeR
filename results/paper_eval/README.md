@@ -43,3 +43,11 @@ amendments 12-13.
 | J: GPTQ‡ | `final/` | NVFP4 GPTQ codes with FourOverSix activations, 6 models: 4.6 % loss recovered |
 | K: FOCUS | `final/` | 5 models (Qwen3.8-27B TBD), 8 steps on the release set, deployed natively: 83.3 % over its 10 pairs vs FlipQuant 82.1 / 82.4 / 67.4 % on the same pairs |
 | L: final main-ppl | `final/` | loss recovered (12 pairs): FourOverSix 6.7 %, IF4 13.4 %, MixFP4 (Zou) 9.4 %, GPTQ‡ 4.6 %, FlipQuant 78.9 / 78.2 / 64.7 %; FlipQuant vs NVFP4 significant in 36 / 36 cells, 0 daggers; \|8x64 − 16x64\| max 0.0064; 256x64 keeps 81.1 % (62.7-84.7 % per model) |
+
+## FOCUS on Hugging Face and tab:ptq's GSM8K column (2026-10-09)
+
+| part | directory | status | result |
+|---|---|---|---|
+| FOCUS HF upload | `focus_hf/` | done | the 5 FOCUS states (part K) as PRIVATE repos `edgeai-lab/<Base>-FOCUS-NVFP4`: `focus.pt` as is (sha256 source = uploaded; 0 scan hits, no metadata change), model card, `ppl_summary.json`, license files; every remote file's sha256 equal to the staged one; Hub YAML validation passed |
+| M0: GSM8K pilot | `ptq_gsm8k/pilot/` | done (not a result) | greedy outputs depend on the batch size on both models (batch 16 vs 1: 10 of 64 / 1 of 32 completions identical; not a padding leak); batch 1 would take ~162 h; the user chose batch 64 (amendment 14) |
+| M: tab:ptq GSM8K | `ptq_gsm8k/` | running (M1 from 08:25 UTC, ETA ~23:30 UTC) | 18 configurations, greedy, thinking off, 2048 tokens, batch 64 |
