@@ -10,6 +10,7 @@ Thinking-off prompt (end): `' \\boxed{}.\n<SPECIAL_11>Assistant\n<think></think>
 |---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|
 | 16 | 64 | 92.2 % | 277 / 287 / 468 | 0 | 0 | 0 | 0.0287 | 0.83 | 89 | 24.7 |
 | 1 | 64 | 95.3 % | 314 / 286 / 2048 | 1 | 0 | 0 | 0.0282 | 8.93 | 606 | 24.7 |
+| 64 | 64 | 92.2 % | 278 / 280 / 490 | 0 | 0 | 0 | 0.0644 | nan | 36 | 24.7 |
 
 Batch identity (batch 16 vs batch 1, 64 problems): 10 identical, 54 differ (7 with a different extracted answer, 6 with a different correctness).
 - gsm8k/0: first difference at character 81 (lengths 336 / 330); answers 18 / 18; correct True / True
@@ -33,16 +34,18 @@ Batch identity (batch 16 vs batch 1, 64 problems): 10 identical, 54 differ (7 wi
 - gsm8k/20: first difference at character 187 (lengths 1273 / 1384); answers 15 / 15; correct True / True
 - gsm8k/23: first difference at character 310 (lengths 840 / 847); answers 8 / 8; correct True / True
 
+Batch 64 vs batch 16 (64 problems; a side note, not a gate): 22 identical, 5 with a different extracted answer, 4 with a different correctness.
+
 Padding (gsm8k_padcheck.py): rows with no left padding in their batch-16 batch: 1 of 4 identical to batch 1; padded rows: 9 of 60. The dependence is not only padding.
 
-Estimated hours (resampling the pilot's completion lengths; batches 32 / 64 not piloted, their step time assumed 2 % / 10 % above batch 16's; GPTQ +2 min per load and Hadamard +20 % per step assumed):
+Estimated hours (resampling the pilot's completion lengths; a batch size not run has its step time assumed 2 % (32) / 10 % (64) above batch 16's; GPTQ +2 min per load and Hadamard +20 % per step assumed); batch 64: upper bound: its time after the weights loaded / its 490 steps (the setup estimate 34.1 s from the batch-16 run exceeds this run's whole time):
 
 | batch | per configuration | 9 configurations |
 |---:|---:|---:|
-| 1 | 3.07 | 29.5 |
-| 16 | 0.44 | 4.3 |
-| 32 | 0.30 | 3.0 |
-| 64 | 0.22 | 2.2 |
+| 1 | 3.01 | 28.9 |
+| 16 | 0.40 | 3.9 |
+| 32 | 0.26 | 2.6 |
+| 64 | 0.37 | 3.6 |
 
 ## Qwen3.8-27B
 
@@ -52,6 +55,7 @@ Thinking-off prompt (end): `'_end|>\n<|im_start|>assistant\n<think>\n\n</think>\
 |---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|
 | 16 | 64 | 95.3 % | 441 / 370 / 2048 | 1 | 0 | 0 | 0.0879 | 8.05 | 465 | 67.5 |
 | 1 | 32 | 100.0 % | 429 / 383 / 1608 | 0 | 0 | 0 | 0.0861 | 37.44 | 1223 | 67.5 |
+| 64 | 64 | 96.9 % | 431 / 394 / 2048 | 1 | 0 | 0 | 0.1123 | nan | 269 | 67.5 |
 
 Batch identity (batch 16 vs batch 1, 32 problems): 1 identical, 31 differ (2 with a different extracted answer, 2 with a different correctness).
 - gsm8k/0: first difference at character 0 (lengths 839 / 949); answers 18 / 18; correct True / True
@@ -75,14 +79,16 @@ Batch identity (batch 16 vs batch 1, 32 problems): 1 identical, 31 differ (2 wit
 - gsm8k/19: first difference at character 121 (lengths 1940 / 1927); answers 6 / 6; correct True / True
 - gsm8k/20: first difference at character 38 (lengths 1929 / 2071); answers 15 / 15; correct True / True
 
+Batch 64 vs batch 16 (64 problems; a side note, not a gate): 18 identical, 1 with a different extracted answer, 1 with a different correctness.
+
 Padding (gsm8k_padcheck.py): rows with no left padding in their batch-16 batch: 0 of 0 identical to batch 1; padded rows: 1 of 32. The dependence is not only padding.
 
-Estimated hours (resampling the pilot's completion lengths; batches 32 / 64 not piloted, their step time assumed 2 % / 10 % above batch 16's; GPTQ +2 min per load and Hadamard +20 % per step assumed):
+Estimated hours (resampling the pilot's completion lengths; a batch size not run has its step time assumed 2 % (32) / 10 % (64) above batch 16's; GPTQ +2 min per load and Hadamard +20 % per step assumed); batch 64: one batch: (its time after the weights loaded - the setup 28.3 s of the batch-16 run) / its 2048 steps:
 
 | batch | per configuration | 9 configurations |
 |---:|---:|---:|
-| 1 | 13.81 | 132.7 |
-| 16 | 2.29 | 22.1 |
-| 32 | 1.48 | 14.3 |
-| 64 | 0.97 | 9.4 |
+| 1 | 13.73 | 131.9 |
+| 16 | 2.24 | 21.6 |
+| 32 | 1.49 | 14.4 |
+| 64 | 1.15 | 11.1 |
 

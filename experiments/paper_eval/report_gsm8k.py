@@ -47,15 +47,17 @@ def ordered(jsonl):
 
 
 def timeline(log):
-    """(t_cmd, [(t, generated)]) from a time-stamped job log."""
-    t0, marks = None, []
+    """(t_cmd, [(t, generated)], t_weights) from a time-stamped job log; t_weights = the last "Loading weights" line."""
+    t0, marks, tw = None, [], None
     for line in Path(log).read_text().splitlines():
         t, _, msg = line.partition(" ")
         if msg.startswith("CMD ") and t0 is None:
             t0 = float(t)
         elif msg.startswith("gsm8k: ") and "generated" in msg:
             marks.append((float(t), int(msg.split()[1].split("/")[0])))
-    return t0, marks
+        elif "Loading weights" in msg:
+            tw = float(t)
+    return t0, marks, tw
 
 
 def summary(recs):
@@ -120,7 +122,7 @@ def pilot():
             if not js.exists() or not (p / f"rtn_fo6_b{b}.json").exists():
                 continue
             rs, order = records(js), ordered(js)
-            t0, marks = timeline(p / f"rtn_fo6_b{b}.log")
+            t0, marks, tw = timeline(p / f"rtn_fo6_b{b}.log")
             rep = json.loads((p / f"rtn_fo6_b{b}.json").read_text())
             first = marks[0][0] if marks else None
             # per batch: duration (between progress marks; the first from the previous mark is unknown) and its steps
@@ -132,7 +134,9 @@ def pilot():
                                     steps=max(r["tokens"] for r in chunk), tokens=sum(r["tokens"] for r in chunk)))
             steps = sum(x["steps"] for x in batches)
             secs = sum(x["seconds"] for x in batches)
+            first_steps = max(r["tokens"] for r in order[:marks[0][1]]) if marks else None
             runs[b] = dict(summary=summary(rs), seconds_total=rep["resources"]["seconds"],
+                           first_batch=dict(steps=first_steps, seconds_after_weights=marks[0][0] - tw) if marks and tw else None,
                            seconds_before_first_batch_end=(first - t0) if first and t0 else None,
                            batches_timed=len(batches), timed_seconds=secs, timed_steps=steps,
                            seconds_per_step=secs / steps if steps else None,
@@ -153,6 +157,22 @@ def pilot():
             same = dict(problems=len(ids), identical=len(ids) - len(diff), differ=len(diff),
                         answer_differs=sum(x["pred_b16"] != x["pred_b1"] for x in diff),
                         correctness_differs=sum(x["correct_b16"] != x["correct_b1"] for x in diff), differences=diff)
+        if 16 in runs and runs[16]["first_batch"] and runs[16]["seconds_per_step"]:
+            f16 = runs[16]["first_batch"]
+            setup = f16["seconds_after_weights"] - f16["steps"] * runs[16]["seconds_per_step"]
+            for bb, r in runs.items():
+                if not r["seconds_per_step"] and r["first_batch"] and bb > 1:
+                    est = (r["first_batch"]["seconds_after_weights"] - setup) / r["first_batch"]["steps"]
+                    upper = r["first_batch"]["seconds_after_weights"] / r["first_batch"]["steps"]
+                    if est > 0.5 * runs[16]["seconds_per_step"]:
+                        r["seconds_per_step"] = est
+                        r["seconds_per_step_note"] = (f"one batch: (its time after the weights loaded - the setup {setup:.1f} s "
+                                                      f"of the batch-16 run) / its {r['first_batch']['steps']} steps")
+                    else:                                  # the setup varies between runs: an upper bound (no setup)
+                        r["seconds_per_step"] = upper
+                        r["seconds_per_step_note"] = (f"upper bound: its time after the weights loaded / its "
+                                                      f"{r['first_batch']['steps']} steps (the setup estimate {setup:.1f} s "
+                                                      "from the batch-16 run exceeds this run's whole time)")
         lengths = [r["tokens"] for rr in runs.values() for r in rr["records"].values()]
         etas = {}
         if 16 in runs:
@@ -206,8 +226,10 @@ def pilot():
                            f"{q['no_pad']['identical']} of {q['no_pad']['n']} identical to batch 1; padded rows: "
                            f"{q['padded']['identical']} of {q['padded']['n']}. The dependence is not only padding."]
         if etas:
-            md += ["", "Estimated hours (resampling the pilot's completion lengths; batches 32 / 64 not piloted, their step "
-                       "time assumed 2 % / 10 % above batch 16's; GPTQ +2 min per load and Hadamard +20 % per step assumed):",
+            notes = "; ".join(f"batch {bb}: {r['seconds_per_step_note']}" for bb, r in runs.items() if r.get("seconds_per_step_note"))
+            md += ["", "Estimated hours (resampling the pilot's completion lengths; a batch size not run has its step time "
+                       "assumed 2 % (32) / 10 % (64) above batch 16's; GPTQ +2 min per load and Hadamard +20 % per step "
+                       f"assumed){'; ' + notes if notes else ''}:",
                    "", "| batch | per configuration | 9 configurations |", "|---:|---:|---:|"]
             md += [f"| {bb} | {e['hours_per_config']:.2f} | {e['hours_9_configs']:.1f} |" for bb, e in etas.items()]
         md.append("")
