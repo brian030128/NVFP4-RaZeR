@@ -364,3 +364,47 @@ K's restarted training (03:00 UTC) was stopped after 3 steps at 03:01 UTC: it tr
 tokens), but `train_focus` records `--seqlen` (default 2048) in its report and log. flipquant paper-sm120-runs 46dc5a7
 makes `--data release` require `--seqlen` equal to the windows' length, and the driver passes `--seqlen 512`; the stopped
 log is kept as `logs/focus_train_qwen3-1.7b_micro8.stopped_seqlen_record.log`. K restarts from its first model.
+
+## Part M (registered 2026-10-09 07:35 UTC): tab:ptq's GSM8K column
+
+The user's request (relayed 2026-10-09 07:1x UTC): fill tab:ptq's GSM8K column; independent of the FOCUS upload.
+- **Scope:** the 18 tab:ptq configurations of part H, nothing else (no BF16 or other rows): Nemotron-Nano-9B-v2 and
+  Qwen3.8-27B x {RTN, GPTQ, Hadamard} x {NVFP4, FourOverSix, FlipQuant 16x64}, native 16x64 in n16k64-fast, build_V
+  with `--kernel-set auto`, the release revisions, the same artifacts and activations as H: RTN = part F's
+  configurations (the release 16x64 map); GPTQ = H's code files (BF16 propagation; read from the cache with H's
+  settings); Hadamard = block 16 in PyTorch with FlipQuant's rotated-basis map. NVFP4 rows: NVFP4 activations with
+  per-token scales; the others: per-token FourOverSix. Flags per configuration: `run_gsm8k.py quant()`, H's without
+  the PPL-only ones.
+- **Harness:** flipquant `evaluation.accuracy` on paper-sm120-runs @ 46dc5a7, unchanged (no option needed: greedy is
+  its default and `--no-think` switches thinking off). GSM8K test (openai/gsm8k main @ 740312a, 1,319 problems), its
+  prompt (the problem, then "Please reason step by step, and put your final answer within \boxed{}.", in the chat
+  template) and its scorer (the last `\boxed{}` after any think block, else the last number; numeric comparison).
+- **Decoding (the user's settings):** greedy (`do_sample=False`; the harness passes no temperature / top-p / top-k when
+  not sampling; neither model's generation_config sets a repetition penalty or another logits processor), seed 0.
+  Stop at the first EOS of the model's generation_config (Nemotron-Nano-9B-v2 [2, 11, 12]; Qwen3.8-27B [248046,
+  248044]) or at `--max-new-tokens 2048`.
+- **Thinking off:** Qwen3.8-27B: the chat template's `enable_thinking=False` (the template then drops its reasoning-
+  effort system message, default xhigh, and pre-fills an empty `<think>\n\n</think>\n\n`). Nemotron-Nano-9B-v2: the
+  documented `/no_think` system prompt (the template strips it and pre-fills `<think></think>`). Both through the
+  harness's `--no-think`; rendered prompts in `ptq_gsm8k/pilot/<model>/prompt.json`. **Check M1:** no completion
+  contains `<think>` or `</think>` (checked on the pilot and on every record; any hit is reported).
+- **Batch and padding:** the harness's left padding and its prompt-length order, one batch size per model for all 9
+  configurations, decided by M0.
+- **M0 pilot (not a result):** RTN FourOverSix, the first 64 problems at batch 16 and the first 64 (Nemotron) / 32
+  (Qwen3.8-27B) at batch 1 (`run_gsm8k.py pilot`; every stdout line time-stamped): generated lengths, load time, decode
+  time per step, and batch identity (each problem's completion text at batch 16 equal to batch 1's). Rule: a model runs
+  at batch 16 only if all its pilot completions at batch 16 equal batch 1's; otherwise at batch 1 (identical to batch 1
+  by construction). The batch dependence is reported either way. The ETA comes from the pilot; if the total exceeds
+  ~24 h, stop and report the options before M1.
+- **M1:** the 18 runs (`run_gsm8k.py run`), resumable (the harness appends each problem to `<out>.jsonl` and resumes from
+  it), one job at a time, Nemotron-Nano-9B-v2 first.
+- **Report** (`results/paper_eval/ptq_gsm8k/`): accuracy (%) ± 2 SE (binomial, sqrt(p(1-p)/n)) per configuration;
+  paired per-problem comparisons -- each format vs FourOverSix within the same PTQ method, and GPTQ / Hadamard
+  FlipQuant vs RTN FlipQuant -- as the accuracy difference ± 2 SE of the per-problem difference, with the discordant
+  counts and McNemar's exact two-sided p; truncation at 2048 (the harness's flag: generated tokens >= 2048, the pad
+  token not counted) and unparseable answers (no `\boxed{}` and no number) per configuration; mean and max generated
+  tokens; the per-problem records (the harness's JSONL, gzipped); the GSM8K column of `table_ptq.tex`.
+- **Checks:** M1 (thinking off, above); M2: every GPTQ record's `codes_sha256` equals H's record of the same
+  configuration; M3: every FlipQuant record installs the map H used (path, modules, E0M3 tiles); M4: 1,319 problems in
+  every record. Stop and report on: a failing check, an OOM that would need a changed setting, an implausible result,
+  or a total ETA above ~24 h after the pilot.
