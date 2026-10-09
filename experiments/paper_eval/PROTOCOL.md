@@ -408,3 +408,23 @@ The user's request (relayed 2026-10-09 07:1x UTC): fill tab:ptq's GSM8K column; 
   configuration; M3: every FlipQuant record installs the map H used (path, modules, E0M3 tiles); M4: 1,319 problems in
   every record. Stop and report on: a failing check, an OOM that would need a changed setting, an implausible result,
   or a total ETA above ~24 h after the pilot.
+
+### Amendment 14 (2026-10-09 08:13 UTC): part M's batch, 64 on both models (the user's choice)
+
+The M0 pilot (paper-eval abc0a00, `results/paper_eval/ptq_gsm8k/pilot/PILOT.md`) found that greedy outputs depend on the
+batch size on both models. Batch 16 against batch 1, RTN FourOverSix: Nemotron-Nano-9B-v2 10 of 64 completions
+identical (7 extracted answers and 6 correctness outcomes differ), unpadded rows included (1 of 4 identical);
+Qwen3.8-27B 1 of 32 identical (2 answers differ). The cause is the batch shape (the kernels' shapes change the rounding,
+and the FP4 activation rounding amplifies it), not a padding leak. Batch 1 for the 18 configurations would take ~162 h,
+above the ~24 h limit, so M1 stopped and the options went to the user, who chose (2c) (relayed 2026-10-09 08:12 UTC):
+- The registered batch rule (batch 16 only if identical to batch 1, else batch 1) is replaced by: **one batch size per
+  model, 64**, with identical batches and padding (the harness's prompt-length order and left padding) for all 9
+  configurations of a model. The batch dependence is stated here and goes into the caption notes: the GSM8K accuracies
+  are those of greedy decoding at batch 64; at another batch size individual completions differ.
+- Before M1, a timing check at batch 64 per model (`run_gsm8k.py check --check-batch 64`: RTN FourOverSix, the pilot's
+  first 64 problems): memory and the projected total. If it fits in memory and the projected total is <= ~24 h, M1
+  starts for all 18 configurations without waiting. On an OOM, that model drops to batch 32 for all 9 of its
+  configurations, recorded in an amendment.
+- Batch 64 against batch 16 on the shared pilot problems is reported as a side note, not a gate.
+- Everything else as registered: greedy, EOS or 2048 new tokens, thinking off, the 1,319 problems, the report (paired
+  per-problem comparisons, truncation, unparseable answers) and checks M1-M4.

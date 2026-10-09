@@ -5,6 +5,7 @@ activations of part H's PPL runs. flipquant `evaluation.accuracy` (paper-sm120-r
 
     python run_gsm8k.py prompts                       # CPU: the rendered prompts (the thinking switch), pilot/<model>/
     python run_gsm8k.py pilot                         # M0: lengths, timing, batch-1 identity (RTN FourOverSix)
+    python run_gsm8k.py check --check-batch=64        # amendment 14: the batch-64 timing check (the same 64 problems)
     python run_gsm8k.py run --batch=<model>:<b>,...   # M1: the 18 configurations, resumable (one job at a time)
 
 Records: RUN/ptq_gsm8k/<model>/<method>_<fmt>.json (+ .jsonl per problem, as evaluation.accuracy writes them) and
@@ -115,6 +116,14 @@ def pilot():
                    f"gsm8k pilot {model} batch {batch}")
 
 
+def check(batch):
+    """Amendment 14: RTN FourOverSix, the pilot's first 64 problems at the chosen batch (timing, memory, agreement)."""
+    for model in MODELS:
+        out = ROOT / "pilot" / model / f"rtn_fo6_b{batch}.json"
+        S.must(run_ts(f"gsm8k_check_{model}_b{batch}", acc_cmd(model, "rtn", "fo6", batch, out, limit=64), out),
+               f"gsm8k batch-{batch} check {model}")
+
+
 def run(batches):
     """M1: the 18 configurations at the batch registered per model after M0 (Nemotron first)."""
     for model in MODELS:
@@ -128,14 +137,18 @@ def run(batches):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=("prompts", "pilot", "run"))
+    ap.add_argument("what", choices=("prompts", "pilot", "check", "run"))
     ap.add_argument("--batch", default=None, help="<model>:<batch>,... (run)")
+    ap.add_argument("--check-batch", type=int, default=64, help="check: the batch size")
     a = ap.parse_args()
     if a.what == "prompts":
         prompts()
     elif a.what == "pilot":
         G.log("gsm8k pilot (part M0)")
         pilot()
+    elif a.what == "check":
+        G.log(f"gsm8k batch-{a.check_batch} check (amendment 14)")
+        check(a.check_batch)
     else:
         bs = dict(x.split(":") for x in a.batch.split(","))
         assert set(bs) == set(MODELS), bs

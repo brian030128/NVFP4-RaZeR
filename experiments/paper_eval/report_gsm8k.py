@@ -115,7 +115,7 @@ def pilot():
         p = M.ROOT / "pilot" / model
         prm = json.loads((p / "prompt.json").read_text())
         runs = {}
-        for b in (16, 1):
+        for b in (16, 1, 32, 64):
             js = p / f"rtn_fo6_b{b}.jsonl"
             if not js.exists() or not (p / f"rtn_fo6_b{b}.json").exists():
                 continue
@@ -159,14 +159,23 @@ def pilot():
             s16 = runs[16]["seconds_per_step"]
             s1 = runs[1]["seconds_per_step"] if 1 in runs else s16
             for bb, st in ((1, s1), (16, s16), (32, s16 * 1.02), (64, s16 * 1.10)):
+                st = runs[bb]["seconds_per_step"] if bb in runs and runs[bb]["seconds_per_step"] else st
                 one = eta(lengths, st, bb)
                 # 9 configurations: 3 GPTQ loads (+2 min each), 3 Hadamard runs with a 20 % slower decode step (estimates)
                 total = 9 * one + 3 * 2 / 60 + 3 * 0.2 * (one - 45 / 3600)
                 etas[bb] = dict(hours_per_config=one, hours_9_configs=total, step_s=st,
                                 piloted=bb in runs)
+        agree = {}                                  # amendment 14's side note: a larger batch against batch 16
+        for bb in (32, 64):
+            if bb in runs and 16 in runs:
+                a, c = runs[bb]["records"], runs[16]["records"]
+                ids = sorted(set(a) & set(c))
+                agree[bb] = dict(problems=len(ids), identical=sum(a[i]["completion"] == c[i]["completion"] for i in ids),
+                                 answer_differs=sum(a[i]["pred"] != c[i]["pred"] for i in ids),
+                                 correctness_differs=sum(a[i]["correct"] != c[i]["correct"] for i in ids))
         rec[model] = dict(prompt_tail_off=prm["prompt_off"][-60:], pad_token=prm["pad_token"],
                           runs={b: {k: v for k, v in r.items() if k != "records"} for b, r in runs.items()},
-                          batch_identity=same, lengths_pooled=len(lengths), eta=etas)
+                          batch_identity=same, agreement_with_b16=agree, lengths_pooled=len(lengths), eta=etas)
         md += [f"## {TITLES[model]}", "",
                f"Thinking-off prompt (end): `{prm['prompt_off'][-48:]!r}`; registry switch {prm['thinking_registry']}.", ""]
         md += ["| batch | problems | accuracy | mean / median / max tokens | truncated | unparseable | think markers | "
@@ -185,6 +194,10 @@ def pilot():
                 md.append(f"- {x['id']}: first difference at character {x['first_diff_char']} (lengths {x['len_b16']} / "
                           f"{x['len_b1']}); answers {x['pred_b16']} / {x['pred_b1']}; correct {x['correct_b16']} / "
                           f"{x['correct_b1']}")
+        for bb, g in agree.items():
+            md += ["", f"Batch {bb} vs batch 16 ({g['problems']} problems; a side note, not a gate): {g['identical']} "
+                       f"identical, {g['answer_differs']} with a different extracted answer, {g['correctness_differs']} "
+                       f"with a different correctness."]
         pc = d / "padcheck.json"
         if pc.exists():
             q = json.loads(pc.read_text()).get(model)
