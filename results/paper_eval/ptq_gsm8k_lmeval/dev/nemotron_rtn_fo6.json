@@ -1,0 +1,266 @@
+{
+  "status": "complete",
+  "argv": {
+    "model": "nemotron-nano-9b-v2",
+    "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+    "mode": "native",
+    "weight": "fourover6",
+    "act": "fourover6",
+    "act_scope": "row",
+    "focus": null,
+    "focus_deploy": false,
+    "nvidia_nvfp4": false,
+    "modelopt_checkpoint": null,
+    "map": null,
+    "unit": null,
+    "e2m1": "own",
+    "act_method": null,
+    "native_backend": "auto",
+    "kernel_set": "auto",
+    "kernel_build_dir": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+    "ownership_check": false,
+    "any_act": false,
+    "device_map": "cuda",
+    "fake_weight_cache": "on",
+    "attn": "sdpa",
+    "tiny_layers": null,
+    "rotate": "none",
+    "rotate_block": 16,
+    "ptq": "rtn",
+    "gptq_damp": 0.01,
+    "gptq_block": 128,
+    "gptq_windows": null,
+    "gptq_batch": 8,
+    "gptq_act_order": false,
+    "gptq_calib": "record",
+    "gptq_calib_extension": null,
+    "gptq_calib_record": null,
+    "gptq_hessian_input": "quantized",
+    "gptq_propagate": "quantized",
+    "gptq_cache": null,
+    "tasks": "gsm8k_llama",
+    "num_fewshot": [],
+    "limit": 2,
+    "batch_size": 64,
+    "resume": false,
+    "apply_chat_template": true,
+    "system_instruction": "/no_think",
+    "enable_thinking": null,
+    "gen_lengths": true,
+    "samples_out": "/home/dev/n16k64_campaign/paper_eval/ptq_gsm8k_lmeval/dev/nemotron_rtn_fo6",
+    "out": "/home/dev/n16k64_campaign/paper_eval/ptq_gsm8k_lmeval/dev/nemotron_rtn_fo6.json"
+  },
+  "model": "nemotron-nano-9b-v2",
+  "policy": {
+    "model": "nemotron-nano-9b-v2",
+    "source": {
+      "hf_id": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+      "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+      "transformers": "5.16.1",
+      "torch": "2.9.0+cu128"
+    },
+    "mode": "native",
+    "quant": {
+      "backend": "sm120",
+      "weight": "fourover6",
+      "act": "fourover6",
+      "act_scope": "row",
+      "unit": null
+    },
+    "native": {
+      "backend": "sm120",
+      "kernel": "stock_ko",
+      "routing": "auto: fourover6 weights -> stock_ko, from /home/dev/n16k64_campaign/kernel_opt/build_V",
+      "build_dir": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+      "weight": "fourover6",
+      "unit": null,
+      "activation_quantizer": "four_over_six_rows",
+      "activation_quantizer_override": false,
+      "modules": 120,
+      "e0m3_tiles": 0,
+      "checked": true,
+      "ownership": {},
+      "kernel_set": {
+        "family": "stock_ko",
+        "kernels": {
+          "stock_wA_n16": "abbc9c15d11cfebb95ddea38e8c03fc5544d6135b8dc7130a9f521ff99faa763",
+          "stock_wA_n32": "cbf601ccee1a9a9ae7d3ead4692e10182f7964ac9887d08693f182dbda731e48",
+          "stock_wA_n64": "905e6171fd9a3928523fef54e7aff45f1972adf95fc767930fec48fc0bd53d15",
+          "stock_wA_e64": "5ccdacea29559b9a68015d50a64c7e429eb9761fcbd401ac0f5cff01b60d1e6a"
+        },
+        "table": "/home/dev/n16k64_campaign/sm120runs/wt/kernels/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+        "table_shapes": 16,
+        "table_family": "stock",
+        "schedule_shapes": 16,
+        "calls_by_width": {}
+      },
+      "device_bytes": {
+        "packed": 3855810560,
+        "scales_placed": 482424320,
+        "bias": 0
+      }
+    },
+    "quantized_modules": 120,
+    "native_backend": "sm120"
+  },
+  "tasks_requested": [
+    "gsm8k_llama"
+  ],
+  "num_fewshot": {
+    "mmlu": 5
+  },
+  "limit": 2,
+  "batch_size": 64,
+  "load_seconds": 13.77410101890564,
+  "versions": {
+    "lm_eval": "0.4.11",
+    "transformers": "5.16.1",
+    "torch": "2.9.0+cu128",
+    "datasets": "4.8.5"
+  },
+  "dataset_pins": {
+    "allenai/ai2_arc": "210d026faf9955653af8916fad021475a3f00453",
+    "Rowan/hellaswag": "218ec52e09a7e7462a5400043bb9a69a41d06b76",
+    "allenai/openbookqa": "388097ea7776314e93a529163e0fea805b8a6454",
+    "aps/super_glue": "3de24cf8022e94f4ee4b9d55a6f539891524d646",
+    "allenai/winogrande": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+    "baber/piqa": "142f6d7367fd9877f0fb3b5734ea6a545f54cdd1",
+    "openai/gsm8k": "740312add88f781978c0658806c59bc2815b9866",
+    "cais/mmlu": "c30699e8356da336a370243923dbaf21066bb9fe",
+    "TIGER-Lab/MMLU-Pro": "b189ec765aa7ed75c8acfea42df31fdae71f97be",
+    "EleutherAI/lambada_openai": "900124bf3b8235c6daf21033af9948b3f07346c4"
+  },
+  "host": {
+    "hostname": "gpu-ab4c5289-69ab-4445-bf02-a6b3e67061b8",
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+  },
+  "started_utc": "2026-10-09T16:52:56+00:00",
+  "tasks": {
+    "gsm8k_llama": {
+      "metrics": {
+        "exact_match,strict_match": 1.0,
+        "exact_match_stderr,strict_match": 0.0,
+        "exact_match,flexible_extract": 1.0,
+        "exact_match_stderr,flexible_extract": 0.0
+      },
+      "examples": {
+        "0": {
+          "raw": "Janet's ducks lay 16 eggs per day. She eats 3 eggs and uses 4 for muffins, totaling 3 + 4 = 7 eggs. The remaining eggs are 16 - 7 = 9. She sells these 9 eggs at $2 each, so she makes 9 * 2 = $18 every day at the farmers' market. The final answer is 18.\n",
+          "generated": {
+            "tokens": 93,
+            "eos": true,
+            "budget": 1024
+          },
+          "strict_match": {
+            "exact_match": 1.0,
+            "response": "18."
+          },
+          "flexible_extract": {
+            "exact_match": 1.0,
+            "response": "18."
+          }
+        },
+        "1": {
+          "raw": "The robe requires 2 bolts of blue fiber. For white fiber, it takes half of 2 bolts, which is 1 bolt. In total, 2 (blue) + 1 (white) = 3 bolts. The final answer is 3.\n",
+          "generated": {
+            "tokens": 55,
+            "eos": true,
+            "budget": 1024
+          },
+          "strict_match": {
+            "exact_match": 1.0,
+            "response": "3."
+          },
+          "flexible_extract": {
+            "exact_match": 1.0,
+            "response": "3."
+          }
+        }
+      },
+      "sample_digest": "0bd36058fd1b0ff394d57e30bc9b823ff4125348e6e5974b7b9ad399635aee58",
+      "prompt_hash": {
+        "0": "11df8d2bca6a",
+        "1": "d76db3c0d4d5"
+      },
+      "seconds": 26.251776218414307,
+      "examples_evaluated": 2,
+      "batch_size": 64,
+      "peak_gpu_allocated_gib": 7.124650001525879,
+      "n_shot": 8,
+      "chance": 0.0,
+      "model_timing": {
+        "generate_until_seconds": 23.31502366065979,
+        "generate_until_requests": 2
+      },
+      "native_gemm": {
+        "calls": 11160,
+        "tokens": 307680,
+        "forwards_by_token_bucket": {
+          "4096": 1,
+          "2": 92
+        },
+        "calls_by_width": {
+          "128": 120,
+          "16": 11040
+        },
+        "forwards": 93,
+        "every_linear_every_forward": true
+      }
+    }
+  },
+  "chat_options": {
+    "apply_chat_template": true,
+    "fewshot_as_multiturn": true,
+    "system_instruction": "/no_think",
+    "enable_thinking": null
+  },
+  "hflm_max_length": 131072,
+  "chat_template_args": {},
+  "tokenization": {
+    "add_bos_token": null,
+    "bos_token": "<s>",
+    "bos_token_id": 1,
+    "context_starts_with_bos": true,
+    "probe_ids": [
+      1,
+      25229,
+      1058,
+      1032
+    ]
+  },
+  "coverage": {
+    "native": 120,
+    "native_called": 120,
+    "calls": 11160,
+    "tokens": 307680,
+    "remaining_bf16_linears": [],
+    "remaining_bf16_linears_called": {},
+    "kernel_set": {
+      "family": "stock_ko",
+      "kernels": {
+        "stock_wA_n16": "abbc9c15d11cfebb95ddea38e8c03fc5544d6135b8dc7130a9f521ff99faa763",
+        "stock_wA_n32": "cbf601ccee1a9a9ae7d3ead4692e10182f7964ac9887d08693f182dbda731e48",
+        "stock_wA_n64": "905e6171fd9a3928523fef54e7aff45f1972adf95fc767930fec48fc0bd53d15",
+        "stock_wA_e64": "5ccdacea29559b9a68015d50a64c7e429eb9761fcbd401ac0f5cff01b60d1e6a"
+      },
+      "table": "/home/dev/n16k64_campaign/sm120runs/wt/kernels/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+      "table_shapes": 16,
+      "table_family": "stock",
+      "schedule_shapes": 16,
+      "calls_by_width": {
+        "16": 11040,
+        "128": 120
+      }
+    }
+  },
+  "dataset_loads": [
+    {
+      "requested": "openai/gsm8k",
+      "loaded": "openai/gsm8k",
+      "name": "main",
+      "revision": "740312add88f781978c0658806c59bc2815b9866",
+      "dropped_trust_remote_code": null
+    }
+  ],
+  "seconds": 43.45952391624451
+}

@@ -467,3 +467,46 @@ records are kept as they are, finished and partial, and M1 is not completed. It 
   order (`results/paper_eval/ptq_gsm8k/order_check.json`); the paused one continued the batch partition.
 - **Archived:** `results/paper_eval/ptq_gsm8k/GSM8K.md` (marked superseded), `gsm8k.json`, the per-problem records of the
   16 complete configurations (`records/`). They do not feed tab:ptq; part N does.
+
+## Part N (registered 2026-10-09 16:55 UTC): tab:ptq's GSM8K column with lm-eval's gsm8k_llama, thinking off
+
+The user's decision (relayed 2026-10-09 16:4x UTC; replaces part M, amendment 16). Settings are the user's (the MR-GPTQ /
+RaZeR settings); nothing in the task is changed.
+- **Task:** lm-eval 0.4.11's `gsm8k_llama` exactly as shipped (`lm_eval/tasks/llama3/instruct/gsm8k/gsm8k.yaml`): 8-shot CoT
+  with the task's own shots (`first_n`), `apply_chat_template=True` and `fewshot_as_multiturn=True`, greedy
+  (`do_sample: false`, `temperature: 0`), `max_gen_toks: 1024`, `until: []` (HFLM adds the tokenizer's EOS), filters
+  `strict_match` and `flexible_extract`, metric exact_match. The full test set (1,319; openai/gsm8k main @ 740312a, the
+  harness's pin), 1 repeat. lm-eval's seeds as `evaluation.downstream` (0 / 1234 / 1234 / 1234).
+- **Thinking off, through lm-eval's own switches:** Qwen3.8-27B: HFLM `enable_thinking=False` (its `chat_template_args`;
+  the template then drops its reasoning-effort system message and pre-fills an empty think block). Nemotron-Nano-9B-v2:
+  lm-eval's `system_instruction="/no_think"` (the template strips it and pre-fills `<think></think>`).
+- **Scope:** the 18 tab:ptq configurations, the artifacts and activations of parts H / M (`run_gsm8k.quant`): the release
+  16x64 maps; GPTQ = part H's code files (BF16 propagation), whose codes_sha256 must equal part H's records; Hadamard
+  block 16 with the rotated-basis map. NVFP4 rows: NVFP4 activations (per-token scales); the others: per-token
+  FourOverSix. Native, build_V, `--kernel-set auto`, n16k64-fast.
+- **Harness:** flipquant `evaluation.downstream` on paper-sm120-runs f2a56f1: lm-eval's HFLM on the natively quantized
+  model object (`HFLM(pretrained=model)`), so generate_until runs `model.generate` through the native kernels; the native
+  coverage check (every quantized Linear in every forward, nothing outside the scope) as in its log-likelihood use. The
+  new options are off by default (`--apply-chat-template`, `--system-instruction`, `--enable-thinking`, `--gen-lengths`,
+  `--samples-out`, `--doc-ids`). HFLM's max length is the model's (131072 / 262144), so no prompt is truncated (checked
+  in N0).
+- **Batch:** one fixed batch size per model for all 9 configurations (never "auto"): 64 if it fits, else 32 for that
+  model (recorded). lm-eval sorts the requests by prompt length (descending, deterministic), so every configuration of a
+  model sees the same batches.
+- **N0 (not a result; `run_gsm8k_lmeval.py smoke / pilot`):** smoke -- RTN FourOverSix, 8 problems per model: the rendered
+  prompt of one request per model recorded, the off switch present (Qwen: `enable_thinking=False` in the template args
+  and the empty `<think>\n\n</think>\n\n`; Nemotron: the `/no_think` system message and `<think></think>`), no think
+  content in the outputs beyond the template's empty block. Pilot -- RTN FourOverSix at batch 64 on the 64 questions with
+  the most tokens (the full run's longest batch, its memory worst case) plus 64 others (seed 0): memory and time per
+  batch, the ETA. Over ~24 h: stop and report the options. A development smoke of the harness (Nemotron, 2 problems)
+  ran before this registration and is disclosed (`ptq_gsm8k_lmeval/dev/`).
+- **N1:** the 18 runs (`run_gsm8k_lmeval.py run`), one job at a time, Nemotron-Nano-9B-v2 first.
+- **Report** (`results/paper_eval/ptq_gsm8k_lmeval/`): strict-match and flexible-extract accuracy ± 2 SE (binomial) per
+  configuration (the paper column uses strict-match unless the coordinator says otherwise); paired per-problem
+  comparisons with McNemar's exact p (each format vs FourOverSix within a method; GPTQ / Hadamard FlipQuant vs RTN
+  FlipQuant), per filter; the generations that used the whole 1024-token budget, the mean / max generated tokens, and the
+  answers each filter cannot extract (`[invalid]`); lm-eval's samples files; table_ptq.tex's GSM8K column (strict-match).
+- **Checks:** N1 -- no think content (`<think>` / `</think>`) in any output; N2 -- every GPTQ record's codes_sha256 equal
+  to part H's; N3 -- every FlipQuant record installs the map part H used (path, modules, E0M3 tiles); N4 -- 1,319
+  documents, each with both filters, in every record; N5 -- the native coverage check passed. Stop and report on a
+  failing check, an OOM at batch 32, or an implausible result.
