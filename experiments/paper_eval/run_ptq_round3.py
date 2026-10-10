@@ -192,17 +192,18 @@ def e0m3(models, root):
         S.must(G.run(f"round3_e0m3_{model}", cmd, out, S.FQ2), f"round3 e0m3 codes {model}")
 
 
-def test_b():
+def test_b(tag=None):
     """O3 test (b): tests/test_acceptance_candidates.py (Qwen3-1.7B, 2 epochs: the hook with rtn and with RTN code
-    files gives calibration.train_map's map.pt bit for bit), as a GPU job; outputs under RUN/ptq_round3/test_b."""
-    out = ROOT / "test_b"
+    files gives calibration.train_map's map.pt bit for bit), as a GPU job; outputs under RUN/ptq_round3/test_b[_tag]
+    (a fresh directory per tag: the test reuses what it finds)."""
+    out = ROOT / ("test_b" if tag is None else f"test_b_{tag}")
     out.mkdir(parents=True, exist_ok=True)
     rec = out / "pytest.json"
     if G.done(rec):
         return
     cmd = [G.PY, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_acceptance_candidates.py",
            f"--junitxml={out / 'junit.xml'}"]
-    rc = G.run("round3_test_b", cmd, rec, S.FQ2, extra_env={"FLIPQUANT_ACCEPTANCE": "1", "FLIPQUANT_ACCEPTANCE_DIR": str(out),
+    rc = G.run("round3_test_b" + (f"_{tag}" if tag else ""), cmd, rec, S.FQ2, extra_env={"FLIPQUANT_ACCEPTANCE": "1", "FLIPQUANT_ACCEPTANCE_DIR": str(out),
                                                            "FLIPQUANT_TMOPT_DATA": str(S.DATA_ROOT)})
     rec.write_text(json.dumps(dict(status="complete" if rc == 0 else "failed", rc=rc,
                                    summary=json.loads((out / "summary_candidates.json").read_text())
@@ -210,8 +211,15 @@ def test_b():
     S.must(rc, "round3 test (b)")
 
 
+# part O run note: Qwen's first GPTQ-candidate training ran out of GPU memory in the trainer's dense fallback; attempt 2
+# (flipquant's pack hook) writes a new output, because tmopt_ext deletes an existing run directory and nothing on /home
+# is deleted
+ATTEMPT = {("qwen3.8-27b", "gptq"): 2}
+
+
 def trained_map(model, source):
-    return ROOT / model / f"fq-{UNIT}_{source}cand.pt"
+    a = ATTEMPT.get((model, source), 1)
+    return ROOT / model / (f"fq-{UNIT}_{source}cand.pt" if a == 1 else f"fq-{UNIT}_{source}cand_a{a}.pt")
 
 
 def train(models, root, source, env):
@@ -265,6 +273,7 @@ if __name__ == "__main__":
     ap.add_argument("--codes-root", type=Path, default=CODES_ROOT)
     ap.add_argument("--source", choices=("rtn", "gptq"), default=None, help="train: the candidates")
     ap.add_argument("--env", choices=tuple(TRAIN_PY), default="release", help="train: the trainer's env")
+    ap.add_argument("--test-tag", default=None, help="test-b: a fresh output directory test_b_<tag>")
     a = ap.parse_args()
     models = [m for m in a.models.split(",") if m]
     assert set(models) <= set(MODELS), models
@@ -284,7 +293,7 @@ if __name__ == "__main__":
         e0m3(models, a.codes_root)
     elif a.what == "test-b":
         G.log("round3 test (b) (O3): the candidates hook on Qwen3-1.7B")
-        test_b()
+        test_b(a.test_tag)
     elif a.what == "train":
         assert a.source, "--source rtn|gptq"
         G.log(f"round3 train (O3) source {a.source} env {a.env} models {models}")

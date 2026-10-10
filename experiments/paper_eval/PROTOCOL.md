@@ -712,6 +712,22 @@ N stay unchanged; their GPTQ rows remain the BF16-propagation variant.
   - The run continues as started: the bytes are the same, it is only slower, and this session kills nothing.
   - flipquant **b5cbc22** (pushed) reads the files in full. Qwen's training and every later evaluation use it; the
     CPU tests (17) still pass.
+- **O3, Qwen's GPTQ-candidate training, attempt 1: out of GPU memory** (15:34-15:48 UTC, rc 1, in candidate packing).
+  - Cause: with GPTQ codes, run_train_map's RTN pre-packer `pack()` returns None. The trainer's dense fallback then
+    keeps both BF16 candidates of every module on the GPU until the candidate loop ends: about 4 bytes per weight, so
+    about 97 GB for Qwen.
+  - Nemotron's run took the same fallback and fit (about 31 GB). Its map stands. The training reads only the lean
+    store, which both paths build with native_dev.pack_candidates from the same codes, checked against the same
+    candidate tensors. The fallback holds extra copies only until the loop ends; the trainer then clears them.
+  - Fix, flipquant **a53e122** (pushed): with code files, the hook also supplies `pack`. It returns the given codes in
+    `packed_candidates.encode`'s layout, checked with the trainer's own decoders (E2M1 bit for bit, E0M3 by value),
+    so every module takes the trainer's packed path, as RTN candidates do. With `rtn`, the trainer's own `pack` runs
+    unchanged, so test (c) is unaffected. The CPU tests now also check the packed path in all three modes.
+  - Test (b) is rerun with this hook in a fresh directory (`RUN/ptq_round3/test_b_b2`): (g) RTN, and (g2) RTN code
+    files, which now go through the new `pack`.
+  - Qwen's attempt 2 writes `fq-16x64_gptqcand_a2.pt`. tmopt_ext deletes an existing run directory, and nothing on
+    /home is deleted, so attempt 1's directory is kept as the record of the failure. The driver maps
+    (qwen3.8-27b, gptq) to attempt 2.
   - Code each run used:
     - The batch-64 pilots ran on f2a56f1.
     - The batch-48 pilot ran on f2a56f1 plus the not yet committed opt-in edits; BF16 mode touches none of them.

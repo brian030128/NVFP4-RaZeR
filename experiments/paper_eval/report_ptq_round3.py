@@ -328,7 +328,7 @@ def report():
         release_tiles, _, _ = load_map(G.REL / model / "flipquant_16x64.pt")
         run_rel = jload(G.REL / model / "records" / "16x64" / "run.json") or {}
         for src in ("rtn", "gptq"):
-            mp = ROOT / model / f"fq-16x64_{src}cand.pt"
+            mp = P.trained_map(model, src)
             mrep = jload(mp.with_suffix(".json"))
             if not (mrep and mrep.get("status") == "complete"):
                 continue
