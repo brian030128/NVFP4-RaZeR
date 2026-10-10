@@ -896,3 +896,51 @@ and is on HF: `edgeai-lab/Qwen3.8-27B-FOCUS-NVFP4` @ b84ff372a7, `focus_256/focu
   pairs, with no non-positive gap: FlipQuant 8x64 47.2 %, 16x64 46.1 %, FOCUS 41.6 %, 256x64 40.8 %, IF4 20.9 %,
   Zou 19.3 %, FourOverSix 9.5 %, GPTQ‡ 4.1 %.
 - **Records:** `results/paper_eval/focus_qwen27b/` (REPORT.md, focus_qwen27b.json, records/).
+
+## Part P, amendment 1 (registered 2026-10-10 22:43 UTC): Llama-3.2-1B-Instruct
+
+The coordinator relayed this on 2026-10-10, after part Q. The edgeai-lab account now has access to
+meta-llama/Llama-3.2-1B-Instruct (checked read-only; no identity switch). Run it in part P with the same methods and
+settings as Llama-3.1-8B-Instruct, then regenerate `results/paper_eval/final/` with all 8 models. Keep the /home floor
+at 10 GB. Do not upload its artifacts to HF until a request is relayed. One GPU job at a time, n16k64.
+
+- **Pin check (read-only, done).** The registry pin `9213176726f574b556790deb65791e0c5aa438b6` (2024-10-24, "Update
+  model card (#25)") is the Hub's main today, and the model is accessible (gated: manual, accepted). The pin is kept.
+- **Trainer key `llama1b_ins`, registered at run time.** flipquant paper-sm120-runs aa12408 (first on
+  llama-instruct-dev, then fast-forwarded and pushed). No vendored file is edited. Neither the vendored trainer nor
+  prepare_model_data knows the model, so it is registered at run time as the release's models without an archived
+  record (Phi-4, Qwen3-1.7B, Qwen3-8B, Mistral-7B-Instruct-v0.3, Nemotron-Nano-9B-v2):
+  - The preparation registers it in prepare_model_data.MODELS, in its own process, with no record.
+  - The builder rule's three checks run first. They must reproduce the Llama-3.1-8B, Qwen3-4B and Mistral-7B-v0.3
+    records exactly. They need those three tokenizers, which are re-downloaded (configs and tokenizer files only, no
+    weights).
+  - Then `campaign.data.builder_seed0` with this model's tokenizer draws the 128 fit windows. They are re-tokenized and
+    every token hash is checked. The matrices are this model's weights.
+  - `prepare_development` draws its three development records (fresh_dev1..3, the Llama development rule; this model's
+    C4 evaluation documents and earlier draws are excluded), as for those models.
+  - calibration.train_map runs the trainer through `tmopt_launch.py --register-model llama1b_ins`. That adds the key to
+    run_multiround.LOCAL_DEVELOPMENT (the three draws) and MODELS. PUBLISHED is left alone: there is no published C4
+    record for this model, so the trainer records the evaluation windows by token hash.
+  - Tests: tests/test_stage3.py (13 passed, 1 skipped). Nothing changes for any other model.
+- **Calibration windows: 256 x 512.**
+  - The 128 of the paper rule, as above.
+  - The 128 of the extension rule (seed 20260930). It skips the fit documents, the 192 drawn development documents,
+    and no published C4 documents. The release extension check applies, with `skip_c4_published` = 0 documents.
+  - Every window's token sha256 is recorded. Comparing them with base Llama-3.1-8B's release windows is reported only,
+    not required: the 1B's development documents differ, so its extension may differ.
+- **Steps, exactly as for Llama-3.1-8B-Instruct (part P steps 1–7; `run_llama_instruct.py`):**
+  - the record (CPU: weights 2.48 GB at the pin; `original/` is not downloaded);
+  - maps 8x64 / 16x64 / 256x64 with the release settings, measured, with the extension check;
+  - native PPL: BF16, NVFP4, FourOverSix, FlipQuant x 3;
+  - IF4 and MixFP4 (Zou), simulated;
+  - GPTQ‡ (BF16 propagation, its own 16x64 trainer report as the extension, no code file);
+  - FOCUS (part K's settings, micro 8 halved on OOM);
+  - the windows record;
+  - then tables_final.py (all 8 models) and report_llama_instruct.py.
+- **Final table.** The mean capped NLL recovery is over the 16 common pairs (8 models x 2 corpora; every model has
+  FOCUS). Any non-positive gap is flagged, and the per-pair values are reported.
+- **Disk.** /home has 17 GB free. Expected use: about 2.5 GB of weights, about 25 MB of tokenizers, a FOCUS state of
+  about 0.7 GB, and small records. Stop if a step would cross 10 GB.
+- **Stop and report** on a failing builder-rule, token-hash, extension or coverage check, an OOM, or an implausible
+  result.
+- **ETA.** CPU preparation about 10 min; GPU about 25 min; the report about 10 min.

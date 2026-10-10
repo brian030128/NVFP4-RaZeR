@@ -263,8 +263,10 @@ def focus(models, focus_root):
 
 
 def windows(models):
-    """Every window's token sha256 (the 128 of the record, the 128 of the extension), and, for Llama-3.1-8B-Instruct,
-    whether they equal base Llama-3.1-8B's release windows."""
+    """Every window's token sha256 (the 128 of the record, the 128 of the extension), and whether they equal base
+    Llama-3.1-8B's release windows: expected for Llama-3.1-8B-Instruct (its base); for Llama-3.2-1B-Instruct only a
+    comparison (its fit set is drawn by the paper rule with its own tokenizer, its development records are its own
+    draws)."""
     base = json.loads(BASE_RELEASE.read_text())
     base_prior = json.loads((DATA / "llama8b" / "calibration" / "report.json").read_text()) \
         if (DATA / "llama8b" / "calibration" / "report.json").exists() else None
@@ -275,11 +277,11 @@ def windows(models):
         fit = {s: prior["fit"][s]["token_sha256"] for s in ("math", "code")}
         ext = [r["token_sha256"] for r in rep["fit_extension"]["records"]]
         out = dict(model=model, key=key, fit_token_sha256=fit, extension_token_sha256=ext)
-        if model == "llama3.1-8b-instruct":
-            bext = [r["token_sha256"] for r in base["fit_extension"]["records"]]
-            out.update(base_release=str(BASE_RELEASE), extension_equals_base=ext == bext,
-                       fit_equals_base=(base_prior is not None and all(
-                           fit[s] == base_prior["fit"][s]["token_sha256"] for s in ("math", "code"))))
+        bext = [r["token_sha256"] for r in base["fit_extension"]["records"]]
+        out.update(base_release=str(BASE_RELEASE), extension_equals_base=ext == bext,
+                   extension_shared_with_base=len(set(ext) & set(bext)),
+                   fit_equals_base=(base_prior is not None and all(
+                       fit[s] == base_prior["fit"][s]["token_sha256"] for s in ("math", "code"))))
         (ROOT / model / "windows.json").write_text(json.dumps(out, indent=1) + "\n")
         print(model, {k: v for k, v in out.items() if k.endswith("_base")})
 

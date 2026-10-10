@@ -57,10 +57,15 @@ def main():
         w = json.loads((d / "windows.json").read_text()) if (d / "windows.json").exists() else {}
         m["windows"] = w
         if w:
+            same = (f" Equal to base Llama-3.1-8B's release windows, token for token: fit {w.get('fit_equals_base')}, "
+                    f"extension {w.get('extension_equals_base')}." if model == "llama3.1-8b-instruct" else
+                    f" Compared with Llama-3.1-8B's release windows (not required: this model's fit set is drawn with "
+                    f"its own tokenizer and its development records are its own draws): fit equal "
+                    f"{w.get('fit_equals_base')}, extension equal {w.get('extension_equals_base')} "
+                    f"({w.get('extension_shared_with_base')} of 128 extension windows shared).")
             md += ["", "Calibration windows (256 x 512): the 128 of the paper rule (`builder_seed0` with this model's "
                    "tokenizer; not taken from an archived record) and the 128 of the extension rule (seed 20260930)."
-                   + (f" Equal to base Llama-3.1-8B's release windows, token for token: fit {w.get('fit_equals_base')}, "
-                      f"extension {w.get('extension_equals_base')}." if "fit_equals_base" in w else "")]
+                   + (same if "fit_equals_base" in w else "")]
             shutil.copyfile(d / "windows.json", OUT / f"windows_{model}.json")
         md += ["", "| row | WikiText-2 | C4 | ΔNLL vs FourOverSix (wiki / C4) | FlipQuant vs NVFP4 (wiki / C4) |",
                "|---|---:|---:|---:|---:|"]
