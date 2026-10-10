@@ -55,15 +55,17 @@ class Sampler(threading.Thread):
             self.halt.wait(2)
 
 
-def measured(name, cmd, out, cwd=S.FQ2):
-    """G.run with the release runs' device-peak sampler; returns (rc, seconds, peak MiB) or None if done."""
+def measured(name, cmd, out, cwd=S.FQ2, fresh_dir=False):
+    """G.run with the release runs' device-peak sampler; returns (rc, seconds, peak MiB) or None if done.
+    fresh_dir: run_sm120.run_fresh_dir, which does not create the record's parent (train_map refuses an existing
+    --out directory)."""
     if G.done(out):
         return None
     sampler = Sampler()
     G.idle()
     sampler.start()
     t = time.time()
-    rc = G.run(name, cmd, out, cwd)
+    rc = S.run_fresh_dir(name, cmd, out, cwd) if fresh_dir else G.run(name, cmd, out, cwd)
     sampler.halt.set()
     sampler.join()
     return rc, time.time() - t, sampler.peak
@@ -146,7 +148,8 @@ def maps(models):
             cmd = [G.PY, "-m", "calibration.train_map", "--model", model, "--unit", unit, *TRAIN, "--data-root", DATA,
                    "--out", out]
             code = checkout()
-            res = measured(f"llama_train_{model}_{unit}", cmd, out / "reproduction.json")
+            out.parent.mkdir(parents=True, exist_ok=True)
+            res = measured(f"llama_train_{model}_{unit}", cmd, out / "reproduction.json", fresh_dir=True)
             rc, seconds, peak = res if res else (0, None, None)
             rec = dict(model=model, unit=unit, command=" ".join(map(str, cmd[1:])), checkout=code, rc=rc,
                        seconds=seconds, device_peak_mib=peak)
