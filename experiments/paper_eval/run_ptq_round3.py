@@ -240,6 +240,13 @@ def train(models, root, source, env):
 
 def ppl3(models, root):
     for model in models:
+        if ATTEMPT.get((model, "gptq"), 1) == 1:
+            # the coordinator's condition: a map trained through the trainer's dense fallback is used only if its lean
+            # store equals the one the hook's pack path builds (store_check_round3.py, a GPU job run here first if
+            # needed); otherwise it is retrained as attempt 2 before its PPL
+            import store_check_round3 as SC
+            if SC.check(model, root).get("identical") is not True:
+                G.stop(f"round3 ppl3 {model}: the store check found different lean stores; retrain as attempt 2")
         out = ROOT / model / f"gptqcand_fq-{UNIT}.json"
         cand = (codes(root, model, "fo6"), codes(root, model, "e0m3"))
         q = [*NATIVE, "--weight", "mixfp4", "--act", "fourover6", "--map", trained_map(model, "gptq"),

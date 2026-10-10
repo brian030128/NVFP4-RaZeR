@@ -728,6 +728,21 @@ N stay unchanged; their GPTQ rows remain the BF16-propagation variant.
   - Qwen's attempt 2 writes `fq-16x64_gptqcand_a2.pt`. tmopt_ext deletes an existing run directory, and nothing on
     /home is deleted, so attempt 1's directory is kept as the record of the failure. The driver maps
     (qwen3.8-27b, gptq) to attempt 2.
+- **O3, the store check (the coordinator's request).** Nemotron's GPTQ-candidate map (dense fallback, 276ce86's
+  hook) is used only if its lean store equals the one the new `pack` path builds from the same code files.
+  - Otherwise Nemotron is retrained as attempt 2 before its PPL.
+  - `store_check_round3.py` rebuilds both paths per module and compares the five store tensors byte for byte, with
+    per-tensor sha256 and an overall digest:
+    - A: 276ce86's Candidates (git show), the trainer's `pack` returning None, then the dense fallback;
+    - B: a53e122's Candidates with its `pack`.
+  - First attempt, CPU (15:54-15:56 UTC): stopped at the first module. On the CPU, flipquant's RTN FourOverSix grid
+    differs from the GPU's in near-tie blocks: the 4-or-6 choice compares summed squared errors, summed in another
+    order. The hook's grid guard therefore refused the GPU-made codes.
+  - The check now runs as a GPU job: the trainer's own load call, `device_map="cuda"`. The driver's `ppl3` runs it
+    first, between Qwen's attempt 2 and the PPL, and stops if the stores differ.
+  - Test (b) rerun with a53e122 (`test_b_b2`, 15:51-15:55 UTC) passed:
+    - (g) and (g2) both give map.pt 4f08678a...;
+    - (g2) now takes the packed path for all 196 modules, with no dense fallback.
   - Code each run used:
     - The batch-64 pilots ran on f2a56f1.
     - The batch-48 pilot ran on f2a56f1 plus the not yet committed opt-in edits; BF16 mode touches none of them.
