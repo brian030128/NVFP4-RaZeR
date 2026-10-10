@@ -100,9 +100,59 @@ def shares():
     print("\n".join(md))
 
 
+# ----------------------------------------------------------------------------------------------------- O0 pilot
+KV_KIB = {"nemotron-nano-9b-v2": 16, "qwen3.8-27b": 64}   # KV cache per token (PROTOCOL.md part O, O0)
+LIMIT_MIB = 97280                                        # 95 GiB
+LADDER = (64, 48, 32, 16)
+
+
+def pilot():
+    """O0's batch rule: batch b fits if its pilot completes and nvidia-smi's peak + b x 1024 x KV per token <= 95 GiB;
+    the full run uses the largest batch that fits."""
+    out = OUT / "o0_pilot"
+    out.mkdir(parents=True, exist_ok=True)
+    rec = dict(rule="pilot rc 0 and nvidia-smi peak + b x 1024 tokens x KV/token <= 97280 MiB", models={})
+    md = ["# O0 pilot: the BF16 GSM8K batch (not a result)", "",
+          "Part N's pilot documents per model (the 64 longest questions + 64 others), BF16, part N's command. A batch b "
+          "fits if the pilot completes and nvidia-smi's peak plus the KV growth bound b x 1024 tokens x KV per token "
+          "(64 KiB Qwen3.8-27B, 16 KiB Nemotron-Nano-9B-v2) is at most 97,280 MiB (95 GiB).", "",
+          "| model | batch | rc | nvidia-smi peak (MiB) | + KV bound (MiB) | total (MiB) | torch peak allocated (GiB) | "
+          "seconds | strict / flexible (pilot docs) | fits |", "|---|---:|---:|---:|---:|---:|---:|---:|---|---|"]
+    for model, title in MODELS:
+        d = ROOT / "bf16" / "pilot" / model
+        fits = []
+        for b in LADDER:
+            mem_f, rep_f = d / f"pilot_b{b}.mem.json", d / f"pilot_b{b}.json"
+            if not mem_f.exists():
+                continue
+            mem = json.loads(mem_f.read_text())
+            rep = json.loads(rep_f.read_text()) if rep_f.exists() else {}
+            t = (rep.get("tasks") or {}).get("gsm8k_llama", {})
+            kv = b * 1024 * KV_KIB[model] // 1024
+            ok = mem["rc"] == 0 and rep.get("status") == "complete" and mem["peak_mib"] + kv <= LIMIT_MIB
+            if ok:
+                fits.append(b)
+            m = t.get("metrics", {})
+            r = rec["models"].setdefault(model, {})[b] = dict(
+                rc=mem["rc"], nvidia_smi_peak_mib=mem["peak_mib"], kv_bound_mib=kv, total_mib=mem["peak_mib"] + kv,
+                fits=ok, torch_peak_allocated_gib=t.get("peak_gpu_allocated_gib"), seconds=t.get("seconds"),
+                strict=m.get("exact_match,strict_match"), flexible=m.get("exact_match,flexible_extract"))
+            md.append(f"| {title} | {b} | {r['rc']} | {r['nvidia_smi_peak_mib']:,} | {kv:,} | {r['total_mib']:,} | "
+                      f"{r['torch_peak_allocated_gib'] or 0:.2f} | {r['seconds'] or 0:.0f} | "
+                      f"{r['strict']} / {r['flexible']} | {'yes' if ok else 'no'} |")
+        rec["models"].setdefault(model, {})["chosen"] = max(fits) if fits else None
+    md += ["", "Chosen (the largest batch that fits): " + ", ".join(
+        f"{t} {rec['models'][m]['chosen']}" for m, t in MODELS), ""]
+    (out / "pilot.json").write_text(json.dumps(rec, indent=1) + "\n")
+    (out / "PILOT.md").write_text("\n".join(md) + "\n")
+    print("\n".join(md))
+
+
 if __name__ == "__main__":
     what = sys.argv[1] if len(sys.argv) > 1 else ""
     if what == "shares":
         shares()
+    elif what == "pilot":
+        pilot()
     else:
         sys.exit(__doc__)

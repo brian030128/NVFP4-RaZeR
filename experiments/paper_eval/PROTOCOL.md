@@ -656,3 +656,30 @@ N stay unchanged; their GPTQ rows remain the BF16-propagation variant.
   and the GPTQ-candidate map, two runs per model. Every evaluation stays in n16k64-fast.
 - **O1 note** (the coordinator's wording): part H's Hadamard maps were trained in n16k64-fast, so the rotated vs
   unrotated E0M3 shares mix the basis change with the env.
+
+### Part O: the run (written as it goes)
+
+- **The user's /vault grant (07:44 UTC, in this session).** Covers writes under `/vault/flipquant_paper_eval/` for
+  part O: create directories, have the GPTQ jobs write their code files there, compute their sha256, and read them back
+  for evaluation and map training. Files there may be moved or removed only if they are a partial or failed output of
+  a job this session started. Nothing else on /vault is modified, and nothing on /home is deleted.
+  `/vault/flipquant_paper_eval/ptq_round3` was created at 07:44 UTC. Order (the user's words): O2 for Nemotron, then
+  Qwen, then O3, then O4, after O0. The O3 tool tests the coordinator allowed during the wait were not needed early;
+  they run in O3, before its experiment runs.
+- **O0 pilot** (`results/paper_eval/ptq_round3/o0_pilot/PILOT.md`, not a result):
+  - Nemotron-Nano-9B-v2 fits at batch 64: nvidia-smi peak 55,408 MiB + 1,024 MiB KV bound.
+  - Qwen3.8-27B at batch 64 completed (rc 0), but 94,320 + 4,096 MiB > 97,280 MiB, so it does not fit by the rule.
+  - Qwen3.8-27B at batch 48 fits: 83,974 + 3,072 MiB.
+  - The full BF16 runs therefore use Nemotron 64 and Qwen 48 (started 07:49:51 UTC). Qwen's BF16 reference row uses
+    a different batch than part N's quantized rows (64), as the request allows for the reference row; documented
+    here and in the report.
+- **Code after registration.**
+  - Driver: `bf16-pilot` takes `--models`, and `--codes-root` defaults to the vault path (amendment 1).
+  - flipquant paper-sm120-runs **276ce86** (pushed) adds the opt-in options: `--candidates-e2m1 / --candidates-e0m3`
+    (tmopt_launch / tmopt_ext train) and `--gptq-candidates` (models/cli, flipquant.gptq.compose_candidates).
+    Defaults are unchanged. Test (a), tests/test_gptq_candidates.py, 17 CPU tests, passes: composition; the hook
+    driven through run_train_map's lean-store call sequence (`rtn` = the unhooked store byte for byte; code files
+    decode to the files' codes); refusal of another grid or swapped files, checked to fail at the intended guard.
+    tests/test_gptq.py and tests/test_stage3.py still pass.
+  - O2 and later run on 276ce86; O0 runs started on f2a56f1 + these uncommitted opt-in edits (BF16 mode touches none
+    of them).

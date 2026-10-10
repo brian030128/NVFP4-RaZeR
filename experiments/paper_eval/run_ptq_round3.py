@@ -119,8 +119,8 @@ class GpuMemory:
         self.t.join()
 
 
-def bf16_pilot(batch):
-    for model in MODELS:
+def bf16_pilot(batch, models=MODELS):
+    for model in models:
         out = ROOT / "bf16" / "pilot" / model / f"pilot_b{batch}.json"
         with GpuMemory() as mem:
             rc = M.run_ts(f"round3_bf16_pilot_{model}_b{batch}",
@@ -250,8 +250,8 @@ if __name__ == "__main__":
     models = [m for m in a.models.split(",") if m]
     assert set(models) <= set(MODELS), models
     if a.what == "bf16-pilot":
-        G.log(f"round3 bf16 pilot (O0) batch {a.batch}")
-        bf16_pilot(int(a.batch))
+        G.log(f"round3 bf16 pilot (O0) batch {a.batch} models {models}")
+        bf16_pilot(int(a.batch), models)
     elif a.what == "bf16":
         bs = dict(x.split(":") for x in a.batch.split(","))
         assert set(bs) == set(MODELS), bs
