@@ -141,6 +141,22 @@ def report():
     md += ["", "Checks: N1 no think content {N1}; N2 GPTQ codes_sha256 equal to part H's {N2}; N3 FlipQuant maps equal to part "
            "H's {N3}; N4 1,319 documents with both filters {N4}; N5 native coverage {N5}.".format(
                **{k: f"{ok[k]} of {want[k]}" for k in want}), ""]
+    # every output with a think marker, in full context (the N1 exceptions)
+    exc = []
+    for (model, method, fmt), ex in ex_all.items():
+        for d, e in ex.items():
+            raw = e.get("raw") or ""
+            if any(m in raw for m in THINK):
+                exc.append(dict(config=f"{model}/{method}_{fmt}", doc=d, generated=e.get("generated"),
+                                strict=e["strict_match"], flexible=e["flexible_extract"], raw=raw))
+    rec["n1_exceptions"] = exc
+    if exc:
+        md += ["## Check N1 exceptions (outputs containing a think marker)", ""]
+        for x in exc:
+            md += [f"- `{x['config']}`, doc {x['doc']} ({x['generated']['tokens']} tokens, EOS {x['generated']['eos']}): "
+                   f"strict {x['strict']['response']!r} ({'correct' if x['strict']['exact_match'] else 'wrong'}), "
+                   f"flexible {x['flexible']['response']!r} ({'correct' if x['flexible']['exact_match'] else 'wrong'}). Output:",
+                   "", "```", x["raw"], "```", ""]
     (OUT / "gsm8k_lmeval.json").write_text(json.dumps(rec, indent=1) + "\n")
     (OUT / "GSM8K_LMEVAL.md").write_text("\n".join(md) + "\n")
     print("\n".join(md))

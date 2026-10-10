@@ -510,3 +510,18 @@ RaZeR settings); nothing in the task is changed.
   to part H's; N3 -- every FlipQuant record installs the map part H used (path, modules, E0M3 tiles); N4 -- 1,319
   documents, each with both filters, in every record; N5 -- the native coverage check passed. Stop and report on a
   failing check, an OOM at batch 32, or an implausible result.
+
+### Part N: the run
+
+N1 ran on 2026-10-09 from 17:06:21 to 23:32:50 UTC (registration 8f3fbe8; flipquant paper-sm120-runs f2a56f1), batch 64
+on both models, all 18 configurations rc 0, one job at a time; no deviation from the registered method. The completion
+watcher of this session waited on its own command line (`pgrep -f` matched itself), so the report ran on 10/10 at
+05:16 UTC instead of right after the run; nothing else was affected.
+- **Checks:** N2 (GPTQ codes_sha256 = part H's) 6 / 6; N3 (FlipQuant maps = part H's) 6 / 6; N4 (1,319 documents, both
+  filters) 18 / 18; N5 (native coverage) 18 / 18; per-problem accuracies equal lm-eval's exact_match exactly.
+- **N1 (no think content) 17 / 18 -- reported, a decision for the coordinator:** one output of 23,742 (Qwen3.8-27B
+  Hadamard FourOverSix, doc 262) contains a stray `</think>`: the model wrote its answer, the tag, and the same answer
+  again ("... The final answer is 270.\n</think>\n\n<same text>"). No reasoning precedes it (the prompt pre-fills the
+  empty think block), it ends with EOS at 152 tokens, and both filters extract 270, correct either way.
+- **Results:** `results/paper_eval/ptq_gsm8k_lmeval/GSM8K_LMEVAL.md`; tab:ptq's GSM8K column (strict-match) in
+  `results/paper_eval/ptq/table_ptq.tex`.
