@@ -1,0 +1,271 @@
+{
+ "model": "meta-llama/Llama-3.1-8B-Instruct",
+ "revision": "0e9e39f249a16976918f6564b8830bc894c89659",
+ "flipquant_model_key": "llama3.1-8b-instruct",
+ "evaluation": {
+  "mode": "native sm_120 kernels (FlipQuant evaluation.ppl --mode native)",
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "quantized_modules": 224,
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "nvfp4": "per-token NVFP4 activations (--act-scope row), as the paper's NVFP4 rows",
+  "corpora": {
+   "wiki": {
+    "dataset": "Salesforce/wikitext, wikitext-2-raw-v1, test split",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "total_tokens": 289077,
+    "used_tokens": 288768,
+    "windows": 141,
+    "window_tokens": 2048
+   },
+   "c4": {
+    "dataset": "allenai/c4, validation shard en/c4-validation.00000-of-00008.json.gz",
+    "revision": "1588ec454efa1a09f29cd18ddd04fe05fc8653a2",
+    "path": "en/c4-validation.00000-of-00008.json.gz",
+    "seed": 0,
+    "windows": 256,
+    "window_tokens": 2048
+   }
+  },
+  "c4_documents": "the documents are drawn with the recorded seed from the listed shard"
+ },
+ "ppl": {
+  "bf16": {
+   "wiki": 7.217093808743426,
+   "c4": 10.385272903551368
+  },
+  "nvfp4": {
+   "wiki": 7.887582901713398,
+   "c4": 11.340903728977823
+  },
+  "fo6": {
+   "wiki": 7.818606621556924,
+   "c4": 11.266695538637414
+  },
+  "flipquant_8x64": {
+   "wiki": 7.695068856924412,
+   "c4": 11.138373512554246
+  },
+  "flipquant_16x64": {
+   "wiki": 7.710644542880094,
+   "c4": 11.142039500973826
+  },
+  "flipquant_256x64": {
+   "wiki": 7.750103946105757,
+   "c4": 11.217090922794652
+  }
+ },
+ "paired_vs_fourover6": {
+  "bf16": {
+   "wiki": {
+    "delta_nll": -0.08005400498708089,
+    "two_se": 0.0031279429746647065,
+    "n": 141,
+    "significant": true,
+    "verdict": "better"
+   },
+   "c4": {
+    "delta_nll": -0.08146234080777504,
+    "two_se": 0.01597382199916088,
+    "n": 256,
+    "significant": true,
+    "verdict": "better"
+   }
+  },
+  "nvfp4": {
+   "wiki": {
+    "delta_nll": 0.008783381035987367,
+    "two_se": 0.001931222116182335,
+    "n": 141,
+    "significant": true,
+    "verdict": "worse"
+   },
+   "c4": {
+    "delta_nll": 0.006564912619069219,
+    "two_se": 0.002356591811204865,
+    "n": 256,
+    "significant": true,
+    "verdict": "worse"
+   }
+  },
+  "flipquant_8x64": {
+   "wiki": {
+    "delta_nll": -0.01592664177536119,
+    "two_se": 0.001676801442134179,
+    "n": 141,
+    "significant": true,
+    "verdict": "better"
+   },
+   "c4": {
+    "delta_nll": -0.011454856838099658,
+    "two_se": 0.002616431265752125,
+    "n": 256,
+    "significant": true,
+    "verdict": "better"
+   }
+  },
+  "flipquant_16x64": {
+   "wiki": {
+    "delta_nll": -0.013904574915026943,
+    "two_se": 0.0017669227940002754,
+    "n": 141,
+    "significant": true,
+    "verdict": "better"
+   },
+   "c4": {
+    "delta_nll": -0.011125779594294727,
+    "two_se": 0.0028968621292480906,
+    "n": 256,
+    "significant": true,
+    "verdict": "better"
+   }
+  },
+  "flipquant_256x64": {
+   "wiki": {
+    "delta_nll": -0.008800101618394784,
+    "two_se": 0.001679480017927906,
+    "n": 141,
+    "significant": true,
+    "verdict": "better"
+   },
+   "c4": {
+    "delta_nll": -0.004412485985085368,
+    "two_se": 0.0015553681442972446,
+    "n": 256,
+    "significant": true,
+    "verdict": "better"
+   }
+  }
+ },
+ "maps": {
+  "flipquant_8x64.pt": {
+   "sha256": "db896cece0fdef908ba1622b23a3c21b8f867e474ceb41439f94821c476f33ce",
+   "e0m3_tiles": 83771,
+   "tiles": 13631488
+  },
+  "flipquant_16x64.pt": {
+   "sha256": "3d527e1191f6e8bef3010016875c12419a81cec75e2ba231edf6943f8cd6f131",
+   "e0m3_tiles": 52719,
+   "tiles": 6815744
+  },
+  "flipquant_256x64.pt": {
+   "sha256": "84b009d76e27f883ab53d7c5ca2ed7bf71b7930affacc3de1d13da4aa56732c4",
+   "e0m3_tiles": 9447,
+   "tiles": 425984
+  }
+ },
+ "calibration": {
+  "settings": {
+   "param": "ste",
+   "optimizer": "adam",
+   "lr": 0.02,
+   "eps": 1e-12,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "schedule": "constant",
+   "init_logit": -1.0,
+   "epochs": 5,
+   "batch": 8,
+   "accum": 1,
+   "seed": 0,
+   "tm_opt": true,
+   "tile_grad_tc": true,
+   "no_dev": true,
+   "no_eval": true,
+   "unit": "16x64",
+   "teacher_topk": 1000,
+   "fit_windows": 256,
+   "memory_mode": "lean",
+   "fused_act_quant": true,
+   "tile_grad_kernel": false,
+   "chunked_loss": true,
+   "deterministic": true,
+   "dev_backend": "native",
+   "eval_backend": "native",
+   "single_pass_epilogue": true,
+   "pytorch_cuda_alloc_conf": "expandable_segments:True",
+   "cublas_workspace_config": ":4096:8",
+   "fit_set": "128 windows x 512 tokens: 64 open-web-math @ fde8ef8 + 64 codeparrot-clean @ 35a59fb, then 128 by the extension rule",
+   "activations": "per-token FourOverSix fake quant (STE)",
+   "loss": "KL to the BF16 teacher",
+   "output": "last-epoch map (theta > 0 -> E0M3)"
+  },
+  "non_default_settings": {
+   "epochs": 5,
+   "teacher_topk": 1000,
+   "fit_windows": 256
+  },
+  "windows": "Its 256 windows are identical, token for token, to the base model's release windows (Llama-3.1-8B-FlipQuant): the Instruct model shares the base tokenizer, the paper rule (`builder_seed0` with this model's tokenizer) reproduces the base model's 128 fit windows exactly, and the extension rule gives the same 128 more.",
+  "per_unit": {
+   "8x64": {
+    "model_load": 5.904614210128784,
+    "data": 20.646387338638306,
+    "teacher": 12.29215669631958,
+    "packing": 37.23027229309082,
+    "setup": 76.07343053817749,
+    "epoch_mean": 40.24331884384155,
+    "epoch_min": 39.88989472389221,
+    "epoch_max": 40.432801961898804,
+    "training": 201.22551226615906,
+    "trainer_total": 277.3380377292633,
+    "wall": 288.7276906967163,
+    "train_map_wall": 285.86653089523315,
+    "batch": 8,
+    "accum": 1,
+    "gpu_alloc": 41.85270023345947,
+    "gpu_reserved": 42.869140625,
+    "rss": 15.914192199707031,
+    "rss_load": 15.879043579101562,
+    "teacher_gib": 0.7314786911010742,
+    "device_peak_mib": 44652
+   },
+   "16x64": {
+    "model_load": 1.6061983108520508,
+    "data": 19.888099908828735,
+    "teacher": 11.83015775680542,
+    "packing": 36.71599769592285,
+    "setup": 70.04045367240906,
+    "epoch_mean": 40.25744581222534,
+    "epoch_min": 39.9432578086853,
+    "epoch_max": 40.44397783279419,
+    "training": 201.2966389656067,
+    "trainer_total": 271.36794209480286,
+    "wall": 282.9688673019409,
+    "train_map_wall": 280.0743489265442,
+    "batch": 8,
+    "accum": 1,
+    "gpu_alloc": 41.712998390197754,
+    "gpu_reserved": 42.689453125,
+    "rss": 15.918132781982422,
+    "rss_load": 15.717666625976562,
+    "teacher_gib": 0.7314786911010742,
+    "device_peak_mib": 44468
+   },
+   "256x64": {
+    "model_load": 1.6609246730804443,
+    "data": 20.905725955963135,
+    "teacher": 11.65676474571228,
+    "packing": 36.275309801101685,
+    "setup": 70.49872517585754,
+    "epoch_mean": 40.26039099693298,
+    "epoch_min": 39.90244746208191,
+    "epoch_max": 40.454625368118286,
+    "training": 201.31134581565857,
+    "trainer_total": 271.8331778049469,
+    "wall": 283.5144863128662,
+    "train_map_wall": 280.68731474876404,
+    "batch": 8,
+    "accum": 1,
+    "gpu_alloc": 41.60756826400757,
+    "gpu_reserved": 42.576171875,
+    "rss": 15.918865203857422,
+    "rss_load": 14.760162353515625,
+    "teacher_gib": 0.7314786911010742,
+    "device_peak_mib": 44352
+   }
+  }
+ }
+}
