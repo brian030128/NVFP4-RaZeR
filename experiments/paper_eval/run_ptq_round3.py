@@ -10,8 +10,8 @@
 
 Every GPU job goes through run_gpu.run / run_gsm8k.run_ts: one at a time on an idle GPU, START / END in queue.log, a
 finished record is not run again. GSM8K is part N's command (run_gsm8k_lmeval) with this part's quantization flags.
-GPTQ code files go under --codes-root (default RUN/ptq_round3/codes); a GPTQ job starts only if the disk holds its file
-plus a 10 GB margin.
+GPTQ code files go under --codes-root (default /vault/flipquant_paper_eval/ptq_round3, amendment 1); a GPTQ job starts
+only if that disk holds its file plus a 10 GB margin.
 """
 import argparse
 import json
@@ -34,6 +34,8 @@ UNIT = "16x64"
 NATIVE = [*G.NATIVE, "--kernel-set", "auto"]
 FILE_GB = {"nemotron-nano-9b-v2": 5, "qwen3.8-27b": 16}   # one GPTQ code file, rounded up (part H: 4.3-4.8 / 13.7-15.2 GB)
 MARGIN_GB = 10
+# part O amendment 1: round 3's GPTQ code files go to the user's vault (the user's decision; nothing on /home)
+CODES_ROOT = Path("/vault/flipquant_paper_eval/ptq_round3")
 # the trainer's interpreter: the release maps' env (their records: n16k64), or n16k64-fast
 TRAIN_PY = {"release": G.PY, "fast": G.PY_FAST}
 # O2's rows: part H's quantization flags (run_sm120.GPTQ_ROWS); PPL as part H (FourOverSix activations: the paper
@@ -241,7 +243,7 @@ if __name__ == "__main__":
     ap.add_argument("what", choices=("bf16-pilot", "bf16", "gptq", "e0m3", "train", "ppl3", "gsm8k"))
     ap.add_argument("--batch", default="64", help="bf16-pilot: the batch size; bf16: <model>:<batch>,...")
     ap.add_argument("--models", default=",".join(MODELS))
-    ap.add_argument("--codes-root", type=Path, default=ROOT / "codes")
+    ap.add_argument("--codes-root", type=Path, default=CODES_ROOT)
     ap.add_argument("--source", choices=("rtn", "gptq"), default=None, help="train: the candidates")
     ap.add_argument("--env", choices=tuple(TRAIN_PY), default="release", help="train: the trainer's env")
     a = ap.parse_args()

@@ -641,3 +641,18 @@ N stay unchanged; their GPTQ rows remain the BF16-propagation variant.
     n16k64-fast.
   - O4: about 3 h.
   - In all, about 10-11 h of GPU time, plus waiting for the two decisions above.
+
+### Part O, amendment 1 (2026-10-10 07:39 UTC): the user's two decisions
+
+- **Disk: the GPTQ code files go to the user's vault** (relayed by the coordinator; the user chose it explicitly):
+  `/vault/flipquant_paper_eval/ptq_round3/<model>/codes_<row>.pt` (the driver's `--codes-root` default). The report
+  records the path and each file's sha256. Nothing on /home is deleted. The first write there (07:38 UTC, a
+  `mkdir` plus a one-line write test) was denied by this session's permission classifier. As the coordinator
+  instructed, no workaround was tried, and no round-3 code file goes to /home instead. The GPTQ jobs (O2, O3's E0M3
+  codes) wait until the user grants writes under `/vault/flipquant_paper_eval/` in this session. The disk guard
+  applies to the vault's free space.
+- **The trainer env for O3 is n16k64, confirmed by the user.** This is a registered exception to "hybrid models
+  run in n16k64-fast", because the release maps were trained in n16k64. It covers the RTN-candidate reproduction
+  and the GPTQ-candidate map, two runs per model. Every evaluation stays in n16k64-fast.
+- **O1 note** (the coordinator's wording): part H's Hadamard maps were trained in n16k64-fast, so the rotated vs
+  unrotated E0M3 shares mix the basis change with the env.
