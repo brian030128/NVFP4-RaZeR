@@ -687,6 +687,16 @@ N stay unchanged; their GPTQ rows remain the BF16-propagation variant.
     driven through run_train_map's lean-store call sequence (`rtn` = the unhooked store byte for byte; code files
     decode to the files' codes); refusal of another grid or swapped files, checked to fail at the intended guard.
     tests/test_gptq.py and tests/test_stage3.py still pass.
+- **O0, O2 done.** Every job ran with rc 0 (`results/paper_eval/ptq_round3/REPORT.md`). O2's six code files are on
+  /vault, with their sha256 in the report.
+- **O3, the E0M3 candidates.** Both GPTQ runs on the all-E0M3 map completed with O2's settings (11:11-12:03 UTC).
+- **O3, test (b), first attempt (12:02-12:05 UTC, rc 1).**
+  - (g) passed: the hook with `rtn` gave calibration.train_map's map.pt bit for bit (sha256 4f08678a..., 196 modules,
+    lean store).
+  - (g2) did not run: the test's own helper, which writes the RTN code files, passed a str where `gptq._save` takes a
+    Path. That is a bug in the test script, not in the hook.
+  - Fixed in flipquant eb10c28 (test file only), and (b) was rerun. Its finished parts (the direct run, (g)) are
+    reused by the test's own caching.
   - Code each run used:
     - The batch-64 pilots ran on f2a56f1.
     - The batch-48 pilot ran on f2a56f1 plus the not yet committed opt-in edits; BF16 mode touches none of them.
