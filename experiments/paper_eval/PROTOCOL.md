@@ -817,3 +817,31 @@ merged; nothing vendored is edited) and on paper-eval.
   downloads and records, about 20 min. Reports take about 15 min on CPU.
 - **Stop and report** on a failing check: the builder rule, the token hashes, the extension check, coverage, an OOM, or
   an implausible result.
+
+### Part P: the run (written as it goes)
+
+- **CPU preparation.**
+  - Llama-3.1-8B-Instruct's weights were downloaded at the pin. Its record was built by INSTRUCT_PREPARE (16:16-16:36
+    UTC, from the dev worktree at 7b472b0). The paper rule reproduces the base archived record; the record has 224
+    matrices.
+  - The user freed /home first by deleting three HF-cache models (Qwen3-4B, Mistral-7B-v0.3, Llama-3.1-8B), after this
+    session confirmed nothing pending needed their weights.
+  - paper-sm120-runs was fast-forwarded to 7b472b0 between O4 jobs (17:03 UTC) and pushed.
+- **GPU, Llama-3.1-8B-Instruct** (19:45-20:30 UTC, after O4; one job at a time; all rc 0):
+  - maps 3 x about 285 s, device peak about 44.5 GB, E0M3 0.615 % / 0.773 % / 2.218 %, every fit-extension check
+    passes;
+  - native PPL 6 rows;
+  - IF4 and Zou (simulated);
+  - GPTQ-double-dagger (BF16 propagation, own 16x64 trainer report as the extension, no code file);
+  - FOCUS (micro-batch 8, 247 s).
+  - The 256 windows equal base Llama-3.1-8B's release windows, token for token: the 128 of the rule and the 128 of
+    the extension.
+- **Code.** Driver change: `maps` runs train_map through `run_fresh_dir`, because train_map refuses an existing
+  `--out`.
+- **A note, not a rerun.** GPTQ-double-dagger's C4 cell for Llama-3.1-8B-Instruct is driven by one window (C4 window
+  219: +2.32 nats vs FourOverSix). Without it the C4 ΔNLL vs FourOverSix is -0.23 x 1e-3. This model's C4 windows
+  are volatile in general: FourOverSix differs from BF16 by up to 1.1 nats on single windows.
+- **Llama-3.2-1B-Instruct:** not run; the license is not accepted for edgeai-lab.
+- **Results:** `results/paper_eval/llama_instruct/REPORT.md`; the final table is regenerated
+  (`results/paper_eval/final/`, the Llama-3.2-1B-Instruct column TBD). The mean capped NLL recovery is over 12
+  common pairs until the 1B is in.
