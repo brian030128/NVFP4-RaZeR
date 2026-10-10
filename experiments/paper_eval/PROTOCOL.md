@@ -743,6 +743,10 @@ N stay unchanged; their GPTQ rows remain the BF16-propagation variant.
   - Test (b) rerun with a53e122 (`test_b_b2`, 15:51-15:55 UTC) passed:
     - (g) and (g2) both give map.pt 4f08678a...;
     - (g2) now takes the packed path for all 196 modules, with no dense fallback.
+- **O3, the store check: passed** (GPU job, 16:42-16:45 UTC). All 120 modules' lean-store tensors are identical byte
+  for byte between the dense-fallback path (276ce86) and the hook's `pack` path (a53e122). Both overall digests are
+  17f04378...; both total 8,675,574,240 bytes = 8.0798 GiB, the store size the 15:34 run reported. Nemotron's
+  GPTQ-candidate map stands; Qwen's is attempt 2 (packed path, no dense fallback).
   - Code each run used:
     - The batch-64 pilots ran on f2a56f1.
     - The batch-48 pilot ran on f2a56f1 plus the not yet committed opt-in edits; BF16 mode touches none of them.
