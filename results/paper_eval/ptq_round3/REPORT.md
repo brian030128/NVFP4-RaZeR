@@ -42,12 +42,12 @@ See `O1_SHARES.md` (all rows, per projection type). In all: Nemotron-Nano-9B-v2 
 
 | model | format | WikiText-2 | C4 | ΔNLL wiki vs RTN FO6 | ΔNLL C4 vs RTN FO6 | ΔNLL wiki vs part H GPTQ | ΔNLL C4 vs part H GPTQ | propagate / Hessian input | codes_sha256 |
 |---|---|---:|---:|---:|---:|---:|---:|---|---|
-| Nemotron-Nano-9B-v2 | NVFP4 | TBD | TBD | | | | | | |
-| Nemotron-Nano-9B-v2 | FourOverSix | TBD | TBD | | | | | | |
-| Nemotron-Nano-9B-v2 | FlipQuant 16x64 | TBD | TBD | | | | | | |
-| Qwen3.8-27B | NVFP4 | TBD | TBD | | | | | | |
-| Qwen3.8-27B | FourOverSix | TBD | TBD | | | | | | |
-| Qwen3.8-27B | FlipQuant 16x64 | TBD | TBD | | | | | | |
+| Nemotron-Nano-9B-v2 | NVFP4 | 8.4494 | 11.5223 | +2.77 ± 1.60* | +1.64 ± 1.06* | +0.36 ± 1.41 | -0.68 ± 0.92 | quantized / quantized | `6a9c9d292d49a82e` |
+| Nemotron-Nano-9B-v2 | FourOverSix | 8.3950 | 11.4884 | -3.68 ± 1.38* | -1.31 ± 0.96* | +0.02 ± 1.24 | +0.32 ± 0.81 | quantized / quantized | `e2aba63fe972b433` |
+| Nemotron-Nano-9B-v2 | FlipQuant 16x64 | 8.3936 | 11.4920 | -3.85 ± 1.39* | -0.99 ± 1.03 | -0.31 ± 1.33 | +0.45 ± 0.84 | quantized / quantized | `7d2ff4f579498991` |
+| Qwen3.8-27B | NVFP4 | 7.3706 | 10.1799 | +9.31 ± 5.14* | -1.02 ± 1.26 | -20.70 ± 5.62* | +0.71 ± 0.93 | quantized / quantized | `1eb8cda90ce0109f` |
+| Qwen3.8-27B | FourOverSix | 7.4282 | 10.1433 | +17.10 ± 7.10* | -4.62 ± 1.08* | +13.37 ± 5.24* | +0.09 ± 0.93 | quantized / quantized | `78a99adb2bf508bf` |
+| Qwen3.8-27B | FlipQuant 16x64 | 7.2270 | 10.1390 | -10.37 ± 4.87* | -5.05 ± 1.08* | -11.69 ± 3.84* | -0.89 ± 0.95 | quantized / quantized | `38e8ef0f596953d4` |
 
 ## O3: GPTQ candidates and a retrained map
 
@@ -79,6 +79,14 @@ See `O1_SHARES.md` (all rows, per projection type). In all: Nemotron-Nano-9B-v2 
 |---|---:|
 | N1 | 2 / 2 |
 | N4 | 2 / 2 |
+| O-1 ppl | 6 / 6 |
+| O-2 | 2 / 2 |
 
 GPTQ code files (`/vault/flipquant_paper_eval/ptq_round3`), sha256:
 
+- `/vault/flipquant_paper_eval/ptq_round3/nemotron-nano-9b-v2/codes_fo6.pt`: `8b2d569662247801d45138063c98beb74d6c8eefa33d0e52678c3483f8435168`
+- `/vault/flipquant_paper_eval/ptq_round3/nemotron-nano-9b-v2/codes_fq-16x64.pt`: `0663cc237730702c9b397037450c1933f22a184446618736f4e3bd648e7f064e`
+- `/vault/flipquant_paper_eval/ptq_round3/nemotron-nano-9b-v2/codes_nvfp4.pt`: `b22d36018b755f43a90aa38384d20195eba13c733fd73407533b2bae50ea2abf`
+- `/vault/flipquant_paper_eval/ptq_round3/qwen3.8-27b/codes_fo6.pt`: `3207d39c5f4f17b06f4fa16f1a8d51cc6c140c3d06e00c206438846bf1ccaea0`
+- `/vault/flipquant_paper_eval/ptq_round3/qwen3.8-27b/codes_fq-16x64.pt`: `0abc74ed3b47eef7137ec057e4a76caca8f2072c11fdd5768d70a58162bb4e8e`
+- `/vault/flipquant_paper_eval/ptq_round3/qwen3.8-27b/codes_nvfp4.pt`: `4f969bf8c6c4e0ec802ff7c5715bbd95326d9132cc80c1f7d6108992dbbaeb43`
