@@ -523,5 +523,7 @@ watcher of this session waited on its own command line (`pgrep -f` matched itsel
   Hadamard FourOverSix, doc 262) contains a stray `</think>`: the model wrote its answer, the tag, and the same answer
   again ("... The final answer is 270.\n</think>\n\n<same text>"). No reasoning precedes it (the prompt pre-fills the
   empty think block), it ends with EOS at 152 tokens, and both filters extract 270, correct either way.
+  **Accepted by the coordinator (2026-10-10); thinking was off, the tag carries no reasoning, the accuracy is
+  unaffected. The cell stays as measured; no rerun.**
 - **Results:** `results/paper_eval/ptq_gsm8k_lmeval/GSM8K_LMEVAL.md`; tab:ptq's GSM8K column (strict-match) in
   `results/paper_eval/ptq/table_ptq.tex`.

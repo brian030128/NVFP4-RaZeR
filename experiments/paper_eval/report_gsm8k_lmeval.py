@@ -28,6 +28,9 @@ TASK = NL.TASK
 FILTERS = ("strict_match", "flexible_extract")
 THINK = ("<think>", "</think>")
 N_DOCS = 1319
+#: check exceptions the coordinator accepted (config, doc) -> note
+ACCEPTED = {("qwen3.8-27b/hadamard_fo6", "262"): "accepted by the coordinator; thinking was off, the tag carries no "
+                                                  "reasoning, the accuracy is unaffected"}
 
 
 def load(path):
@@ -140,7 +143,7 @@ def report():
                       f"{p['a_only']} | {p['b_only']} | {p['mcnemar_p']:.3g} |")
     md += ["", "Checks: N1 no think content {N1}; N2 GPTQ codes_sha256 equal to part H's {N2}; N3 FlipQuant maps equal to part "
            "H's {N3}; N4 1,319 documents with both filters {N4}; N5 native coverage {N5}.".format(
-               **{k: f"{ok[k]} of {want[k]}" for k in want}), ""]
+               **{k: f"{ok[k]} of {want[k]}" for k in want})]
     # every output with a think marker, in full context (the N1 exceptions)
     exc = []
     for (model, method, fmt), ex in ex_all.items():
@@ -149,13 +152,19 @@ def report():
             if any(m in raw for m in THINK):
                 exc.append(dict(config=f"{model}/{method}_{fmt}", doc=d, generated=e.get("generated"),
                                 strict=e["strict_match"], flexible=e["flexible_extract"], raw=raw))
+    for x in exc:
+        x["acceptance"] = ACCEPTED.get((x["config"], x["doc"]))
     rec["n1_exceptions"] = exc
+    if exc and all(x["acceptance"] for x in exc):
+        md += [f"N1's exception ({len(exc)} output): {exc[0]['acceptance'] if len(exc) == 1 else 'see below'}."]
+    md.append("")
     if exc:
         md += ["## Check N1 exceptions (outputs containing a think marker)", ""]
         for x in exc:
             md += [f"- `{x['config']}`, doc {x['doc']} ({x['generated']['tokens']} tokens, EOS {x['generated']['eos']}): "
                    f"strict {x['strict']['response']!r} ({'correct' if x['strict']['exact_match'] else 'wrong'}), "
-                   f"flexible {x['flexible']['response']!r} ({'correct' if x['flexible']['exact_match'] else 'wrong'}). Output:",
+                   f"flexible {x['flexible']['response']!r} ({'correct' if x['flexible']['exact_match'] else 'wrong'})."
+                   + (f" **{x['acceptance'][0].upper() + x['acceptance'][1:]}.**" if x["acceptance"] else "") + " Output:",
                    "", "```", x["raw"], "```", ""]
     (OUT / "gsm8k_lmeval.json").write_text(json.dumps(rec, indent=1) + "\n")
     (OUT / "GSM8K_LMEVAL.md").write_text("\n".join(md) + "\n")

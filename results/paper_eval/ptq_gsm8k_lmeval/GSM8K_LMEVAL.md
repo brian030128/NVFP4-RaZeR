@@ -61,10 +61,11 @@ Paired per problem (A − B, percentage points ± 2 SE; A-only / B-only correct;
 | qwen3.8-27b: hadamard fq-16x64 vs rtn fq-16x64 | flexible_extract | +0.08 ± 1.04 | 24 | 23 | 1 |
 
 Checks: N1 no think content 17 of 18; N2 GPTQ codes_sha256 equal to part H's 6 of 6; N3 FlipQuant maps equal to part H's 6 of 6; N4 1,319 documents with both filters 18 of 18; N5 native coverage 18 of 18.
+N1's exception (1 output): accepted by the coordinator; thinking was off, the tag carries no reasoning, the accuracy is unaffected.
 
 ## Check N1 exceptions (outputs containing a think marker)
 
-- `qwen3.8-27b/hadamard_fo6`, doc 262 (152 tokens, EOS True): strict '270.' (correct), flexible '270.' (correct). Output:
+- `qwen3.8-27b/hadamard_fo6`, doc 262 (152 tokens, EOS True): strict '270.' (correct), flexible '270.' (correct). **Accepted by the coordinator; thinking was off, the tag carries no reasoning, the accuracy is unaffected.** Output:
 
 ```
 Maddison has 5 boxes with 50 marbles in each box. So she has 5 * 50 = 250 marbles. Then she gets 20 marbles from her friend. So she has 250 + 20 = 270 marbles. The final answer is 270.
