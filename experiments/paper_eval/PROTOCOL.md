@@ -747,3 +747,65 @@ N stay unchanged; their GPTQ rows remain the BF16-propagation variant.
     - The batch-64 pilots ran on f2a56f1.
     - The batch-48 pilot ran on f2a56f1 plus the not yet committed opt-in edits; BF16 mode touches none of them.
     - The full BF16 runs (07:49:51 UTC) and everything after run on 276ce86.
+
+## Part P (registered 2026-10-10 16:13 UTC): Llama-3.2-1B-Instruct and Llama-3.1-8B-Instruct in tab:main-ppl
+
+The user's request, relayed by the coordinator on 2026-10-10. Add two models to the calibrated set and to tab:main-ppl,
+with every method of that table. Part O is not interrupted: the CPU preparation runs now, and the GPU work starts
+after part O, O4 included, unless the coordinator says otherwise. Records go in `RUN/llama_instruct/`, results in
+`results/paper_eval/llama_instruct/` plus the updated `results/paper_eval/final/`. Code is on flipquant
+paper-sm120-runs (the registry and calibration changes are first on the local branch llama-instruct-dev, 7b472b0, then
+merged; nothing vendored is edited) and on paper-eval.
+
+- **Models and access** (the configured token; active account edgeai-lab; no token printed or changed):
+  - `llama3.1-8b-instruct`, meta-llama/Llama-3.1-8B-Instruct @ **0e9e39f249a16976918f6564b8830bc894c89659**. Access
+    OK. This is the revision of the reference implementation's Instruct calibration record (NVFP4-RaZeR
+    `make_instruct_prior.py`), and also the Hub's main today. The vendored trainer knows it as `llama8b_ins`.
+  - `llama3.2-1b-instruct`, meta-llama/Llama-3.2-1B-Instruct (registry pin 9213176726f574b556790deb65791e0c5aa438b6).
+    **GATED for edgeai-lab: STOPPED** until the user accepts its license on HF. Its steps, its trainer key (the vendored
+    trainer does not know it) and its pin check are an amendment before its first run.
+- **Calibration data, the release rule: 256 x 512 windows.**
+  - The first 128 windows are built by the paper rule: `campaign.data.builder_seed0` with the model's own tokenizer,
+    the same math/code streams (open-web-math @ fde8ef8, codeparrot-clean @ 35a59fb), 64 + 64. They are then
+    re-tokenized and every token hash is checked. They are **not taken from an archived record**.
+  - For Llama-3.1-8B-Instruct the paper rule reproduces Llama-3.1-8B's archived record exactly (documents, offsets,
+    token sha256; checked on CPU at registration). That is what `make_instruct_prior.py` assumed ("the Instruct model
+    shares the base tokenizer").
+  - The next 128 windows come from the extension rule (`fit_extension.py`, seed 20260930) over the same streams. It
+    skips the fit documents, the development documents (Llama-3.1-8B's three records for `llama8b_ins`, as the
+    vendored trainer defines) and the published C4 evaluation documents (Llama-3.1-8B's), and never touches the
+    WikiText or C4 evaluation windows.
+  - Every window's token sha256 is recorded (the record and the trainer report's fit extension). For
+    Llama-3.1-8B-Instruct the 256 windows are expected to equal base Llama-3.1-8B's release windows; this is checked
+    and reported.
+  - Records: `calibration.tmopt_common.INSTRUCT_PREPARE`, under the release runs' data root
+    (`fqrel/tmopt_data/llama8b_ins`).
+- **GPU steps, per model, after part O; the existing main-table rows' exact settings; n16k64; one job at a time.**
+  1. **FlipQuant maps, 8x64 / 16x64 / 256x64.** `calibration.train_map` with the release settings: TM-OPT+TC, 256
+     windows, 5 epochs, top-1000 teacher, lr 0.02, init -1, eps 1e-12, batch 8, seed 0, deterministic, no
+     development set. Time and memory are measured as for the release runs (`fqrel/release.py`: wall time, the
+     trainer's phases, device peak), and the fit-extension check is run as the release did.
+  2. **Native PPL** (WikiText-2 / C4, all windows; build_V, `--kernel-set auto`): BF16, NVFP4 (per-token NVFP4
+     activations, `--act-scope row`), FourOverSix and FlipQuant at each unit (`--paper-convention`).
+  3. **IF4 and MixFP4 (Zou), simulated**, as part I: each method's own rules, 1x16, per-token activation scales
+     (`--act-method own`).
+  4. **GPTQ‡** as part J: gptq.py, BF16 propagation, the release fit set (record + the model's own 16x64 trainer
+     report as the extension), block 128, damp 0.01, no act-order; NVFP4 weights with per-token FourOverSix
+     activations, native. The codes go to no cache file (disk); codes_sha256 is recorded. If the user later switches
+     GPTQ‡ to activation-quantized calibration, these runs are redone with the others.
+  5. **FOCUS** as part K: the FOCUS hyperparameters, the release fit set, 8 optimizer steps, deployed as NVFP4 codes,
+     native.
+  6. **Paired ΔNLL** vs FourOverSix (and FlipQuant vs NVFP4) per cell, with daggers as in part L.
+  7. **Mean capped NLL recovery**, the coordinator's definition. Per pair: 100 * min(1, (NLL_NVFP4 - NLL_m) /
+     (NLL_NVFP4 - NLL_BF16)) from nll_mean, with no floor, and equal weight over the 14 pairs of the 7 models with
+     FOCUS (all but Qwen3.8-27B). A pair with NLL_NVFP4 - NLL_BF16 <= 0 is flagged. Outputs: the per-pair values and an
+     updated `table_main_ppl_final.tex` with the two new column groups.
+- **Disk (a decision for the user, pending).**
+  - /home has 23 GB free. Llama-3.1-8B-Instruct's weights are 16.06 GB (HF cache), Llama-3.2-1B-Instruct's about
+    2.5 GB, and an 8B FOCUS state about 5 GB.
+  - Nothing is downloaded until the user decides: /vault for the large outputs, space on /home, or both.
+  - GPTQ‡ keeps no code file.
+- **ETA (GPU, after part O).** About 1 h for Llama-3.1-8B-Instruct and about 25 min for Llama-3.2-1B-Instruct, plus the
+  downloads and records, about 20 min. Reports take about 15 min on CPU.
+- **Stop and report** on a failing check: the builder rule, the token hashes, the extension check, coverage, an OOM, or
+  an implausible result.
