@@ -897,7 +897,7 @@ and is on HF: `edgeai-lab/Qwen3.8-27B-FOCUS-NVFP4` @ b84ff372a7, `focus_256/focu
   Zou 19.3 %, FourOverSix 9.5 %, GPTQ‡ 4.1 %.
 - **Records:** `results/paper_eval/focus_qwen27b/` (REPORT.md, focus_qwen27b.json, records/).
 
-## Part P, amendment 1 (registered 2026-10-10 22:43 UTC): Llama-3.2-1B-Instruct
+## Part P, amendment 1 (registered 2026-10-10 22:42 UTC, commit f0fb41c): Llama-3.2-1B-Instruct
 
 The coordinator relayed this on 2026-10-10, after part Q. The edgeai-lab account now has access to
 meta-llama/Llama-3.2-1B-Instruct (checked read-only; no identity switch). Run it in part P with the same methods and
