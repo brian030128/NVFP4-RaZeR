@@ -875,3 +875,24 @@ and is on HF: `edgeai-lab/Qwen3.8-27B-FOCUS-NVFP4` @ b84ff372a7, `focus_256/focu
     the new common pairs (every model with all methods: 7 models = 14 pairs until the 1B is in), flagging any
     non-positive gap, with the per-pair values.
   - Records: `results/paper_eval/focus_qwen27b/`.
+
+### Part Q: the run (2026-10-10)
+
+- **Provenance (CPU, before the download):** every check passes. The state's 256 window token sha256 are identical, in
+  order, to the release fit set (record 128 + the release 16x64 trainer report's 128 extension windows); the
+  fit_extension records and settings are equal; every part-K hyperparameter is equal. The deviation is recorded: micro 1,
+  device_map balanced, 2 x H200, job 519366. KL-top 0.0521 -> 0.0480.
+- **Download:** `focus_256/focus.pt` (18,263,340,091 bytes) into the HF cache on /home in 1238 s; sha256 `baf02d9c...`
+  equal to the Hub's LFS sha256. /home free afterwards: 17 GB (floor 10 GB).
+- **Evaluation:** part K's command, n16k64-fast, build_V `--kernel-set auto` (stock_ko for the NVFP4 codes), 496 / 496
+  modules. It fits one GPU: 116 s, torch peak 83.5 GiB. WikiText-2 7.2746 (145 windows), C4 10.1572 (256 windows),
+  between BF16 and NVFP4 on both.
+- **Paired ΔNLL x 1e-3 (± 2 SE), FOCUS minus:**
+  - FourOverSix: -3.80 ± 4.78 / -3.25 ± 1.21*;
+  - FlipQuant 8x64: +18.69 ± 4.62* / +1.29 ± 1.08*;
+  - FlipQuant 16x64: +12.27 ± 4.36* / +1.60 ± 1.09*;
+  - FlipQuant 256x64: +7.61 ± 4.16* / -0.40 ± 1.12.
+- **Final table:** regenerated with the FOCUS Qwen3.8-27B cells. The mean capped NLL recovery is now over 14 common
+  pairs, with no non-positive gap: FlipQuant 8x64 47.2 %, 16x64 46.1 %, FOCUS 41.6 %, 256x64 40.8 %, IF4 20.9 %,
+  Zou 19.3 %, FourOverSix 9.5 %, GPTQ‡ 4.1 %.
+- **Records:** `results/paper_eval/focus_qwen27b/` (REPORT.md, focus_qwen27b.json, records/).

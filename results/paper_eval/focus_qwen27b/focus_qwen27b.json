@@ -1,0 +1,619 @@
+{
+ "provenance": {
+  "repo": "edgeai-lab/Qwen3.8-27B-FOCUS-NVFP4",
+  "revision": "b84ff372a7ccab5b8541395db26056c3acd14aff",
+  "model": "qwen3.8-27b",
+  "source": {
+   "hf_id": "Qwen/Qwen3.8-27B",
+   "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+   "transformers": "5.16.1",
+   "torch": "2.9.0+cu128"
+  },
+  "status": "complete",
+  "steps": 8,
+  "windows": {
+   "state": 256,
+   "release": 256,
+   "identical_in_order": true,
+   "extension_records_identical": true,
+   "extension_settings_identical": true
+  },
+  "hyperparameters": {
+   "epochs": {
+    "state": "1",
+    "part_k": "1",
+    "equal": true
+   },
+   "batch": {
+    "state": "32",
+    "part_k": "32",
+    "equal": true
+   },
+   "lr_scale": {
+    "state": "0.005",
+    "part_k": "0.005",
+    "equal": true
+   },
+   "lr_sub": {
+    "state": "0.001",
+    "part_k": "0.001",
+    "equal": true
+   },
+   "topk": {
+    "state": "1000",
+    "part_k": "1000",
+    "equal": true
+   },
+   "num_sub": {
+    "state": "2",
+    "part_k": "2",
+    "equal": true
+   },
+   "init_q": {
+    "state": "6.0",
+    "part_k": "6.0",
+    "equal": true
+   },
+   "act": {
+    "state": "fourover6",
+    "part_k": "fourover6",
+    "equal": true
+   },
+   "act_scope": {
+    "state": "row",
+    "part_k": "row",
+    "equal": true
+   },
+   "seed": {
+    "state": "42",
+    "part_k": "42",
+    "equal": true
+   },
+   "ppl_datasets": {
+    "state": "",
+    "part_k": "",
+    "equal": true
+   },
+   "seqlen": {
+    "state": "512",
+    "part_k": "512",
+    "equal": true
+   },
+   "data": {
+    "state": "release",
+    "part_k": "release",
+    "equal": true
+   },
+   "revision": {
+    "state": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "part_k": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "equal": true
+   },
+   "max_blocks": {
+    "state": "0",
+    "part_k": "0",
+    "equal": true
+   },
+   "zeroshot": {
+    "state": "False",
+    "part_k": "False",
+    "equal": true
+   }
+  },
+  "deviations": {
+   "micro": "1",
+   "device_map": "balanced",
+   "gpus": [
+    "NVIDIA H200",
+    "NVIDIA H200"
+   ],
+   "job": "519366",
+   "windows_arg": "256",
+   "note": "micro-batch 1 on 2 x H200 with device_map balanced (part K: micro 8, one GPU); the global batch (32, 8 steps) is the same, only the summation order differs; --windows 256 = all 256 release windows (part K: 0 = all)"
+  },
+  "kl_top": {
+   "first": 0.0521164175006561,
+   "last": 0.048000361886806786
+  },
+  "parameters": {
+   "modules": 496,
+   "crs": 1521909760,
+   "dgs": 3043819520
+  },
+  "training_seconds": 2248.790075778961,
+  "ok": true
+ },
+ "download": {
+  "repo": "edgeai-lab/Qwen3.8-27B-FOCUS-NVFP4",
+  "revision": "b84ff372a7ccab5b8541395db26056c3acd14aff",
+  "file": "focus_256/focus.pt",
+  "path": "/home/dev/.cache/huggingface/hub/models--edgeai-lab--Qwen3.8-27B-FOCUS-NVFP4/snapshots/b84ff372a7ccab5b8541395db26056c3acd14aff/focus_256/focus.pt",
+  "bytes": 18263340091,
+  "sha256": "baf02d9c36551191fe7bc216f6408346cc7d34471cc3e9b524eb60e3f81eeb9b",
+  "hub_lfs_sha256": "baf02d9c36551191fe7bc216f6408346cc7d34471cc3e9b524eb60e3f81eeb9b",
+  "seconds": 1238.0440483093262,
+  "sha256_equals_hub_lfs": true
+ },
+ "evaluation": {
+  "record": "/home/dev/n16k64_campaign/paper_eval/focus/qwen3.8-27b/ppl.json",
+  "seconds": 116.23279285430908,
+  "gpus": [
+   "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+  ],
+  "gpu_peak_gib": [
+   83.48869180679321
+  ],
+  "source": {
+   "hf_id": "Qwen/Qwen3.8-27B",
+   "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+   "transformers": "5.16.1",
+   "torch": "2.9.0+cu128"
+  },
+  "focus": {
+   "state": "/home/dev/.cache/huggingface/hub/models--edgeai-lab--Qwen3.8-27B-FOCUS-NVFP4/snapshots/b84ff372a7ccab5b8541395db26056c3acd14aff/focus_256/focus.pt",
+   "config": {
+    "model": "qwen3.8-27b",
+    "num_sub": 2,
+    "init_q": 6.0,
+    "act": "fourover6",
+    "act_scope": "row",
+    "data": "release",
+    "seqlen": 512,
+    "windows": 256,
+    "epochs": 1,
+    "batch": 32,
+    "lr_scale": 0.005,
+    "lr_sub": 0.001,
+    "topk": 1000,
+    "seed": 42
+   },
+   "calibration_act": [
+    "fourover6",
+    "row"
+   ],
+   "deploy": true
+  },
+  "native": {
+   "backend": "sm120",
+   "kernel": "stock_ko",
+   "routing": "auto: nvfp4 weights -> stock_ko, from /home/dev/n16k64_campaign/kernel_opt/build_V",
+   "build_dir": "/home/dev/n16k64_campaign/kernel_opt/build_V",
+   "weight": "nvfp4",
+   "unit": null,
+   "activation_quantizer": "four_over_six_rows",
+   "activation_quantizer_override": false,
+   "modules": 496,
+   "e0m3_tiles": 0,
+   "checked": true,
+   "ownership": {},
+   "kernel_set": {
+    "family": "stock_ko",
+    "kernels": {
+     "stock_wA_n16": "abbc9c15d11cfebb95ddea38e8c03fc5544d6135b8dc7130a9f521ff99faa763",
+     "stock_wA_n32": "cbf601ccee1a9a9ae7d3ead4692e10182f7964ac9887d08693f182dbda731e48",
+     "stock_wA_n64": "905e6171fd9a3928523fef54e7aff45f1972adf95fc767930fec48fc0bd53d15",
+     "stock_wA_e64": "5ccdacea29559b9a68015d50a64c7e429eb9761fcbd401ac0f5cff01b60d1e6a"
+    },
+    "table": "/home/dev/n16k64_campaign/sm120runs/wt/kernels/sm120/configs/nvidia_rtx_pro_6000_blackwell_workstation_edition.ko.json",
+    "table_shapes": 16,
+    "table_family": "stock",
+    "schedule_shapes": 16,
+    "calls_by_width": {}
+   },
+   "device_bytes": {
+    "packed": 12175278080,
+    "scales_placed": 1524367360,
+    "bias": 0
+   },
+   "codes": "precomputed (pack_codes: flags and decode checked against the codes)"
+  },
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "ppl": {
+   "wiki": 7.274646006308447,
+   "c4": 10.15724783595878
+  },
+  "windows": {
+   "wiki": 145,
+   "c4": 256
+  }
+ },
+ "ppl": {
+  "bf16": {
+   "wiki": 7.052307918575775,
+   "c4": 9.893087466780564
+  },
+  "nvfp4": {
+   "wiki": 7.574028384303147,
+   "c4": 10.223142077291511
+  },
+  "fo6": {
+   "wiki": 7.302328442591353,
+   "c4": 10.190296777381636
+  },
+  "fq_8x64": {
+   "wiki": 7.139915808985021,
+   "c4": 10.144126456270463
+  },
+  "fq_16x64": {
+   "wiki": 7.18593367371307,
+   "c4": 10.141038905457533
+  },
+  "fq_256x64": {
+   "wiki": 7.219527599621896,
+   "c4": 10.161343976933699
+  },
+  "if4": {
+   "wiki": 7.33425970927232,
+   "c4": 10.165732940918112
+  },
+  "zou": {
+   "wiki": 7.347576707237093,
+   "c4": 10.163928228368997
+  },
+  "gptq": {
+   "wiki": 7.527783231615187,
+   "c4": 10.157587235820248
+  },
+  "focus": {
+   "wiki": 7.274646006308447,
+   "c4": 10.15724783595878
+  }
+ },
+ "focus_vs": {
+  "fo6": {
+   "wiki": {
+    "delta": -0.003798109087450751,
+    "se": 0.0023876004027590632,
+    "two_se": 0.0047752008055181264,
+    "n": 145,
+    "significant": false
+   },
+   "c4": {
+    "delta": -0.0032484480179846287,
+    "se": 0.0006063465618415654,
+    "two_se": 0.0012126931236831307,
+    "n": 256,
+    "significant": true
+   }
+  },
+  "nvfp4": {
+   "wiki": {
+    "delta": -0.04032992412304056,
+    "se": 0.0038016921787124916,
+    "two_se": 0.007603384357424983,
+    "n": 145,
+    "significant": true
+   },
+   "c4": {
+    "delta": -0.006466458318755031,
+    "se": 0.0006486328082567764,
+    "two_se": 0.0012972656165135528,
+    "n": 256,
+    "significant": true
+   }
+  },
+  "bf16": {
+   "wiki": {
+    "delta": 0.03104022535784491,
+    "se": 0.0022256945964020474,
+    "two_se": 0.004451389192804095,
+    "n": 145,
+    "significant": true
+   },
+   "c4": {
+    "delta": 0.02635124558582902,
+    "se": 0.0011207894897248378,
+    "two_se": 0.0022415789794496756,
+    "n": 256,
+    "significant": true
+   }
+  },
+  "fq_8x64": {
+   "wiki": {
+    "delta": 0.018694168123705633,
+    "se": 0.002310882221730253,
+    "two_se": 0.004621764443460506,
+    "n": 145,
+    "significant": true
+   },
+   "c4": {
+    "delta": 0.0012926594354212284,
+    "se": 0.000541221021532011,
+    "two_se": 0.001082442043064022,
+    "n": 256,
+    "significant": true
+   }
+  },
+  "fq_16x64": {
+   "wiki": {
+    "delta": 0.012269694229652142,
+    "se": 0.0021795462977872667,
+    "two_se": 0.0043590925955745334,
+    "n": 145,
+    "significant": true
+   },
+   "c4": {
+    "delta": 0.001597074093297124,
+    "se": 0.0005425724762814207,
+    "two_se": 0.0010851449525628414,
+    "n": 256,
+    "significant": true
+   }
+  },
+  "fq_256x64": {
+   "wiki": {
+    "delta": 0.007605631598110857,
+    "se": 0.0020815717370431686,
+    "two_se": 0.004163143474086337,
+    "n": 145,
+    "significant": true
+   },
+   "c4": {
+    "delta": -0.0004031914286315441,
+    "se": 0.0005619298858011146,
+    "two_se": 0.0011238597716022292,
+    "n": 256,
+    "significant": false
+   }
+  }
+ },
+ "plausible": {
+  "wiki": true,
+  "c4": true
+ },
+ "largest_window_vs_fo6": {
+  "wiki": {
+   "window": 137,
+   "delta_nats": -0.16427409648895264,
+   "mean_without": -0.0026836925082736546
+  },
+  "c4": {
+   "window": 108,
+   "delta_nats": -0.06198948621749878,
+   "mean_without": -0.0030180910054375142
+  }
+ },
+ "capped_recovery": {
+  "bf16": {
+   "value": 100.0,
+   "pairs": 14,
+   "of": 14
+  },
+  "nvfp4": {
+   "value": 0.0,
+   "pairs": 14,
+   "of": 14
+  },
+  "fo6": {
+   "value": 9.546771064350478,
+   "pairs": 14,
+   "of": 14
+  },
+  "if4": {
+   "value": 20.925779691459777,
+   "pairs": 14,
+   "of": 14
+  },
+  "zou": {
+   "value": 19.266741653713733,
+   "pairs": 14,
+   "of": 14
+  },
+  "gptq": {
+   "value": 4.1287473325937025,
+   "pairs": 14,
+   "of": 14
+  },
+  "focus": {
+   "value": 41.572816519745274,
+   "pairs": 14,
+   "of": 14
+  },
+  "fq_8x64": {
+   "value": 47.22609991446658,
+   "pairs": 14,
+   "of": 14
+  },
+  "fq_16x64": {
+   "value": 46.12077165443566,
+   "pairs": 14,
+   "of": 14
+  },
+  "fq_256x64": {
+   "value": 40.83651077476792,
+   "pairs": 14,
+   "of": 14
+  }
+ },
+ "capped_pairs": [
+  "qwen3-1.7b/wiki",
+  "qwen3-1.7b/c4",
+  "qwen3-8b/wiki",
+  "qwen3-8b/c4",
+  "mistral-7b/wiki",
+  "mistral-7b/c4",
+  "nemotron-nano-9b-v2/wiki",
+  "nemotron-nano-9b-v2/c4",
+  "phi4-14b/wiki",
+  "phi4-14b/c4",
+  "qwen3.8-27b/wiki",
+  "qwen3.8-27b/c4",
+  "llama3.1-8b-instruct/wiki",
+  "llama3.1-8b-instruct/c4"
+ ],
+ "capped_flags": [],
+ "capped_per_pair": {
+  "bf16": {
+   "qwen3-1.7b/wiki": 100.0,
+   "qwen3-1.7b/c4": 100.0,
+   "qwen3-8b/wiki": 100.0,
+   "qwen3-8b/c4": 100.0,
+   "mistral-7b/wiki": 100.0,
+   "mistral-7b/c4": 100.0,
+   "nemotron-nano-9b-v2/wiki": 100.0,
+   "nemotron-nano-9b-v2/c4": 100.0,
+   "phi4-14b/wiki": 100.0,
+   "phi4-14b/c4": 100.0,
+   "qwen3.8-27b/wiki": 100.0,
+   "qwen3.8-27b/c4": 100.0,
+   "llama3.1-8b-instruct/wiki": 100.0,
+   "llama3.1-8b-instruct/c4": 100.0
+  },
+  "nvfp4": {
+   "qwen3-1.7b/wiki": 0.0,
+   "qwen3-1.7b/c4": 0.0,
+   "qwen3-8b/wiki": 0.0,
+   "qwen3-8b/c4": 0.0,
+   "mistral-7b/wiki": 0.0,
+   "mistral-7b/c4": 0.0,
+   "nemotron-nano-9b-v2/wiki": 0.0,
+   "nemotron-nano-9b-v2/c4": 0.0,
+   "phi4-14b/wiki": 0.0,
+   "phi4-14b/c4": 0.0,
+   "qwen3.8-27b/wiki": 0.0,
+   "qwen3.8-27b/c4": 0.0,
+   "llama3.1-8b-instruct/wiki": 0.0,
+   "llama3.1-8b-instruct/c4": 0.0
+  },
+  "fo6": {
+   "qwen3-1.7b/wiki": -25.947354211576112,
+   "qwen3-1.7b/c4": 6.849046080788006,
+   "qwen3-8b/wiki": 12.62187389435431,
+   "qwen3-8b/c4": 2.712517106679704,
+   "mistral-7b/wiki": 9.253445706771593,
+   "mistral-7b/c4": 5.916477812383529,
+   "nemotron-nano-9b-v2/wiki": 7.337786399275316,
+   "nemotron-nano-9b-v2/c4": 10.15359876345894,
+   "phi4-14b/wiki": 13.441319038208812,
+   "phi4-14b/c4": 12.979112589529091,
+   "qwen3.8-27b/wiki": 51.18640678393683,
+   "qwen3.8-27b/c4": 9.805714348958164,
+   "llama3.1-8b-instruct/wiki": 9.887032283577804,
+   "llama3.1-8b-instruct/c4": 7.457818304560691
+  },
+  "if4": {
+   "qwen3-1.7b/wiki": -31.275995411416485,
+   "qwen3-1.7b/c4": 4.353092959806045,
+   "qwen3-8b/wiki": 50.096285806471755,
+   "qwen3-8b/c4": 35.2955926591276,
+   "mistral-7b/wiki": 25.234025178398532,
+   "mistral-7b/c4": 18.795495652511164,
+   "nemotron-nano-9b-v2/wiki": 16.674675826238047,
+   "nemotron-nano-9b-v2/c4": 23.616134510738036,
+   "phi4-14b/wiki": 25.005301594732614,
+   "phi4-14b/c4": 25.21898423182978,
+   "qwen3.8-27b/wiki": 45.07290036567989,
+   "qwen3.8-27b/c4": 17.159739913806195,
+   "llama3.1-8b-instruct/wiki": 21.40611951297903,
+   "llama3.1-8b-instruct/c4": 16.308562879534712
+  },
+  "zou": {
+   "qwen3-1.7b/wiki": -27.13901155840017,
+   "qwen3-1.7b/c4": -27.46967776523091,
+   "qwen3-8b/wiki": 57.43229161517572,
+   "qwen3-8b/c4": 37.64792778920111,
+   "mistral-7b/wiki": 28.38171398581023,
+   "mistral-7b/c4": 16.39503231290329,
+   "nemotron-nano-9b-v2/wiki": 11.921151671254542,
+   "nemotron-nano-9b-v2/c4": 21.67262851955282,
+   "phi4-14b/wiki": 23.036736676174588,
+   "phi4-14b/c4": 26.79057731896747,
+   "qwen3.8-27b/wiki": 42.53111157060251,
+   "qwen3.8-27b/c4": 17.70074294986203,
+   "llama3.1-8b-instruct/wiki": 22.48834449381068,
+   "llama3.1-8b-instruct/c4": 18.34481357230841
+  },
+  "gptq": {
+   "qwen3-1.7b/wiki": 8.77037522595724,
+   "qwen3-1.7b/c4": -1.8588753721191418,
+   "qwen3-8b/wiki": -24.328126390249068,
+   "qwen3-8b/c4": 13.950557044962187,
+   "mistral-7b/wiki": -1.964728612448074,
+   "mistral-7b/c4": 0.19179531490684865,
+   "nemotron-nano-9b-v2/wiki": 6.4339303130448044,
+   "nemotron-nano-9b-v2/c4": 10.890936730036868,
+   "phi4-14b/wiki": 2.165045868297272,
+   "phi4-14b/c4": 9.565607146069455,
+   "qwen3.8-27b/wiki": 8.581276901128405,
+   "qwen3.8-27b/c4": 19.602359586541322,
+   "llama3.1-8b-instruct/wiki": 8.356989872397715,
+   "llama3.1-8b-instruct/c4": -2.5546809722139985
+  },
+  "focus": {
+   "qwen3-1.7b/wiki": 100.0,
+   "qwen3-1.7b/c4": 83.26915851379115,
+   "qwen3-8b/wiki": 100.0,
+   "qwen3-8b/c4": 41.908758538223,
+   "mistral-7b/wiki": 21.819688810776196,
+   "mistral-7b/c4": 26.343700922627338,
+   "nemotron-nano-9b-v2/wiki": 22.758012011073482,
+   "nemotron-nano-9b-v2/c4": 17.736237123956457,
+   "phi4-14b/wiki": 27.874081255755563,
+   "phi4-14b/c4": 20.57899001368213,
+   "qwen3.8-27b/wiki": 56.508112167877556,
+   "qwen3.8-27b/c4": 19.70417655530063,
+   "llama3.1-8b-instruct/wiki": 25.43916015012469,
+   "llama3.1-8b-instruct/c4": 18.07935521324554
+  },
+  "fq_8x64": {
+   "qwen3-1.7b/wiki": 100.0,
+   "qwen3-1.7b/c4": 88.20418359523414,
+   "qwen3-8b/wiki": 100.0,
+   "qwen3-8b/c4": 51.06695484013536,
+   "mistral-7b/wiki": 33.81380008317537,
+   "mistral-7b/c4": 34.126391183802674,
+   "nemotron-nano-9b-v2/wiki": 26.775304565045417,
+   "nemotron-nano-9b-v2/c4": 25.136550769392684,
+   "phi4-14b/wiki": 25.07311500459378,
+   "phi4-14b/c4": 22.33907934964836,
+   "qwen3.8-27b/wiki": 82.7013711979884,
+   "qwen3.8-27b/c4": 23.643085380791824,
+   "llama3.1-8b-instruct/wiki": 27.814891812476482,
+   "llama3.1-8b-instruct/c4": 20.47067102024755
+  },
+  "fq_16x64": {
+   "qwen3-1.7b/wiki": 100.0,
+   "qwen3-1.7b/c4": 90.48496176644255,
+   "qwen3-8b/wiki": 100.0,
+   "qwen3-8b/c4": 45.31439775578221,
+   "mistral-7b/wiki": 32.4761746659531,
+   "mistral-7b/c4": 32.41364147271147,
+   "nemotron-nano-9b-v2/wiki": 26.874440054206776,
+   "nemotron-nano-9b-v2/c4": 24.881805167541067,
+   "phi4-14b/wiki": 25.902108640209626,
+   "phi4-14b/c4": 23.437267046204113,
+   "qwen3.8-27b/wiki": 73.69974525103117,
+   "qwen3.8-27b/c4": 24.570678178755287,
+   "llama3.1-8b-instruct/wiki": 25.538747780267705,
+   "llama3.1-8b-instruct/c4": 20.096835382994126
+  },
+  "fq_256x64": {
+   "qwen3-1.7b/wiki": 100.0,
+   "qwen3-1.7b/c4": 70.25945421020204,
+   "qwen3-8b/wiki": 100.0,
+   "qwen3-8b/c4": 43.22655458931493,
+   "mistral-7b/wiki": 28.67503944386347,
+   "mistral-7b/c4": 26.708047283669917,
+   "nemotron-nano-9b-v2/wiki": 19.751955129035142,
+   "nemotron-nano-9b-v2/c4": 19.166602011194374,
+   "phi4-14b/wiki": 23.49039203311616,
+   "phi4-14b/c4": 22.529455457845746,
+   "qwen3.8-27b/wiki": 67.16471251610542,
+   "qwen3.8-27b/c4": 18.475597524287966,
+   "llama3.1-8b-instruct/wiki": 19.792886127712553,
+   "llama3.1-8b-instruct/c4": 12.470454520403095
+  }
+ },
+ "capped_recovery_previous_pairs": {
+  "bf16": 100.0,
+  "nvfp4": 0.0,
+  "fo6": 6.055222814000974,
+  "if4": 19.227356283412565,
+  "zou": 17.458544052627314,
+  "gptq": 2.4682355140535086,
+  "focus": 42.1505952127713,
+  "fq_8x64": 46.235078518645985,
+  "fq_16x64": 45.61836497769273,
+  "fq_256x64": 40.50590340052979
+ }
+}

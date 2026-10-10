@@ -1,11 +1,12 @@
-"""The final table main-ppl from per-window NLL (parts F, I, J, K): results/paper_eval/final/{FINAL.md, final.json,
+"""The final table main-ppl from per-window NLL (parts F, I, J, K, P, Q): results/paper_eval/final/{FINAL.md, final.json,
 table_main_ppl_final.tex}.
 
 Sources per model (all on the same WikiText-2 / C4 windows; the paired statistics need the same windows):
 - the four non-hybrid models (n16k64): BF16 / NVFP4 / FourOverSix from main-ppl 44f8cea's records, FlipQuant from the
   release records (as tables_cpu.py);
 - Nemotron-Nano-9B-v2 and Qwen3.8-27B (n16k64-fast, amendment 3): part F's records for those four policies;
-- IF4 and MixFP4 (Zou): part I's records; GPTQ‡: part J's; FOCUS: part K's (Qwen3.8-27B: TBD, it does not fit one GPU).
+- IF4 and MixFP4 (Zou): part I's records; GPTQ‡: part J's; FOCUS: part K's (Qwen3.8-27B: part Q's, the state trained
+  on the cluster and evaluated here as part K).
 - Llama-3.2-1B-Instruct and Llama-3.1-8B-Instruct (part P, n16k64): every row from RUN/llama_instruct/<model>/ (a model
   without records yet is a TBD column and enters no statistic).
 A row with a missing record is TBD in that cell; the loss recovered is then over the pairs it has (marked).
@@ -13,7 +14,7 @@ A row with a missing record is TBD in that cell; the loss recovered is then over
 Statistics:
 - mean capped NLL recovery (part P, the coordinator's definition; the table's last column): per model-corpus pair
   100 * min(1, (NLL_NVFP4 - NLL_row) / (NLL_NVFP4 - NLL_BF16)) from the mean per-window NLL, no floor, equal weight,
-  over the common pairs: the models with FOCUS (all but Qwen3.8-27B). A pair with NLL_NVFP4 - NLL_BF16 <= 0 is flagged;
+  over the common pairs: the models with FOCUS. A pair with NLL_NVFP4 - NLL_BF16 <= 0 is flagged;
 - loss recovered over all pairs: sum(NVFP4 - row) / sum(NVFP4 - BF16), mean NLL per pair (the earlier column);
 - daggers: FlipQuant (each unit) NOT significantly better than FourOverSix (paired ΔNLL > -2 SE), per cell; and
   FlipQuant vs NVFP4 significance per cell;
@@ -128,7 +129,7 @@ def main():
         lost = sum(nm[k]["nvfp4"][c] - nm[k]["bf16"][c] for k, c in have)
         rec["loss_recovered"][r] = dict(value=sum(nm[k]["nvfp4"][c] - nm[k][r][c] for k, c in have) / lost,
                                         pairs=len(have))
-    # every row on the pairs FOCUS has (Qwen3.8-27B's FOCUS cell is TBD), for a like-for-like comparison
+    # every row on the pairs FOCUS has, for a like-for-like comparison
     fpairs = [(k, c) for k, c in pairs if "focus" in nm[k]]
     if fpairs:
         lost_f = sum(nm[k]["nvfp4"][c] - nm[k]["bf16"][c] for k, c in fpairs)
@@ -164,7 +165,8 @@ def main():
         share_256_of_16_overall=sum(d256.values()) / sum(d16.values()),
         share_256_of_16_per_model={k: d256[k] / d16[k] for k in d16})
     # markdown
-    L = ["# Final table main-ppl (per-window NLL; parts F, I, J, K)", "",
+    nofocus = [t for k, _, t in models if "focus" not in nm[k]]
+    L = ["# Final table main-ppl (per-window NLL; parts F, I, J, K, P, Q)", "",
          "PPL (WikiText-2 / C4). Non-hybrid models in n16k64 (main-ppl 44f8cea + the release FlipQuant records); "
          "Nemotron-Nano-9B-v2 and Qwen3.8-27B in n16k64-fast (part F). † = FlipQuant not significantly better than "
          "FourOverSix (paired ΔNLL > -2 SE).", "",
@@ -207,7 +209,8 @@ def main():
             "—" if rec["capped_per_pair"].get(r, {}).get(p) is None else f"{rec['capped_per_pair'][r][p]:.1f}"
             for p in rec["capped_pairs"]) + " |")
     if rec.get("loss_recovered_focus_pairs"):
-        L += ["", f"Loss recovered over the {rec['loss_recovered_focus_pairs_n']} pairs FOCUS has (without Qwen3.8-27B): "
+        L += ["", f"Loss recovered over the {rec['loss_recovered_focus_pairs_n']} pairs FOCUS has"
+              + (f" (without {', '.join(nofocus)})" if nofocus else "") + ": "
               + "; ".join(f"{NAMES[r]} {100 * v:.1f} %" for r, v in rec["loss_recovered_focus_pairs"].items()
                           if r not in ("bf16", "nvfp4")) + "."]
     if rec["focus_vs_fq"]:
@@ -228,8 +231,8 @@ def main():
         L += ["", "Missing (TBD): " + ", ".join(rec["missing"]) + "."]
     # LaTeX: one row per method, WikiText-2 / C4 PPL per model, the loss recovered; daggers on FlipQuant cells
     tex = [f"% table main-ppl (final): WikiText-2 / C4 PPL; mean capped NLL recovery over the {len(common)} common "
-           "model-corpus pairs (the models with FOCUS; Qwen3.8-27B excluded); \\dag: FlipQuant not significantly "
-           "better than FourOverSix",
+           "model-corpus pairs (the models with FOCUS" + (f"; {', '.join(nofocus)} excluded" if nofocus else "")
+           + "); \\dag: FlipQuant not significantly better than FourOverSix",
            "Method & " + " & ".join(t for _, _, t in FINAL_MODELS) + " & Mean capped NLL rec. \\\\"]
     for r in ROWS:
         cells = []
