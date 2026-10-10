@@ -674,12 +674,20 @@ N stay unchanged; their GPTQ rows remain the BF16-propagation variant.
     a different batch than part N's quantized rows (64), as the request allows for the reference row; documented
     here and in the report.
 - **Code after registration.**
-  - Driver: `bf16-pilot` takes `--models`, and `--codes-root` defaults to the vault path (amendment 1).
+  - Driver:
+    - `bf16-pilot` takes `--models`.
+    - `--codes-root` defaults to the vault path (amendment 1).
+    - New `test-b`: tests/test_acceptance_candidates.py as a GPU job (n16k64). Its outputs, including two RTN code
+      files for Qwen3-1.7B of about 0.8 GB each, are test artifacts, not round-3 GPTQ code files; they go under
+      `RUN/ptq_round3/test_b`.
+  - Report: `report_ptq_round3.py report` builds the round-3 report (O0-O4), with every GPTQ code file's sha256.
   - flipquant paper-sm120-runs **276ce86** (pushed) adds the opt-in options: `--candidates-e2m1 / --candidates-e0m3`
     (tmopt_launch / tmopt_ext train) and `--gptq-candidates` (models/cli, flipquant.gptq.compose_candidates).
     Defaults are unchanged. Test (a), tests/test_gptq_candidates.py, 17 CPU tests, passes: composition; the hook
     driven through run_train_map's lean-store call sequence (`rtn` = the unhooked store byte for byte; code files
     decode to the files' codes); refusal of another grid or swapped files, checked to fail at the intended guard.
     tests/test_gptq.py and tests/test_stage3.py still pass.
-  - O2 and later run on 276ce86; O0 runs started on f2a56f1 + these uncommitted opt-in edits (BF16 mode touches none
-    of them).
+  - Code each run used:
+    - The batch-64 pilots ran on f2a56f1.
+    - The batch-48 pilot ran on f2a56f1 plus the not yet committed opt-in edits; BF16 mode touches none of them.
+    - The full BF16 runs (07:49:51 UTC) and everything after run on 276ce86.

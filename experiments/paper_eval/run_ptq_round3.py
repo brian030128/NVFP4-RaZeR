@@ -4,6 +4,7 @@
     python run_ptq_round3.py bf16 --batch <model>:<b>,...         # O0: the BF16 GSM8K runs (all 1,319 problems)
     python run_ptq_round3.py gptq [--models M,..]                 # O2: GPTQ with activation quantization on, + PPL
     python run_ptq_round3.py e0m3 [--models M,..]                 # O3: the all-E0M3 map and its GPTQ codes
+    python run_ptq_round3.py test-b                               # O3: test (b), the hook on Qwen3-1.7B (GPU)
     python run_ptq_round3.py train --source rtn|gptq [--models M,..] [--env release|fast]   # O3: TM-OPT+TC, hooked
     python run_ptq_round3.py ppl3 [--models M,..]                 # O3: native PPL, the retrained map on GPTQ candidates
     python run_ptq_round3.py gsm8k [--models M,..]                # O4: GSM8K, the four new rows, batch 64
@@ -191,6 +192,24 @@ def e0m3(models, root):
         S.must(G.run(f"round3_e0m3_{model}", cmd, out, S.FQ2), f"round3 e0m3 codes {model}")
 
 
+def test_b():
+    """O3 test (b): tests/test_acceptance_candidates.py (Qwen3-1.7B, 2 epochs: the hook with rtn and with RTN code
+    files gives calibration.train_map's map.pt bit for bit), as a GPU job; outputs under RUN/ptq_round3/test_b."""
+    out = ROOT / "test_b"
+    out.mkdir(parents=True, exist_ok=True)
+    rec = out / "pytest.json"
+    if G.done(rec):
+        return
+    cmd = [G.PY, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_acceptance_candidates.py",
+           f"--junitxml={out / 'junit.xml'}"]
+    rc = G.run("round3_test_b", cmd, rec, S.FQ2, extra_env={"FLIPQUANT_ACCEPTANCE": "1", "FLIPQUANT_ACCEPTANCE_DIR": str(out),
+                                                           "FLIPQUANT_TMOPT_DATA": str(S.DATA_ROOT)})
+    rec.write_text(json.dumps(dict(status="complete" if rc == 0 else "failed", rc=rc,
+                                   summary=json.loads((out / "summary_candidates.json").read_text())
+                                   if (out / "summary_candidates.json").exists() else None), indent=1) + "\n")
+    S.must(rc, "round3 test (b)")
+
+
 def trained_map(model, source):
     return ROOT / model / f"fq-{UNIT}_{source}cand.pt"
 
@@ -240,7 +259,7 @@ def gsm8k(models, root):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=("bf16-pilot", "bf16", "gptq", "e0m3", "train", "ppl3", "gsm8k"))
+    ap.add_argument("what", choices=("bf16-pilot", "bf16", "gptq", "e0m3", "test-b", "train", "ppl3", "gsm8k"))
     ap.add_argument("--batch", default="64", help="bf16-pilot: the batch size; bf16: <model>:<batch>,...")
     ap.add_argument("--models", default=",".join(MODELS))
     ap.add_argument("--codes-root", type=Path, default=CODES_ROOT)
@@ -263,6 +282,9 @@ if __name__ == "__main__":
     elif a.what == "e0m3":
         G.log(f"round3 e0m3 candidate (O3) models {models} codes {a.codes_root}")
         e0m3(models, a.codes_root)
+    elif a.what == "test-b":
+        G.log("round3 test (b) (O3): the candidates hook on Qwen3-1.7B")
+        test_b()
     elif a.what == "train":
         assert a.source, "--source rtn|gptq"
         G.log(f"round3 train (O3) source {a.source} env {a.env} models {models}")
