@@ -770,8 +770,636 @@
   }
  },
  "o3": {
-  "nemotron-nano-9b-v2": {},
-  "qwen3.8-27b": {}
+  "nemotron-nano-9b-v2": {
+   "e0m3_candidate": {
+    "file": "/vault/flipquant_paper_eval/ptq_round3/nemotron-nano-9b-v2/codes_e0m3.pt",
+    "file_sha256": "060866aeb47bae3eef2dfe7c953f273499952c634062ac65cb9b04f239094797",
+    "codes_sha256": "ac0e2081e7eeba6e3a02e36fa29b0c56b6d389f74313a56949528228651357ba",
+    "report_cache_sha256": "060866aeb47bae3eef2dfe7c953f273499952c634062ac65cb9b04f239094797",
+    "mean_codes_changed": 0.1709890766069293
+   },
+   "map_rtn": {
+    "map": "/home/dev/n16k64_campaign/paper_eval/ptq_round3/nemotron-nano-9b-v2/fq-16x64_rtncand.pt",
+    "map_file_sha256": "34ba5c2ac5726cfdedda42266802aab45df31595e049102083fd1cae550f3d1d",
+    "trainer_map_sha256": "05222ba8433bf4ae73211cf491eecb382883bd5349cd4227b4e6d4535f2fbfe0",
+    "summary": {
+     "modules": 120,
+     "tiles": 7530880,
+     "e0m3_tiles": 80098,
+     "e0m3_fraction": 0.010635941616384805
+    },
+    "candidates": {
+     "e2m1": {
+      "source": "rtn"
+     },
+     "e0m3": {
+      "source": "rtn"
+     },
+     "mean_codes_changed_vs_rtn": {
+      "e2m1": 0.0,
+      "e0m3": 0.0
+     }
+    },
+    "release_run_map_sha256": "05222ba8433bf4ae73211cf491eecb382883bd5349cd4227b4e6d4535f2fbfe0",
+    "tiles_equal_release": true,
+    "trainer_sha_equal_release": true
+   },
+   "map_gptq": {
+    "map": "/home/dev/n16k64_campaign/paper_eval/ptq_round3/nemotron-nano-9b-v2/fq-16x64_gptqcand.pt",
+    "map_file_sha256": "61ef72a63857cf3cb5efa368fa86053e9737a930741c5569900bdaafdae8a416",
+    "trainer_map_sha256": "4d744cfc8a7b749fdbb61afe96bbd455096ea00492012aaf46f53188c057ada7",
+    "summary": {
+     "modules": 120,
+     "tiles": 7530880,
+     "e0m3_tiles": 56091,
+     "e0m3_fraction": 0.007448133551457466
+    },
+    "candidates": {
+     "e2m1": {
+      "source": "/vault/flipquant_paper_eval/ptq_round3/nemotron-nano-9b-v2/codes_fo6.pt",
+      "key": {
+       "model": "nemotron-nano-9b-v2",
+       "weight": "fourover6",
+       "act": "fourover6",
+       "unit": null,
+       "mode": "fake",
+       "map_sha256": null,
+       "rotate": "none",
+       "damp": 0.01,
+       "block": 128,
+       "windows": 256,
+       "calib": "release",
+       "rules": "modelopt-0.47",
+       "hessian_input": "quantized",
+       "data_sha256": "024372b4513c7f3d28179f0fd46c27e49d3f86c0c18fc53da05886b007c90c22"
+      },
+      "bytes": 4337891685
+     },
+     "e0m3": {
+      "source": "/vault/flipquant_paper_eval/ptq_round3/nemotron-nano-9b-v2/codes_e0m3.pt",
+      "key": {
+       "model": "nemotron-nano-9b-v2",
+       "weight": "mixfp4",
+       "act": "fourover6",
+       "unit": "16x64",
+       "mode": "fake",
+       "map_sha256": "ef845494e7c05983c85cb92c987a7c833cfc9c5fde51735eff6963c1e8fdefa6",
+       "rotate": "none",
+       "damp": 0.01,
+       "block": 128,
+       "windows": 256,
+       "calib": "release",
+       "rules": "modelopt-0.47",
+       "hessian_input": "quantized",
+       "data_sha256": "024372b4513c7f3d28179f0fd46c27e49d3f86c0c18fc53da05886b007c90c22"
+      },
+      "bytes": 4819902135
+     },
+     "mean_codes_changed_vs_rtn": {
+      "e2m1": 0.1782098388299346,
+      "e0m3": 0.1709890766069293
+     }
+    },
+    "vs_release": {
+     "Mamba / in_proj": {
+      "modules": 27,
+      "tiles": 2676240,
+      "e0m3_a": 18918,
+      "e0m3_b": 25592,
+      "both": 991,
+      "chance": 189.94227199354322,
+      "share_a": 0.007068872746838849,
+      "share_b": 0.009562670014647416,
+      "jaccard": 0.02277166295181415
+     },
+     "Mamba": {
+      "modules": 54,
+      "tiles": 3885840,
+      "e0m3_a": 29973,
+      "e0m3_b": 41595,
+      "both": 1865,
+      "chance": 348.39403538640033,
+      "share_a": 0.007713390155024397,
+      "share_b": 0.010704249274288185,
+      "jaccard": 0.026756380643587794
+     },
+     "all": {
+      "modules": 120,
+      "tiles": 7530880,
+      "e0m3_a": 56091,
+      "e0m3_b": 80098,
+      "both": 3291,
+      "chance": 646.4275557945638,
+      "share_a": 0.007448133551457466,
+      "share_b": 0.010635941616384805,
+      "jaccard": 0.024763352345407757
+     },
+     "Mamba / out_proj": {
+      "modules": 27,
+      "tiles": 1209600,
+      "e0m3_a": 11055,
+      "e0m3_b": 16003,
+      "both": 874,
+      "chance": 158.45176339285712,
+      "share_a": 0.009139384920634921,
+      "share_b": 0.013229993386243387,
+      "jaccard": 0.033379162847540486
+     },
+     "MLP / up_proj": {
+      "modules": 25,
+      "tiles": 1715000,
+      "e0m3_a": 10796,
+      "e0m3_b": 15704,
+      "both": 487,
+      "chance": 104.04454810495626,
+      "share_a": 0.006295043731778425,
+      "share_b": 0.009156851311953353,
+      "jaccard": 0.018721408526505976
+     },
+     "MLP": {
+      "modules": 50,
+      "tiles": 3430000,
+      "e0m3_a": 23862,
+      "e0m3_b": 35407,
+      "both": 1280,
+      "chance": 263.80030612244894,
+      "share_a": 0.006956851311953353,
+      "share_b": 0.01032274052478134,
+      "jaccard": 0.022073151804652608
+     },
+     "MLP / down_proj": {
+      "modules": 25,
+      "tiles": 1715000,
+      "e0m3_a": 13066,
+      "e0m3_b": 19703,
+      "both": 793,
+      "chance": 159.7557580174927,
+      "share_a": 0.00761865889212828,
+      "share_b": 0.01148862973760933,
+      "jaccard": 0.02479984988741556
+     },
+     "attention / q_proj": {
+      "modules": 4,
+      "tiles": 89600,
+      "e0m3_a": 889,
+      "e0m3_b": 934,
+      "both": 45,
+      "chance": 9.413124999999999,
+      "share_a": 0.009921875,
+      "share_b": 0.010424107142857143,
+      "jaccard": 0.02530933633295838
+     },
+     "attention": {
+      "modules": 16,
+      "tiles": 215040,
+      "e0m3_a": 2256,
+      "e0m3_b": 3096,
+      "both": 146,
+      "chance": 34.23321428571428,
+      "share_a": 0.010491071428571428,
+      "share_b": 0.014397321428571428,
+      "jaccard": 0.028044563964656165
+     },
+     "attention / k_proj": {
+      "modules": 4,
+      "tiles": 17920,
+      "e0m3_a": 263,
+      "e0m3_b": 293,
+      "both": 19,
+      "chance": 4.7484375,
+      "share_a": 0.014676339285714286,
+      "share_b": 0.01635044642857143,
+      "jaccard": 0.035381750465549346
+     },
+     "attention / v_proj": {
+      "modules": 4,
+      "tiles": 17920,
+      "e0m3_a": 204,
+      "e0m3_b": 350,
+      "both": 17,
+      "chance": 4.080357142857142,
+      "share_a": 0.011383928571428571,
+      "share_b": 0.01953125,
+      "jaccard": 0.03165735567970205
+     },
+     "attention / o_proj": {
+      "modules": 4,
+      "tiles": 89600,
+      "e0m3_a": 900,
+      "e0m3_b": 1519,
+      "both": 65,
+      "chance": 15.991294642857143,
+      "share_a": 0.010044642857142858,
+      "share_b": 0.016953125,
+      "jaccard": 0.027612574341546302
+     }
+    }
+   },
+   "ppl": {
+    "ppl": {
+     "wiki": 8.354956775885624,
+     "c4": 11.448264902530388
+    },
+    "paired": {
+     "GPTQ FO6 (O2)": {
+      "wiki": {
+       "delta": -0.004784665140164953,
+       "se": 0.0005479395236783282,
+       "two_se": 0.0010958790473566565,
+       "n": 147,
+       "significant": true
+      },
+      "c4": {
+       "delta": -0.003495548153296113,
+       "se": 0.00035019181398925515,
+       "two_se": 0.0007003836279785103,
+       "n": 256,
+       "significant": true
+      }
+     },
+     "GPTQ FlipQuant, fixed map (O2)": {
+      "wiki": {
+       "delta": -0.0046146110612518935,
+       "se": 0.0006531059659354545,
+       "two_se": 0.001306211931870909,
+       "n": 147,
+       "significant": true
+      },
+      "c4": {
+       "delta": -0.0038137645460665226,
+       "se": 0.0004072055946448438,
+       "two_se": 0.0008144111892896876,
+       "n": 256,
+       "significant": true
+      }
+     },
+     "RTN FlipQuant (part F)": {
+      "wiki": {
+       "delta": 0.00021201169409719453,
+       "se": 0.0006713830235682939,
+       "two_se": 0.0013427660471365878,
+       "n": 147,
+       "significant": false
+      },
+      "c4": {
+       "delta": 0.00026902626268565655,
+       "se": 0.00046235444469028785,
+       "two_se": 0.0009247088893805757,
+       "n": 256,
+       "significant": false
+      }
+     }
+    },
+    "codes_sha256": "14c1edf4235f2ab6f12869e6ab7bc5000a39875fee2de5398a5fe80cc9af2d22",
+    "composed": {
+     "e2m1": {
+      "path": "/vault/flipquant_paper_eval/ptq_round3/nemotron-nano-9b-v2/codes_fo6.pt",
+      "codes_sha256": "e2aba63fe972b4333abaa50d30442aaa5193384704bb140764656f22747faa4a"
+     },
+     "e0m3": {
+      "path": "/vault/flipquant_paper_eval/ptq_round3/nemotron-nano-9b-v2/codes_e0m3.pt",
+      "codes_sha256": "ac0e2081e7eeba6e3a02e36fa29b0c56b6d389f74313a56949528228651357ba"
+     }
+    }
+   }
+  },
+  "qwen3.8-27b": {
+   "e0m3_candidate": {
+    "file": "/vault/flipquant_paper_eval/ptq_round3/qwen3.8-27b/codes_e0m3.pt",
+    "file_sha256": "8b534d86341dd9c0d7dca2a43653a719896cc9989ddbabd7f4213ce7a5bdbbe8",
+    "codes_sha256": "d60c501a012afd75105412823a9a07227de235c4173ded5c123767cf4724a6d8",
+    "report_cache_sha256": "8b534d86341dd9c0d7dca2a43653a719896cc9989ddbabd7f4213ce7a5bdbbe8",
+    "mean_codes_changed": 0.15147005985941617
+   },
+   "map_rtn": {
+    "map": "/home/dev/n16k64_campaign/paper_eval/ptq_round3/qwen3.8-27b/fq-16x64_rtncand.pt",
+    "map_file_sha256": "2f66748861322edaf52f16d60cbe8f3567ee721347dc2769ec4b24a87dcd3fd0",
+    "trainer_map_sha256": "abb2c5987df49c06218e4021c768fe3e22cb8891c186b60c5813023b961d18f1",
+    "summary": {
+     "modules": 496,
+     "tiles": 23779840,
+     "e0m3_tiles": 105278,
+     "e0m3_fraction": 0.004427195473140274
+    },
+    "candidates": {
+     "e2m1": {
+      "source": "rtn"
+     },
+     "e0m3": {
+      "source": "rtn"
+     },
+     "mean_codes_changed_vs_rtn": {
+      "e2m1": 0.0,
+      "e0m3": 0.0
+     }
+    },
+    "release_run_map_sha256": "abb2c5987df49c06218e4021c768fe3e22cb8891c186b60c5813023b961d18f1",
+    "tiles_equal_release": true,
+    "trainer_sha_equal_release": true
+   },
+   "map_gptq": {
+    "map": "/home/dev/n16k64_campaign/paper_eval/ptq_round3/qwen3.8-27b/fq-16x64_gptqcand_a2.pt",
+    "map_file_sha256": "3fc4ed8ffc101a85155459af39cabbfb9f6efd142462228ae2a75b936c031be2",
+    "trainer_map_sha256": "b1e34631c2bb464338f3d957feff3d2408996369592937a7f6e330e7c9e59840",
+    "summary": {
+     "modules": 496,
+     "tiles": 23779840,
+     "e0m3_tiles": 84582,
+     "e0m3_fraction": 0.0035568784314780923
+    },
+    "candidates": {
+     "e2m1": {
+      "source": "/vault/flipquant_paper_eval/ptq_round3/qwen3.8-27b/codes_fo6.pt",
+      "key": {
+       "model": "qwen3.8-27b",
+       "weight": "fourover6",
+       "act": "fourover6",
+       "unit": null,
+       "mode": "fake",
+       "map_sha256": null,
+       "rotate": "none",
+       "damp": 0.01,
+       "block": 128,
+       "windows": 256,
+       "calib": "release",
+       "rules": "modelopt-0.47",
+       "hessian_input": "quantized",
+       "data_sha256": "8a2b9e4aa6293091aed07f8540ab79da10ad3e08671a8da6337edf255bcc2066"
+      },
+      "bytes": 13697639677
+     },
+     "e0m3": {
+      "source": "/vault/flipquant_paper_eval/ptq_round3/qwen3.8-27b/codes_e0m3.pt",
+      "key": {
+       "model": "qwen3.8-27b",
+       "weight": "mixfp4",
+       "act": "fourover6",
+       "unit": "16x64",
+       "mode": "fake",
+       "map_sha256": "d1230e9d1423717743b7b9cecd815ab3fbce13da98d09ca2de6cbc34d18e8812",
+       "rotate": "none",
+       "damp": 0.01,
+       "block": 128,
+       "windows": 256,
+       "calib": "release",
+       "rules": "modelopt-0.47",
+       "hessian_input": "quantized",
+       "data_sha256": "8a2b9e4aa6293091aed07f8540ab79da10ad3e08671a8da6337edf255bcc2066"
+      },
+      "bytes": 15219693455
+     },
+     "mean_codes_changed_vs_rtn": {
+      "e2m1": 0.15459068200641102,
+      "e0m3": 0.15147005985941617
+     }
+    },
+    "vs_release": {
+     "Gated DeltaNet / out_proj": {
+      "modules": 48,
+      "tiles": 1474560,
+      "e0m3_a": 5772,
+      "e0m3_b": 7504,
+      "both": 209,
+      "chance": 32.42552083333334,
+      "share_a": 0.003914388020833334,
+      "share_b": 0.005088975694444445,
+      "jaccard": 0.015994489936481213
+     },
+     "Gated DeltaNet": {
+      "modules": 240,
+      "tiles": 5429760,
+      "e0m3_a": 20413,
+      "e0m3_b": 25548,
+      "both": 1106,
+      "chance": 108.44151692708334,
+      "share_a": 0.0037594663484205562,
+      "share_b": 0.004705180339462518,
+      "jaccard": 0.02465722884851187
+     },
+     "all": {
+      "modules": 496,
+      "tiles": 23779840,
+      "e0m3_a": 84582,
+      "e0m3_b": 105278,
+      "both": 2972,
+      "chance": 445.496654411765,
+      "share_a": 0.0035568784314780923,
+      "share_b": 0.004427195473140274,
+      "jaccard": 0.015902572663841444
+     },
+     "Gated DeltaNet / in_proj_qkv": {
+      "modules": 48,
+      "tiles": 2457600,
+      "e0m3_a": 9257,
+      "e0m3_b": 11524,
+      "both": 587,
+      "chance": 50.20066406249999,
+      "share_a": 0.003766682942708333,
+      "share_b": 0.004689127604166667,
+      "jaccard": 0.02906804001188472
+     },
+     "Gated DeltaNet / in_proj_z": {
+      "modules": 48,
+      "tiles": 1474560,
+      "e0m3_a": 5303,
+      "e0m3_b": 6396,
+      "both": 306,
+      "chance": 25.273665364583337,
+      "share_a": 0.0035963270399305557,
+      "share_b": 0.0043375651041666664,
+      "jaccard": 0.026858597384358817
+     },
+     "Gated DeltaNet / in_proj_b": {
+      "modules": 48,
+      "tiles": 11520,
+      "e0m3_a": 42,
+      "e0m3_b": 60,
+      "both": 3,
+      "chance": 0.2833333333333333,
+      "share_a": 0.0036458333333333334,
+      "share_b": 0.005208333333333333,
+      "jaccard": 0.030303030303030304
+     },
+     "Gated DeltaNet / in_proj_a": {
+      "modules": 48,
+      "tiles": 11520,
+      "e0m3_a": 39,
+      "e0m3_b": 64,
+      "both": 1,
+      "chance": 0.25833333333333336,
+      "share_a": 0.0033854166666666668,
+      "share_b": 0.005555555555555556,
+      "jaccard": 0.00980392156862745
+     },
+     "MLP / gate_proj": {
+      "modules": 64,
+      "tiles": 5570560,
+      "e0m3_a": 17931,
+      "e0m3_b": 20907,
+      "both": 416,
+      "chance": 73.34102711397058,
+      "share_a": 0.003218886431525735,
+      "share_b": 0.0037531235638786765,
+      "jaccard": 0.010827130289938057
+     },
+     "MLP": {
+      "modules": 192,
+      "tiles": 16711680,
+      "e0m3_a": 57410,
+      "e0m3_b": 70315,
+      "both": 1544,
+      "chance": 285.7000919117648,
+      "share_a": 0.0034353218826593136,
+      "share_b": 0.004207536285998775,
+      "jaccard": 0.01223639058178331
+     },
+     "MLP / up_proj": {
+      "modules": 64,
+      "tiles": 5570560,
+      "e0m3_a": 19647,
+      "e0m3_b": 24041,
+      "both": 584,
+      "chance": 99.73103170955882,
+      "share_a": 0.0035269344554227943,
+      "share_b": 0.004315724092371323,
+      "jaccard": 0.013548626577579806
+     },
+     "MLP / down_proj": {
+      "modules": 64,
+      "tiles": 5570560,
+      "e0m3_a": 19832,
+      "e0m3_b": 25367,
+      "both": 544,
+      "chance": 112.6280330882353,
+      "share_a": 0.0035601447610294117,
+      "share_b": 0.0045537612017463236,
+      "jaccard": 0.012182286418094278
+     },
+     "attention / q_proj": {
+      "modules": 16,
+      "tiles": 983040,
+      "e0m3_a": 3625,
+      "e0m3_b": 4519,
+      "both": 166,
+      "chance": 21.303841145833335,
+      "share_a": 0.0036875406901041665,
+      "share_b": 0.0045969645182291664,
+      "jaccard": 0.02080721985460015
+     },
+     "attention": {
+      "modules": 64,
+      "tiles": 1638400,
+      "e0m3_a": 6759,
+      "e0m3_b": 9415,
+      "both": 322,
+      "chance": 51.35504557291666,
+      "share_a": 0.0041253662109375,
+      "share_b": 0.0057464599609375,
+      "jaccard": 0.02031289427201615
+     },
+     "attention / k_proj": {
+      "modules": 16,
+      "tiles": 81920,
+      "e0m3_a": 279,
+      "e0m3_b": 358,
+      "both": 13,
+      "chance": 1.603515625,
+      "share_a": 0.00340576171875,
+      "share_b": 0.0043701171875,
+      "jaccard": 0.020833333333333332
+     },
+     "attention / v_proj": {
+      "modules": 16,
+      "tiles": 81920,
+      "e0m3_a": 452,
+      "e0m3_b": 734,
+      "both": 34,
+      "chance": 5.6021484375,
+      "share_a": 0.005517578125,
+      "share_b": 0.0089599609375,
+      "jaccard": 0.029513888888888888
+     },
+     "attention / o_proj": {
+      "modules": 16,
+      "tiles": 491520,
+      "e0m3_a": 2403,
+      "e0m3_b": 3804,
+      "both": 109,
+      "chance": 22.845540364583336,
+      "share_a": 0.004888916015625,
+      "share_b": 0.0077392578125,
+      "jaccard": 0.017874713020662514
+     }
+    }
+   },
+   "ppl": {
+    "ppl": {
+     "wiki": 7.310930947084424,
+     "c4": 10.126139827711892
+    },
+    "paired": {
+     "GPTQ FO6 (O2)": {
+      "wiki": {
+       "delta": -0.015919261143125335,
+       "se": 0.0023814234373591837,
+       "two_se": 0.0047628468747183675,
+       "n": 145,
+       "significant": true
+      },
+      "c4": {
+       "delta": -0.0016974983736872673,
+       "se": 0.0004158282770428203,
+       "two_se": 0.0008316565540856406,
+       "n": 256,
+       "significant": true
+      }
+     },
+     "GPTQ FlipQuant, fixed map (O2)": {
+      "wiki": {
+       "delta": 0.01154594585813325,
+       "se": 0.0022667836358605344,
+       "two_se": 0.004533567271721069,
+       "n": 145,
+       "significant": true
+      },
+      "c4": {
+       "delta": -0.0012651854194700718,
+       "se": 0.0005159312224378646,
+       "two_se": 0.0010318624448757293,
+       "n": 256,
+       "significant": true
+      }
+     },
+     "RTN FlipQuant (part F)": {
+      "wiki": {
+       "delta": 0.017245159478023134,
+       "se": 0.0029423794233889365,
+       "two_se": 0.005884758846777873,
+       "n": 145,
+       "significant": true
+      },
+      "c4": {
+       "delta": -0.001470266841351986,
+       "se": 0.0004873361181436803,
+       "two_se": 0.0009746722362873605,
+       "n": 256,
+       "significant": true
+      }
+     }
+    },
+    "codes_sha256": "7d99d9e45b108fba088bd739194019db4a83ee137fae860513f74b81bc7765ae",
+    "composed": {
+     "e2m1": {
+      "path": "/vault/flipquant_paper_eval/ptq_round3/qwen3.8-27b/codes_fo6.pt",
+      "codes_sha256": "78a99adb2bf508bfe29ab7b0a31419f56be8884188b1e7f8a106ac7b2a2f5d54"
+     },
+     "e0m3": {
+      "path": "/vault/flipquant_paper_eval/ptq_round3/qwen3.8-27b/codes_e0m3.pt",
+      "codes_sha256": "d60c501a012afd75105412823a9a07227de235c4173ded5c123767cf4724a6d8"
+     }
+    }
+   }
+  }
  },
  "o4": {},
  "checks": {
@@ -794,6 +1422,14 @@
   "O-2": {
    "nemotron-nano-9b-v2/gptq_fq-16x64": true,
    "qwen3.8-27b/gptq_fq-16x64": true
+  },
+  "O-3 (c)": {
+   "nemotron-nano-9b-v2": true,
+   "qwen3.8-27b": true
+  },
+  "O-5": {
+   "nemotron-nano-9b-v2": true,
+   "qwen3.8-27b": true
   }
  },
  "codes_root": "/vault/flipquant_paper_eval/ptq_round3",
@@ -803,7 +1439,9 @@
   "/vault/flipquant_paper_eval/ptq_round3/nemotron-nano-9b-v2/codes_fq-16x64.pt": "0663cc237730702c9b397037450c1933f22a184446618736f4e3bd648e7f064e",
   "/vault/flipquant_paper_eval/ptq_round3/qwen3.8-27b/codes_nvfp4.pt": "4f969bf8c6c4e0ec802ff7c5715bbd95326d9132cc80c1f7d6108992dbbaeb43",
   "/vault/flipquant_paper_eval/ptq_round3/qwen3.8-27b/codes_fo6.pt": "3207d39c5f4f17b06f4fa16f1a8d51cc6c140c3d06e00c206438846bf1ccaea0",
-  "/vault/flipquant_paper_eval/ptq_round3/qwen3.8-27b/codes_fq-16x64.pt": "0abc74ed3b47eef7137ec057e4a76caca8f2072c11fdd5768d70a58162bb4e8e"
+  "/vault/flipquant_paper_eval/ptq_round3/qwen3.8-27b/codes_fq-16x64.pt": "0abc74ed3b47eef7137ec057e4a76caca8f2072c11fdd5768d70a58162bb4e8e",
+  "/vault/flipquant_paper_eval/ptq_round3/nemotron-nano-9b-v2/codes_e0m3.pt": "060866aeb47bae3eef2dfe7c953f273499952c634062ac65cb9b04f239094797",
+  "/vault/flipquant_paper_eval/ptq_round3/qwen3.8-27b/codes_e0m3.pt": "8b534d86341dd9c0d7dca2a43653a719896cc9989ddbabd7f4213ce7a5bdbbe8"
  },
  "checks_summary": {
   "N1": {
@@ -819,6 +1457,14 @@
    "of": 6
   },
   "O-2": {
+   "passed": 2,
+   "of": 2
+  },
+  "O-3 (c)": {
+   "passed": 2,
+   "of": 2
+  },
+  "O-5": {
    "passed": 2,
    "of": 2
   }
