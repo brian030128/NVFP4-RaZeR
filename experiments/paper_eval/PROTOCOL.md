@@ -747,6 +747,10 @@ N stay unchanged; their GPTQ rows remain the BF16-propagation variant.
   for byte between the dense-fallback path (276ce86) and the hook's `pack` path (a53e122). Both overall digests are
   17f04378...; both total 8,675,574,240 bytes = 8.0798 GiB, the store size the 15:34 run reported. Nemotron's
   GPTQ-candidate map stands; Qwen's is attempt 2 (packed path, no dense fallback).
+- **O4 done** (16:54-19:45 UTC, 8 runs, all rc 0, batch 64).
+  - Checks: N1 (no think content) 10 / 10 (with O0's BF16); N4 10 / 10; N5 (native coverage) 8 / 8; O-1 (each GSM8K
+    record's codes_sha256 = its PPL record's) 8 / 8.
+  - Part O is complete: `results/paper_eval/ptq_round3/REPORT.md` and the tab:ptq rows `table_ptq_round3.tex`.
   - Code each run used:
     - The batch-64 pilots ran on f2a56f1.
     - The batch-48 pilot ran on f2a56f1 plus the not yet committed opt-in edits; BF16 mode touches none of them.

@@ -103,28 +103,52 @@ See `O1_SHARES.md` (all rows, per projection type). In all: Nemotron-Nano-9B-v2 
 
 | model | row | strict-match (%) | flexible-extract (%) | cannot extract | used the budget | mean / max tokens |
 |---|---|---:|---:|---|---:|---|
-| Nemotron-Nano-9B-v2 | GPTQ, act. quant. on: NVFP4 | TBD | TBD | | | |
-| Nemotron-Nano-9B-v2 | GPTQ, act. quant. on: FourOverSix | TBD | TBD | | | |
-| Nemotron-Nano-9B-v2 | GPTQ, act. quant. on: FlipQuant 16x64 (release map fixed) | TBD | TBD | | | |
-| Nemotron-Nano-9B-v2 | GPTQ candidates + retrained map: FlipQuant 16x64 | TBD | TBD | | | |
-| Qwen3.8-27B | GPTQ, act. quant. on: NVFP4 | TBD | TBD | | | |
-| Qwen3.8-27B | GPTQ, act. quant. on: FourOverSix | TBD | TBD | | | |
-| Qwen3.8-27B | GPTQ, act. quant. on: FlipQuant 16x64 (release map fixed) | TBD | TBD | | | |
-| Qwen3.8-27B | GPTQ candidates + retrained map: FlipQuant 16x64 | TBD | TBD | | | |
+| Nemotron-Nano-9B-v2 | GPTQ, act. quant. on: NVFP4 | 83.78 ± 2.03 | 88.48 ± 1.76 | 86 / 0 | 0 | 116 / 461 |
+| Nemotron-Nano-9B-v2 | GPTQ, act. quant. on: FourOverSix | 87.11 ± 1.85 | 90.07 ± 1.65 | 52 / 0 | 0 | 113 / 520 |
+| Nemotron-Nano-9B-v2 | GPTQ, act. quant. on: FlipQuant 16x64 (release map fixed) | 86.81 ± 1.86 | 90.30 ± 1.63 | 69 / 0 | 0 | 117 / 659 |
+| Nemotron-Nano-9B-v2 | GPTQ candidates + retrained map: FlipQuant 16x64 | 87.64 ± 1.81 | 90.75 ± 1.60 | 55 / 0 | 0 | 115 / 535 |
+| Qwen3.8-27B | GPTQ, act. quant. on: NVFP4 | 96.06 ± 1.07 | 96.06 ± 1.07 | 5 / 0 | 5 | 183 / 1024 |
+| Qwen3.8-27B | GPTQ, act. quant. on: FourOverSix | 95.98 ± 1.08 | 96.06 ± 1.07 | 18 / 0 | 14 | 177 / 1024 |
+| Qwen3.8-27B | GPTQ, act. quant. on: FlipQuant 16x64 (release map fixed) | 95.98 ± 1.08 | 95.98 ± 1.08 | 13 / 0 | 12 | 184 / 1024 |
+| Qwen3.8-27B | GPTQ candidates + retrained map: FlipQuant 16x64 | 96.06 ± 1.07 | 96.13 ± 1.06 | 14 / 0 | 11 | 174 / 1024 |
 
 | model | comparison (A vs B) | strict-match Δ (pp) | flexible-extract Δ (pp) |
 |---|---|---:|---:|
+| Nemotron-Nano-9B-v2 | GPTQ, act. quant. on: NVFP4 vs GPTQ, act. quant. on: FourOverSix | -3.34 ± 1.71 * (42 / 86, p 0.000125) | -1.59 ± 1.28 * (25 / 46, p 0.017) |
+| Nemotron-Nano-9B-v2 | GPTQ, act. quant. on: FlipQuant 16x64 (release map fixed) vs GPTQ, act. quant. on: FourOverSix | -0.30 ± 1.63 (56 / 60, p 0.781) | +0.23 ± 1.31 (39 / 36, p 0.818) |
+| Nemotron-Nano-9B-v2 | GPTQ candidates + retrained map: FlipQuant 16x64 vs GPTQ, act. quant. on: FourOverSix | +0.53 ± 1.61 (60 / 53, p 0.573) | +0.68 ± 1.35 (44 / 35, p 0.368) |
+| Nemotron-Nano-9B-v2 | GPTQ candidates + retrained map: FlipQuant 16x64 vs GPTQ, act. quant. on: FlipQuant 16x64 (release map fixed) | +0.83 ± 1.72 (70 / 59, p 0.379) | +0.45 ± 1.42 (47 / 41, p 0.594) |
+| Nemotron-Nano-9B-v2 | GPTQ, act. quant. on: FlipQuant 16x64 (release map fixed) vs RTN FlipQuant (part N) | -2.50 ± 1.73 * (49 / 82, p 0.00498) | -0.99 ± 1.36 (34 / 47, p 0.182) |
+| Nemotron-Nano-9B-v2 | GPTQ candidates + retrained map: FlipQuant 16x64 vs RTN FlipQuant (part N) | -1.67 ± 1.67 (50 / 72, p 0.0568) | -0.53 ± 1.36 (37 / 44, p 0.505) |
+| Nemotron-Nano-9B-v2 | GPTQ, act. quant. on: FlipQuant 16x64 (release map fixed) vs part N's GPTQ FlipQuant (BF16 propagation) | +1.21 ± 1.75 (75 / 59, p 0.195) | +1.44 ± 1.43 * (54 / 35, p 0.0558) |
+| Nemotron-Nano-9B-v2 | GPTQ, act. quant. on: NVFP4 vs BF16 | -3.64 ± 1.73 * (42 / 90, p 3.57e-05) | -2.05 ± 1.34 * (26 / 53, p 0.00318) |
+| Nemotron-Nano-9B-v2 | GPTQ, act. quant. on: FourOverSix vs BF16 | -0.30 ± 1.61 (54 / 58, p 0.777) | -0.45 ± 1.27 (32 / 38, p 0.55) |
+| Nemotron-Nano-9B-v2 | GPTQ, act. quant. on: FlipQuant 16x64 (release map fixed) vs BF16 | -0.61 ± 1.68 (57 / 65, p 0.526) | -0.23 ± 1.31 (36 / 39, p 0.818) |
+| Nemotron-Nano-9B-v2 | GPTQ candidates + retrained map: FlipQuant 16x64 vs BF16 | +0.23 ± 1.60 (57 / 54, p 0.85) | +0.23 ± 1.26 (36 / 33, p 0.81) |
+| Qwen3.8-27B | GPTQ, act. quant. on: NVFP4 vs GPTQ, act. quant. on: FourOverSix | +0.08 ± 0.87 (17 / 16, p 1) | +0.00 ± 0.86 (16 / 16, p 1) |
+| Qwen3.8-27B | GPTQ, act. quant. on: FlipQuant 16x64 (release map fixed) vs GPTQ, act. quant. on: FourOverSix | +0.00 ± 0.91 (18 / 18, p 1) | -0.08 ± 0.87 (16 / 17, p 1) |
+| Qwen3.8-27B | GPTQ candidates + retrained map: FlipQuant 16x64 vs GPTQ, act. quant. on: FourOverSix | +0.08 ± 0.87 (17 / 16, p 1) | +0.08 ± 0.84 (16 / 15, p 1) |
+| Qwen3.8-27B | GPTQ candidates + retrained map: FlipQuant 16x64 vs GPTQ, act. quant. on: FlipQuant 16x64 (release map fixed) | +0.08 ± 0.79 (14 / 13, p 1) | +0.15 ± 0.77 (14 / 12, p 0.845) |
+| Qwen3.8-27B | GPTQ, act. quant. on: FlipQuant 16x64 (release map fixed) vs RTN FlipQuant (part N) | +0.83 ± 0.95 (25 / 14, p 0.108) | +0.38 ± 0.87 (19 / 14, p 0.487) |
+| Qwen3.8-27B | GPTQ candidates + retrained map: FlipQuant 16x64 vs RTN FlipQuant (part N) | +0.91 ± 1.00 (28 / 16, p 0.0961) | +0.53 ± 0.95 (23 / 16, p 0.337) |
+| Qwen3.8-27B | GPTQ, act. quant. on: FlipQuant 16x64 (release map fixed) vs part N's GPTQ FlipQuant (BF16 propagation) | -0.61 ± 0.77 (9 / 17, p 0.169) | -0.53 ± 0.76 (9 / 16, p 0.23) |
+| Qwen3.8-27B | GPTQ, act. quant. on: NVFP4 vs BF16 | +0.38 ± 0.84 (18 / 13, p 0.473) | +0.23 ± 0.84 (17 / 14, p 0.72) |
+| Qwen3.8-27B | GPTQ, act. quant. on: FourOverSix vs BF16 | +0.30 ± 0.96 (22 / 18, p 0.636) | +0.23 ± 0.92 (20 / 17, p 0.743) |
+| Qwen3.8-27B | GPTQ, act. quant. on: FlipQuant 16x64 (release map fixed) vs BF16 | +0.30 ± 0.80 (16 / 12, p 0.572) | +0.15 ± 0.80 (15 / 13, p 0.851) |
+| Qwen3.8-27B | GPTQ candidates + retrained map: FlipQuant 16x64 vs BF16 | +0.38 ± 0.84 (18 / 13, p 0.473) | +0.30 ± 0.86 (18 / 14, p 0.597) |
 
 ## Checks
 
 | check | passed |
 |---|---:|
-| N1 | 2 / 2 |
-| N4 | 2 / 2 |
+| N1 | 10 / 10 |
+| N4 | 10 / 10 |
 | O-1 ppl | 6 / 6 |
 | O-2 | 2 / 2 |
 | O-3 (c) | 2 / 2 |
 | O-5 | 2 / 2 |
+| N5 | 8 / 8 |
+| O-1 gsm8k | 8 / 8 |
 
 GPTQ code files (`/vault/flipquant_paper_eval/ptq_round3`), sha256:
 
