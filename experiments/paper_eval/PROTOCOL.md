@@ -697,6 +697,15 @@ N stay unchanged; their GPTQ rows remain the BF16-propagation variant.
     Path. That is a bug in the test script, not in the hook.
   - Fixed in flipquant eb10c28 (test file only), and (b) was rerun. Its finished parts (the direct run, (g)) are
     reused by the test's own caching.
+- **O3, test (b), passed (12:06-12:07 UTC).** Qwen3-1.7B, 2 epochs:
+  - (g): the hook with `rtn` gives calibration.train_map's map.pt bit for bit.
+  - (g2): RTN code files give it bit for bit too.
+  - Both have sha256 4f08678a...; the files are under `RUN/ptq_round3/test_b/`.
+- **O3, test (c), passed (n16k64, 12:07-13:33 UTC).** With `--candidates-* rtn`, both release 16x64 maps are
+  reproduced bit for bit. The tiles are equal (80,098 / 105,278 E0M3), and the trainer's map.pt sha256 equals the
+  release record's run_map_sha256 (05222ba8... / abb2c598...). Every epoch's train KL, E0M3 count and flips equal the
+  release report's, and every module got both candidates exactly once.
+- **O3, the experiment, started 13:33 UTC:** the GPTQ-candidate maps (n16k64), then their native PPL.
   - Code each run used:
     - The batch-64 pilots ran on f2a56f1.
     - The batch-48 pilot ran on f2a56f1 plus the not yet committed opt-in edits; BF16 mode touches none of them.
