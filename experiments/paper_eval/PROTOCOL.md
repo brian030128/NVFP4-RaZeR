@@ -527,3 +527,117 @@ watcher of this session waited on its own command line (`pgrep -f` matched itsel
   unaffected. The cell stays as measured; no rerun.**
 - **Results:** `results/paper_eval/ptq_gsm8k_lmeval/GSM8K_LMEVAL.md`; tab:ptq's GSM8K column (strict-match) in
   `results/paper_eval/ptq/table_ptq.tex`.
+
+## Part O (registered 2026-10-10 07:34 UTC): round 3 of tab:ptq
+
+The user's request, relayed by the coordinator on 2026-10-10. It follows how IF4 (Fig. 5b), MixFP4 (Table 4, App. C)
+and FourOverSix (Table 5) combine their formats with PTQ methods. Scope: Nemotron-Nano-9B-v2 and Qwen3.8-27B at
+16x64; the release revisions (`run_sm120.REV`); native evaluation (build_V, `--kernel-set auto`, n16k64-fast); flipquant
+paper-sm120-runs; one GPU job at a time; the steps run in this order. Driver: `experiments/paper_eval/run_ptq_round3.py`.
+Records are in `RUN/ptq_round3/`; results (one report covering O0-O4) are in `results/paper_eval/ptq_round3/`. Parts H and
+N stay unchanged; their GPTQ rows remain the BF16-propagation variant.
+
+- **O0, the BF16 reference row (STEP 0).**
+  - **GSM8K.** Part N's protocol exactly (lm-eval 0.4.11 `gsm8k_llama` as shipped, chat template +
+    fewshot_as_multiturn, greedy, max_gen_toks 1024, thinking off with lm-eval's own switches, all 1,319 problems,
+    the same command), with `--mode bf16` instead of the quantization flags. Nothing is quantized, so there is no
+    native coverage check.
+  - **Batch.** A pilot on part N's pilot documents per model (the 64 longest questions + 64 others) at batch 64,
+    sampling nvidia-smi's device memory every second. A batch b fits if the pilot completes and its peak plus the KV
+    growth bound b x 1024 tokens x (64 KiB per token for Qwen3.8-27B: 16 attention layers x 2 x 4 KV heads x 256 x
+    2 B; 16 KiB for Nemotron-Nano-9B-v2: 4 layers x 2 x 8 x 128 x 2 B) is at most 97,280 MiB (95 GiB). If it does
+    not fit, try 48, then 32, then 16 the same way; the full run uses the largest batch that fits, recorded and
+    documented. A full run that still runs out of memory is rerun at the next lower batch, also recorded.
+  - **Report.** Strict-match and flexible-extract accuracy ± 2 SE, budget hits, the samples file. Paired per problem
+    and filter (McNemar's exact p): each of part N's 18 configurations vs BF16.
+  - **PPL** reuses part F's BF16 records (`RUN/pplfast/<model>/bf16.json`). Checked at registration: run by
+    n16k64-fast's interpreter, at the release revisions (6533e8d / 1d4bf0f), transformers 5.16.1, torch 2.9.0+cu128
+    (the env's current versions; nothing has been installed since), WikiText-2 147 / 145 windows and C4 256.
+- **O1, CPU only (STEP 1).** The E0M3 share of the Hadamard-basis FlipQuant 16x64 maps (part H:
+  `RUN/ptq/<model>/fq-16x64_hadamard.pt`) and of the unrotated release 16x64 maps, per model and per projection
+  type (the module name's last component: q/k/v/o_proj, gate/up/down_proj, the Mamba in/out_proj, the
+  Gated-DeltaNet projections), with the tiles that are E0M3 in both. Not all of the difference is the basis: part H
+  trained the Hadamard maps in n16k64-fast, and the release maps were trained in n16k64.
+- **O2, GPTQ with activation quantization on during calibration (STEP 2; the MixFP4 / FP-Quant setting).**
+  - **Settings.** flipquant gptq.py's defaults, passed explicitly: `--gptq-hessian-input quantized`
+    (`H = X^T X` from the input after the row's own activation quantizer, per token) and `--gptq-propagate
+    quantized` (earlier layers run quantized, as they are evaluated: GPTQ codes and per-token activations, fake
+    quant during calibration). Everything else as part H: fixed RTN grid, block 128, damp 0.01, no act-order,
+    sequential layerwise, the release 256 x 512 fit set (`--gptq-calib release`), `--gptq-batch` 1 (Qwen) / 8.
+  - **Rows.**
+    - NVFP4: `--weight nvfp4 --act nvfp4`, per-token NVFP4 activations in calibration and evaluation.
+    - FourOverSix: `--weight fourover6 --act fourover6`, per token.
+    - FlipQuant 16x64: `--weight mixfp4 --map <release 16x64 map>`, FourOverSix per token. The map is fixed, and each
+      tile is GPTQ-rounded on its format's grid (MixFP4's static strategy).
+  - **PPL.** Native WikiText-2 / C4 PPL (part H's PPL flags: `--paper-convention` / NVFP4 `--act-scope row`).
+    codes_sha256 is recorded; code files are stored under `--codes-root`.
+  - **Comparisons.** Paired per-window ΔNLL (± 2 SE) vs RTN FourOverSix (part F's record), and vs part H's
+    BF16-propagation GPTQ row of the same format.
+- **O3, GPTQ candidates plus a retrained map (STEP 3; FlipQuant's own combination: transform, then select).**
+  - **E2M1 candidate.** O2's GPTQ FourOverSix codes.
+  - **E0M3 candidate.** A new GPTQ run on the all-E0M3 grid, with O2's settings (activation quantization on,
+    per-token FourOverSix): `calibration.gptq_codes --weight mixfp4` with a map that has every tile E0M3. The map
+    is written from the release 16x64 map's modules and tile shapes. Its grid is exactly the trainer's candidate A:
+    block max / 7 in E4M3 and the global scale shared with FourOverSix.
+  - **Map training.** `calibration.tmopt_ext train` with the release settings: TM-OPT+TC, 5 epochs, 256 fit windows,
+    top-1000 teacher, lr 0.02, init -1, seed 0, deterministic, batch 2 x accumulation 4. It uses the release runs'
+    data root (`fqrel/tmopt_data`). Only the candidates differ from the release map's training.
+  - **The new hook (opt-in on paper-sm120-runs; defaults unchanged; no hook = the trainer as before).**
+    - **Interface.** `tmopt_launch.py --candidates-e2m1 SRC --candidates-e0m3 SRC`, passed through by `tmopt_ext
+      train`. SRC is a flipquant-gptq/1 code file, or `rtn` (flipquant's own RTN codes of the module's BF16 weight).
+    - **Mechanism.** Like `--rotate`, it wraps `run_train_map.sha` (called once per module, right before that
+      module's candidates are built) to know the current module. It replaces the trainer's candidate quantizers
+      (`quant_nvfp4_4over6`, `quant_mix_4_6` in run_train_map) for that module's weight with the given candidates'
+      decoded BF16 weights. It also replaces `rq.weight_four_over_six` / `rq.weight_e0m3` (the codes the lean store
+      packs) with the given codes. The trainer's own packing check (each stored candidate decodes bit for bit to the
+      candidate it holds) runs unchanged.
+    - **Guards.** Each module's given scales and global scale must equal the RTN grid of its BF16 weight (GPTQ keeps
+      the fixed grid), so codes on any other grid fail. With `rtn`, each candidate must equal the trainer's own
+      quantizer output bit for bit. Every quantized module must receive both candidates exactly once.
+    - **Metadata.** The map's meta records the sources (path, key, codes_sha256).
+  - **Composed evaluation (opt-in in models/cli.py / flipquant/gptq.py).** `--gptq-candidates E2M1 E0M3` with `--ptq
+    gptq --weight mixfp4 --map M` runs no GPTQ. Each tile takes its format's GPTQ codes and E4M3 scales (E0M3 tiles
+    from the E0M3 file, E2M1 tiles from the E2M1 file), and the global scales must be equal. Both files' GPTQ settings
+    (act, damp, block, windows, calibration set and data hash, Hessian input, propagation, rotation) must equal the
+    run's; the E2M1 file must be FourOverSix without a map, and the E0M3 file must have every block E0M3. The record
+    holds both files' codes_sha256 and that of the composition.
+  - **Tests before use.**
+    - (a) CPU: the composition (all-E2M1 / all-E0M3 maps give each file's codes; a mixed map gives rtn_grid's mixfp4
+      codes for RTN files; mismatched settings or grids are refused).
+    - (b) GPU, Qwen3-1.7B, 2 epochs, as tests/test_acceptance_ptq.py (a): the hook with `rtn`, and with RTN code
+      files, gives the unhooked trainer's map.pt bit for bit.
+    - (c) The two models, release env: `--candidates-* rtn` reproduces the release 16x64 map. The trainer's map.pt
+      sha256 must equal the release record's `run_map_sha256`, and the tiles must equal the release map's.
+  - **Env for the trainer (both runs per model, the RTN reproduction and the GPTQ-candidate run).** n16k64, the
+    release maps' env. The release records show `/home/dev/.conda/envs/n16k64/bin/python`. n16k64-fast's mamba_ssm /
+    causal_conv1d / fla kernels change the trainer's forward numerics, so no fast-env run can reproduce the release
+    map. This is an exception to "hybrid models run in n16k64-fast"; every evaluation here stays in n16k64-fast.
+    **Pending the coordinator's confirmation.** If declined, both runs use n16k64-fast, and (c) becomes: the hook
+    with `rtn` equals the unhooked trainer, both in n16k64-fast, bit for bit (one more training run per model), with
+    the overlap with the release map reported.
+  - **Evaluation.** Native PPL of the retrained map on the GPTQ candidates. Paired ΔNLL vs O2's GPTQ FourOverSix and
+    GPTQ FlipQuant (fixed map), and vs RTN FlipQuant (part F). The map's E0M3 share, and its overlap with the release
+    map (both, Jaccard, per projection type).
+- **O4, GSM8K for the new rows (STEP 4).** O2's three rows and O3's row, both models, part N's protocol at batch 64.
+  The ETA goes to the coordinator before it starts. Paired as part N (within a method, each format vs FourOverSix;
+  FlipQuant vs RTN FlipQuant), and vs BF16.
+- **Checks.**
+  - O-1: every GPTQ record has propagate / Hessian input quantized in its key, and every GSM8K record's
+    codes_sha256 equals the PPL record's (part N's N2).
+  - O-2: the FlipQuant records install the intended map (path, E0M3 tiles).
+  - O-3: tests (a)-(c) pass.
+  - O-4: part N's N1, N4 and N5 for every GSM8K record (N5 native rows only).
+  - O-5: the composed run's file codes_sha256 equal those recorded when the files were written.
+- **Stop and report** on a failing check, an OOM beyond the batch rule, an implausible result, or a disk shortfall.
+- **Disk (a decision for the user).** A GPTQ code file is 4.3-4.8 GB (Nemotron) or 13.7-15.2 GB (Qwen); O2 + O3
+  write eight, about 76 GB. At registration the disk holding `/home/dev` has 27 GB free (99 % used). The driver
+  starts a GPTQ job only if its file plus 10 GB fits. Until the user decides where the files go (space freed on
+  /home, or another location), only O0, O1 and Nemotron's O2 (about 13.5 GB) can run; the decision is recorded as an
+  amendment.
+- **ETA (GPU, sequential; from parts H / N).**
+  - O0: about 1-1.5 h (Qwen BF16 GSM8K 35-60 min).
+  - O2: about 2.5 h (Nemotron about 11 min per row; Qwen about 35-40 min per row).
+  - O3: about 4 h in n16k64 (E0M3 GPTQ 11 / 40 min; four trainer runs of about 44 min); about 2.3 h if trained in
+    n16k64-fast.
+  - O4: about 3 h.
+  - In all, about 10-11 h of GPU time, plus waiting for the two decisions above.
