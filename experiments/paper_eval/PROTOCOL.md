@@ -944,3 +944,60 @@ at 10 GB. Do not upload its artifacts to HF until a request is relayed. One GPU 
 - **Stop and report** on a failing builder-rule, token-hash, extension or coverage check, an OOM, or an implausible
   result.
 - **ETA.** CPU preparation about 10 min; GPU about 25 min; the report about 10 min.
+
+### Part P, amendment 1: the run (2026-10-10 22:42–23:01 UTC)
+
+All steps rc 0, one job at a time, from flipquant aa12408 (clean).
+- **CPU preparation (304 s).**
+  - The builder rule reproduces the Llama-3.1-8B, Qwen3-4B and Mistral-7B-v0.3 records (checked in both preparation
+    passes).
+  - 128 fit windows, every token hash checked; 112 matrices.
+  - Three development draws: 192 distinct documents; this model's 231 C4 evaluation documents excluded.
+  - The fit set equals Llama-3.1-8B's archived record (documents, offsets, token sha256): the Llama 3.2 tokenizer
+    gives the same windows.
+- **Maps.** About 82 s each, device peak about 15.8 GB, E0M3 2.030 % / 2.805 % / 11.377 %. Every fit-extension check
+  passes: 128 windows, 64 + 64, skips of fit 128 / development 192 / published C4 0, distinct, disjoint, the same
+  extension in all three units. The trainer log shows the launcher's REGISTER line.
+- **The extension shares no window with Llama-3.1-8B's** (reported only, not required). All 128 of the base model's
+  extension documents are among this model's drawn development documents: the development rule takes the next
+  documents of the same streams, and the extension rule skips them.
+- **PPL (WikiText-2 / C4):**
+
+  | row | WikiText-2 | C4 |
+  |---|---:|---:|
+  | BF16 | 13.1629 | 18.5189 |
+  | NVFP4 | 15.5352 | 21.7669 |
+  | FourOverSix | 15.3152 | 21.4488 |
+  | IF4 | 15.3448 | 21.0737 |
+  | MixFP4 (Zou) | 15.2483 | 21.0489 |
+  | GPTQ‡ | 15.5327 | 21.0190 |
+  | FOCUS | 14.6611 | 19.8847 |
+  | FlipQuant 8x64 | 14.4527 | 19.6791 |
+  | FlipQuant 16x64 | 14.4536 | 19.6842 |
+  | FlipQuant 256x64 | 14.6573 | 20.0588 |
+
+  - FlipQuant is significantly better than NVFP4 and FourOverSix in every cell (no dagger).
+  - FOCUS (micro 8, 44 s training; state 697 MB) minus FlipQuant, paired ΔNLL x 1e-3:
+    - 8x64: +14.32 ± 2.56* / +10.40 ± 1.90*;
+    - 16x64: +14.26 ± 2.35* / +10.14 ± 1.77*;
+    - 256x64: +0.26 ± 2.70 / −8.72 ± 2.09*.
+- **A note, not a rerun.** GPTQ‡'s WikiText-2 cell is driven by one window, as for the 8B's C4 cell. Window 88 is
+  +2.73 nats vs FourOverSix (NLL 6.20 vs 3.47; BF16 3.34). Without it, ΔNLL vs FourOverSix is −5.30 x 1e-3 instead of
+  +14.10 ± 39.30.
+- **Final table.** All 8 models, nothing TBD. Mean capped NLL recovery over 16 pairs, with no non-positive gap:
+
+  | row | recovery |
+  |---|---:|
+  | FlipQuant 8x64 | 47.9 % |
+  | FlipQuant 16x64 | 47.0 % |
+  | FOCUS | 42.1 % |
+  | FlipQuant 256x64 | 41.1 % |
+  | IF4 | 20.0 % |
+  | Zou | 18.9 % |
+  | FourOverSix | 9.5 % |
+  | GPTQ‡ | 5.0 % |
+
+  FlipQuant vs NVFP4 is significant in 48 / 48 cells; 0 daggers.
+- **Disk.** /home has 14 GB free after the run.
+- **Results.** `results/paper_eval/llama_instruct/REPORT.md` (both models; the largest single-window differences for
+  both corpora) and `results/paper_eval/final/`. No HF upload.

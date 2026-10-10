@@ -278,8 +278,17 @@ def windows(models):
         ext = [r["token_sha256"] for r in rep["fit_extension"]["records"]]
         out = dict(model=model, key=key, fit_token_sha256=fit, extension_token_sha256=ext)
         bext = [r["token_sha256"] for r in base["fit_extension"]["records"]]
+        dev = set()
+        for name in ("fresh_dev1", "fresh_dev2", "fresh_dev3"):
+            m = DATA / key / name / "fresh_manifest.json"
+            if m.exists():
+                dev |= {r["document_sha256"] for r in json.loads(m.read_text())["records"]}
         out.update(base_release=str(BASE_RELEASE), extension_equals_base=ext == bext,
                    extension_shared_with_base=len(set(ext) & set(bext)),
+                   # drawn development records (the release's rule for models without an archived record) take the
+                   # next documents of the same streams, so the base model's extension documents can be among them
+                   base_extension_documents_in_own_development=len(
+                       {r["document_sha256"] for r in base["fit_extension"]["records"]} & dev),
                    fit_equals_base=(base_prior is not None and all(
                        fit[s] == base_prior["fit"][s]["token_sha256"] for s in ("math", "code"))))
         (ROOT / model / "windows.json").write_text(json.dumps(out, indent=1) + "\n")

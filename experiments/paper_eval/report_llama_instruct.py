@@ -62,7 +62,10 @@ def main():
                     f" Compared with Llama-3.1-8B's release windows (not required: this model's fit set is drawn with "
                     f"its own tokenizer and its development records are its own draws): fit equal "
                     f"{w.get('fit_equals_base')}, extension equal {w.get('extension_equals_base')} "
-                    f"({w.get('extension_shared_with_base')} of 128 extension windows shared).")
+                    f"({w.get('extension_shared_with_base')} of 128 extension windows shared; "
+                    f"{w.get('base_extension_documents_in_own_development')} of the base model's 128 extension documents "
+                    "are among this model's drawn development documents, which the extension rule skips: the "
+                    "development rule takes the next documents of the same streams).")
             md += ["", "Calibration windows (256 x 512): the 128 of the paper rule (`builder_seed0` with this model's "
                    "tokenizer; not taken from an archived record) and the 128 of the extension rule (seed 20260930)."
                    + (same if "fit_equals_base" in w else "")]
@@ -96,9 +99,11 @@ def main():
                                                     mean_without=(sum(diffs) - diffs[i]) / (len(diffs) - 1))
         m["largest_window_vs_fo6"] = out
         md += ["", "Largest single-window NLL difference vs FourOverSix (nats; window index), and the mean ΔNLL x 1e-3 "
-               "without that window, C4: " + "; ".join(
-                   f"{F.NAMES[r]} {v['c4']['delta_nats']:+.2f} (w{v['c4']['window']}; without it "
-                   f"{1e3 * v['c4']['mean_without']:+.2f})" for r, v in out.items()) + ".", ""]
+               "without that window:", ""]
+        md += [f"- {name}: " + "; ".join(
+                   f"{F.NAMES[r]} {v[c]['delta_nats']:+.2f} (w{v[c]['window']}; without it "
+                   f"{1e3 * v[c]['mean_without']:+.2f})" for r, v in out.items()) + "." for c, name in T.CORPORA]
+        md += [""]
     cr = final.get("capped_recovery") or {}
     md += ["## Mean capped NLL recovery", "",
            f"Over the {len(final.get('capped_pairs') or [])} common pairs (the models with FOCUS; the coordinator's "
