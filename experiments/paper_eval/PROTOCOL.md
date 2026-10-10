@@ -845,3 +845,33 @@ merged; nothing vendored is edited) and on paper-eval.
 - **Results:** `results/paper_eval/llama_instruct/REPORT.md`; the final table is regenerated
   (`results/paper_eval/final/`, the Llama-3.2-1B-Instruct column TBD). The mean capped NLL recovery is over 12
   common pairs until the 1B is in.
+
+## Part Q (registered 2026-10-10 22:10 UTC): FOCUS on Qwen3.8-27B from the trained state on HF
+
+The user's request, relayed by the coordinator on 2026-10-10 (GPU priority). The goal is to fill the main table's FOCUS
+Qwen3.8-27B cells (TBD in part K: FOCUS did not fit one 96 GB GPU for training). The state was trained on the cluster
+and is on HF: `edgeai-lab/Qwen3.8-27B-FOCUS-NVFP4` @ b84ff372a7, `focus_256/focus.pt` (18.26 GB) plus
+`focus_256/report.json` and `focus_256/fit_extension.json`.
+
+- **Provenance checks before use** (read-only; stop on any difference):
+  - **Windows.** The state's 256 windows' token sha256 (report.json data records, fit_extension.json) must equal
+    the release fit set for qwen3.8-27b, i.e. the windows of the release map and of part K's FOCUS runs. The windows are
+    rebuilt here with flipquant's `calibration_release` (the record plus the release 16x64 trainer report's extension)
+    and hashed the same way.
+  - **Hyperparameters.** Every one must equal part K's (`run_sm120.FOCUS_COMMON`): data release, 256 x 512, 1 epoch,
+    batch 32 (8 steps), lr 5e-3 / 1e-3, num_sub 2, init_q 6, top-1000, act fourover6 / row, seed 42, revision 1d4bf0f2.
+  - **Recorded deviation:** micro-batch 1 on 2 x H200 with device_map balanced. The global batch is the same; only the
+    summation order differs.
+  - The HF repository sha and the file's sha256 are recorded.
+- **Download** into the HF cache on /home. The coordinator relaxed the floor to 10 GB now that O4 is done; stop if the
+  download would cross it.
+- **Evaluation:** exactly part K's, `evaluation.ppl --weight focus --focus <path> --focus-deploy --act fourover6
+  --act-scope row --paper-convention`, native (build_V, `--kernel-set auto`), n16k64-fast, the release revision. The
+  record goes to `RUN/focus/qwen3.8-27b/ppl.json` (where tables_final.py reads FOCUS). If it does not fit one GPU in
+  the deploy path, stop and report; no setting is changed.
+- **Report:**
+  - paired ΔNLL vs FourOverSix and vs FlipQuant at 3 units;
+  - `results/paper_eval/final/` regenerated with the FOCUS Qwen3.8-27B cells and the mean capped NLL recovery over
+    the new common pairs (every model with all methods: 7 models = 14 pairs until the 1B is in), flagging any
+    non-positive gap, with the per-pair values.
+  - Records: `results/paper_eval/focus_qwen27b/`.
