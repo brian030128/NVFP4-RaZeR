@@ -706,6 +706,12 @@ N stay unchanged; their GPTQ rows remain the BF16-propagation variant.
   release record's run_map_sha256 (05222ba8... / abb2c598...). Every epoch's train KL, E0M3 count and flips equal the
   release report's, and every module got both candidates exactly once.
 - **O3, the experiment, started 13:33 UTC:** the GPTQ-candidate maps (n16k64), then their native PPL.
+- **O3, reading /vault.** Nemotron's GPTQ-candidate training (13:33 UTC) loads the two code files memory-mapped
+  (flipquant 276ce86's `load_codes_file`). On the FUSE vault, page faults read about 2 MB/s, against about 85 MB/s for
+  a full read; 40 trainer threads were waiting on FUSE, and 45 % of the files were resident after about 36 min.
+  - The run continues as started: the bytes are the same, it is only slower, and this session kills nothing.
+  - flipquant **b5cbc22** (pushed) reads the files in full. Qwen's training and every later evaluation use it; the
+    CPU tests (17) still pass.
   - Code each run used:
     - The batch-64 pilots ran on f2a56f1.
     - The batch-48 pilot ran on f2a56f1 plus the not yet committed opt-in edits; BF16 mode touches none of them.
