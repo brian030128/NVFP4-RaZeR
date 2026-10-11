@@ -1002,7 +1002,7 @@ All steps rc 0, one job at a time, from flipquant aa12408 (clean).
 - **Results.** `results/paper_eval/llama_instruct/REPORT.md` (both models; the largest single-window differences for
   both corpora) and `results/paper_eval/final/`. No HF upload.
 
-## Part R (registered 2026-10-11, at this commit): FourOverSix's tensor-scale constant, 6 x 448 vs the original 6 x 256
+## Part R (registered 2026-10-11 04:37 UTC, commit 78b0805): FourOverSix's tensor-scale constant, 6 x 448 vs the original 6 x 256
 
 The user's request, relayed by the coordinator on 2026-10-11 (go given).
 
@@ -1082,3 +1082,46 @@ for these results.
   - GPU: 16 PPL runs, about 35 min;
   - CPU statistics, about 45 min, in parallel;
   - the report, about 20 min.
+
+### Part R: the run (2026-10-11 04:37–06:13 UTC)
+
+- **Code:** flipquant paper-sm120-runs d92c032 (dev branch fo6-tensor-qmax-dev, fast-forwarded and pushed). No vendored
+  file or build changed.
+- **Tests:** tests/test_fo6_tensor_qmax.py, 18 passed on sm_120 with build_V. Everything registered as t2–t4 holds;
+  the unfused route at fp32(1/2688) equals the fused NativeLinear on 4 shapes x 5 token counts.
+- **Existing suites, as before:**
+  - test_formats against the reference quantizers ($REFERENCE_ROOT = the NVFP4-RaZeR checkout): 7 passed.
+  - test_linear, test_stage3, test_gptq, test_focus, test_if4, test_zou_mixfp4, test_rotate, test_fake_cache_model and
+    test_mapcheck pass.
+  - test_sm120_native: no build directory here holds both the paper builds and the optimized sets. On build_T, 10 pass
+    and 3 fail for missing optimized sets, the same 3 as on aa12408.
+- **t1 (check-default):** the new fourover6 at its default, and with tensor_qmax=448, equals aa12408's formats.py bit
+  for bit. 128 cases: every scope, CPU and GPU, 4 random and 4 real weight tensors.
+- **Runs:** 16 native PPL runs, all rc 0 (04:48–05:02). The FO6-448 reruns reproduce the table's FourOverSix records
+  per window, bit for bit, for all eight models. That includes the four whose records came from the earlier sm120
+  harness, so the harnesses agree.
+- **FO6-256 vs FO6-448** (paired ΔNLL x 1e-3, wiki / C4):
+
+  | model | wiki | C4 |
+  |---|---:|---:|
+  | Qwen3-1.7B | −34.28* | +13.63* |
+  | Qwen3-8B | −3.62* | −4.25* |
+  | Mistral-7B-Instruct-v0.3 | −0.36 | −1.16 |
+  | Nemotron-Nano-9B-v2 | +1.37 | +2.88* |
+  | Phi-4 | +0.06 | +0.37 |
+  | Qwen3.8-27B | +1.83 | −0.68 |
+  | Llama-3.2-1B-Instruct | −0.42 | −3.57* |
+  | Llama-3.1-8B-Instruct | −6.42* | +1.21 |
+
+  - 256 is better in 5 / 16 cells and worse in 2 / 16.
+  - Mean capped NLL recovery: 9.5 % → 11.7 %.
+  - FlipQuant (448 maps, not recalibrated) is significantly better than FO6-256 in 16 / 16 cells at each unit.
+  - FO6-256 vs NVFP4: better in 13 cells, not significant in 2 (Qwen3-1.7B wiki, Nemotron C4), worse in 1
+    (Qwen3-1.7B C4, +7.54*).
+- **CPU statistics** (8 models, 04:48–06:13; Qwen3.8-27B in a second process):
+  - weight blocks above 2/3 of the amax: 0.0003–0.011 %;
+  - blocks changed: 92–95 %;
+  - 4-vs-6 choice flips: 18.3–19.2 %;
+  - blocks choosing 4: about 44–45 % under both constants;
+  - subnormal block scales: 0, except Nemotron (0.024 % / 0.025 %).
+- **Results:** `results/paper_eval/fo6_tensor_scale/` (REPORT.md, fo6_tensor_scale.json, records/).
