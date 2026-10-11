@@ -1001,3 +1001,84 @@ All steps rc 0, one job at a time, from flipquant aa12408 (clean).
 - **Disk.** /home has 14 GB free after the run.
 - **Results.** `results/paper_eval/llama_instruct/REPORT.md` (both models; the largest single-window differences for
   both corpora) and `results/paper_eval/final/`. No HF upload.
+
+## Part R (registered 2026-10-11, at this commit): FourOverSix's tensor-scale constant, 6 x 448 vs the original 6 x 256
+
+The user's request, relayed by the coordinator on 2026-10-11 (go given).
+
+**Why.** The original FourOverSix paper (arXiv:2512.02010, Sec. 3) sets the tensor scale to amax / (6 x 256), not
+amax / (6 x 448). 256 is the largest E4M3 value whose 6/4 multiple (384) is still an E4M3 value, so every block can map
+its max onto 4. Our FourOverSix (flipquant `formats.GLOBAL_QMAX` = 6 x 448; `quant_act.cuh`'s 1/2688) and RaZeR's
+reimplementation use 6 x 448. With 448, a block whose max exceeds 2/3 of the tensor amax cannot take a true 4: its
+4-candidate scale is clamped at 448. So our "FourOverSix" rows, and FlipQuant's E2M1 candidate, are not the original
+definition. This part measures how much that matters. **No FlipQuant map is recalibrated here**; that decision waits
+for these results.
+
+- **Code** (flipquant paper-sm120-runs; first on a local dev branch, then fast-forwarded and pushed). No vendored file
+  is edited, and build_V's binaries and tables are untouched: no rebuild.
+  - `flipquant.formats.fourover6(x, scope, gscale, tensor_qmax=448)`: the global scale is amax / (6 x tensor_qmax).
+    - 448 divides by the same 2688.0 as today, so the default is bit-identical by construction. 256 is the original
+      definition.
+    - The E4M3 block-scale clamp stays [2^-9, 448]. With 256, a block scaled to 4 reaches at most 384.
+  - `--fo6-tensor-qmax Q` (models/cli.py; default 448) is accepted only with `--weight fourover6 --act fourover6`.
+    It is refused with maps (mixfp4), GPTQ, rotation or ModelOpt checkpoints. A non-default Q is recorded in the
+    report.
+    - Fake mode: `QuantSpec.fo6_tensor_qmax` applies to the weights and to the per-token activations.
+    - Native sm120: the weights are flipquant's FourOverSix codes at Q, packed by `models.sm120.pack_codes`. Its check:
+      the packed weight decodes to the codes' fake-quant weight bit for bit.
+    - Native sm120 activations: a NativeLinear subclass in models/sm120.py runs the vendored Triton per-token
+      quantizer (`mixfp4_sm120.quant_act`, the vendored fallback of the fused quantizer, bit-identical to it) with
+      the reciprocal fp32(1/(6 x Q)), i.e. fp32(1/1536), in place of fp32(1/2688). It then makes the same build_V GEMM
+      call as NativeLinear's unfused branch.
+    - Why not the fused quantizer: the CUDA quantizer compiled into build_V's libraries has 1/2688 fixed in its host
+      launcher, so it serves only Q = 448.
+    - With Q = 448 nothing changes: pack_module and the fused NativeLinear run as now.
+- **Tests, before any run** (sm_120 GPU; build_V):
+  - (t1) The default is bit-identical.
+    - The new `fourover6` (default, and with tensor_qmax=448 explicit) equals aa12408's formats.py (loaded from git)
+      bit for bit for every scope (tensor, row, document, static), on random and real-weight tensors.
+    - The existing tests pass unchanged: test_formats, which compares bitwise with the vendored reference
+      quantizers, and the sm120 native tests.
+  - (t2) The unfused route at 448 (the subclass with fp32(1/2688)) gives outputs bit-identical to the vendored fused
+    NativeLinear over several shapes and token counts. So the 256 path differs from the default only by the constant.
+  - (t3) The 256 path matches a reference implementation of the original FourOverSix, written in the test from the
+    paper's definition, independent of formats.py:
+    - fake values bit for bit (tensor and row scopes);
+    - the native quantizer's activations, decoded in fake order, equal the fake ones bit for bit;
+    - the packed weights decode to the fake weights bit for bit;
+    - the native layer's output equals fake mode's within the existing native-vs-fake tolerance. This one is by value,
+      because the GEMM accumulation order differs.
+  - (t4) With 256, no block scale exceeds 384, and no block's 4-candidate is clamped.
+- **Runs.** One GPU job at a time; native; build_V; `--kernel-set auto`; `--paper-convention`; the pinned
+  revisions; all windows; the hybrids in n16k64-fast, the others in n16k64.
+  - FO6-256 on all 8 main-table models.
+  - FO6-448 with the same code at its default, on all 8.
+    - Nemotron-Nano-9B-v2, Qwen3.8-27B and the two Llama-Instruct models: the rerun must reproduce the existing FO6
+      records (parts F and P) per window, bit for bit. This is the end-to-end default check; stop if it fails.
+    - Qwen3-1.7B, Qwen3-8B, Mistral-7B-Instruct-v0.3 and Phi-4: the table's FO6 records come from the earlier sm120
+      evaluation harness (main-ppl / paper; "NativeLinear (c)", auto_stock). The rerun is the same-code reference for
+      the paired ΔNLL, and its per-window agreement with the table's records is reported.
+  - The WikiText-2 / C4 windows are those of the existing records: counts asserted, token hashes compared where
+    recorded.
+- **Statistics.**
+  - Paired ΔNLL (FO6-256 − FO6-448) ± 2 SE per model and corpus, against the same-code FO6-448. For the four
+    non-hybrid models, also against the table's FO6 record.
+  - FO6-256 vs NVFP4 (table records).
+  - FlipQuant 16x64 (table records; maps calibrated with 448) vs FO6-256: is FlipQuant significantly better in every
+    cell?
+  - The mean capped NLL recovery of FO6-256 over the 16 pairs, with the table's BF16 and NVFP4, next to FO6-448's.
+- **CPU statistics** (no GPU), per model, over its quantized linears' BF16 weights (models.loader.quantizable_linears):
+  - the share of 16-element blocks whose max exceeds 2/3 of the tensor amax (448 cannot select a true 4 there);
+  - the shares of blocks choosing 4 under 448 and under 256, and the share whose 4-vs-6 choice differs. They come from
+    a replica of `fourover6`'s decision, checked against `fourover6`'s codes on every tensor.
+  - Activations: at least one block per token by construction (the block holding the row max), i.e. ≥ 16/K, listed
+    per K.
+  - These are CPU values. formats' FourOverSix can differ between CPU and GPU in rare near-tie blocks (part O).
+- **Disk.** No downloads (all 8 models are cached); records only; floor 10 GB (14 GB free).
+- **Stop and report** on a failing test, a default-path mismatch, an OOM, or an implausible result.
+- **Records.** `results/paper_eval/fo6_tensor_scale/`.
+- **ETA.** About 3 h:
+  - code and tests about 1.5 h;
+  - GPU: 16 PPL runs, about 35 min;
+  - CPU statistics, about 45 min, in parallel;
+  - the report, about 20 min.
