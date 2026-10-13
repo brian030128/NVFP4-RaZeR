@@ -1125,3 +1125,58 @@ for these results.
   - blocks choosing 4: about 44–45 % under both constants;
   - subnormal block scales: 0, except Nemotron (0.024 % / 0.025 %).
 - **Results:** `results/paper_eval/fo6_tensor_scale/` (REPORT.md, fo6_tensor_scale.json, records/).
+
+## Part W (registered 2026-10-13 10:16 UTC, at its commit): A's prefill latency for Llama-3.2-1B-Instruct and Llama-3.1-8B-Instruct
+
+The user's request, relayed by the coordinator on 2026-10-13. tab:latency replaces its two Qwen3 columns with the two
+Llama Instruct models of tab:main-ppl.
+- **Protocol: A's, unchanged except the model list** (this file, "A: prefill latency", and amendments 1-3).
+  - Kernels build_V; flipquant `evaluation.latency prefill`; CUDA graphs and eager in every process.
+  - 8 shapes: 1x128, 1x256, 1x512, 1x1024, 1x2048, 1x4096, 1x8192, 4x2048; 7 repetitions.
+  - 7 policies: bf16, nvfp4, fo6, fo6-wB, fq-8x64, fq-16x64, fq-256x64, with A's flags (run_gpu.POLICIES).
+  - 5 rounds; one process per (model, policy, round). Round r's order is `random.Random(20260928 + r).shuffle` of the
+    run's policy list, A's rule.
+  - One job at a time on an idle GPU; no clock locking, no ncu, no reboot.
+  - A's checks stop the run: rc 0 and a complete record; graph logits equal to eager's; the policy's kernel family;
+    every library from build_V (run_gpu.check_fq_record).
+- **Models.**
+  - Llama-3.2-1B-Instruct: registry key llama3.2-1b-instruct, revision 9213176726.
+  - Llama-3.1-8B-Instruct: llama3.1-8b-instruct, 0e9e39f2.
+  - Both run in n16k64 (not hybrid). Their weights are in the HF cache at these revisions (checked: 2.4 GB / 15 GB).
+- **Maps.** Part P's, under `RUN/llama_instruct/<model>/maps/flipquant_<unit>.pt`; each file's sha256 equals the one part
+  P recorded:
+  - 1B: 8x64 4f693ed8..., 16x64 d9dfa5a7..., 256x64 54effb55...;
+  - 8B: 8x64 3bf00ea6..., 16x64 502ec6cf..., 256x64 7582c4da....
+- **Code: flipquant paper-sm120-runs 6f5ad27** (worktree sm120runs/wt, clean), not A's 120173a. This is forced by the
+  model list:
+  - 120173a's registry has no llama3.1-8b-instruct, and its llama3.2-1b-instruct is unpinned.
+  - 6f5ad27 pins both (part P).
+  - The timed path is unchanged: `evaluation/latency.py` is byte-identical to 120173a's, and so is the kernel tile
+    table (`kernels/sm120/configs/`).
+  - `models/sm120.install`'s default branch (no precomputed codes, no rotation, no FourOverSix tensor-scale override)
+    calls the same `pack_module` and `NativeLinear`; 6f5ad27 only adds opt-in branches.
+- **Session-drift check.**
+  - Run: Mistral-7B-Instruct-v0.3 (mistral-7b, A's cached snapshot c170c708, n16k64, the release maps), policies fo6
+    and fq-16x64, all 8 shapes, 5 rounds, the same rule (the shuffle of the two-policy list).
+  - Report: each (policy, shape) cell's median over rounds against A's value (58fe644), and the fq-16x64 / fo6 paired
+    ratio against A's.
+  - It is a check only: A's published Mistral numbers are not replaced. It covers the session and the code change
+    above together.
+- **Order.** The Mistral check first, then Llama-3.2-1B-Instruct, then Llama-3.1-8B-Instruct.
+- **Outputs.** Records `RUN/latency_llama/<model>/<policy>/round<r>.json` (new names; A's records are untouched). Report
+  `results/paper_eval/latency_llama/` (LATENCY.md + latency.json, A's format).
+  1. Per new model: ms tables and paired ratios vs fo6 per shape, median [min, max] over rounds, plus the 8-shape median
+     summary.
+  2. A combined 1x2048 table for the six paper models: Llama-3.2-1B-Instruct, Llama-3.1-8B-Instruct, Mistral, Nemotron,
+     Phi-4, Qwen3.8-27B.
+     - The old models' values come from 58fe644, the new ones from W.
+     - Rows: bf16, nvfp4, fo6, fq-16x64, fq-8x64, and fq-256x64 as an extra.
+     - Raw ms, plus a LaTeX snippet rounded to one decimal from the raw values.
+  3. Over the six models:
+     - fq-16x64 vs fo6 and fq-8x64 vs fo6: the range over all shapes and models, and per-model medians;
+     - at 1x2048: the range of the paired ratios and of the ratio of medians;
+     - BF16 / fq-16x64 at 1x2048.
+- **Rules.** /home stays above 10 GB free; nothing is deleted; retries get new output names. The registration and the
+  results are committed on paper-eval and pushed (that branch only); no HF upload.
+- **ETA.** About 50 min of GPU (A's per-process times: about 20 s for a 1.7B, about 45 s for an 8B), plus the report.
+
