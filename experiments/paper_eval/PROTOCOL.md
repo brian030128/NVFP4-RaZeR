@@ -1180,3 +1180,20 @@ Llama Instruct models of tab:main-ppl.
   results are committed on paper-eval and pushed (that branch only); no HF upload.
 - **ETA.** About 50 min of GPU (A's per-process times: about 20 s for a 1.7B, about 45 s for an 8B), plus the report.
 
+### Part W: the run (2026-10-13 10:17–10:57 UTC)
+
+- **Code.** flipquant paper-sm120-runs 6f5ad27 (checked clean at the start), build_V, n16k64.
+- **Runs.** 80 processes, every one rc 0 and passing A's checks: complete record, graph logits equal to eager's, the
+  policy's kernel family, build_V libraries.
+  - Mistral check: 10 processes, 37–48 s each.
+  - Llama-3.2-1B-Instruct: 35 processes, 14–17 s each.
+  - Llama-3.1-8B-Instruct: 35 processes, 36–54 s each.
+- **Drift check.** The first process (Mistral fo6 round 1, after a long-idle GPU) was 4–6 % faster than A at the
+  larger shapes; later rounds rose to A's level (warm-up).
+  - Its medians over rounds differ from A's by −0.04 to −1.14 % (median −0.36 %, 16 cells).
+  - The fq-16x64 / fo6 ratio's median over shapes is +0.88 % (A: +0.82 %).
+  - A's Mistral numbers stand.
+- **Push.** This session's push of the registration (038aaf4) was denied by its permission classifier; the user
+  pushed paper-eval (59114fb..4043bc7).
+- **Report.** results/paper_eval/latency_llama/ (LATENCY.md, latency.json; report_latency_llama.py).
+
