@@ -1197,3 +1197,148 @@ Llama Instruct models of tab:main-ppl.
   pushed paper-eval (59114fb..4043bc7).
 - **Report.** results/paper_eval/latency_llama/ (LATENCY.md, latency.json; report_latency_llama.py).
 
+
+## Part X (registered 2026-10-14 10:50 UTC, at its commit): six zero-shot tasks, six models, ten rows, through flipquant main
+
+The user's request, relayed by the coordinator on 2026-10-14. Every cell is a new run (BF16 included); nothing earlier
+is reused as a result.
+- **Tasks.** piqa, hellaswag, winogrande, arc_easy, arc_challenge and lambada_openai, all 0-shot, lm-eval 0.4.11, the
+  paper's settings. The primary metric is acc_norm for PIQA, HellaSwag and the two ARC tasks, and acc for WinoGrande
+  and LAMBADA. Batch 16 (Qwen3.8-27B: 8); per-token activations.
+- **Models**, each at its main-table revision, passed as `--revision` to every job:
+  - Llama-3.2-1B-Instruct: llama3.2-1b-instruct @ 9213176726f5;
+  - Mistral-7B-Instruct-v0.3: mistral-7b @ c170c708c41d;
+  - Llama-3.1-8B-Instruct: llama3.1-8b-instruct @ 0e9e39f249a1;
+  - Nemotron-Nano-9B-v2: nemotron-nano-9b-v2 @ 6533e8de2c68;
+  - Phi-4: phi4-14b @ 2db69c1c3e91;
+  - Qwen3.8-27B: qwen3.8-27b @ 1d4bf0f2ff60.
+  - Run order: small first, Qwen3.8-27B last, i.e. the order above.
+  - Nemotron and Qwen3.8-27B run in n16k64-fast; the others run in n16k64, as every main-table record did
+    (amendment 3). The two envs differ only in the hybrid kernels (mamba-ssm, causal-conv1d, fla), which the other
+    models never call; lm-eval, transformers, torch and datasets are the same.
+- **Rows** (one process per model and row; `evaluation.downstream --tasks <the six>`; native = `--mode native
+  --kernel-build-dir build_V --kernel-set auto`, the RTX PRO 6000):
+  1. **bf16:** `--mode bf16`.
+  2. **nvfp4:** native, `--weight nvfp4 --act nvfp4` (NVFP4 per-token activations).
+  3. **fo6:** native, `--weight fourover6 --act fourover6`.
+  4. **focus:** native, `--weight focus --focus <state> --focus-deploy --act fourover6 --act-scope row` (the deployed
+     NVFP4 codes with FourOverSix activations).
+     - States: part K's (`RUN/focus/<model>/state/focus.pt`) for Mistral, Nemotron and Phi-4; part P's
+       (`RUN/llama_instruct/focus_states/<model>/state/focus.pt`) for the two Llama models.
+     - Qwen3.8-27B: part Q's file, downloaded again (edgeai-lab/Qwen3.8-27B-FOCUS-NVFP4 @ b84ff372a7cc,
+       focus_256/focus.pt). It must match part Q's record: 18,263,340,091 bytes, sha256 baf02d9c..., the Hub's LFS
+       sha256. Script: zs6_download.py; the cached token is never printed or logged.
+  5. **gptq (GPTQ‡):** native, `--weight nvfp4 --act fourover6 --any-act` plus part J's GPTQ flags
+     (run_sm120.gptq_flags):
+     - `--ptq gptq --gptq-propagate bf16 --gptq-hessian-input bf16 --gptq-calib release` with the model's record and
+       release trainer report; block 128, damp 0.01, `--gptq-batch 8` (Qwen3.8-27B: 1);
+     - `--gptq-cache` = the main-table codes file. Mistral and Phi-4: `RUN/gptqdd/<model>/codes_nvfp4_act-fo6.pt`.
+       Nemotron and Qwen3.8-27B: `RUN/ptq/<model>/codes_nvfp4_act-fo6.pt` (their J cells are H's runs).
+     - The two Llama models have no codes file (part P computed theirs in-process). Step 0 regenerates them with main's
+       GPTQ into `RUN/zeroshot6/gptq/<model>/codes_nvfp4_act-fo6.pt`; their codes_sha256 must equal part P's.
+     - Every run's `ptq.codes_sha256` must equal the main-table record's.
+  6. **if4:** `--mode fake --weight if4 --act-method own --unit 1x16`.
+  7. **zou:** `--mode fake --weight zou_mixfp4 --act-method own --unit 1x16`. Rows 6 and 7 are simulated with each
+     method's own weight and activation rules, as in tab:main-ppl (part I).
+  8. **fq-8x64 / fq-16x64 / fq-256x64:** native, `--weight mixfp4 --act fourover6 --map <map>`.
+     - Maps: the release maps (`/home/dev/flipquant_release/<model>/flipquant_<unit>.pt`) for Mistral, Nemotron, Phi-4
+       and Qwen3.8-27B. Their sha256 equals the release record (`summary.json` map_sha256) for all 12 files (checked
+       at registration).
+     - The two Llama models: part P's maps (`RUN/llama_instruct/<model>/maps`), with the sha256 of part P's record.
+     - The driver re-hashes every map, state and codes file before its run.
+- **Code: flipquant origin/main 3db0072** (fetched 2026-10-14), in a fresh detached worktree
+  `/home/dev/n16k64_campaign/zeroshot6/wt`, used unmodified; flipquant's `main` branch is not touched. Kernels:
+  build_V. Env for every job: run_gpu.env() plus `CUBLAS_WORKSPACE_CONFIG=:4096:8` and
+  `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`, the paper's step 04 environment (paper_common.env and
+  ACCURACY_ENV).
+- **Deviation 1, registry.** main's registry has no llama3.1-8b-instruct (paper-sm120-runs 7b472b0 added it; main
+  never merged it).
+  - Its jobs run through `zs6_fq.py <module> ...`, a launcher outside the flipquant checkout. It adds 7b472b0's entry
+    to `models.registry.MODELS` at run time and then runs the module as `python -m` would:
+    `ModelSpec("llama3.1-8b-instruct", "meta-llama/Llama-3.1-8B-Instruct", revision="0e9e39f2...")`, every other field
+    at its default, as in 7b472b0.
+  - Every other model runs `python -m evaluation.downstream` directly.
+- **Deviation 2, Mistral and Phi-4 revisions.** main leaves them unpinned. The jobs pass the main table's revisions
+  (above), which are also the cached snapshots.
+- **Step 0: code identity, before any panel run.** Any failed check stops part X and is reported.
+  - **(a) Settings diff.** A written comparison, in results/paper_eval/zeroshot6/STEP0.md, of flipquant
+    `evaluation/downstream.py` against NVFP4-RaZeR `run_lmeval_deploy.py` + `experiments/paper/04_downstream.py`
+    (kernel-opt 9580a2a, the clean main checkout). It covers:
+    - the lm-eval version and the HFLM arguments (batch, BOS, backend);
+    - the dataset pins (`lm_eval_datasets.py` sha256, and flipquant's extra lambada_openai pin);
+    - few-shot counts, primary metrics and the activation scope;
+    - model loading and revisions.
+    - Every difference is listed. LAMBADA has no primary metric in `run_lmeval_deploy.py`; only flipquant's pin of
+      its dataset is checked (EXTRA_PINS, and the pinned revision in every LAMBADA load).
+  - **(b) Same-session harness parity**, `--limit 24`, tasks arc_easy, arc_challenge, hellaswag, piqa and winogrande,
+    batch 16; policies BF16, FO6 native and FlipQuant 16x64 native.
+    - The model is **base Mistral-7B-v0.3 @ caa1feb0** (deviation 3). NVFP4-RaZeR's harness (kernel-opt
+      sm120/eval/common.MODELS) knows Mistral only as the base model, and neither Instruct model; its native artifacts
+      are the paper's. flipquant main has the same model pinned as `mistral-7b-base`.
+    - NVFP4-RaZeR side: one process,
+      `run_lmeval_deploy.py --model mistral7b --data-root /home/dev/n16k64_campaign/multimodel/data` with
+      `bf16=bf16`, `fo6=native:paper/artifacts/mistral7b_fo6:auto_stock` and
+      `fq-16x64=native:paper/artifacts/mistral7b_tc_16x64:auto`; `PYTHONPATH=sm120:.` and `SM120_BUILD_DIR=build_V`.
+    - flipquant side: three processes, `--model mistral-7b-base` with `--mode bf16`, native `--weight fourover6`,
+      and native `--weight mixfp4 --map paper/maps/mistral7b_16x64/map.pt --unit 16x64` (the map the artifact was
+      exported from; the port validation and part P did the same).
+    - Same session, same env. Required for every (policy, task): equal sample_digest, equal per-example correctness,
+      bit-identical per-choice log-likelihoods (and targets), and equal metrics. Also both sides' native coverage, and
+      build_V libraries.
+  - **(c) IF4, Zou, FOCUS deploy and GPTQ‡ against the paths behind tab:main-ppl.**
+    - **IF4 / Zou** (Experiment A was not ported; flipquant's `flipquant/if4.py` and `zou_mixfp4.py` came from the
+      co-author's IF4 / MIXFP4 branches). Script zs6_identity.py on Mistral-7B-Instruct-v0.3, GPU. Reference:
+      NVFP4-RaZeR main-ppl 44f8cea `quantize/adaptive_formats.py`, the code behind main-ppl's IF4 / Zou records,
+      which part I matched bit for bit.
+      - Weights: every quantized Linear's weight from `quantize(w, rule)` vs flipquant `quantize_weight(w, "1x16",
+        "own")`, bitwise. The installed-weight sha256, in module order, against main-ppl's record.
+      - Activations: every quantized Linear's input on one 2048-token WikiText-2 window of the BF16 model, from
+        `quantize_rows(x, rule)` vs flipquant `quantize_act(x)`, bitwise.
+      - End to end: flipquant main's `evaluation.ppl` for if4 and zou_mixfp4 (`--act-method own --unit 1x16
+        --limit 4`). Its per-window NLL and installed-weight sha256 must equal main-ppl's records (via part I's copies).
+    - **FOCUS deploy:** flipquant main's `evaluation.ppl` (part K's command, `--limit 2`) for all six models. The
+      per-window NLL must be bit-identical to the main-table records (part K: Mistral, Nemotron, Phi-4; part P: both
+      Llama models; part Q: Qwen3.8-27B).
+      - Each state's sha256 must equal its record: the FOCUS HF-upload record for part K's states, HF_UPLOAD.md for
+        the 8B, part Q for Qwen3.8-27B. The 1B's state has no recorded sha256; it is recorded here.
+    - **GPTQ‡:**
+      - Each main-table codes file's code digest (the codes_sha256 formula, from the stored entries) and its key
+        (settings and calibration-data sha256) must equal the record's (CPU).
+      - The two Llama models' codes are regenerated as above.
+      - Then flipquant main's `evaluation.ppl` (part J's command, `--limit 2`) for all six models: `ptq.codes_sha256`
+        and the per-window NLL must equal the records.
+- **Checks inside the panel** (each stops the run):
+  - rc 0; a complete report with the six tasks;
+  - every example evaluated (1838 / 10042 / 1267 / 2376 / 1172 / 5153), 0-shot, batch 16 (Qwen3.8-27B 8);
+  - lm-eval 0.4.11 and the model's pinned revision;
+  - every dataset load at its pinned revision (lambada_openai at 900124bf);
+  - each task's sample_digest equal across the model's rows.
+  - Native rows: downstream's coverage asserts, and the kernel family (nvfp4 / fo6 / focus / gptq: stock_ko; fq-8x64:
+    mixed_wB_ko; fq-16x64: mixed_ko; fq-256x64: mixed256_ko), from build_V (every library sha256 among build_V's
+    manifests).
+  - GPTQ‡: codes_sha256 as recorded.
+  - IF4 / Zou: the installed-weight sha256 equal to the main-table records' (part I; part P for the Llama models).
+- **Native / fake cross-check:** Mistral-7B-Instruct-v0.3, fo6 and fq-16x64 also with `--mode fake` (the same flags
+  otherwise), all six tasks. Reported per task: accuracy native vs fake, the paired difference with its exact McNemar
+  p, the share of examples with the same correctness, and the per-choice log-likelihood differences.
+- **Old vs new.** The co-author's numbers in flipquant main `docs/results/acc_panel/acc_panel.md` (fake quant on H200,
+  no per-example records here): Mistral, Nemotron, Phi-4 and Qwen3.8-27B for bf16, fo6, focus and fq x 3. Its
+  Llama-3.1-8B row is the base model and is not compared. Per task: new, old, the difference, and whether |difference|
+  exceeds 2 SE (binomial, unpaired: sqrt(p1 q1 / n + p2 q2 / n)).
+- **Report** (results/paper_eval/zeroshot6/: REPORT.md, zeroshot6.json, STEP0.md, step0.json):
+  - the 6 x 10 x 6 table with Avg. (the unweighted mean of the six tasks);
+  - per model, the pooled paired exact McNemar of every row vs FourOverSix and vs BF16 over all questions of the six
+    tasks (acc_panel_tables.py's formula: difference in points, row-only / reference-only correct, two-sided exact p);
+  - the old-vs-new comparison and the native / fake cross-check;
+  - per-run timings (load, per task, total) and the queue START / END;
+  - a LaTeX snippet.
+- **Rules.** One GPU job at a time on an idle GPU (run_gpu.run). No ncu, no clock locking, no reboot. /home stays
+  above 10 GB free; nothing is deleted; retries get new output names. Wait loops wait on the PID or an END log line.
+  Commits and the push go to paper-eval only (each push tried once; a denial is reported, not worked around). No HF
+  upload.
+- **Records.** `RUN/zeroshot6/`: `step0/` (parity, identity, ppl checks, code digests, download), `gptq/`,
+  `panel/<model>/<row>.json`, `crosscheck/mistral-7b/<row>_fake.json`. Logs in `RUN/logs/zs6_*.log`; START / END lines
+  in `RUN/queue.log`.
+- **ETA.** Step 0 about 1 h (plus the 18 GB download, in parallel). The panel is estimated at 17–20 h, mostly the
+  simulated IF4 / Zou rows (about 7–9x a native row) and Qwen3.8-27B; the coordinator's estimate is about 14 h. The
+  ETA is re-estimated from the first model's runs and sent when the panel starts.
