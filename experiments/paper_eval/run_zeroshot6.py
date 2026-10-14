@@ -219,7 +219,7 @@ def libraries_ok(obj, libs):
 
 def step0_codes():
     out = ZS / "step0" / "codes.json"
-    if not G.done(out):
+    if not out.exists():                      # a record is never overwritten (retries get new names)
         G.log("START zs6_step0_codes (CPU)")
         rc = subprocess.run([G.PY, HERE / "zs6_codes.py", "--out", out], cwd=HERE, env=G.env(),
                             stdout=open(G.RUN / "logs" / "zs6_step0_codes.log", "w"), stderr=subprocess.STDOUT).returncode

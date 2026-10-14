@@ -182,8 +182,12 @@ def step0():
                 got, want = (r.get("ptq") or {}), (ref.get("ptq") or {})
                 gargs = {k: (r["args"].get(k), ref["args"].get(k)) for k in ref["args"]
                          if k.startswith("gptq_") and k != "gptq_cache" and r["args"].get(k) != ref["args"].get(k)}
+                # an opt-in option of paper-sm120-runs that main lacks, unused (None) in the record, is not a difference
+                absent = {k: v for k, v in gargs.items() if v[0] is None and v[1] == "None" and k not in r["args"]}
+                gargs = {k: v for k, v in gargs.items() if k not in absent}
                 c.update(codes_sha256=[got.get("codes_sha256"), want.get("codes_sha256")], loaded=got.get("loaded"),
-                         data_sha256=[got.get("data_sha256"), want.get("data_sha256")], gptq_args_differing=gargs)
+                         data_sha256=[got.get("data_sha256"), want.get("data_sha256")], gptq_args_differing=gargs,
+                         gptq_args_absent_in_main_unused_in_record=sorted(absent))
                 c["ok"] = (all(c["nll_equal"].values()) and got.get("codes_sha256") == want.get("codes_sha256")
                            and got.get("data_sha256") == want.get("data_sha256") and not gargs)
             else:
@@ -302,8 +306,11 @@ def step0_md(rec):
         other = ""
         if "codes_sha256" in c:
             other = (f"codes_sha256 {c['codes_sha256'][0][:12]} vs {c['codes_sha256'][1][:12]} "
-                     f"({'loaded' if c['loaded'] else 'computed'}); data_sha256 equal {yes(c['data_sha256'][0] == c['data_sha256'][1])}"
-                     + (f"; args differ {c['gptq_args_differing']}" if c["gptq_args_differing"] else ""))
+                     f"({'loaded' if c['loaded'] else 'computed by main'}); data_sha256 equal "
+                     f"{yes(c['data_sha256'][0] == c['data_sha256'][1])}"
+                     + (f"; args differ {c['gptq_args_differing']}" if c["gptq_args_differing"] else "")
+                     + (f"; {', '.join(c['gptq_args_absent_in_main_unused_in_record'])} absent in main (opt-in, unused "
+                        "in the record)" if c.get("gptq_args_absent_in_main_unused_in_record") else ""))
         elif "installed_weight_sha256" in c:
             other = f"installed weights {c['installed_weight_sha256'][0][:12]} vs {c['installed_weight_sha256'][1][:12]}"
         L.append(f"| {k} | {c['windows'].get('wiki')}, {c['windows'].get('c4')} | "
@@ -319,7 +326,7 @@ def step0_md(rec):
     L += ["", "| model | FOCUS state | sha256 | recorded sha256 | equal |", "|---|---|---|---|---|"]
     for m, v in rec["focus_states"].items():
         L.append(f"| {m} | `{v['path'].replace(str(G.RUN), 'RUN')}` | {v['sha256'][:16]}... | "
-                 f"{(v['record'] or 'none (recorded here)')[:16]} | {yes(v['ok']) if v['record'] else 'n/a'} |")
+                 f"{v['record'][:16] if v['record'] else 'none (recorded here)'} | {yes(v['ok']) if v['record'] else 'n/a'} |")
     d = rec["qwen27b_download"]
     L += ["", f"Qwen3.8-27B FOCUS state downloaded again: {d.get('bytes', 0):,} bytes, sha256 {str(d.get('sha256'))[:16]}..., "
           f"equal to part Q's record {yes(d.get('equal_to_part_q'))}, equal to the Hub's LFS sha256 "
