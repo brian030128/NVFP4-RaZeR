@@ -1198,7 +1198,7 @@ Llama Instruct models of tab:main-ppl.
 - **Report.** results/paper_eval/latency_llama/ (LATENCY.md, latency.json; report_latency_llama.py).
 
 
-## Part X (registered 2026-10-14 10:50 UTC, at its commit): six zero-shot tasks, six models, ten rows, through flipquant main
+## Part X (registered 2026-10-14 10:33 UTC, at its commit e5b5cdc): six zero-shot tasks, six models, ten rows, through flipquant main
 
 The user's request, relayed by the coordinator on 2026-10-14. Every cell is a new run (BF16 included); nothing earlier
 is reused as a result.
@@ -1342,3 +1342,23 @@ is reused as a result.
 - **ETA.** Step 0 about 1 h (plus the 18 GB download, in parallel). The panel is estimated at 17–20 h, mostly the
   simulated IF4 / Zou rows (about 7–9x a native row) and Qwen3.8-27B; the coordinator's estimate is about 14 h. The
   ETA is re-estimated from the first model's runs and sent when the panel starts.
+
+### Part X, amendment 1 (2026-10-14 10:55 UTC, before any parity result): step 0 (b) on Phi-4
+
+- **What happened.** The first parity job (NVFP4-RaZeR side, base Mistral-7B-v0.3) stopped at model load (rc 1,
+  6 s). Base Mistral-7B-v0.3's weight files are no longer in the HF cache; only its config and index remain. The
+  same holds for base Llama-3.1-8B. Neither model that NVFP4-RaZeR's harness shares with the request can run without
+  downloading 14–16 GB of a model the user removed.
+- **The change.** The parity runs on **Phi-4**:
+  - registry `phi4-14b` on the flipquant side, `phi4` on the NVFP4-RaZeR side, both at 2db69c1c3e91 (the panel's
+    revision; the RaZeR side reads its multimodel/data calibration record);
+  - the paper's artifacts `phi4_fo6` (kernel auto_stock) and `phi4_tc_16x64` (auto), the latter exported from
+    `paper/maps/phi4_16x64/map.pt`, which flipquant reads with `--unit 16x64`.
+  - This is part P's harness-parity arrangement, and Phi-4 is a panel model.
+  - Everything else is as registered: tasks, `--limit 24`, batch 16, both sides' env, the criteria.
+- **Records.** The failed job's log is kept (`logs/zs6_parity_razer.log`). The new records go to
+  `RUN/zeroshot6/step0/parity_phi4/`, under new log names (`zs6_parity_phi4_*`).
+- **Already passed.** Step 0's codes-file check passed before this change (4/4: code digests and keys equal the
+  records).
+- **Header correction.** The registration header's time is corrected to the commit's (10:33 UTC; it read 10:50).
+

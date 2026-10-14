@@ -125,10 +125,10 @@ def step0():
     rec = dict(settings=settings_diff())
     ok = {}
     # (b) parity
-    rz = load(ZS / "step0" / "parity" / "razer" / "report.json") or {}
+    rz = load(ZS / "step0" / Z.PARITY["dir"] / "razer" / "report.json") or {}
     par, libs = {}, G.manifests()
     for pol in PARITY_POLICIES:
-        fq = load(ZS / "step0" / "parity" / "flipquant" / f"{pol}.json") or {}
+        fq = load(ZS / "step0" / Z.PARITY["dir"] / "flipquant" / f"{pol}.json") or {}
         ev = (rz.get("evaluations") or {}).get(pol) or {}
         for t in Z.PARITY_TASKS.split(","):
             a, b = (ev.get("tasks") or {}).get(t), (fq.get("tasks") or {}).get(t)
@@ -150,7 +150,7 @@ def step0():
                                            flipquant_kernel=((fq.get("policy") or {}).get("native") or {}).get("kernel"))
     rec["parity"] = dict(razer_status=rz.get("status"), tasks=Z.PARITY_TASKS, limit=24, cells=par,
                          tokenization=dict(razer=rz.get("tokenization"),
-                                           flipquant=(load(ZS / "step0" / "parity" / "flipquant" / "bf16.json") or {}).get(
+                                           flipquant=(load(ZS / "step0" / Z.PARITY["dir"] / "flipquant" / "bf16.json") or {}).get(
                                                "tokenization")))
     ok["parity"] = rz.get("status") == "complete" and all(v.get("ok") for v in par.values())
     # (c) IF4 / Zou layers
@@ -257,11 +257,12 @@ def step0_md(rec):
           "- **LAMBADA**: run_lmeval_deploy.py has no primary metric for lambada_openai, so it cannot evaluate LAMBADA; "
           "only flipquant's dataset pin is checked, as the protocol says.", ""]
     p = rec["parity"]
-    L += ["## (b) Same-session harness parity: base Mistral-7B-v0.3, --limit 24, batch 16", "",
-          "NVFP4-RaZeR `run_lmeval_deploy.py` (one process: bf16, then fo6 = native mistral7b_fo6 / auto_stock, then "
-          "fq-16x64 = native mistral7b_tc_16x64 / auto; SM120_BUILD_DIR=build_V) against flipquant `evaluation.downstream "
-          "--model mistral-7b-base` (one process per policy; build_V, --kernel-set auto; the paper 16x64 map). Base "
-          "Mistral because NVFP4-RaZeR's harness knows no Instruct model (deviation 3).", "",
+    L += ["## (b) Same-session harness parity: Phi-4, --limit 24, batch 16", "",
+          "NVFP4-RaZeR `run_lmeval_deploy.py --model phi4` (one process: bf16, then fo6 = native phi4_fo6 / auto_stock, "
+          "then fq-16x64 = native phi4_tc_16x64 / auto; SM120_BUILD_DIR=build_V) against flipquant `evaluation.downstream "
+          "--model phi4-14b --revision 2db69c1c` (one process per policy; build_V, --kernel-set auto; the paper 16x64 map "
+          "the artifact was exported from). NVFP4-RaZeR's harness knows none of the panel's Instruct models (deviation "
+          "3), and base Mistral-7B-v0.3's weights are no longer cached, so the parity runs on Phi-4 (amendment 1).", "",
           "| policy / task | examples | choices | sample digest | correctness | per-choice LL (bitwise) | metrics | primary |",
           "|---|---:|---:|---|---|---|---|---:|"]
     for k, c in p["cells"].items():
@@ -327,5 +328,237 @@ def step0_md(rec):
     return "\n".join(L)
 
 
+# ---------------------------------------------------------------------------------------------- the panel
+
+TITLES = {"llama3.2-1b-instruct": "Llama-3.2-1B-Instruct", "mistral-7b": "Mistral-7B-Instruct-v0.3",
+          "llama3.1-8b-instruct": "Llama-3.1-8B-Instruct", "nemotron-nano-9b-v2": "Nemotron-Nano-9B-v2",
+          "phi4-14b": "Phi-4", "qwen3.8-27b": "Qwen3.8-27B"}
+NAMES = {"bf16": "BF16", "nvfp4": "NVFP4", "fo6": "FourOverSix", "focus": "FOCUS", "gptq": "GPTQ‡", "if4": "IF4",
+         "zou": "MixFP4 (Zou)", "fq-8x64": "FlipQuant 8x64", "fq-16x64": "FlipQuant 16x64", "fq-256x64": "FlipQuant 256x64"}
+LATEX = {"bf16": "BF16", "nvfp4": "NVFP4", "fo6": "FourOverSix", "focus": "FOCUS", "gptq": "GPTQ$^{\\ddagger}$",
+         "if4": "IF4$^{\\dagger}$", "zou": "MixFP4$^{\\dagger}$", "fq-8x64": "\\method{} $8{\\times}64$",
+         "fq-16x64": "\\method{} $16{\\times}64$", "fq-256x64": "\\method{} $256{\\times}64$"}
+TASK_NAMES = [("piqa", "PIQA"), ("hellaswag", "HellaSwag"), ("winogrande", "WinoGrande"), ("arc_easy", "ARC-e"),
+              ("arc_challenge", "ARC-c"), ("lambada_openai", "LAMBADA")]
+OLD_MODELS = {"mistral-7b": "Mistral-7B-Instruct-v0.3", "nemotron-nano-9b-v2": "Nemotron-Nano-9B-v2", "phi4-14b": "phi-4",
+              "qwen3.8-27b": "Qwen3.8-27B"}
+OLD_ROWS = {"BF16": "bf16", "FourOverSix": "fo6", "FOCUS": "focus", "FlipQuant 8x64": "fq-8x64",
+            "FlipQuant 16x64": "fq-16x64", "FlipQuant 256x64": "fq-256x64"}
+
+
+def mcnemar(b: int, c: int) -> float:
+    """scripts/acc_panel_tables.py (flipquant main), unchanged: the exact two-sided McNemar p."""
+    n = b + c
+    if n == 0:
+        return 1.0
+    lh = n * math.log(0.5)
+    return min(1.0, 2 * sum(math.exp(math.lgamma(n + 1) - math.lgamma(i + 1) - math.lgamma(n - i + 1) + lh)
+                            for i in range(min(b, c) + 1)))
+
+
+def acc(r, t):
+    ex = r["tasks"][t]["examples"]
+    return 100 * sum(ex.values()) / len(ex)
+
+
+def paired(a, b):
+    """Pooled over every question of the six tasks: (difference in points, row-only correct, ref-only correct, p)."""
+    ka = {f"{t}:{k}": v for t, _ in TASK_NAMES for k, v in a["tasks"][t]["examples"].items()}
+    kb = {f"{t}:{k}": v for t, _ in TASK_NAMES for k, v in b["tasks"][t]["examples"].items()}
+    assert set(ka) == set(kb)
+    c = sum(ka[k] > kb[k] for k in ka)          # a correct only
+    bb = sum(kb[k] > ka[k] for k in ka)         # reference correct only
+    return dict(diff=100 * (c - bb) / len(ka), row_only=c, ref_only=bb, p=mcnemar(bb, c), n=len(ka))
+
+
+def old_panel():
+    text = (Z.FQ / "docs" / "results" / "acc_panel" / "acc_panel.md").read_text()
+    part = text.split("## Zero-shot", 1)[1]
+    out = {}
+    for line in part.splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 9 or cells[0] in ("model", "---"):
+            continue
+        model = next((k for k, v in OLD_MODELS.items() if v == cells[0]), None)
+        row = OLD_ROWS.get(cells[1])
+        if model and row:
+            out.setdefault(model, {})[row] = {t: float(cells[2 + i]) for i, (t, _) in enumerate(TASK_NAMES)}
+    return out
+
+
+def queue_times():
+    times = {}
+    for line in (G.RUN / "queue.log").read_text().splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[1] in ("START", "END") and parts[2].startswith("zs6_"):
+            times.setdefault(parts[2], {})[parts[1].lower()] = parts[0]
+    return times
+
+
+def panel():
+    data, rec = {}, dict(models={}, checks={})
+    for m in Z.MODELS:
+        for row in Z.ROWS:
+            r = load(ZS / "panel" / m / f"{row}.json")
+            if r is not None and r.get("status") == "complete":
+                data.setdefault(m, {})[row] = r
+    xc = {row: load(ZS / "crosscheck" / "mistral-7b" / f"{row}_fake.json") for row in ("fo6", "fq-16x64")}
+    old = old_panel()
+    qt = queue_times()
+    md = ["# Zero-shot accuracy: six tasks, six models, ten rows (part X)", "",
+          "flipquant origin/main `3db0072` `evaluation.downstream` (fresh detached worktree, unmodified; the "
+          "llama3.1-8b-instruct registry entry added at run time by `zs6_fq.py`, deviation 1), lm-eval 0.4.11, 0-shot, "
+          "the paper's settings (batch 16, Qwen3.8-27B 8; per-token activations; datasets pinned, LAMBADA at 900124bf). "
+          "Native rows on the RTX PRO 6000 (build_V, `--kernel-set auto`); IF4 and MixFP4 (Zou) simulated with their own "
+          "rules (†), as in tab:main-ppl. Every cell is a new run. Step 0 (code identity against NVFP4-RaZeR): "
+          "STEP0.md. PROTOCOL.md part X.", "",
+          "Accuracy in %: acc_norm for PIQA, HellaSwag, ARC-e and ARC-c; acc for WinoGrande and LAMBADA. Avg. = the "
+          "unweighted mean of the six. The paired columns pool every question of the six tasks (20,848 per row): "
+          "difference in points (row-only correct / reference-only correct, exact McNemar p), * = p < 0.05 "
+          "(acc_panel_tables.py's formula).", "",
+          "| model | method | " + " | ".join(n for _, n in TASK_NAMES) + " | Avg. | vs FourOverSix | vs BF16 |",
+          "|---|---|" + "---:|" * (len(TASK_NAMES) + 1) + "---|---|"]
+    for m in Z.MODELS:
+        rows = data.get(m, {})
+        mrec = rec["models"][m] = {}
+        for row in Z.ROWS:
+            r = rows.get(row)
+            if r is None:
+                md.append(f"| {TITLES[m]} | {NAMES[row]} | " + " | ".join("TBD" for _ in TASK_NAMES) + " | TBD | | |")
+                continue
+            accs = {t: acc(r, t) for t, _ in TASK_NAMES}
+            avg = sum(accs.values()) / len(accs)
+            cells, cmp = [], {}
+            for ref in ("fo6", "bf16"):
+                if row == ref or ref not in rows:
+                    cells.append("—" if row == ref else "")
+                    continue
+                pr = paired(r, rows[ref])
+                cmp[ref] = pr
+                cells.append(f"{pr['diff']:+.2f}{'*' if pr['p'] < 0.05 else ''} ({pr['row_only']}/{pr['ref_only']}, "
+                             f"p={pr['p']:.2g})")
+            mrec[row] = dict(acc=accs, avg=avg, paired=cmp,
+                             lm_eval={t: {k: v for k, v in r["tasks"][t]["metrics"].items()} for t, _ in TASK_NAMES},
+                             timing=dict(load_seconds=r.get("load_seconds"), seconds=r.get("seconds"),
+                                         tasks={t: r["tasks"][t]["seconds"] for t, _ in TASK_NAMES},
+                                         model_seconds={t: r["tasks"][t]["model_timing"].get("loglikelihood_seconds")
+                                                        for t, _ in TASK_NAMES},
+                                         queue=qt.get(f"zs6_panel_{m}_{row}")),
+                             sample_digest={t: r["tasks"][t]["sample_digest"] for t, _ in TASK_NAMES},
+                             peak_gib=max(r["tasks"][t]["peak_gpu_allocated_gib"] for t, _ in TASK_NAMES),
+                             tokenization=r.get("tokenization"))
+            md.append(f"| {TITLES[m]} | {NAMES[row]}{'†' if row in ('if4', 'zou') else ''} | "
+                      + " | ".join(f"{accs[t]:.2f}" for t, _ in TASK_NAMES) + f" | {avg:.2f} | " + " | ".join(cells) + " |")
+    # sample digests across models
+    dig = {t: {m: rec["models"][m][r]["sample_digest"][t] for m in rec["models"] for r in rec["models"][m]}
+           for t, _ in TASK_NAMES}
+    rec["checks"]["sample_digest_equal_across_models"] = {t: len(set(v.values())) == 1 for t, v in dig.items()}
+    md += ["", "Every row of a model saw the same samples (equal sample_digest per task; the driver checks it). Across "
+           "models: " + ", ".join(f"{n} {'equal' if rec['checks']['sample_digest_equal_across_models'][t] else 'differ'}"
+                                  for t, n in TASK_NAMES) + "."]
+    # LaTeX
+    md += ["", "## LaTeX", "", "```latex"]
+    for m in Z.MODELS:
+        md.append(f"\\midrule\\multicolumn{{9}}{{l}}{{\\textit{{{TITLES[m]}}}}} \\\\")
+        for row in Z.ROWS:
+            v = rec["models"][m].get(row)
+            if v is None:
+                continue
+            md.append(f"{LATEX[row]} & " + " & ".join(f"{v['acc'][t]:.2f}" for t, _ in TASK_NAMES)
+                      + f" & {v['avg']:.2f} \\\\")
+    md += ["```", "", "The columns: method, PIQA, HellaSwag, WinoGrande, ARC-e, ARC-c, LAMBADA, Avg.; values rounded once "
+           "from the per-example records."]
+    # old vs new
+    md += ["", "## Old vs new: the co-author's acc_panel (flipquant main docs/results/acc_panel/acc_panel.md)", "",
+           "Old: fake quant on H200 (scripts/run_main_acc.py, run_small_acc.py), only the table's rounded percentages "
+           "(no per-example records here). New: this run (native rows on the RTX PRO 6000). Δ = new − old in points; "
+           "2 SE = 2 sqrt(p1 q1 / n + p2 q2 / n) (binomial, unpaired); ✗ = |Δ| > 2 SE. The old Llama-3.1-8B row is the base "
+           "model and is not compared.", "",
+           "| model | method | " + " | ".join(n for _, n in TASK_NAMES) + " | Avg. Δ |", "|---|---|" + "---|" * (len(TASK_NAMES) + 1)]
+    rec["old_vs_new"] = {}
+    flagged = 0
+    for m, rows in old.items():
+        for row, o in rows.items():
+            v = rec["models"].get(m, {}).get(row)
+            if v is None:
+                continue
+            cells, entry = [], {}
+            for t, _ in TASK_NAMES:
+                n = Z.SIZES[t]
+                p1, p2 = v["acc"][t] / 100, o[t] / 100
+                se2 = 2 * 100 * math.sqrt(p1 * (1 - p1) / n + p2 * (1 - p2) / n)
+                d = v["acc"][t] - o[t]
+                entry[t] = dict(new=v["acc"][t], old=o[t], diff=d, two_se=se2, beyond=abs(d) > se2)
+                flagged += abs(d) > se2
+                cells.append(f"{v['acc'][t]:.2f} / {o[t]:.2f} ({d:+.2f}{' ✗' if abs(d) > se2 else ''})")
+            oavg = sum(o.values()) / len(o)
+            entry["avg"] = dict(new=v["avg"], old=oavg, diff=v["avg"] - oavg)
+            rec["old_vs_new"].setdefault(m, {})[row] = entry
+            md.append(f"| {TITLES[m]} | {NAMES[row]} | " + " | ".join(cells) + f" | {v['avg'] - oavg:+.2f} |")
+    n_cells = sum(len(r) * len(TASK_NAMES) for r in rec["old_vs_new"].values())
+    md += ["", f"Cells beyond 2 SE: {flagged} of {n_cells}. Each cell reads new / old (Δ)."]
+    rec["old_vs_new_summary"] = dict(cells=n_cells, beyond_2se=flagged)
+    # native / fake cross-check
+    md += ["", "## Native vs simulated (fake) cross-check: Mistral-7B-Instruct-v0.3", "",
+           "The same flags with `--mode fake`. Per task: accuracy native / fake, the paired difference (native-only / "
+           "fake-only correct, exact McNemar p), the share of questions with the same correctness, and the per-choice "
+           "log-likelihood difference (mean |Δ| and max |Δ|, nats).", "",
+           "| row | task | native | fake | Δ (points) | native-only / fake-only, p | same correctness | mean / max |ΔLL| |",
+           "|---|---|---:|---:|---:|---|---:|---|"]
+    rec["crosscheck"] = {}
+    for row, f in xc.items():
+        nat = data.get("mistral-7b", {}).get(row)
+        if f is None or nat is None or f.get("status") != "complete":
+            md.append(f"| {NAMES[row]} | pending | | | | | | |")
+            continue
+        for t, tn in TASK_NAMES:
+            a, b = nat["tasks"][t], f["tasks"][t]
+            assert a["sample_digest"] == b["sample_digest"]
+            ea, eb = a["examples"], b["examples"]
+            c = sum(ea[k] > eb[k] for k in ea)
+            bb = sum(eb[k] > ea[k] for k in ea)
+            same = sum(ea[k] == eb[k] for k in ea) / len(ea)
+            dl = [abs(x - y) for k in a["loglikelihoods"] for x, y in zip(a["loglikelihoods"][k]["ll"], b["loglikelihoods"][k]["ll"])]
+            e = dict(native=acc(nat, t), fake=acc(f, t), native_only=c, fake_only=bb, p=mcnemar(bb, c), same=same,
+                     mean_abs_dll=sum(dl) / len(dl), max_abs_dll=max(dl))
+            rec["crosscheck"].setdefault(row, {})[t] = e
+            md.append(f"| {NAMES[row]} | {tn} | {e['native']:.2f} | {e['fake']:.2f} | {e['native'] - e['fake']:+.2f} | "
+                      f"{c} / {bb}, p={e['p']:.2g} | {100 * same:.2f} % | {e['mean_abs_dll']:.4f} / {e['max_abs_dll']:.3f} |")
+        pr = paired(nat, f)
+        rec["crosscheck"][row]["pooled"] = pr
+        md.append(f"| {NAMES[row]} | pooled | {sum(acc(nat, t) for t, _ in TASK_NAMES) / 6:.2f} | "
+                  f"{sum(acc(f, t) for t, _ in TASK_NAMES) / 6:.2f} | {pr['diff']:+.2f} | {pr['row_only']} / {pr['ref_only']}, "
+                  f"p={pr['p']:.2g} | | |")
+        rec["crosscheck"][row]["fake_seconds"] = f.get("seconds")
+    # timings
+    md += ["", "## Timings", "", "Per run: model load, each task's wall time, and the whole process (seconds); queue START "
+           "(UTC). Simulated rows are marked †.", "",
+           "| model | method | load | " + " | ".join(n for _, n in TASK_NAMES) + " | total | start |",
+           "|---|---|---:|" + "---:|" * (len(TASK_NAMES) + 1) + "---|"]
+    total = 0.0
+    for m in Z.MODELS:
+        for row in Z.ROWS:
+            v = rec["models"][m].get(row)
+            if v is None:
+                continue
+            tm = v["timing"]
+            total += tm["seconds"] or 0
+            md.append(f"| {TITLES[m]} | {NAMES[row]}{'†' if row in ('if4', 'zou') else ''} | {tm['load_seconds']:.0f} | "
+                      + " | ".join(f"{tm['tasks'][t]:.0f}" for t, _ in TASK_NAMES) + f" | {tm['seconds']:.0f} | "
+                      f"{(tm['queue'] or {}).get('start', '')} |")
+    for row, f in xc.items():
+        if f and f.get("status") == "complete":
+            total += f.get("seconds") or 0
+            md.append(f"| Mistral-7B-Instruct-v0.3 | {NAMES[row]} (fake, cross-check) | {f['load_seconds']:.0f} | "
+                      + " | ".join(f"{f['tasks'][t]['seconds']:.0f}" for t, _ in TASK_NAMES) + f" | {f['seconds']:.0f} | "
+                      f"{(qt.get(f'zs6_xcheck_mistral-7b_{row}') or {}).get('start', '')} |")
+    md += ["", f"Sum of the process times: {total / 3600:.1f} h."]
+    rec["total_process_hours"] = total / 3600
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "zeroshot6.json").write_text(json.dumps(rec, indent=1) + "\n")
+    (OUT / "REPORT.md").write_text("\n".join(md) + "\n")
+    print("\n".join(md[:80]))
+
+
 if __name__ == "__main__":
-    {"step0": step0}[sys.argv[1]]()
+    {"step0": step0, "panel": panel}[sys.argv[1]]()

@@ -227,23 +227,27 @@ def step0_codes():
         must(rc, "step 0 codes")
 
 
+# amendment 1: the parity model is Phi-4 (base Mistral-7B-v0.3's weights are no longer cached)
+PARITY = dict(dir="parity_phi4", razer_model="phi4", flipquant_model="phi4-14b", revision=S.REV["phi4-14b"],
+              data_root="/home/dev/n16k64_campaign/multimodel/data", fo6=PAPER / "artifacts" / "phi4_fo6",
+              fq=PAPER / "artifacts" / "phi4_tc_16x64", map=PAPER / "maps" / "phi4_16x64" / "map.pt")
+
+
 def step0_parity():
-    d = ZS / "step0" / "parity"
-    rz = [G.PY, RZ_MAIN / "run_lmeval_deploy.py", "--model", "mistral7b", "--data-root",
-          "/home/dev/n16k64_campaign/multimodel/data", "--evaluate", "bf16=bf16",
-          "--evaluate", f"fo6=native:{PAPER / 'artifacts' / 'mistral7b_fo6'}:auto_stock",
-          "--evaluate", f"fq-16x64=native:{PAPER / 'artifacts' / 'mistral7b_tc_16x64'}:auto",
+    d = ZS / "step0" / PARITY["dir"]
+    rz = [G.PY, RZ_MAIN / "run_lmeval_deploy.py", "--model", PARITY["razer_model"], "--data-root", PARITY["data_root"],
+          "--evaluate", "bf16=bf16", "--evaluate", f"fo6=native:{PARITY['fo6']}:auto_stock",
+          "--evaluate", f"fq-16x64=native:{PARITY['fq']}:auto",
           "--tasks", PARITY_TASKS, "--limit", 24, "--batch-size", 16, "--out", d / "razer"]
-    must(G.run("zs6_parity_razer", rz, d / "razer" / "report.json", RZ_MAIN,
+    must(G.run("zs6_parity_phi4_razer", rz, d / "razer" / "report.json", RZ_MAIN,
                dict(ENV, PYTHONPATH=f"{RZ_MAIN / 'sm120'}:{RZ_MAIN}", SM120_BUILD_DIR=str(G.BUILD_V))), "parity razer")
     pols = {"bf16": ["--mode", "bf16"], "fo6": NATIVE + ["--weight", "fourover6", "--act", "fourover6"],
-            "fq-16x64": NATIVE + ["--weight", "mixfp4", "--act", "fourover6", "--map",
-                                  PAPER / "maps" / "mistral7b_16x64" / "map.pt", "--unit", "16x64"]}
+            "fq-16x64": NATIVE + ["--weight", "mixfp4", "--act", "fourover6", "--map", PARITY["map"], "--unit", "16x64"]}
     for pol, q in pols.items():
         out = d / "flipquant" / f"{pol}.json"
-        cmd = [G.PY, "-m", "evaluation.downstream", "--model", "mistral-7b-base", *q, "--tasks", PARITY_TASKS,
-               "--limit", 24, "--out", out]
-        must(G.run(f"zs6_parity_flipquant_{pol}", cmd, out, FQ, ENV), f"parity flipquant {pol}")
+        cmd = [G.PY, "-m", "evaluation.downstream", "--model", PARITY["flipquant_model"], "--revision", PARITY["revision"],
+               *q, "--tasks", PARITY_TASKS, "--limit", 24, "--out", out]
+        must(G.run(f"zs6_parity_phi4_flipquant_{pol}", cmd, out, FQ, ENV), f"parity flipquant {pol}")
 
 
 def step0_identity():
