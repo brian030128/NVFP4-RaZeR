@@ -1615,3 +1615,20 @@ run; part X's verified artifacts are reused, no earlier output.
   2. X2's 20 rows;
   3. part Y's remaining native rows: Llama-3.1-8B-Instruct FO6 onward, then Nemotron, Phi-4 and Qwen3.8-27B;
   4. part Y's IF4 / MixFP4 rows.
+
+### Part X amendment 2 (X2): the run (2026-10-15 12:26–15:37 UTC); every check passed
+
+- **Code.** flipquant 3db0072, clean in the preflight and before the panel; build_V; env n16k64, with part X's env
+  variables.
+- **Position (part Y amendment 2).** X2 ran between part Y's Llama-3.1-8B-Instruct NVFP4 row (ended 12:26:46 UTC) and
+  its FO6 row. That row started at 15:36:33 UTC, one second after X2's driver exited.
+- **Runs.** 20 processes (2 models x 10 rows). Every one exited rc 0 and passed part X's check_record. The inputs were
+  re-hashed before each run.
+- **Time.** 3 h 09 min 41 s wall (12:26:51–15:36:32 UTC); 3.13 h summed over the processes.
+  - Native rows: 4.2–4.4 min on Qwen3-1.7B, 5.1–7.4 min on Qwen3-8B (BF16 the longest).
+  - IF4 / Zou rows: 21.6–22.0 min on the 1.7B, 31.8–33.9 min on the 8B. That is 5.1–5.2x (1.7B) and 6.1–6.6x (8B) a
+    native FourOverSix row.
+- **Old vs new** (the co-author's acc_panel): 0 of 72 cells beyond 2 SE. The sample digests are equal across all eight
+  models of parts X and X2.
+- **Report.** results/paper_eval/zeroshot6_qwen3/ (REPORT.md and zeroshot6_qwen3.json, from report_zs6_qwen3.py).
+  zs6_flipquant_readme.py generates the flipquant README with the eight models from the two JSONs.
