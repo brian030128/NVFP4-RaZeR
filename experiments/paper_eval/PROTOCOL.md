@@ -1417,3 +1417,92 @@ is reused as a result.
 - **Old vs new** (the co-author's acc_panel): 0 of 144 cells beyond 2 SE.
 - **Report.** results/paper_eval/zeroshot6/ (REPORT.md, zeroshot6.json; STEP0.md, step0.json; report_zeroshot6.py).
 
+
+## Part Y (registered at its commit, 2026-10-15): GSM8K for the six paper models x ten rows, part N's protocol
+
+The user's request, relayed by the coordinator on 2026-10-15 (option A of the coordinator's choice). Every cell is a new
+run; part X's verified artifacts are reused, no earlier output.
+- **Protocol: part N's, exactly.**
+  - lm-eval 0.4.11 `gsm8k_llama` as shipped: 8-shot CoT (first_n), `apply_chat_template` with
+    `fewshot_as_multiturn`, greedy, `max_gen_toks` 1024 (`until: []`, HFLM adds EOS). All 1,319 test problems.
+  - Filters: strict_match (primary) and flexible_extract, both recorded.
+  - Thinking off through lm-eval's own switches. Qwen3.8-27B: `--enable-thinking false` (chat_template_args).
+    Nemotron-Nano-9B-v2: `--system-instruction /no_think`. Llama, Mistral and Phi-4 have no thinking mode and get no
+    system instruction.
+  - Part N's command (run_gsm8k_lmeval.cmd), with `--gen-lengths` and `--samples-out`; part N's env (run_gpu.env()
+    only: the default allocator, no CUBLAS_WORKSPACE_CONFIG; unlike part X).
+- **Batch.** 64 for every run, except Qwen3.8-27B BF16 at 48 (O0's memory rule); any other change is a recorded
+  deviation.
+  - GSM8K generations depend on the batch composition. Part M's pad check: at batch 16 vs batch 1, 10 / 64 Nemotron
+    and 1 / 32 Qwen completions were identical.
+  - Every row therefore runs the full set at the same batch size, so all rows of a model see the same length-sorted
+    batches.
+  - Qwen3.8-27B BF16 at 48 is the exception. Its pairs with the batch-64 rows compare different batch compositions, and
+    that is flagged wherever it affects a paired comparison: vs BF16, fidelity, and old vs new.
+- **Models, revisions, rows, envs: part X's.**
+  - The models at the main-table revisions. Nemotron and Qwen3.8-27B run in n16k64-fast, the others in n16k64.
+  - Ten rows: BF16; NVFP4 (NVFP4 per-token activations); FourOverSix; FOCUS (deployed codes, FourOverSix
+    activations); GPTQ‡ (part J's codes, `--any-act`, FourOverSix activations); IF4† and MixFP4 (Zou)† simulated with
+    their own rules at 1x16; FlipQuant 8x64 / 16x64 / 256x64.
+  - Native = build_V, `--kernel-set auto`, `--act-scope row` (part N's quantization flags).
+- **Artifacts: part X's verified files**, re-hashed before each run against part X's gate (`RUN/zeroshot6/step0/
+  step0_ok.json`) and records:
+  - the release maps and part P's maps;
+  - the FOCUS states, including Qwen3.8-27B's re-downloaded state;
+  - the GPTQ‡ codes, including the two Llama code files regenerated in part X.
+- **Harness: flipquant paper-sm120-runs 4bbe0b1**, the branch that produced part N (f2a56f1), in the worktree
+  sm120runs/wt. Before each job the driver checks that HEAD is 4bbe0b1 and clean. llama3.1-8b-instruct comes from the
+  branch's own registry entry (7b472b0), so no runtime launcher is used.
+- **Step 0** (any failure stops part Y before the panel):
+  - **(a)** `evaluation/downstream.py` and `evaluation/lm_eval_datasets.py` are byte-identical between f2a56f1 (part
+    N) and 4bbe0b1, so the generation path is unchanged. Between them only calibration, the opt-in `--fo6-tensor-qmax`
+    / `--gptq-candidates` code and the registry changed.
+  - **(b) 4bbe0b1 vs main 3db0072** (part X's step 0 tied main to NVFP4-RaZeR). On the default paths the code differs
+    in:
+    - formats / linear / cli / sm120: the FourOverSix tensor-scale constant passed through, 448 by default;
+    - gptq: the opt-in candidates and `load_codes_file`; the cache path is unchanged;
+    - data: the cache's temporary file name;
+    - the registry: the llama3.1-8b-instruct entry;
+    - downstream: f2a56f1's options.
+    - Numeric parity: Llama-3.2-1B-Instruct, all ten rows, `evaluation.ppl --limit 2` (2 WikiText-2 + 2 C4 windows)
+      on both commits, same session and env. Required: bit-identical per-window NLL, equal GPTQ codes_sha256 and equal
+      IF4 / Zou installed-weight sha256.
+  - **(c')** (the coordinator's approved replacement for a `--limit 64` check, which cannot match a full run's batches):
+    Nemotron FourOverSix and FlipQuant 16x64, native, all 1,319 problems with part N's exact command, env and batch 64.
+    - Required: every generation (`resps`) and extracted answer (`filtered_resps`, both filters) byte-identical to
+      part N's samples.
+    - On any difference: stop and report the agreement rate and the first difference.
+    - These two runs use the panel's commit, command and env, so they are the panel's Nemotron FO6 / FQ16 cells (new
+      runs; recorded in the report).
+- **Order.**
+  - Native rows (BF16 and the seven FP4 rows) for all models, small first: Llama-3.2-1B-Instruct, Mistral-7B-Instruct-
+    v0.3, Llama-3.1-8B-Instruct, Nemotron-Nano-9B-v2, Phi-4, Qwen3.8-27B.
+  - Then IF4 and Zou for all models in the same order.
+- **Checks per run** (each stops the run):
+  - rc 0; a complete report; 1,319 problems with both filters and the generated length of each; n-shot 8;
+  - the batch as planned; the chat options and thinking switches as planned (Qwen's template args
+    `enable_thinking=False`, Nemotron's `/no_think`, none otherwise);
+  - no `<think>` / `</think>` in any generated output (part N's N1);
+  - the pinned dataset (openai/gsm8k 740312ad), lm-eval 0.4.11, the model's revision;
+  - equal sample digests across a model's rows;
+  - native coverage and the kernel family from build_V;
+  - GPTQ‡ codes_sha256 and the IF4 / Zou installed-weight sha256 as recorded.
+- **Report** (results/paper_eval/gsm8k6/: REPORT.md + gsm8k6.json):
+  - one table per model: strict and flexible ± 2 SE; paired exact McNemar (strict) vs FourOverSix and vs BF16;
+  - the summary: strict per model plus the mean;
+  - fidelity to BF16, per model and pooled:
+    - extracted-answer agreement (strict, flexible);
+    - correctness flips (row-only + BF16-only correct);
+    - byte-identical generations;
+    - exact McNemar of FlipQuant 16x64 vs FOCUS, IF4, Zou and FourOverSix on per-problem agreement with BF16;
+  - old vs new against part N / O0 (Nemotron and Qwen3.8-27B: BF16, RTN NVFP4, FO6, FQ16): accuracy, paired
+    McNemar, byte-identical share;
+  - per-run timings; mean / max generated tokens; budget hits;
+  - LaTeX.
+- **Rules.**
+  - One GPU job at a time on an idle GPU; no ncu, clock locking or reboot.
+  - /home stays above 10 GB free; nothing is deleted; retries get new names.
+  - Wait loops wait on a PID or an END line.
+  - Commits and the push go to paper-eval only (each push tried once; a denial is reported).
+- **ETA.** Native rows about 9 h (Qwen3.8-27B about 4.7 h of it, from part N / O0's 33 / 50 min per run). IF4 / Zou
+  are decode-bound and not yet measured, estimated at 4–12 h. The ETA is sent when the panel's timing starts.
