@@ -104,5 +104,253 @@ def step0():
     print(json.dumps(dict(all_ok=rec["all_ok"], **ok)))
 
 
+# ---------------------------------------------------------------------------------------------- the panel
+
+TITLES = {"llama3.2-1b-instruct": "Llama-3.2-1B-Instruct", "llama3.1-8b-instruct": "Llama-3.1-8B-Instruct",
+          "mistral-7b": "Mistral-7B-Instruct-v0.3", "nemotron-nano-9b-v2": "Nemotron-Nano-9B-v2", "phi4-14b": "Phi-4",
+          "qwen3.8-27b": "Qwen3.8-27B"}
+ORDER = ["llama3.2-1b-instruct", "llama3.1-8b-instruct", "mistral-7b", "nemotron-nano-9b-v2", "phi4-14b", "qwen3.8-27b"]
+NAMES = {"bf16": "BF16", "nvfp4": "NVFP4", "fo6": "FourOverSix", "focus": "FOCUS", "gptq": "GPTQ‡", "if4": "IF4†",
+         "zou": "MixFP4 (Zou)†", "fq-8x64": "FlipQuant 8x64", "fq-16x64": "FlipQuant 16x64", "fq-256x64": "FlipQuant 256x64"}
+LATEX = {"bf16": "BF16", "nvfp4": "NVFP4", "fo6": "FourOverSix", "focus": "FOCUS", "gptq": "GPTQ$^{\\ddagger}$",
+         "if4": "IF4$^{\\dagger}$", "zou": "MixFP4$^{\\dagger}$", "fq-8x64": "\\method{} $8{\\times}64$",
+         "fq-16x64": "\\method{} $16{\\times}64$", "fq-256x64": "\\method{} $256{\\times}64$"}
+FILTERS = ("strict_match", "flexible_extract")
+# part N / O0 records for the old-vs-new comparison
+OLD = {("nemotron-nano-9b-v2", "bf16"): G.RUN / "ptq_round3" / "bf16" / "nemotron-nano-9b-v2" / "bf16.json",
+       ("qwen3.8-27b", "bf16"): G.RUN / "ptq_round3" / "bf16" / "qwen3.8-27b" / "bf16.json",
+       **{(m, r): Y.PART_N / m / f"rtn_{r}.json" for m in ("nemotron-nano-9b-v2", "qwen3.8-27b")
+          for r in ("nvfp4", "fo6", "fq-16x64")}}
+
+
+def mcnemar(b, c):
+    n = b + c
+    if n == 0:
+        return 1.0
+    lh = n * math.log(0.5)
+    return min(1.0, 2 * sum(math.exp(math.lgamma(n + 1) - math.lgamma(i + 1) - math.lgamma(n - i + 1) + lh)
+                            for i in range(min(b, c) + 1)))
+
+
+def examples(r):
+    return r["tasks"][Y.TASK]["examples"]
+
+
+def correct(e, f="strict_match"):
+    return e[f]["exact_match"] == 1.0
+
+
+def paired(a, b, f="strict_match"):
+    """a vs b on the same problems: (difference in points, a-only correct, b-only correct, exact p)."""
+    ea, eb = examples(a), examples(b)
+    assert set(ea) == set(eb)
+    c = sum(correct(ea[k], f) and not correct(eb[k], f) for k in ea)
+    d = sum(correct(eb[k], f) and not correct(ea[k], f) for k in ea)
+    return dict(diff=100 * (c - d) / len(ea), row_only=c, ref_only=d, p=mcnemar(d, c), n=len(ea))
+
+
+def acc(r, f="strict_match"):
+    ex = examples(r)
+    p = sum(correct(e, f) for e in ex.values()) / len(ex)
+    return 100 * p, 200 * math.sqrt(p * (1 - p) / len(ex))
+
+
+def agree(a, ref):
+    """Per problem, against ref: extracted answers equal (strict, flexible), generation byte-identical."""
+    ea, eb = examples(a), examples(ref)
+    return {k: dict(strict=ea[k]["strict_match"]["response"] == eb[k]["strict_match"]["response"],
+                    flexible=ea[k]["flexible_extract"]["response"] == eb[k]["flexible_extract"]["response"],
+                    text=ea[k]["raw"] == eb[k]["raw"]) for k in ea}
+
+
+def fidelity(a, ref):
+    g = agree(a, ref)
+    n = len(g)
+    ea, eb = examples(a), examples(ref)
+    flips = sum(correct(ea[k]) != correct(eb[k]) for k in ea)
+    return dict(n=n, strict=100 * sum(v["strict"] for v in g.values()) / n,
+                flexible=100 * sum(v["flexible"] for v in g.values()) / n, flips=flips,
+                row_only=sum(correct(ea[k]) and not correct(eb[k]) for k in ea),
+                ref_only=sum(correct(eb[k]) and not correct(ea[k]) for k in ea),
+                identical=100 * sum(v["text"] for v in g.values()) / n)
+
+
+def lengths(r):
+    gen = [e["generated"] for e in examples(r).values()]
+    toks = [g["tokens"] for g in gen]
+    return dict(mean=sum(toks) / len(toks), max=max(toks), budget_hits=sum(not g["eos"] for g in gen))
+
+
+def queue_times():
+    t = {}
+    for line in (G.RUN / "queue.log").read_text().splitlines():
+        p = line.split()
+        if len(p) >= 3 and p[1] in ("START", "END") and p[2].startswith("gsm8k6_"):
+            t.setdefault(p[2], {})[p[1].lower()] = p[0]
+    return t
+
+
+def panel():
+    data = {m: {r: load(Y.ROOT / m / f"{r}.json") for r in Y.ROWS} for m in ORDER}
+    data = {m: {r: v for r, v in rows.items() if v and v.get("status") == "complete"} for m, rows in data.items()}
+    rec = dict(models={}, fidelity={}, fq16_vs={}, old_vs_new={}, timings={})
+    qt = queue_times()
+    md = ["# GSM8K: six paper models, ten rows (part Y)", "",
+          "lm-eval 0.4.11 `gsm8k_llama` as shipped (8-shot CoT, chat template with few-shot as multi-turn, greedy, "
+          "max_gen_toks 1024), all 1,319 problems, thinking off (Qwen3.8-27B `enable_thinking=False`; Nemotron "
+          "`/no_think`; the others have no thinking mode). Part N's protocol, command and env, on flipquant "
+          "paper-sm120-runs 4bbe0b1 (step 0: STEP0.md). Native rows on the RTX PRO 6000 (build_V, `--kernel-set "
+          "auto`); IF4 and MixFP4 (Zou) simulated (†). Batch 64; Qwen3.8-27B BF16 at 48 (O0's memory rule). Every "
+          "cell is a new run; the Nemotron FourOverSix / FlipQuant 16x64 cells are step 0 (c')'s runs.", "",
+          "GSM8K generations depend on the batch composition (part M's pad check), so all rows of a model run the full "
+          "set at one batch size and see the same length-sorted batches -- except Qwen3.8-27B BF16 (batch 48): its "
+          "paired comparisons with the batch-64 rows (vs BF16, fidelity) compare different batch compositions and are "
+          "marked ◊.", "",
+          "Accuracy in % ± 2 SE (binomial). Paired columns: strict-match difference in points (row-only correct / "
+          "reference-only correct, exact McNemar p), * = p < 0.05.", ""]
+    for m in ORDER:
+        rows = data[m]
+        md += [f"## {TITLES[m]}", "", "| method | strict-match | flexible-extract | vs FourOverSix | vs BF16 |",
+               "|---|---:|---:|---|---|"]
+        mrec = rec["models"][m] = {}
+        for r in Y.ROWS:
+            v = rows.get(r)
+            if v is None:
+                md.append(f"| {NAMES[r]} | TBD | TBD | | |")
+                continue
+            s, se = acc(v)
+            f, fe = acc(v, "flexible_extract")
+            cells, cmp = [], {}
+            for ref in ("fo6", "bf16"):
+                if r == ref or ref not in rows:
+                    cells.append("—" if r == ref else "")
+                    continue
+                pr = paired(v, rows[ref])
+                cmp[ref] = pr
+                mark = "◊" if (m == "qwen3.8-27b" and "bf16" in (r, ref)) else ""
+                cells.append(f"{pr['diff']:+.2f}{'*' if pr['p'] < 0.05 else ''}{mark} ({pr['row_only']}/{pr['ref_only']}, "
+                             f"p={pr['p']:.2g})")
+            ln = lengths(v)
+            mrec[r] = dict(strict=s, strict_2se=se, flexible=f, flexible_2se=fe, paired=cmp, lengths=ln,
+                           batch=v["batch_size"], seconds=v.get("seconds"), load_seconds=v.get("load_seconds"),
+                           task_seconds=v["tasks"][Y.TASK]["seconds"], queue=qt.get(f"gsm8k6_{m}_{r}"))
+            md.append(f"| {NAMES[r]} | {s:.2f} ± {se:.2f} | {f:.2f} ± {fe:.2f} | " + " | ".join(cells) + " |")
+        md.append("")
+    # summary
+    complete = [m for m in ORDER if len(data[m]) == len(Y.ROWS)]
+    md += ["## Summary: strict-match per model", "", "Mean = the unweighted mean over the models with all ten rows ("
+           + str(len(complete)) + ").", "",
+           "| method | " + " | ".join(TITLES[m] for m in ORDER) + " | Mean |", "|---|" + "---:|" * (len(ORDER) + 1)]
+    rec["summary"] = {}
+    for r in Y.ROWS:
+        vals = [rec["models"][m].get(r, {}).get("strict") for m in ORDER]
+        mean = sum(rec["models"][m][r]["strict"] for m in complete) / len(complete) if complete else None
+        rec["summary"][r] = dict(mean=mean, per_model=dict(zip(ORDER, vals)))
+        md.append(f"| {NAMES[r]} | " + " | ".join("TBD" if v is None else f"{v:.2f}" for v in vals)
+                  + (f" | {mean:.2f} |" if mean is not None else " | |"))
+    # fidelity to BF16
+    md += ["", "## Fidelity to BF16", "",
+           "Per problem against the same model's BF16 run: the extracted answer equal (strict, flexible), correctness "
+           "flips (row-only + BF16-only correct, strict), and byte-identical generations. Pooled = over every problem of "
+           "the models shown. ◊ = Qwen3.8-27B BF16 ran at batch 48 (other batch compositions).", "",
+           "| method | " + " | ".join(TITLES[m] for m in ORDER) + " | pooled |", "|---|" + "---|" * (len(ORDER) + 1)]
+    for r in Y.ROWS:
+        if r == "bf16":
+            continue
+        cells, pool = [], dict(n=0, strict=0.0, flexible=0.0, flips=0, identical=0.0)
+        for m in ORDER:
+            v, ref = data[m].get(r), data[m].get("bf16")
+            if v is None or ref is None:
+                cells.append("TBD")
+                continue
+            fd = fidelity(v, ref)
+            rec["fidelity"].setdefault(r, {})[m] = fd
+            for k in ("strict", "flexible", "identical"):
+                pool[k] += fd[k] * fd["n"] / 100
+            pool["flips"] += fd["flips"]
+            pool["n"] += fd["n"]
+            cells.append(f"{fd['strict']:.1f} / {fd['flexible']:.1f}; {fd['flips']} ({fd['row_only']}+{fd['ref_only']}); "
+                         f"{fd['identical']:.1f}{'◊' if m == 'qwen3.8-27b' else ''}")
+        if pool["n"]:
+            rec["fidelity"].setdefault(r, {})["pooled"] = dict(n=pool["n"], strict=100 * pool["strict"] / pool["n"],
+                                                               flexible=100 * pool["flexible"] / pool["n"],
+                                                               flips=pool["flips"], identical=100 * pool["identical"] / pool["n"])
+            pc = rec["fidelity"][r]["pooled"]
+            cells.append(f"{pc['strict']:.1f} / {pc['flexible']:.1f}; {pc['flips']}; {pc['identical']:.1f}")
+        else:
+            cells.append("")
+        md.append(f"| {NAMES[r]} | " + " | ".join(cells) + " |")
+    md += ["", "Each cell: answer agreement strict / flexible (%); correctness flips (row-only + BF16-only); byte-identical "
+           "generations (%)."]
+    # FlipQuant 16x64 vs the others on agreement with BF16
+    md += ["", "### FlipQuant 16x64 vs FOCUS, IF4, Zou and FourOverSix: per-problem agreement with BF16 (exact McNemar)", "",
+           "Strict-extracted answer equal to BF16's: FlipQuant-only agreeing / other-only agreeing, p. Pooled over the "
+           "models shown.", "",
+           "| vs | " + " | ".join(TITLES[m] for m in ORDER) + " | pooled |", "|---|" + "---|" * (len(ORDER) + 1)]
+    for other in ("focus", "if4", "zou", "fo6"):
+        cells, pb, pc_ = [], 0, 0
+        for m in ORDER:
+            a, o, ref = (data[m].get(x) for x in ("fq-16x64", other, "bf16"))
+            if a is None or o is None or ref is None:
+                cells.append("TBD")
+                continue
+            ga, go = agree(a, ref), agree(o, ref)
+            b = sum(ga[k]["strict"] and not go[k]["strict"] for k in ga)
+            c = sum(go[k]["strict"] and not ga[k]["strict"] for k in ga)
+            pb, pc_ = pb + b, pc_ + c
+            rec["fq16_vs"].setdefault(other, {})[m] = dict(fq_only=b, other_only=c, p=mcnemar(b, c))
+            cells.append(f"{b} / {c}, p={mcnemar(b, c):.2g}{'◊' if m == 'qwen3.8-27b' else ''}")
+        rec["fq16_vs"].setdefault(other, {})["pooled"] = dict(fq_only=pb, other_only=pc_, p=mcnemar(pb, pc_))
+        cells.append(f"{pb} / {pc_}, p={mcnemar(pb, pc_):.2g}")
+        md.append(f"| {NAMES[other]} | " + " | ".join(cells) + " |")
+    # old vs new
+    md += ["", "## Old vs new: part N (RTN rows) and O0 (BF16)", "",
+           "Strict-match accuracy new / old, the paired difference (new-only / old-only correct, exact McNemar p) and "
+           "the share of problems whose generation is byte-identical. Old: part N (flipquant paper-sm120-runs f2a56f1) and "
+           "O0 (BF16, part O), the same command, env and batch (Qwen3.8-27B BF16 48 in both).", "",
+           "| model | method | new | old | paired | byte-identical |", "|---|---|---:|---:|---|---:|"]
+    for (m, r), p in OLD.items():
+        new, old = data[m].get(r), load(p)
+        if new is None or old is None:
+            md.append(f"| {TITLES[m]} | {NAMES[r]} | TBD | | | |")
+            continue
+        pr = paired(new, old)
+        same = 100 * sum(v["text"] for v in agree(new, old).values()) / len(examples(new))
+        rec["old_vs_new"][f"{m}/{r}"] = dict(new=acc(new)[0], old=acc(old)[0], paired=pr, identical=same, old_record=str(p))
+        md.append(f"| {TITLES[m]} | {NAMES[r]} | {acc(new)[0]:.2f} | {acc(old)[0]:.2f} | {pr['diff']:+.2f} "
+                  f"({pr['row_only']}/{pr['ref_only']}, p={pr['p']:.2g}) | {same:.1f} % |")
+    # timings and lengths
+    md += ["", "## Timings and generated lengths", "",
+           "Per run: model load and the task's wall time (s), mean / max generated tokens (to the first end-of-sequence "
+           "token), and the problems that used the whole 1,024-token budget.", "",
+           "| model | method | batch | load | task | total | mean tokens | max | budget hits | start (UTC) |",
+           "|---|---|---:|---:|---:|---:|---:|---:|---:|---|"]
+    total = 0.0
+    for m in ORDER:
+        for r in Y.ROWS:
+            v = rec["models"][m].get(r)
+            if v is None:
+                continue
+            total += v["seconds"] or 0
+            md.append(f"| {TITLES[m]} | {NAMES[r]} | {v['batch']} | {v['load_seconds']:.0f} | {v['task_seconds']:.0f} | "
+                      f"{v['seconds']:.0f} | {v['lengths']['mean']:.0f} | {v['lengths']['max']} | "
+                      f"{v['lengths']['budget_hits']} | {(v['queue'] or {}).get('start', '')} |")
+    rec["total_process_hours"] = total / 3600
+    md += ["", f"Sum of the process times: {total / 3600:.1f} h."]
+    # LaTeX
+    md += ["", "## LaTeX (strict-match, %)", "", "```latex",
+           "Method & " + " & ".join(TITLES[m] for m in ORDER) + " & Mean \\\\", "\\midrule"]
+    for r in Y.ROWS:
+        s = rec["summary"][r]
+        vals = [s["per_model"][m] for m in ORDER]
+        md.append(f"{LATEX[r]} & " + " & ".join("--" if v is None else f"{v:.2f}" for v in vals)
+                  + (f" & {s['mean']:.2f} \\\\" if s["mean"] is not None else " & -- \\\\"))
+    md += ["```"]
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "gsm8k6.json").write_text(json.dumps(rec, indent=1, default=str) + "\n")
+    (OUT / "REPORT.md").write_text("\n".join(md) + "\n")
+    print("\n".join(md[:60]))
+
+
 if __name__ == "__main__":
-    {"step0": step0}[sys.argv[1]]()
+    {"step0": step0, "panel": panel}[sys.argv[1]]()

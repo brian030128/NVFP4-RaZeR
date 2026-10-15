@@ -1506,3 +1506,17 @@ run; part X's verified artifacts are reused, no earlier output.
   - Commits and the push go to paper-eval only (each push tried once; a denial is reported).
 - **ETA.** Native rows about 9 h (Qwen3.8-27B about 4.7 h of it, from part N / O0's 33 / 50 min per run). IF4 / Zou
   are decode-bound and not yet measured, estimated at 4–12 h. The ETA is sent when the panel's timing starts.
+
+### Part Y, step 0: the run (2026-10-15 08:02–08:20 UTC); all checks passed
+
+- Registration e7acaa0 (08:01 UTC), drivers 551ef6d. Records under RUN/gsm8k6/step0/; report
+  results/paper_eval/gsm8k6/STEP0.md and step0.json; the gate RUN/gsm8k6/step0/step0_ok.json.
+- **(a)** `evaluation/downstream.py` and `evaluation/lm_eval_datasets.py` are byte-identical between f2a56f1 and
+  4bbe0b1.
+- **(b)** All ten rows give bit-identical per-window NLL on 4bbe0b1 and main 3db0072 (Llama-3.2-1B-Instruct, 2 + 2
+  windows, 20 runs of 10–40 s). GPTQ‡ codes_sha256 (952850d7...) and the IF4 / Zou installed-weight sha256 are equal.
+- **(c')** Nemotron-Nano-9B-v2 FourOverSix (373 s) and FlipQuant 16x64 (382 s), all 1,319 problems: 2,638 / 2,638
+  samples (1,319 problems x 2 filters) have byte-identical generations and extracted answers to part N's. These two
+  runs are the panel's Nemotron FO6 / FQ16 cells.
+- The panel started right after.
+
