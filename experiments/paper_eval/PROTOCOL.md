@@ -1398,3 +1398,22 @@ is reused as a result.
 - **Download.** Qwen3.8-27B's FOCUS state: 18,263,340,091 bytes, sha256 baf02d9c..., equal to part Q's record and to
   the Hub's LFS sha256 (15 min).
 
+### Part X, the panel: the run (2026-10-14 11:17 UTC – 2026-10-15 02:21 UTC); every check passed
+
+- **Code.** flipquant 3db0072, checked clean at the start; build_V. Env n16k64, with n16k64-fast for Nemotron and
+  Qwen3.8-27B.
+- **Runs.** 62 processes: 6 models x 10 rows, plus the Mistral fake cross-check (fo6, fq-16x64). Every process exited
+  rc 0 and passed the registered checks:
+  - complete reports, with every example of the six tasks (21,848 per row), 0-shot, batch 16 (Qwen3.8-27B: 8);
+  - lm-eval 0.4.11 and the pinned revisions; every dataset load pinned, LAMBADA at 900124bf;
+  - equal sample digests within each model (they are also equal across models);
+  - native coverage and the kernel families, from build_V;
+  - GPTQ‡ codes_sha256 and the IF4 / Zou installed-weight sha256 as recorded; the inputs' sha256 re-checked before
+    each run.
+- **Time.** 15 h 03 min wall; 14.9 h summed over the processes.
+  - A native row took 3 min on the 1B, 4.3–6.2 min on the 7–14B models and about 19 min on Qwen3.8-27B.
+  - The simulated IF4 / Zou rows took 4.1–7.6x a native row: 1.8–1.9 h each on Qwen3.8-27B.
+  - The fake cross-check rows took 22–23 min each.
+- **Old vs new** (the co-author's acc_panel): 0 of 144 cells beyond 2 SE.
+- **Report.** results/paper_eval/zeroshot6/ (REPORT.md, zeroshot6.json; STEP0.md, step0.json; report_zeroshot6.py).
+

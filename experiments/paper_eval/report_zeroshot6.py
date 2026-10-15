@@ -420,7 +420,8 @@ def panel():
           "rules (†), as in tab:main-ppl. Every cell is a new run. Step 0 (code identity against NVFP4-RaZeR): "
           "STEP0.md. PROTOCOL.md part X.", "",
           "Accuracy in %: acc_norm for PIQA, HellaSwag, ARC-e and ARC-c; acc for WinoGrande and LAMBADA. Avg. = the "
-          "unweighted mean of the six. The paired columns pool every question of the six tasks (20,848 per row): "
+          f"unweighted mean of the six. The paired columns pool every question of the six tasks ({sum(Z.SIZES.values()):,} "
+          "per row): "
           "difference in points (row-only correct / reference-only correct, exact McNemar p), * = p < 0.05 "
           "(acc_panel_tables.py's formula).", "",
           "| model | method | " + " | ".join(n for _, n in TASK_NAMES) + " | Avg. | vs FourOverSix | vs BF16 |",
@@ -456,6 +457,37 @@ def panel():
                              tokenization=r.get("tokenization"))
             md.append(f"| {TITLES[m]} | {NAMES[row]}{'†' if row in ('if4', 'zou') else ''} | "
                       + " | ".join(f"{accs[t]:.2f}" for t, _ in TASK_NAMES) + f" | {avg:.2f} | " + " | ".join(cells) + " |")
+    # the summary: per row, each model's Avg. and its pooled difference from FourOverSix, and the six-model mean
+    short = {"llama3.2-1b-instruct": "Llama-1B-Ins", "mistral-7b": "Mistral-7B-Ins", "llama3.1-8b-instruct": "Llama-8B-Ins",
+             "nemotron-nano-9b-v2": "Nemotron-9B", "phi4-14b": "Phi-4", "qwen3.8-27b": "Qwen3.8-27B"}
+    S = ["## Summary", "", "Avg. of the six tasks (%) per model, with the pooled paired difference from FourOverSix in "
+         "points (* = exact McNemar p < 0.05; the full table has the counts and p). Mean = the unweighted mean of the "
+         "models' Avg." + ("" if all(len(rec["models"][m]) == len(Z.ROWS) for m in Z.MODELS) else
+                           " Models with missing rows are left out of the mean."), "",
+         "| method | " + " | ".join(short[m] for m in Z.MODELS) + " | mean |", "|---|" + "---:|" * (len(Z.MODELS) + 1)]
+    complete = [m for m in Z.MODELS if len(rec["models"][m]) == len(Z.ROWS)]
+    rec["summary"] = {}
+    for row in Z.ROWS:
+        cells = []
+        for m in Z.MODELS:
+            v = rec["models"][m].get(row)
+            if v is None:
+                cells.append("TBD")
+                continue
+            pr = v["paired"].get("fo6")
+            cells.append(f"{v['avg']:.2f}" + (f" ({pr['diff']:+.2f}{'*' if pr['p'] < 0.05 else ''})" if pr else ""))
+        mean = sum(rec["models"][m][row]["avg"] for m in complete) / len(complete) if complete else None
+        sig = {m: rec["models"][m][row]["paired"]["fo6"] for m in complete if "fo6" in rec["models"][m][row]["paired"]}
+        rec["summary"][row] = dict(mean_avg=mean, vs_fo6_significant_up=sum(v["p"] < 0.05 and v["diff"] > 0 for v in sig.values()),
+                                   vs_fo6_significant_down=sum(v["p"] < 0.05 and v["diff"] < 0 for v in sig.values()),
+                                   vs_fo6_mean_diff=(sum(v["diff"] for v in sig.values()) / len(sig)) if sig else None)
+        S.append(f"| {NAMES[row]}{'†' if row in ('if4', 'zou') else ''} | " + " | ".join(cells)
+                 + (f" | {mean:.2f} |" if mean is not None else " | |"))
+    S += ["", "Significant pooled differences from FourOverSix over the " + str(len(complete)) + " complete models "
+          "(up / down): " + "; ".join(f"{NAMES[r]} {rec['summary'][r]['vs_fo6_significant_up']} / "
+                                      f"{rec['summary'][r]['vs_fo6_significant_down']}" for r in Z.ROWS if r != "fo6") + ".", ""]
+    at = next(i for i, line in enumerate(md) if line.startswith("| model | method | PIQA"))
+    md[at:at] = S + ["## Full table", ""]
     # sample digests across models
     dig = {t: {m: rec["models"][m][r]["sample_digest"][t] for m in rec["models"] for r in rec["models"][m]}
            for t, _ in TASK_NAMES}
@@ -466,7 +498,7 @@ def panel():
     # LaTeX
     md += ["", "## LaTeX", "", "```latex"]
     for m in Z.MODELS:
-        md.append(f"\\midrule\\multicolumn{{9}}{{l}}{{\\textit{{{TITLES[m]}}}}} \\\\")
+        md.append(f"\\midrule\\multicolumn{{8}}{{l}}{{\\textit{{{TITLES[m]}}}}} \\\\")
         for row in Z.ROWS:
             v = rec["models"][m].get(row)
             if v is None:
@@ -504,14 +536,35 @@ def panel():
             md.append(f"| {TITLES[m]} | {NAMES[row]} | " + " | ".join(cells) + f" | {v['avg'] - oavg:+.2f} |")
     n_cells = sum(len(r) * len(TASK_NAMES) for r in rec["old_vs_new"].values())
     md += ["", f"Cells beyond 2 SE: {flagged} of {n_cells}. Each cell reads new / old (Δ)."]
+    om = load(ZS / "old_panel_maps.json") or {}
+    rec["old_panel_maps"] = om
+    eq = {m: all(v["repo_tiles_equal_release"] for v in u.values()) for m, u in (om.get("maps") or {}).items()}
+    md += ["", "What the old runs used (from flipquant main's scripts):",
+           "- run_small_acc.py (Mistral, Phi-4) downloads the edgeai-lab release maps and FOCUS states. The uploaded maps' "
+           "tiles are bit-identical to the release maps here (release-maps 0d6e56b), and the FOCUS states for Mistral and "
+           "Phi-4 are part K's, uploaded unchanged (focus_hf).",
+           "- run_main_acc.py (Nemotron, Qwen3.8-27B) reads flipquant's repo maps (`maps/<model>/`). Their tiles equal "
+           "the release maps here for "
+           + ", ".join(f"{TITLES[m]} ({'yes' if eq[m] else 'no'})" for m in ("nemotron-nano-9b-v2", "qwen3.8-27b") if m in eq)
+           + "; its FOCUS states come from `--focus MODEL=PATH`, not recorded here.",
+           "- The repo maps of Mistral and Phi-4 are older paper-setting maps with other tiles ("
+           + ", ".join(f"{TITLES[m]} equal: {'yes' if eq[m] else 'no'}" for m in ("mistral-7b", "phi4-14b") if m in eq)
+           + "; `RUN/zeroshot6/old_panel_maps.json`). The old Mistral / Phi-4 rows used them only if acc_panel_tables.py "
+           "took those rows from runs/main_acc rather than runs/small_acc (it reads both).",
+           "- Known difference between old and new: the execution (fake on H200 vs native on the RTX PRO 6000). Not "
+           "recorded for the old runs: the Mistral / Phi-4 revisions (main leaves them unpinned, so they resolved at "
+           "download time) and the Nemotron / Qwen3.8-27B FOCUS states."]
     rec["old_vs_new_summary"] = dict(cells=n_cells, beyond_2se=flagged)
     # native / fake cross-check
     md += ["", "## Native vs simulated (fake) cross-check: Mistral-7B-Instruct-v0.3", "",
            "The same flags with `--mode fake`. Per task: accuracy native / fake, the paired difference (native-only / "
            "fake-only correct, exact McNemar p), the share of questions with the same correctness, and the per-choice "
-           "log-likelihood difference (mean |Δ| and max |Δ|, nats).", "",
-           "| row | task | native | fake | Δ (points) | native-only / fake-only, p | same correctness | mean / max |ΔLL| |",
-           "|---|---|---:|---:|---:|---|---:|---|"]
+           "log-likelihood difference native vs fake (mean |Δ| and max |Δ|, nats), next to native vs BF16 (mean |Δ|) for "
+           "scale. lm-eval sums each continuation's token log-probabilities from BF16 logits, so a choice's LL carries "
+           "BF16 resolution (about 0.5 nats at |LL| near 100).", "",
+           "| row | task | native | fake | Δ (points) | native-only / fake-only, p | same correctness | mean / max abs ΔLL, "
+           "native vs fake | mean abs ΔLL, native vs BF16 |",
+           "|---|---|---:|---:|---:|---|---:|---|---:|"]
     rec["crosscheck"] = {}
     for row, f in xc.items():
         nat = data.get("mistral-7b", {}).get(row)
@@ -526,17 +579,46 @@ def panel():
             bb = sum(eb[k] > ea[k] for k in ea)
             same = sum(ea[k] == eb[k] for k in ea) / len(ea)
             dl = [abs(x - y) for k in a["loglikelihoods"] for x, y in zip(a["loglikelihoods"][k]["ll"], b["loglikelihoods"][k]["ll"])]
+            ref = data["mistral-7b"]["bf16"]["tasks"][t]["loglikelihoods"]
+            db = [abs(x - y) for k in a["loglikelihoods"] for x, y in zip(a["loglikelihoods"][k]["ll"], ref[k]["ll"])]
             e = dict(native=acc(nat, t), fake=acc(f, t), native_only=c, fake_only=bb, p=mcnemar(bb, c), same=same,
-                     mean_abs_dll=sum(dl) / len(dl), max_abs_dll=max(dl))
+                     mean_abs_dll=sum(dl) / len(dl), max_abs_dll=max(dl), mean_abs_dll_native_vs_bf16=sum(db) / len(db))
             rec["crosscheck"].setdefault(row, {})[t] = e
             md.append(f"| {NAMES[row]} | {tn} | {e['native']:.2f} | {e['fake']:.2f} | {e['native'] - e['fake']:+.2f} | "
-                      f"{c} / {bb}, p={e['p']:.2g} | {100 * same:.2f} % | {e['mean_abs_dll']:.4f} / {e['max_abs_dll']:.3f} |")
+                      f"{c} / {bb}, p={e['p']:.2g} | {100 * same:.2f} % | {e['mean_abs_dll']:.3f} / {e['max_abs_dll']:.2f} | "
+                      f"{e['mean_abs_dll_native_vs_bf16']:.3f} |")
         pr = paired(nat, f)
         rec["crosscheck"][row]["pooled"] = pr
         md.append(f"| {NAMES[row]} | pooled | {sum(acc(nat, t) for t, _ in TASK_NAMES) / 6:.2f} | "
                   f"{sum(acc(f, t) for t, _ in TASK_NAMES) / 6:.2f} | {pr['diff']:+.2f} | {pr['row_only']} / {pr['ref_only']}, "
-                  f"p={pr['p']:.2g} | | |")
+                  f"p={pr['p']:.2g} | | | |")
         rec["crosscheck"][row]["fake_seconds"] = f.get("seconds")
+    # deviations and notes
+    g = load(ZS / "step0" / "step0_ok.json") or {}
+    md += ["", "## Deviations and notes", "",
+           "1. **Registry (deviation 1).** flipquant main has no llama3.1-8b-instruct. Its jobs ran through "
+           "`zs6_fq.py`, which adds paper-sm120-runs 7b472b0's ModelSpec (Meta's Llama-3.1-8B-Instruct @ 0e9e39f2) to "
+           "`models.registry.MODELS` at run time. Nothing in the flipquant checkout changed (the driver checks a clean "
+           "3db0072).",
+           "2. **Revisions (deviation 2).** main leaves Mistral and Phi-4 unpinned. Every job passed the main-table "
+           "revision, and the driver checked each report's source revision.",
+           "3. **Parity model (deviation 3, amendment 1).** NVFP4-RaZeR's lm-eval harness knows neither Instruct model, "
+           "and base Mistral-7B-v0.3's weights are no longer in the HF cache. The step 0 parity ran on Phi-4, a panel "
+           "model, at the same revision in both harnesses.",
+           "4. **Envs.** Nemotron and Qwen3.8-27B ran in n16k64-fast, the others in n16k64, as in the main table (the "
+           "envs differ only in the hybrid kernels).",
+           "5. **GPTQ‡ codes.** The two Llama models' codes were regenerated by main's GPTQ in step 0 (codes_sha256 = "
+           "part P's: 952850d7..., d3fe9816...); the other four were loaded from the main-table files. Every panel "
+           "run's codes_sha256 equals the main-table record's.",
+           f"6. **FOCUS states.** Every state matched its recorded sha256. The 1B's had none; step 0 recorded it "
+           f"({str((g.get('focus_state_sha256') or {}).get('llama3.2-1b-instruct'))[:16]}...). Qwen3.8-27B's was "
+           "downloaded again (part Q's file and revision, sha256 equal).",
+           "7. **Native vs fake.** The two agree in accuracy (the cross-check's pooled differences are not "
+           "significant). Per choice, their log-likelihoods differ about as much as native W4A4 differs from BF16. "
+           "Interpretation, not measured here: W4A4 rounding is discontinuous, so the small arithmetic differences of "
+           "the simulated path (BF16 rounding of the dequantized operands) flip FP4 rounding decisions downstream.",
+           "8. **Protocol text.** The registration and amendment 1 headers carried wrong times; they were corrected to "
+           "the commits' (10:33 and 10:44 UTC)."]
     # timings
     md += ["", "## Timings", "", "Per run: model load, each task's wall time, and the whole process (seconds); queue START "
            "(UTC). Simulated rows are marked †.", "",
