@@ -1590,3 +1590,28 @@ run; part X's verified artifacts are reused, no earlier output.
   - If X2's driver stops, the hold ends with it and part Y continues.
 - **Recorded:** queue.log lines `zeroshot6 X2 ...`, with the times. Part Y's report gives X2's interval between its
   native and IF4 / MixFP4 rows.
+
+### Part Y, amendment 2 (2026-10-15 12:30 UTC): the hold began at 12:14 UTC, so X2 runs between Llama-3.1-8B-Instruct's NVFP4 and FO6 rows
+
+- **What happened.** X2's driver waited for part Y's last native row by searching queue.log for the text
+  `START gsm8k6_qwen3.8-27b_fq-256x64`. Its own waiting line (12:14:16 UTC) quoted that text, so the search matched at
+  once. The hold began at 12:14:17 UTC, while part Y's Llama-3.1-8B-Instruct NVFP4 row was running.
+- **The effect:**
+  - Part Y's NVFP4 row finished normally (12:26:46 UTC, rc 0).
+  - Part Y's driver then reached its next job, Llama-3.1-8B-Instruct FO6. It waits in run_ts for an idle GPU, as
+    amendment 1 intended, but at this earlier boundary.
+  - X2 started at 12:26:51 UTC.
+  - Nothing was stopped or killed. Every job still runs alone on the GPU (the held context runs no kernels), with
+    unchanged inputs, env and checks.
+  - The cells are independent processes, so neither part's results depend on the position, and the total time is
+    unchanged.
+- **The coordinator was notified at 12:16 UTC,** with the option to stop X2's driver before part Y's job ended and so
+  keep the registered position. Nothing was stopped, so X2 runs now. This is also the user's literal "run the Qwen3
+  zero-shot panel first".
+- **The fix** (run_zs6_qwen3.py): the trigger is matched as a whole queue.log line, and the waiting line no longer
+  quotes it. The running driver keeps its loaded code; the fix applies to any relaunch.
+- **The order now:**
+  1. part Y's native rows up to Llama-3.1-8B-Instruct NVFP4;
+  2. X2's 20 rows;
+  3. part Y's remaining native rows: Llama-3.1-8B-Instruct FO6 onward, then Nemotron, Phi-4 and Qwen3.8-27B;
+  4. part Y's IF4 / MixFP4 rows.

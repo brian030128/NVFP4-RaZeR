@@ -15,6 +15,7 @@ RUN/zeroshot6/panel/<model>/. X2 changes only two things:
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -33,7 +34,9 @@ FOCUS_SHA = {"qwen3-1.7b": "5fa877acad86e7b9f64a39936717f8032cab0696d0e657b05250
 #: registered: the codes files' sha256 at the HF staging of 2026-10-15, whose code digests equal the main-table records
 CODES_FILE_SHA = {"qwen3-1.7b": "bb50de2383f7690adcf8438681a3fc86e482418ae4de10876cd38e074e995342",
                   "qwen3-8b": "335a69b142c726a98b6879e6a47c8d7de4e295fd9efe889e7cab9a995606d269"}
-TRIGGER = "START gsm8k6_qwen3.8-27b_fq-256x64"          # part Y's last native row
+# part Y's last native row: the runner's own START line, matched as a whole line (2026-10-15 fix: a substring match
+# also matched this driver's own waiting line, which quoted it)
+TRIGGER_RE = re.compile(r"^\S+Z START gsm8k6_qwen3\.8-27b_fq-256x64$", re.M)
 
 _verify_inputs = Z.verify_inputs
 
@@ -97,12 +100,13 @@ def triggered():
     with open(G.RUN / "queue.log", "rb") as f:
         f.seek(0, 2)
         f.seek(max(0, f.tell() - (1 << 16)))
-        return TRIGGER in f.read().decode(errors="replace")
+        return bool(TRIGGER_RE.search(f.read().decode(errors="replace")))
 
 
 def hold(part_y_pid):
     """Wait for part Y's last native row (or its driver's exit), then hold a CUDA context for this process's life."""
-    G.log(f"zeroshot6 X2: waiting for part Y's last native row ({TRIGGER}) or part Y's driver (pid {part_y_pid}) to exit")
+    G.log(f"zeroshot6 X2: waiting for part Y's last native row (Qwen3.8-27B FlipQuant 256x64) to start, or part Y's "
+          f"driver (pid {part_y_pid}) to exit")
     while not triggered() and alive(part_y_pid):
         time.sleep(30)
     import torch
