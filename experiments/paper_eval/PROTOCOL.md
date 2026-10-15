@@ -1507,9 +1507,9 @@ run; part X's verified artifacts are reused, no earlier output.
 - **ETA.** Native rows about 9 h (Qwen3.8-27B about 4.7 h of it, from part N / O0's 33 / 50 min per run). IF4 / Zou
   are decode-bound and not yet measured, estimated at 4–12 h. The ETA is sent when the panel's timing starts.
 
-### Part Y, step 0: the run (2026-10-15 08:02–08:20 UTC); all checks passed
+### Part Y, step 0: the run (2026-10-15 08:04–08:20 UTC); all checks passed
 
-- Registration e7acaa0 (08:01 UTC), drivers 551ef6d. Records under RUN/gsm8k6/step0/; report
+- Registration e7acaa0 (08:02 UTC), drivers 551ef6d (08:04 UTC). Records under RUN/gsm8k6/step0/; report
   results/paper_eval/gsm8k6/STEP0.md and step0.json; the gate RUN/gsm8k6/step0/step0_ok.json.
 - **(a)** `evaluation/downstream.py` and `evaluation/lm_eval_datasets.py` are byte-identical between f2a56f1 and
   4bbe0b1.
@@ -1520,3 +1520,73 @@ run; part X's verified artifacts are reused, no earlier output.
   runs are the panel's Nemotron FO6 / FQ16 cells.
 - The panel started right after.
 
+
+### Part X, amendment 2 "X2" (registered 2026-10-15, at its commit): Qwen3-1.7B and Qwen3-8B
+
+- **The user's decision** (relayed by the coordinator, 2026-10-15 about 12:00 UTC): run the Qwen3 zero-shot panel
+  first, then continue GSM8K (part Y) as planned. The coordinator's reading: between part Y's native rows and its IF4 /
+  MixFP4 rows, without stopping or killing anything. This is part Y, amendment 1, below.
+- **Models**, each at its main-table revision, passed as `--revision` to every job:
+  - qwen3-1.7b @ 70d244cc86cc;
+  - qwen3-8b @ b968826d9c46.
+  - Order: Qwen3-1.7B, then Qwen3-8B. Both run in n16k64.
+- **Unchanged from part X:**
+  - **Code:** flipquant main 3db0072, the same detached worktree, checked clean before the run; build_V,
+    `--kernel-set auto`.
+  - **Tasks:** the six, 0-shot, lm-eval 0.4.11, datasets pinned (LAMBADA at 900124bf). Batch 16, per-token
+    activations.
+  - **Rows:** the ten, in part X's order. BF16, NVFP4, FourOverSix, FOCUS, GPTQ‡ and FlipQuant 8x64 / 16x64 /
+    256x64 run native. IF4† and MixFP4 (Zou)† run simulated, with their own rules.
+  - **Running:** part X's env (`CUBLAS_WORKSPACE_CONFIG=:4096:8`, `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`),
+    run_gpu.run (START / END in queue.log), one job at a time.
+  - **Checks:** part X's check_record, which requires:
+    - a complete record with every example, n_shot 0, the batch and the revision;
+    - the dataset pins and loads;
+    - equal sample digests within the model;
+    - native coverage and the kernel families from build_V;
+    - the GPTQ‡ codes_sha256 equal to the main-table record, and the IF4 / Zou installed-weight sha256 equal to the
+      main-table rows';
+    - the FOCUS state and map paths.
+  - Every cell is a new run; no earlier output is reused.
+- **Inputs.** Each is re-hashed before its run, against these records (part X's verify_inputs, with the Qwen3
+  entries):
+  - **FOCUS states** RUN/focus/qwen3-*/state/focus.pt, against the sha256 the FOCUS upload recorded
+    (results/paper_eval/focus_hf/stage.json): 5fa877acad86e7b9... (1.7B) and e4689e64c66fe50a... (8B).
+  - **GPTQ‡ codes** RUN/gptqdd/qwen3-*/codes_nvfp4_act-fo6.pt, against the file sha256 recorded at today's HF staging
+    (hf_gptq_focus.py): bb50de2383f7690a... (1.7B) and 335a69b142c726a9... (8B).
+    - That staging checked each code digest equal to the main-table record: 415a788a25da... (1.7B), 4cba489acee8... (8B).
+    - Each run's own codes_sha256 is also checked against the main-table record (gptqdd/<model>/ppl.json).
+  - **Release maps** flipquant_release/<model>/flipquant_<unit>.pt, against the release summary's map_sha256 (part X's
+    rule).
+  - **IF4 / Zou:** the installed-weight sha256 of the main-table rows (mainrows/<model>/{if4,zou}.json), checked after
+    each run.
+- **Old vs new:** the co-author's acc_panel (flipquant main docs/results/acc_panel/acc_panel.md) for Qwen3-1.7B and
+  Qwen3-8B, as in part X. That is BF16, FourOverSix, FOCUS and FlipQuant x3 over the six tasks: 72 cells, Δ against
+  2 SE.
+- **Report:** results/paper_eval/zeroshot6_qwen3/ (REPORT.md, zeroshot6_qwen3.json), with part X's tables for the two
+  models.
+  - Then flipquant paper-sm120-runs results/zeroshot6/README.md is regenerated in the same format, with eight models
+    plus the mean: Llama-3.2-1B, Llama-3.1-8B, Qwen3-1.7B, Qwen3-8B, Mistral, Nemotron, Phi-4, Qwen3.8-27B.
+  - Each push is tried once.
+- **Driver:** run_zs6_qwen3.py: `preflight` (CPU: the inputs against these records) and `panel`. Both use part X's
+  run_zeroshot6 functions, and `panel` also holds the GPU as in part Y, amendment 1.
+- **ETA:** about 2.5–3.5 h. In part X a native row took 3 min on the 1B and 4–6 min on the 7–14B models, and IF4 /
+  Zou rows took 4.1–7.6x a native row.
+
+### Part Y, amendment 1 (registered 2026-10-15, at its commit): X2 between the native and the IF4 / MixFP4 rows
+
+- **The decision:** part X amendment 2, above. Nothing that is running is stopped or killed. Part Y's rows, settings
+  and checks do not change. Its IF4 / MixFP4 rows run after X2, in the registered order.
+- **The hold uses part Y's own runner.** Before every job, run_ts (run_gsm8k.run_ts, via run_gpu.idle) waits until no
+  compute process is on the GPU.
+  - X2's driver waits until part Y's last native row has started: the line `START gsm8k6_qwen3.8-27b_fq-256x64` in
+    queue.log, or part Y's driver has exited.
+  - It then holds a CUDA context until its own last job has ended. The context is one small tensor, about 0.5 GB; that
+    row peaks at about 51 GiB of the 96 GiB (part N's FQ16 record).
+  - Part Y's next job (Llama-3.2-1B-Instruct IF4) therefore waits in run_ts, and starts by itself once X2's driver
+    exits.
+  - X2's own jobs wait only for other processes: its idle check ignores itself. The held context runs no kernels, so
+    the GPU still runs one job at a time.
+  - If X2's driver stops, the hold ends with it and part Y continues.
+- **Recorded:** queue.log lines `zeroshot6 X2 ...`, with the times. Part Y's report gives X2's interval between its
+  native and IF4 / MixFP4 rows.
