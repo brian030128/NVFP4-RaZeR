@@ -1,0 +1,147 @@
+{
+ "model": "microsoft/phi-4",
+ "revision": "2db69c1c3e91a05d2c64a3185acfbaf36f744e25",
+ "flipquant_model_key": "phi4-14b",
+ "method": "GPTQ on NVFP4's fixed round-to-nearest grid, BF16-activation calibration (the FlipQuant paper's GPTQ-double-dagger baseline)",
+ "evaluation": {
+  "mode": "native sm_120 kernels (NVFP4 weights from these codes, per-token FourOverSix activations)",
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "quantized_modules": 160,
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "corpora": {
+   "wiki": {
+    "dataset": "Salesforce/wikitext, wikitext-2-raw-v1, test split",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "total_tokens": 289305,
+    "used_tokens": 288768,
+    "windows": 141,
+    "window_tokens": 2048
+   },
+   "c4": {
+    "dataset": "allenai/c4, validation shard en/c4-validation.00000-of-00008.json.gz",
+    "revision": "1588ec454efa1a09f29cd18ddd04fe05fc8653a2",
+    "path": "en/c4-validation.00000-of-00008.json.gz",
+    "seed": 0,
+    "windows": 256,
+    "window_tokens": 2048
+   }
+  },
+  "c4_documents": "the documents are drawn with the recorded seed from the listed shard"
+ },
+ "ppl": {
+  "bf16": {
+   "wiki": 6.46151240363403,
+   "c4": 10.3098094444712
+  },
+  "nvfp4": {
+   "wiki": 6.693378021361507,
+   "c4": 10.579515761380442
+  },
+  "fo6": {
+   "wiki": 6.661734651161868,
+   "c4": 10.544115699896242
+  },
+  "gptq": {
+   "wiki": 6.688270963089091,
+   "c4": 10.553414416851478
+  }
+ },
+ "paired_vs_fourover6": {
+  "bf16": {
+   "wiki": {
+    "delta_nll": -0.03051650016865832,
+    "two_se": 0.002170510242467142,
+    "n": 141,
+    "significant": true,
+    "verdict": "better"
+   },
+   "c4": {
+    "delta_nll": -0.022472135489806533,
+    "two_se": 0.0013891787909336083,
+    "n": 256,
+    "significant": true,
+    "verdict": "better"
+   }
+  },
+  "nvfp4": {
+   "wiki": {
+    "delta_nll": 0.0047387738599844855,
+    "two_se": 0.0017711807679653669,
+    "n": 141,
+    "significant": true,
+    "verdict": "worse"
+   },
+   "c4": {
+    "delta_nll": 0.0033517053816467524,
+    "two_se": 0.0010720649987827958,
+    "n": 256,
+    "significant": true,
+    "verdict": "worse"
+   }
+  },
+  "gptq": {
+   "wiki": {
+    "delta_nll": 0.003975481006270605,
+    "two_se": 0.002013001230947553,
+    "n": 141,
+    "significant": true,
+    "verdict": "worse"
+   },
+   "c4": {
+    "delta_nll": 0.0008814982138574123,
+    "two_se": 0.00115895040513506,
+    "n": 256,
+    "significant": false,
+    "verdict": "inconclusive"
+   }
+  }
+ },
+ "codes": {
+  "codes_nvfp4_act-fo6.pt": {
+   "sha256": "5c9522f802db3aa7ea01b07da6ade51e9aa18f2329b631e48ea564a0a85b94f1",
+   "bytes": 7667859109,
+   "format": "flipquant-gptq/1",
+   "modules": 160,
+   "codes_sha256": "141a919d520c7e395bb700a33cffc447d9a05430636f787079daee7e70c7e273",
+   "key": {
+    "model": "phi4-14b",
+    "weight": "nvfp4",
+    "act": "none",
+    "unit": null,
+    "mode": "fake",
+    "map_sha256": null,
+    "rotate": "none",
+    "damp": 0.01,
+    "block": 128,
+    "windows": 256,
+    "calib": "release",
+    "rules": "modelopt-0.47",
+    "hessian_input": "bf16",
+    "data_sha256": "ec67986df5da1bad58f1a31209495c2ebd41c91ff81ab3cc84a9264d4e76b329",
+    "propagate": "bf16"
+   }
+  }
+ },
+ "gptq": {
+  "model": "phi4-14b",
+  "weight": "nvfp4",
+  "act": "none",
+  "unit": null,
+  "mode": "fake",
+  "map_sha256": null,
+  "rotate": "none",
+  "damp": 0.01,
+  "block": 128,
+  "windows": 256,
+  "calib": "release",
+  "rules": "modelopt-0.47",
+  "hessian_input": "bf16",
+  "data_sha256": "ec67986df5da1bad58f1a31209495c2ebd41c91ff81ab3cc84a9264d4e76b329",
+  "propagate": "bf16",
+  "flipquant_revision": "c67a5bd",
+  "seconds": 899.4078257083893,
+  "calibration_windows": "256 windows of 512 tokens: the FlipQuant release maps' fit set (the paper's 128 math/code windows, OpenWebMath and CodeParrot-clean, plus 128 from the extension rule)"
+ }
+}

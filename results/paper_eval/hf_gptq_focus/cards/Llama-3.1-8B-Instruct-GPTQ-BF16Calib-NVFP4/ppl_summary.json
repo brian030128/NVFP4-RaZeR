@@ -1,0 +1,147 @@
+{
+ "model": "meta-llama/Llama-3.1-8B-Instruct",
+ "revision": "0e9e39f249a16976918f6564b8830bc894c89659",
+ "flipquant_model_key": "llama3.1-8b-instruct",
+ "method": "GPTQ on NVFP4's fixed round-to-nearest grid, BF16-activation calibration (the FlipQuant paper's GPTQ-double-dagger baseline)",
+ "evaluation": {
+  "mode": "native sm_120 kernels (NVFP4 weights from these codes, per-token FourOverSix activations)",
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "quantized_modules": 224,
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "corpora": {
+   "wiki": {
+    "dataset": "Salesforce/wikitext, wikitext-2-raw-v1, test split",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "total_tokens": 289077,
+    "used_tokens": 288768,
+    "windows": 141,
+    "window_tokens": 2048
+   },
+   "c4": {
+    "dataset": "allenai/c4, validation shard en/c4-validation.00000-of-00008.json.gz",
+    "revision": "1588ec454efa1a09f29cd18ddd04fe05fc8653a2",
+    "path": "en/c4-validation.00000-of-00008.json.gz",
+    "seed": 0,
+    "windows": 256,
+    "window_tokens": 2048
+   }
+  },
+  "c4_documents": "the documents are drawn with the recorded seed from the listed shard"
+ },
+ "ppl": {
+  "bf16": {
+   "wiki": 7.217093808743426,
+   "c4": 10.385272903551368
+  },
+  "nvfp4": {
+   "wiki": 7.887582901713398,
+   "c4": 11.340903728977823
+  },
+  "fo6": {
+   "wiki": 7.818606621556924,
+   "c4": 11.266695538637414
+  },
+  "gptq": {
+   "wiki": 7.829241286074686,
+   "c4": 11.366436026949168
+  }
+ },
+ "paired_vs_fourover6": {
+  "bf16": {
+   "wiki": {
+    "delta_nll": -0.08005400498708089,
+    "two_se": 0.0031279429746647065,
+    "n": 141,
+    "significant": true,
+    "verdict": "better"
+   },
+   "c4": {
+    "delta_nll": -0.08146234080777504,
+    "two_se": 0.01597382199916088,
+    "n": 256,
+    "significant": true,
+    "verdict": "better"
+   }
+  },
+  "nvfp4": {
+   "wiki": {
+    "delta_nll": 0.008783381035987367,
+    "two_se": 0.001931222116182335,
+    "n": 141,
+    "significant": true,
+    "verdict": "worse"
+   },
+   "c4": {
+    "delta_nll": 0.006564912619069219,
+    "two_se": 0.002356591811204865,
+    "n": 256,
+    "significant": true,
+    "verdict": "worse"
+   }
+  },
+  "gptq": {
+   "wiki": {
+    "delta_nll": 0.0013592496831366357,
+    "two_se": 0.005147263392293729,
+    "n": 141,
+    "significant": false,
+    "verdict": "inconclusive"
+   },
+   "c4": {
+    "delta_nll": 0.008813728112727404,
+    "two_se": 0.019191105715787346,
+    "n": 256,
+    "significant": false,
+    "verdict": "inconclusive"
+   }
+  }
+ },
+ "codes": {
+  "codes_nvfp4_act-fo6.pt": {
+   "sha256": "06ff8052565c6534f555813bfed862ab65ded2a4e0263bbda115bb4065b2f456",
+   "bytes": 3926070201,
+   "format": "flipquant-gptq/1",
+   "modules": 224,
+   "codes_sha256": "d3fe98167972cd1c11b184c134ba54c8455e14e04e5365707cd3812bbb8f84c9",
+   "key": {
+    "model": "llama3.1-8b-instruct",
+    "weight": "nvfp4",
+    "act": "none",
+    "unit": null,
+    "mode": "fake",
+    "map_sha256": null,
+    "rotate": "none",
+    "damp": 0.01,
+    "block": 128,
+    "windows": 256,
+    "calib": "release",
+    "rules": "modelopt-0.47",
+    "hessian_input": "bf16",
+    "data_sha256": "0a829ca2785566c33009da2717f95cdfbd9ebbbced27b311f864684d86a3e47d",
+    "propagate": "bf16"
+   }
+  }
+ },
+ "gptq": {
+  "model": "llama3.1-8b-instruct",
+  "weight": "nvfp4",
+  "act": "none",
+  "unit": null,
+  "mode": "fake",
+  "map_sha256": null,
+  "rotate": "none",
+  "damp": 0.01,
+  "block": 128,
+  "windows": 256,
+  "calib": "release",
+  "rules": "modelopt-0.47",
+  "hessian_input": "bf16",
+  "data_sha256": "0a829ca2785566c33009da2717f95cdfbd9ebbbced27b311f864684d86a3e47d",
+  "propagate": "bf16",
+  "flipquant_revision": "3db0072",
+  "seconds": 604.4353194236755,
+  "calibration_windows": "256 windows of 512 tokens: the FlipQuant release maps' fit set (the paper's 128 math/code windows, OpenWebMath and CodeParrot-clean, plus 128 from the extension rule)"
+ }
+}

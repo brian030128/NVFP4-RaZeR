@@ -1,0 +1,147 @@
+{
+ "model": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+ "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+ "flipquant_model_key": "nemotron-nano-9b-v2",
+ "method": "GPTQ on NVFP4's fixed round-to-nearest grid, BF16-activation calibration (the FlipQuant paper's GPTQ-double-dagger baseline)",
+ "evaluation": {
+  "mode": "native sm_120 kernels (NVFP4 weights from these codes, per-token FourOverSix activations)",
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "quantized_modules": 120,
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "corpora": {
+   "wiki": {
+    "dataset": "Salesforce/wikitext, wikitext-2-raw-v1, test split",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "total_tokens": 301617,
+    "used_tokens": 301056,
+    "windows": 147,
+    "window_tokens": 2048
+   },
+   "c4": {
+    "dataset": "allenai/c4, validation shard en/c4-validation.00000-of-00008.json.gz",
+    "revision": "1588ec454efa1a09f29cd18ddd04fe05fc8653a2",
+    "path": "en/c4-validation.00000-of-00008.json.gz",
+    "seed": 0,
+    "windows": 256,
+    "window_tokens": 2048
+   }
+  },
+  "c4_documents": "the documents are drawn with the recorded seed from the listed shard"
+ },
+ "ppl": {
+  "bf16": {
+   "wiki": 8.086256731263783,
+   "c4": 11.152774595866308
+  },
+  "nvfp4": {
+   "wiki": 8.453483871445108,
+   "c4": 11.543722787140462
+  },
+  "fo6": {
+   "wiki": 8.425979560250349,
+   "c4": 11.50341028180243
+  },
+  "gptq": {
+   "wiki": 8.429362656162935,
+   "c4": 11.500488341322313
+  }
+ },
+ "paired_vs_fourover6": {
+  "bf16": {
+   "wiki": {
+    "delta_nll": -0.041153816949753536,
+    "two_se": 0.0016421991432052777,
+    "n": 147,
+    "significant": true,
+    "verdict": "better"
+   },
+   "c4": {
+    "delta_nll": -0.03095522802323103,
+    "two_se": 0.0013415231817701843,
+    "n": 256,
+    "significant": true,
+    "verdict": "better"
+   }
+  },
+  "nvfp4": {
+   "wiki": {
+    "delta_nll": 0.003258911119837339,
+    "two_se": 0.0015136504937621152,
+    "n": 147,
+    "significant": true,
+    "verdict": "worse"
+   },
+   "c4": {
+    "delta_nll": 0.0034982699435204268,
+    "two_se": 0.0009995637110178197,
+    "n": 256,
+    "significant": true,
+    "verdict": "worse"
+   }
+  },
+  "gptq": {
+   "wiki": {
+    "delta_nll": 0.0004014271457179063,
+    "two_se": 0.0016408180992809043,
+    "n": 147,
+    "significant": false,
+    "verdict": "inconclusive"
+   },
+   "c4": {
+    "delta_nll": -0.0002540387213230133,
+    "two_se": 0.0011189680120904319,
+    "n": 256,
+    "significant": false,
+    "verdict": "inconclusive"
+   }
+  }
+ },
+ "codes": {
+  "codes_nvfp4_act-fo6.pt": {
+   "sha256": "251884a98f6408df472f5ee61b3b4656a088ab1f63d2eb26307253b5b765a3a4",
+   "bytes": 4337895473,
+   "format": "flipquant-gptq/1",
+   "modules": 120,
+   "codes_sha256": "22854fc2fac91247772fec16656384a0854eff405f2ff188e4153e0643c2f51b",
+   "key": {
+    "model": "nemotron-nano-9b-v2",
+    "weight": "nvfp4",
+    "act": "none",
+    "unit": null,
+    "mode": "fake",
+    "map_sha256": null,
+    "rotate": "none",
+    "damp": 0.01,
+    "block": 128,
+    "windows": 256,
+    "calib": "release",
+    "rules": "modelopt-0.47",
+    "hessian_input": "bf16",
+    "data_sha256": "024372b4513c7f3d28179f0fd46c27e49d3f86c0c18fc53da05886b007c90c22",
+    "propagate": "bf16"
+   }
+  }
+ },
+ "gptq": {
+  "model": "nemotron-nano-9b-v2",
+  "weight": "nvfp4",
+  "act": "none",
+  "unit": null,
+  "mode": "fake",
+  "map_sha256": null,
+  "rotate": "none",
+  "damp": 0.01,
+  "block": 128,
+  "windows": 256,
+  "calib": "release",
+  "rules": "modelopt-0.47",
+  "hessian_input": "bf16",
+  "data_sha256": "024372b4513c7f3d28179f0fd46c27e49d3f86c0c18fc53da05886b007c90c22",
+  "propagate": "bf16",
+  "flipquant_revision": "1a2094e",
+  "seconds": 551.2824397087097,
+  "calibration_windows": "256 windows of 512 tokens: the FlipQuant release maps' fit set (the paper's 128 math/code windows, OpenWebMath and CodeParrot-clean, plus 128 from the extension rule)"
+ }
+}

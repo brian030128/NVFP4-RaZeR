@@ -1,0 +1,147 @@
+{
+ "model": "meta-llama/Llama-3.2-1B-Instruct",
+ "revision": "9213176726f574b556790deb65791e0c5aa438b6",
+ "flipquant_model_key": "llama3.2-1b-instruct",
+ "method": "GPTQ on NVFP4's fixed round-to-nearest grid, BF16-activation calibration (the FlipQuant paper's GPTQ-double-dagger baseline)",
+ "evaluation": {
+  "mode": "native sm_120 kernels (NVFP4 weights from these codes, per-token FourOverSix activations)",
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "quantized_modules": 112,
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "corpora": {
+   "wiki": {
+    "dataset": "Salesforce/wikitext, wikitext-2-raw-v1, test split",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "total_tokens": 289077,
+    "used_tokens": 288768,
+    "windows": 141,
+    "window_tokens": 2048
+   },
+   "c4": {
+    "dataset": "allenai/c4, validation shard en/c4-validation.00000-of-00008.json.gz",
+    "revision": "1588ec454efa1a09f29cd18ddd04fe05fc8653a2",
+    "path": "en/c4-validation.00000-of-00008.json.gz",
+    "seed": 0,
+    "windows": 256,
+    "window_tokens": 2048
+   }
+  },
+  "c4_documents": "the documents are drawn with the recorded seed from the listed shard"
+ },
+ "ppl": {
+  "bf16": {
+   "wiki": 13.16292155414654,
+   "c4": 18.51890072370715
+  },
+  "nvfp4": {
+   "wiki": 15.53520393039857,
+   "c4": 21.766874082184
+  },
+  "fo6": {
+   "wiki": 15.315245499432683,
+   "c4": 21.448835602758543
+  },
+  "gptq": {
+   "wiki": 15.532727452746478,
+   "c4": 21.018951149991764
+  }
+ },
+ "paired_vs_fourover6": {
+  "bf16": {
+   "wiki": {
+    "delta_nll": -0.15144486630216558,
+    "two_se": 0.0037291469567450287,
+    "n": 141,
+    "significant": true,
+    "verdict": "better"
+   },
+   "c4": {
+    "delta_nll": -0.14687848836183548,
+    "two_se": 0.005827486849533775,
+    "n": 256,
+    "significant": true,
+    "verdict": "better"
+   }
+  },
+  "nvfp4": {
+   "wiki": {
+    "delta_nll": 0.014259899761659879,
+    "two_se": 0.002494612620509065,
+    "n": 141,
+    "significant": true,
+    "verdict": "worse"
+   },
+   "c4": {
+    "delta_nll": 0.014718916965648532,
+    "two_se": 0.0023573707638788748,
+    "n": 256,
+    "significant": true,
+    "verdict": "worse"
+   }
+  },
+  "gptq": {
+   "wiki": {
+    "delta_nll": 0.01410047635964468,
+    "two_se": 0.03930274027372007,
+    "n": 141,
+    "significant": false,
+    "verdict": "inconclusive"
+   },
+   "c4": {
+    "delta_nll": -0.020245893159881234,
+    "two_se": 0.0033581144805347025,
+    "n": 256,
+    "significant": true,
+    "verdict": "better"
+   }
+  }
+ },
+ "codes": {
+  "codes_nvfp4_act-fo6.pt": {
+   "sha256": "5f65382fe016aec8736c520051a32ee165ee80ee6572281b946055b78c3a4722",
+   "bytes": 547457897,
+   "format": "flipquant-gptq/1",
+   "modules": 112,
+   "codes_sha256": "952850d7d8cf4d3d61b0eee6672151a6a2736f3fa6d49264b8dda09417f15e2c",
+   "key": {
+    "model": "llama3.2-1b-instruct",
+    "weight": "nvfp4",
+    "act": "none",
+    "unit": null,
+    "mode": "fake",
+    "map_sha256": null,
+    "rotate": "none",
+    "damp": 0.01,
+    "block": 128,
+    "windows": 256,
+    "calib": "release",
+    "rules": "modelopt-0.47",
+    "hessian_input": "bf16",
+    "data_sha256": "1fde06eca80c4aeab249472410748ba84edca1186b964744630dbd1bdcffe3c2",
+    "propagate": "bf16"
+   }
+  }
+ },
+ "gptq": {
+  "model": "llama3.2-1b-instruct",
+  "weight": "nvfp4",
+  "act": "none",
+  "unit": null,
+  "mode": "fake",
+  "map_sha256": null,
+  "rotate": "none",
+  "damp": 0.01,
+  "block": 128,
+  "windows": 256,
+  "calib": "release",
+  "rules": "modelopt-0.47",
+  "hessian_input": "bf16",
+  "data_sha256": "1fde06eca80c4aeab249472410748ba84edca1186b964744630dbd1bdcffe3c2",
+  "propagate": "bf16",
+  "flipquant_revision": "3db0072",
+  "seconds": 121.93884491920471,
+  "calibration_windows": "256 windows of 512 tokens: the FlipQuant release maps' fit set (the paper's 128 math/code windows, OpenWebMath and CodeParrot-clean, plus 128 from the extension rule)"
+ }
+}

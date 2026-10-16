@@ -25,3 +25,13 @@ The user's request (relayed by the coordinator, 2026-10-10): part P's Llama-3.1-
 
 Every staged file, with the release / FOCUS patterns (local paths, the host, user names, private repository names, tokens, e-mail addresses, pointers to a reference implementation): `edgeai-lab/Llama-3.1-8B-Instruct-FlipQuant` 5 hits, 0 not accepted, `edgeai-lab/Llama-3.1-8B-Instruct-FOCUS-NVFP4` 1 hit, 0 not accepted. Accepted, as in the release-map upload: Meta's reporting address `LlamaUseReport@meta.com` inside the official `USE_POLICY.md` (byte-identical to the base model's), and the words “commit” / “branch” in the release card's own sentences (the FlipQuant commit is kept; the provenance paragraph).
 
+## Addendum (2026-10-15): visibility
+
+The user's decision (2026-10-15, relayed by the coordinator) was to make both repositories public. The user made the change. The implementation session did not: its permission system refused to.
+
+Read-only checks without a token, at 2026-10-16 21:14 UTC; record in `../hf_gptq_focus/visibility.json`:
+
+| repository | visibility | model info readable | file list = staged | README = staged | head = verified upload |
+|---|---|---|---|---|---|
+| `edgeai-lab/Llama-3.1-8B-Instruct-FlipQuant` | public | True | True | True | True |
+| `edgeai-lab/Llama-3.1-8B-Instruct-FOCUS-NVFP4` | public | True | True | True | True |

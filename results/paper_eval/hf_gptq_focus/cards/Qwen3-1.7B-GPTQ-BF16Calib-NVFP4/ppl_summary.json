@@ -1,0 +1,147 @@
+{
+ "model": "Qwen/Qwen3-1.7B",
+ "revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+ "flipquant_model_key": "qwen3-1.7b",
+ "method": "GPTQ on NVFP4's fixed round-to-nearest grid, BF16-activation calibration (the FlipQuant paper's GPTQ-double-dagger baseline)",
+ "evaluation": {
+  "mode": "native sm_120 kernels (NVFP4 weights from these codes, per-token FourOverSix activations)",
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "quantized_modules": 196,
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "corpora": {
+   "wiki": {
+    "dataset": "Salesforce/wikitext, wikitext-2-raw-v1, test split",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "total_tokens": 299078,
+    "used_tokens": 299008,
+    "windows": 146,
+    "window_tokens": 2048
+   },
+   "c4": {
+    "dataset": "allenai/c4, validation shard en/c4-validation.00000-of-00008.json.gz",
+    "revision": "1588ec454efa1a09f29cd18ddd04fe05fc8653a2",
+    "path": "en/c4-validation.00000-of-00008.json.gz",
+    "seed": 0,
+    "windows": 256,
+    "window_tokens": 2048
+   }
+  },
+  "c4_documents": "the documents are drawn with the recorded seed from the listed shard"
+ },
+ "ppl": {
+  "bf16": {
+   "wiki": 16.71621165948511,
+   "c4": 19.24625666806624
+  },
+  "nvfp4": {
+   "wiki": 18.87128643892733,
+   "c4": 21.034857058494364
+  },
+  "fo6": {
+   "wiki": 19.474500584649626,
+   "c4": 20.907220172425195
+  },
+  "gptq": {
+   "wiki": 18.671650405427922,
+   "c4": 21.069632776175204
+  }
+ },
+ "paired_vs_fourover6": {
+  "bf16": {
+   "wiki": {
+    "delta_nll": -0.15272694091274314,
+    "two_se": 0.01115524699847736,
+    "n": 146,
+    "significant": true,
+    "verdict": "better"
+   },
+   "c4": {
+    "delta_nll": -0.08277797908522189,
+    "two_se": 0.004172861440563035,
+    "n": 256,
+    "significant": true,
+    "verdict": "better"
+   }
+  },
+  "nvfp4": {
+   "wiki": {
+    "delta_nll": -0.03146441668680269,
+    "two_se": 0.011154448813855704,
+    "n": 146,
+    "significant": true,
+    "verdict": "better"
+   },
+   "c4": {
+    "delta_nll": 0.006086359499022365,
+    "two_se": 0.002798568750399133,
+    "n": 256,
+    "significant": true,
+    "verdict": "worse"
+   }
+  },
+  "gptq": {
+   "wiki": {
+    "delta_nll": -0.042099595069885254,
+    "two_se": 0.01187964975225898,
+    "n": 146,
+    "significant": true,
+    "verdict": "better"
+   },
+   "c4": {
+    "delta_nll": 0.007738236803561449,
+    "two_se": 0.0029685523334766557,
+    "n": 256,
+    "significant": true,
+    "verdict": "worse"
+   }
+  }
+ },
+ "codes": {
+  "codes_nvfp4_act-fo6.pt": {
+   "sha256": "bb50de2383f7690adcf8438681a3fc86e482418ae4de10876cd38e074e995342",
+   "bytes": 792899701,
+   "format": "flipquant-gptq/1",
+   "modules": 196,
+   "codes_sha256": "415a788a25dac12d8f02b5d41cd9638a98a3a6d93b3e035a987bbb02bda8a904",
+   "key": {
+    "model": "qwen3-1.7b",
+    "weight": "nvfp4",
+    "act": "none",
+    "unit": null,
+    "mode": "fake",
+    "map_sha256": null,
+    "rotate": "none",
+    "damp": 0.01,
+    "block": 128,
+    "windows": 256,
+    "calib": "release",
+    "rules": "modelopt-0.47",
+    "hessian_input": "bf16",
+    "data_sha256": "1aeff38bfc63998b4933488daadaa7417bd642dd854104c569edf940e120edb1",
+    "propagate": "bf16"
+   }
+  }
+ },
+ "gptq": {
+  "model": "qwen3-1.7b",
+  "weight": "nvfp4",
+  "act": "none",
+  "unit": null,
+  "mode": "fake",
+  "map_sha256": null,
+  "rotate": "none",
+  "damp": 0.01,
+  "block": 128,
+  "windows": 256,
+  "calib": "release",
+  "rules": "modelopt-0.47",
+  "hessian_input": "bf16",
+  "data_sha256": "1aeff38bfc63998b4933488daadaa7417bd642dd854104c569edf940e120edb1",
+  "propagate": "bf16",
+  "flipquant_revision": "c67a5bd",
+  "seconds": 181.1280586719513,
+  "calibration_windows": "256 windows of 512 tokens: the FlipQuant release maps' fit set (the paper's 128 math/code windows, OpenWebMath and CodeParrot-clean, plus 128 from the extension rule)"
+ }
+}

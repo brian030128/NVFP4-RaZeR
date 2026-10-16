@@ -1,0 +1,147 @@
+{
+ "model": "mistralai/Mistral-7B-Instruct-v0.3",
+ "revision": "c170c708c41dac9275d15a8fff4eca08d52bab71",
+ "flipquant_model_key": "mistral-7b",
+ "method": "GPTQ on NVFP4's fixed round-to-nearest grid, BF16-activation calibration (the FlipQuant paper's GPTQ-double-dagger baseline)",
+ "evaluation": {
+  "mode": "native sm_120 kernels (NVFP4 weights from these codes, per-token FourOverSix activations)",
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "quantized_modules": 224,
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "corpora": {
+   "wiki": {
+    "dataset": "Salesforce/wikitext, wikitext-2-raw-v1, test split",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "total_tokens": 334661,
+    "used_tokens": 333824,
+    "windows": 163,
+    "window_tokens": 2048
+   },
+   "c4": {
+    "dataset": "allenai/c4, validation shard en/c4-validation.00000-of-00008.json.gz",
+    "revision": "1588ec454efa1a09f29cd18ddd04fe05fc8653a2",
+    "path": "en/c4-validation.00000-of-00008.json.gz",
+    "seed": 0,
+    "windows": 256,
+    "window_tokens": 2048
+   }
+  },
+  "c4_documents": "the documents are drawn with the recorded seed from the listed shard"
+ },
+ "ppl": {
+  "bf16": {
+   "wiki": 5.496113314784826,
+   "c4": 8.135140348359002
+  },
+  "nvfp4": {
+   "wiki": 5.730362782072144,
+   "c4": 8.415552255107725
+  },
+  "fo6": {
+   "wiki": 5.708273815402617,
+   "c4": 8.398695949874403
+  },
+  "gptq": {
+   "wiki": 5.735063789729629,
+   "c4": 8.4150052916211
+  }
+ },
+ "paired_vs_fourover6": {
+  "bf16": {
+   "wiki": {
+    "delta_nll": -0.037875496536676136,
+    "two_se": 0.0015128359247604587,
+    "n": 163,
+    "significant": true,
+    "verdict": "better"
+   },
+   "c4": {
+    "delta_nll": -0.031883456802461296,
+    "two_se": 0.0017445927396491363,
+    "n": 256,
+    "significant": true,
+    "verdict": "better"
+   }
+  },
+  "nvfp4": {
+   "wiki": {
+    "delta_nll": 0.0038621725480249324,
+    "two_se": 0.0011586930781823344,
+    "n": 163,
+    "significant": true,
+    "verdict": "worse"
+   },
+   "c4": {
+    "delta_nll": 0.002005003218073398,
+    "two_se": 0.0011828629887690575,
+    "n": 256,
+    "significant": true,
+    "verdict": "worse"
+   }
+  },
+  "gptq": {
+   "wiki": {
+    "delta_nll": 0.00468220447470074,
+    "two_se": 0.0013857742941103673,
+    "n": 163,
+    "significant": true,
+    "verdict": "worse"
+   },
+   "c4": {
+    "delta_nll": 0.0019400067394599319,
+    "two_se": 0.0020758538381344016,
+    "n": 256,
+    "significant": false,
+    "verdict": "inconclusive"
+   }
+  }
+ },
+ "codes": {
+  "codes_nvfp4_act-fo6.pt": {
+   "sha256": "7d837f380896b690adb32605f4c9ba5b2f73cfe1c280a1efc1a7ad0d465c699c",
+   "bytes": 3926070201,
+   "format": "flipquant-gptq/1",
+   "modules": 224,
+   "codes_sha256": "b8d0f31c80779da56996700841b0501ce6b288bce59b89d649c32614c0a5479d",
+   "key": {
+    "model": "mistral-7b",
+    "weight": "nvfp4",
+    "act": "none",
+    "unit": null,
+    "mode": "fake",
+    "map_sha256": null,
+    "rotate": "none",
+    "damp": 0.01,
+    "block": 128,
+    "windows": 256,
+    "calib": "release",
+    "rules": "modelopt-0.47",
+    "hessian_input": "bf16",
+    "data_sha256": "98dc456245ae6dce22659838358f1cc3a13eeba1e70cd349a73896ea080daca0",
+    "propagate": "bf16"
+   }
+  }
+ },
+ "gptq": {
+  "model": "mistral-7b",
+  "weight": "nvfp4",
+  "act": "none",
+  "unit": null,
+  "mode": "fake",
+  "map_sha256": null,
+  "rotate": "none",
+  "damp": 0.01,
+  "block": 128,
+  "windows": 256,
+  "calib": "release",
+  "rules": "modelopt-0.47",
+  "hessian_input": "bf16",
+  "data_sha256": "98dc456245ae6dce22659838358f1cc3a13eeba1e70cd349a73896ea080daca0",
+  "propagate": "bf16",
+  "flipquant_revision": "c67a5bd",
+  "seconds": 602.0871982574463,
+  "calibration_windows": "256 windows of 512 tokens: the FlipQuant release maps' fit set (the paper's 128 math/code windows, OpenWebMath and CodeParrot-clean, plus 128 from the extension rule)"
+ }
+}
