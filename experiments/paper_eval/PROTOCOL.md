@@ -1700,3 +1700,17 @@ run; part X's verified artifacts are reused, no earlier output.
   - it passes if every registered check passes and the graph ms are within a few % of part W's (RUN/latency_llama);
   - records RUN/latency_rounds_smoke/; a short note in results/paper_eval/latency_rounds_smoke/NOTE.md.
 - **Order:** B, then C1, then validation (b), then part Y amendment 4.
+
+### Part Z: the run (2026-10-16 13:13–13:18 UTC); every job rc 0
+
+- **Code.** flipquant sm120runs/wt at 4bbe0b1, clean; build_V; run_gpu.env (mem_probe with MEM_PROBE_FLIPQUANT).
+- **B: memory** (12 processes, 14–18 s each). For both models, FlipQuant 8x64 / 16x64 / 256x64 install
+  byte-identical quantized linears and whole models to NVFP4's and FourOverSix's: 547,356,672 B (1B) and 3,925,868,544 B
+  (8B) for the quantized linears. After load and at the 1x2048 peak they differ by at most 0.0010 GiB (1B) and
+  0.0079 GiB (8B). Both claims hold.
+- **C1: ownership** (6 processes, 10–20 s each). All 6 maps are exact, with 0 format mismatches, over every module
+  (112 / 224). That is 23,857,201,152 weight elements checked. With C1's 18 maps, the total is 24 maps and
+  206,941,323,264 elements, all exact.
+- **Validation (b)** (4 processes, 13:17:45–13:18:26 UTC). Every registered check passed. The graph times are within
+  0.2–3.4 % of part W's. The note is results/paper_eval/latency_rounds_smoke/NOTE.md.
+- **Report.** results/paper_eval/llama_bc/ (LLAMA_BC.md, llama_bc.json).
