@@ -1748,3 +1748,35 @@ run; part X's verified artifacts are reused, no earlier output.
     compositions. A row at 48 shares Qwen3.8-27B BF16's batch composition, and the report says so.
   - The pre-check rule is unchanged: generations not byte-identical means stop and report. The fallback does not cover
     that.
+
+### Part Y, the panel: the run (2026-10-15 08:20 UTC – 2026-10-16 21:04 UTC); every check passed
+
+- **Code.** flipquant paper-sm120-runs 4bbe0b1 (sm120runs/wt, checked clean before each job); build_V; env n16k64, with
+  n16k64-fast for Nemotron and Qwen3.8-27B; part N's env (run_gpu.env) except amendment 4's two rows.
+- **Cells.** 60 (6 models x 10 rows). Every one exited rc 0 and passed the registered checks:
+  - complete, with all 1,319 problems, 8-shot, and the pinned dataset;
+  - each model's chat options, and no think tags;
+  - equal sample digests within the model;
+  - native coverage and the kernel families from build_V;
+  - the GPTQ‡ codes_sha256, the IF4 / Zou installed weights, and the FOCUS state and map paths.
+  - The Nemotron FO6 / FQ16 cells are step 0 (c')'s runs.
+- **Batch.** 64, except Qwen3.8-27B BF16 at 48 (its record and logged command). Amendment 4's two rows ran at 64; no
+  fallback was needed.
+- **Amendments:**
+  - 1–2: X2 ran 2026-10-15 12:26:51–15:36:32 UTC, between Llama-3.1-8B-Instruct's NVFP4 and FO6 rows.
+  - 3: Llama-3.2-1B-Instruct's IF4 / MixFP4 ran with the date pinned; their digests equal BF16's. The unpinned Oct-16
+    IF4 record is kept as if4_date-oct16.*.
+  - 4 (+ addendum): Qwen3.8-27B's IF4 / MixFP4 ran with expandable segments at batch 64. The pre-check gave 128/128
+    byte-identical; the default-allocator OOM log is kept.
+- **Old vs new.** The 8 cells against part N / O0 (Nemotron and Qwen3.8-27B; BF16, NVFP4, FO6, FQ16) have 100 %
+  byte-identical generations and equal accuracy.
+- **Time.** 08:20 UTC Oct 15 – 21:04 UTC Oct 16, 36.7 h wall. That includes X2's 3.2 h, the two stops and part Z. The
+  panel's processes sum to 31.7 h.
+  - Native rows took 4–50 min.
+  - Simulated rows took 2.5–6.9x a native FO6 row. Qwen3.8-27B IF4 / MixFP4 took 3.9 h / 3.3 h.
+- **Analysis definitions** (the coordinator's, 2026-10-16).
+  - Answer agreement compares extracted answers after the scorer's own normalization.
+  - A pair where both sides have `[invalid]` is not agreement, and is counted separately. Each row's no-answer count is
+    reported.
+  - An unpublished preview had compared raw strings ("20." vs "20").
+- **Report.** results/paper_eval/gsm8k6/: REPORT.md and gsm8k6.json; STEP0.md and step0.json.

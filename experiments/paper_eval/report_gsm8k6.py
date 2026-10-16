@@ -6,6 +6,7 @@ RUN/gsm8k6/step0/step0_ok.json that the panel requires) and the final report (RE
 """
 import json
 import math
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -155,12 +156,42 @@ def acc(r, f="strict_match"):
     return 100 * p, 200 * math.sqrt(p * (1 - p) / len(ex))
 
 
+#: gsm8k_llama's scorer (gsm8k-cot.yaml, exact_match): these regexes removed, then lowercased, before comparing
+SCORER_IGNORE = (",", "\\$", "(?s).*#### ", "\\.$")
+
+
+def scored(answer):
+    """An extracted answer as lm-eval's exact_match compares it (regexes_to_ignore, ignore_case)."""
+    for rx in SCORER_IGNORE:
+        answer = re.sub(rx, "", answer)
+    return answer.lower()
+
+
+NO_ANSWER = "[invalid]"             # lm-eval's regex filter output when it extracts nothing
+
+
 def agree(a, ref):
-    """Per problem, against ref: extracted answers equal (strict, flexible), generation byte-identical."""
+    """Per problem, against ref (the coordinator's definition, 2026-10-16):
+    - an answer agrees when both sides extracted one and they are equal after the scorer's normalization;
+    - a problem where neither side extracted an answer is not agreement (it is counted on its own: *_none_both);
+    - one side without an answer is a disagreement.
+    Also: whether the generation is byte-identical. Raw strings would count "20." and "20" as different, although both
+    score alike."""
     ea, eb = examples(a), examples(ref)
-    return {k: dict(strict=ea[k]["strict_match"]["response"] == eb[k]["strict_match"]["response"],
-                    flexible=ea[k]["flexible_extract"]["response"] == eb[k]["flexible_extract"]["response"],
-                    text=ea[k]["raw"] == eb[k]["raw"]) for k in ea}
+    out = {}
+    for k in ea:
+        e = dict(text=ea[k]["raw"] == eb[k]["raw"])
+        for f, name in (("strict_match", "strict"), ("flexible_extract", "flexible")):
+            x, y = ea[k][f]["response"], eb[k][f]["response"]
+            e[name] = x != NO_ANSWER and y != NO_ANSWER and scored(x) == scored(y)
+            e[f"{name}_none_both"] = x == NO_ANSWER and y == NO_ANSWER
+        out[k] = e
+    return out
+
+
+def no_answer(r, f="strict_match"):
+    """How many generations have no extracted answer under filter f."""
+    return sum(e[f]["response"] == NO_ANSWER for e in examples(r).values())
 
 
 def fidelity(a, ref):
@@ -170,6 +201,9 @@ def fidelity(a, ref):
     flips = sum(correct(ea[k]) != correct(eb[k]) for k in ea)
     return dict(n=n, strict=100 * sum(v["strict"] for v in g.values()) / n,
                 flexible=100 * sum(v["flexible"] for v in g.values()) / n, flips=flips,
+                strict_none_both=sum(v["strict_none_both"] for v in g.values()),
+                flexible_none_both=sum(v["flexible_none_both"] for v in g.values()),
+                strict_no_answer_row=no_answer(a), strict_no_answer_ref=no_answer(ref),
                 row_only=sum(correct(ea[k]) and not correct(eb[k]) for k in ea),
                 ref_only=sum(correct(eb[k]) and not correct(ea[k]) for k in ea),
                 identical=100 * sum(v["text"] for v in g.values()) / n)
@@ -179,6 +213,27 @@ def lengths(r):
     gen = [e["generated"] for e in examples(r).values()]
     toks = [g["tokens"] for g in gen]
     return dict(mean=sum(toks) / len(toks), max=max(toks), budget_hits=sum(not g["eos"] for g in gen))
+
+
+def label(m, r):
+    """The row's name, with § on the rows amendment 3 ran with the chat template's date pinned and ¤ on the rows
+    amendment 4 ran with expandable segments."""
+    return NAMES[r] + ("§" if (m, r) in Y.DATE_PIN else "") + ("¤" if (m, r) in getattr(Y, "ALLOC", {}) else "")
+
+
+def bmark(*records):
+    """◊ when the paired records ran at different batch sizes (different batch compositions)."""
+    return "◊" if len({x["batch_size"] for x in records if x is not None}) > 1 else ""
+
+
+def x2_interval():
+    """Part X amendment 2's runs inside part Y (amendment 2): the first START and the last END of its 20 runs."""
+    starts, ends = [], []
+    for line in (G.RUN / "queue.log").read_text().splitlines():
+        p = line.split()
+        if len(p) >= 3 and p[2].startswith("zs6_panel_qwen3-"):
+            (starts if p[1] == "START" else ends if p[1] == "END" else []).append(p[0])
+    return (min(starts), max(ends)) if starts and ends else (None, None)
 
 
 def queue_times():
@@ -205,7 +260,7 @@ def panel():
           "GSM8K generations depend on the batch composition (part M's pad check), so all rows of a model run the full "
           "set at one batch size and see the same length-sorted batches -- except Qwen3.8-27B BF16 (batch 48): its "
           "paired comparisons with the batch-64 rows (vs BF16, fidelity) compare different batch compositions and are "
-          "marked ◊.", "",
+          "marked ◊; so is any other pairing of two runs at different batch sizes (amendment 4's fallback).", "",
           "Accuracy in % ± 2 SE (binomial). Paired columns: strict-match difference in points (row-only correct / "
           "reference-only correct, exact McNemar p), * = p < 0.05.", ""]
     for m in ORDER:
@@ -216,7 +271,7 @@ def panel():
         for r in Y.ROWS:
             v = rows.get(r)
             if v is None:
-                md.append(f"| {NAMES[r]} | TBD | TBD | | |")
+                md.append(f"| {label(m, r)} | TBD | TBD | | |")
                 continue
             s, se = acc(v)
             f, fe = acc(v, "flexible_extract")
@@ -227,14 +282,14 @@ def panel():
                     continue
                 pr = paired(v, rows[ref])
                 cmp[ref] = pr
-                mark = "◊" if (m == "qwen3.8-27b" and "bf16" in (r, ref)) else ""
+                mark = bmark(v, rows[ref])
                 cells.append(f"{pr['diff']:+.2f}{'*' if pr['p'] < 0.05 else ''}{mark} ({pr['row_only']}/{pr['ref_only']}, "
                              f"p={pr['p']:.2g})")
             ln = lengths(v)
             mrec[r] = dict(strict=s, strict_2se=se, flexible=f, flexible_2se=fe, paired=cmp, lengths=ln,
                            batch=v["batch_size"], seconds=v.get("seconds"), load_seconds=v.get("load_seconds"),
                            task_seconds=v["tasks"][Y.TASK]["seconds"], queue=qt.get(f"gsm8k6_{m}_{r}"))
-            md.append(f"| {NAMES[r]} | {s:.2f} ± {se:.2f} | {f:.2f} ± {fe:.2f} | " + " | ".join(cells) + " |")
+            md.append(f"| {label(m, r)} | {s:.2f} ± {se:.2f} | {f:.2f} ± {fe:.2f} | " + " | ".join(cells) + " |")
         md.append("")
     # summary
     complete = [m for m in ORDER if len(data[m]) == len(Y.ROWS)]
@@ -250,9 +305,11 @@ def panel():
                   + (f" | {mean:.2f} |" if mean is not None else " | |"))
     # fidelity to BF16
     md += ["", "## Fidelity to BF16", "",
-           "Per problem against the same model's BF16 run: the extracted answer equal (strict, flexible), correctness "
-           "flips (row-only + BF16-only correct, strict), and byte-identical generations. Pooled = over every problem of "
-           "the models shown. ◊ = Qwen3.8-27B BF16 ran at batch 48 (other batch compositions).", "",
+           "Per problem against the same model's BF16 run: the extracted answer equal (strict, flexible) after the "
+           "scorer's own normalization (lm-eval's exact_match: `,`, `$`, `#### ` and a trailing `.` removed, case "
+           "ignored), correctness flips (row-only + BF16-only correct, strict), and byte-identical generations. Pooled = over every problem of "
+           "the models shown. ◊ = the two runs had different batch sizes (Qwen3.8-27B BF16 ran at batch 48), so their "
+           "batch compositions differ.", "",
            "| method | " + " | ".join(TITLES[m] for m in ORDER) + " | pooled |", "|---|" + "---|" * (len(ORDER) + 1)]
     for r in Y.ROWS:
         if r == "bf16":
@@ -270,7 +327,7 @@ def panel():
             pool["flips"] += fd["flips"]
             pool["n"] += fd["n"]
             cells.append(f"{fd['strict']:.1f} / {fd['flexible']:.1f}; {fd['flips']} ({fd['row_only']}+{fd['ref_only']}); "
-                         f"{fd['identical']:.1f}{'◊' if m == 'qwen3.8-27b' else ''}")
+                         f"{fd['identical']:.1f}{bmark(v, ref)}")
         if pool["n"]:
             rec["fidelity"].setdefault(r, {})["pooled"] = dict(n=pool["n"], strict=100 * pool["strict"] / pool["n"],
                                                                flexible=100 * pool["flexible"] / pool["n"],
@@ -281,7 +338,29 @@ def panel():
             cells.append("")
         md.append(f"| {NAMES[r]} | " + " | ".join(cells) + " |")
     md += ["", "Each cell: answer agreement strict / flexible (%); correctness flips (row-only + BF16-only); byte-identical "
-           "generations (%)."]
+           "generations (%).",
+           "",
+           "**Agreement.** Both sides extracted an answer, and the two are equal after the scorer's normalization. A "
+           "problem where neither side extracted an answer (`[invalid]`) is not agreement; it is counted below. One side "
+           "without an answer is a disagreement.", "",
+           "### Generations without a strict-match answer", "",
+           "Per row, the problems whose generation has no strict-match answer (`[invalid]`: no \"final answer is <number>\"). "
+           "In brackets: the problems where the row and BF16 both have none.", "",
+           "| method | " + " | ".join(TITLES[m] for m in ORDER) + " | total |", "|---|" + "---:|" * (len(ORDER) + 1)]
+    rec["no_answer"] = {}
+    for r in Y.ROWS:
+        cells, tot = [], 0
+        for m in ORDER:
+            v, ref = data[m].get(r), data[m].get("bf16")
+            if v is None:
+                cells.append("TBD")
+                continue
+            n_none = no_answer(v)
+            both = None if r == "bf16" or ref is None else sum(x["strict_none_both"] for x in agree(v, ref).values())
+            rec["no_answer"].setdefault(r, {})[m] = dict(strict=n_none, strict_both_with_bf16=both)
+            tot += n_none
+            cells.append(f"{n_none}" + ("" if both is None else f" ({both})"))
+        md.append(f"| {NAMES[r]} | " + " | ".join(cells) + f" | {tot} |")
     # FlipQuant 16x64 vs the others on agreement with BF16
     md += ["", "### FlipQuant 16x64 vs FOCUS, IF4, Zou and FourOverSix: per-problem agreement with BF16 (exact McNemar)", "",
            "Strict-extracted answer equal to BF16's: FlipQuant-only agreeing / other-only agreeing, p. Pooled over the "
@@ -299,7 +378,7 @@ def panel():
             c = sum(go[k]["strict"] and not ga[k]["strict"] for k in ga)
             pb, pc_ = pb + b, pc_ + c
             rec["fq16_vs"].setdefault(other, {})[m] = dict(fq_only=b, other_only=c, p=mcnemar(b, c))
-            cells.append(f"{b} / {c}, p={mcnemar(b, c):.2g}{'◊' if m == 'qwen3.8-27b' else ''}")
+            cells.append(f"{b} / {c}, p={mcnemar(b, c):.2g}{bmark(a, o, ref)}")
         rec["fq16_vs"].setdefault(other, {})["pooled"] = dict(fq_only=pb, other_only=pc_, p=mcnemar(pb, pc_))
         cells.append(f"{pb} / {pc_}, p={mcnemar(pb, pc_):.2g}")
         md.append(f"| {NAMES[other]} | " + " | ".join(cells) + " |")
@@ -319,6 +398,55 @@ def panel():
         rec["old_vs_new"][f"{m}/{r}"] = dict(new=acc(new)[0], old=acc(old)[0], paired=pr, identical=same, old_record=str(p))
         md.append(f"| {TITLES[m]} | {NAMES[r]} | {acc(new)[0]:.2f} | {acc(old)[0]:.2f} | {pr['diff']:+.2f} "
                   f"({pr['row_only']}/{pr['ref_only']}, p={pr['p']:.2g}) | {same:.1f} % |")
+    # deviations and notes
+    x2a, x2b = x2_interval()
+    b48 = {r: rec["models"]["qwen3.8-27b"].get(r, {}).get("batch") for r in Y.ROWS}
+    cost = {}
+    for m in ORDER:
+        fo6 = rec["models"][m].get("fo6")
+        for r in ("if4", "zou"):
+            v = rec["models"][m].get(r)
+            if v and fo6:
+                cost.setdefault(m, {})[r] = v["seconds"] / fo6["seconds"]
+    rec["notes"] = dict(x2_interval=[x2a, x2b], qwen27b_batches=b48, fake_over_fo6=cost,
+                        date_pinned_rows=[list(k) for k in sorted(Y.DATE_PIN)], date_pin=sorted(set(Y.DATE_PIN.values())))
+    old_tmp = Y.ROOT / "llama3.2-1b-instruct" / "if4_date-oct16.json"
+    md += ["", "## Deviations and notes", "",
+           f"1. **Batch.** Qwen3.8-27B BF16 ran at batch {b48.get('bf16')}: its record's batch_size and its logged "
+           "command both say so. Every other run used 64. Qwen3.8-27B BF16's paired comparisons are marked ◊.",
+           f"2. **X2 inside part Y (amendments 1 and 2).** Part X amendment 2's 20 zero-shot runs ran from {x2a} to {x2b}, "
+           "between Llama-3.1-8B-Instruct's NVFP4 and FO6 rows.",
+           "   - X2's hold took effect at that boundary, not at the registered one (after part Y's native rows).",
+           "   - Part Y's driver waited for an idle GPU, by its own rule. Nothing was stopped, and every job ran alone on "
+           "the GPU.",
+           "   - No part Y result depends on the position.",
+           "3. **Date pin (amendment 3), the rows marked §.** Llama-3.2-1B-Instruct's chat template writes today's date into "
+           "its system header.",
+           "   - The model's native rows ran on 2026-10-15. Its IF4 and MixFP4 rows ran with the date pinned to "
+           "\"15 Oct 2026\": gsm8k6_date.py pins transformers' strftime_now and nothing else.",
+           "   - Both passed the registered check: sample_digest equal to BF16's, so all 2,638 prompts are "
+           "byte-identical.",
+           "   - The first, unpinned IF4 run (2026-10-16 01:59–02:50 UTC, \"16 Oct 2026\") stopped the panel on that "
+           f"check. Its record is kept as `{old_tmp.name.replace('.json', '.*')}` and is not a panel cell.",
+           "   - No other model's template writes a date. Llama-3.1-8B-Instruct's header is a fixed \"26 Jul 2024\".",
+           "4. **Old vs new and dates.** The old records compared (part N / O0: Nemotron, Qwen3.8-27B) have no date in their "
+           "prompts. No older Llama-3.2-1B-Instruct GSM8K record exists, because parts N / O and tab:ptq cover Nemotron "
+           "and Qwen3.8-27B only, so no \"Today Date\" line is compared.",
+           "5. **Allocator and batch (amendment 4 and its addendum), the rows marked ¤.** Qwen3.8-27B's IF4 and MixFP4 "
+           "rows ran with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`. Under the default allocator, IF4 had run out "
+           "of memory at batch 64 from fragmentation (if4_oom-b64-default-alloc.log).",
+           "   - Before the full rows, a --limit 64 pre-check showed the allocator changes no output: "
+           + (f"{a4['generations_identical']} / {a4['samples']} samples byte-identical."
+              if (a4 := load(Y.ROOT / "amend4" / "check.json")) else "pending.")
+           + " Every other row ran under the default allocator, as registered.",
+           "   - The batch each ran at: " + "; ".join(
+               f"{NAMES[r]} {rec['models']['qwen3.8-27b'][r]['batch']}" for r in ("if4", "zou")
+               if r in rec["models"].get("qwen3.8-27b", {})) + ".",
+           "   - A row below 64 is marked ◊ against batch-64 rows. A row at 48 shares the batch composition of Qwen3.8-27B "
+           "BF16 (48), so that pairing carries no ◊.",
+           "6. **Simulated rows' cost** (process seconds, against the model's native FourOverSix row): "
+           + "; ".join(f"{TITLES[m]} IF4 {c.get('if4', float('nan')):.1f}x, MixFP4 {c.get('zou', float('nan')):.1f}x"
+                       for m, c in cost.items()) + "."]
     # timings and lengths
     md += ["", "## Timings and generated lengths", "",
            "Per run: model load and the task's wall time (s), mean / max generated tokens (to the first end-of-sequence "
@@ -332,7 +460,7 @@ def panel():
             if v is None:
                 continue
             total += v["seconds"] or 0
-            md.append(f"| {TITLES[m]} | {NAMES[r]} | {v['batch']} | {v['load_seconds']:.0f} | {v['task_seconds']:.0f} | "
+            md.append(f"| {TITLES[m]} | {label(m, r)} | {v['batch']} | {v['load_seconds']:.0f} | {v['task_seconds']:.0f} | "
                       f"{v['seconds']:.0f} | {v['lengths']['mean']:.0f} | {v['lengths']['max']} | "
                       f"{v['lengths']['budget_hits']} | {(v['queue'] or {}).get('start', '')} |")
     rec["total_process_hours"] = total / 3600
