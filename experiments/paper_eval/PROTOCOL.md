@@ -1632,3 +1632,37 @@ run; part X's verified artifacts are reused, no earlier output.
   models of parts X and X2.
 - **Report.** results/paper_eval/zeroshot6_qwen3/ (REPORT.md and zeroshot6_qwen3.json, from report_zs6_qwen3.py).
   zs6_flipquant_readme.py generates the flipquant README with the eight models from the two JSONs.
+
+### Part Y, amendment 3 (registered 2026-10-16, at its commit; the coordinator's OK, relayed): Llama-3.2-1B-Instruct's fake rows render the date of its native rows
+
+- **What happened.**
+  - At 02:50:07 UTC the panel stopped on a registered check. The first fake row, Llama-3.2-1B-Instruct IF4 (rc 0,
+    3,034 s), had a sample_digest that differs from the model's BF16 row.
+  - All 2,638 samples' prompts differ in one line, the system header's "Today Date". Llama-3.2-1B-Instruct's chat
+    template writes `strftime_now("%d %b %Y")` there.
+  - The model's native rows ran on 2026-10-15 ("Today Date: 15 Oct 2026"); the IF4 row ran after midnight UTC ("16 Oct
+    2026"). Every other recorded setting is identical.
+- **Which rows are affected.** Only Llama-3.2-1B-Instruct's IF4 and MixFP4 (Zou) rows.
+  - Llama-3.1-8B-Instruct's template writes a fixed "Today Date: 26 Jul 2024".
+  - Mistral, Nemotron, Phi-4 and Qwen3.8-27B have no date.
+  - Parts X / X2 use no chat template.
+- **The change.** Those two rows run through gsm8k6_date.py (`python gsm8k6_date.py 2026-10-15 evaluation.downstream
+  ...`, from the flipquant worktree, as part X's zs6_fq.py did).
+  - It replaces transformers' chat_template_utils module global `datetime` with one whose `now()` returns 2026-10-15
+    12:00, so `strftime_now` renders "15 Oct 2026". Nothing else changes: not the flipquant checkout (4bbe0b1), and
+    not any other clock.
+  - Every other row runs exactly as registered (run_gsm8k6.DATE_PIN lists the two rows).
+- **Acceptance.** Unchanged: the registered check. Each rerun row's sample_digest must equal Llama-3.2-1B-Instruct
+  BF16's, i.e. all 2,638 prompts are byte-identical. If it does not, the run stops and is reported; the check is not
+  loosened.
+  - Checked beforehand, on the CPU: with the pin, the tokenizer at 9213176726 renders a system header identical to the
+    BF16 record's.
+- **The Oct-16 IF4 record** is kept, renamed to if4_date-oct16.{json,log,gsm8k_llama.jsonl.gz}; its sha256 is
+  unchanged. It is not a panel cell.
+- **Restart.** run_gsm8k6.py panel again. It skips every complete record, checking each again, and continues in the
+  registered order: Llama-3.2-1B-Instruct IF4 / Zou (pinned), then Mistral, Llama-3.1-8B-Instruct, Nemotron, Phi-4 and
+  Qwen3.8-27B. The scope is the full 12 rows.
+- **Report.** The date pin is flagged. Old vs new states the "Today Date" line of any older Llama-3.2-1B-Instruct
+  GSM8K record it compares against, if that line differs from 15 Oct 2026.
+- **Measured.** The fake rows cost about 9x a native row: Llama-3.2-1B-Instruct IF4 took 50.6 min against 5.6 min for
+  FO6. The 12 fake rows take about 32 h.

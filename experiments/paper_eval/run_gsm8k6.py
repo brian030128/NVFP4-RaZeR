@@ -61,9 +61,15 @@ def quant(model, row):
     raise KeyError(row)
 
 
+#: amendment 3: Llama-3.2-1B-Instruct's chat template writes today's date into its system header; its fake rows render
+#: the date its native rows saw (gsm8k6_date.py pins strftime_now and nothing else)
+DATE_PIN = {("llama3.2-1b-instruct", "if4"): "2026-10-15", ("llama3.2-1b-instruct", "zou"): "2026-10-15"}
+
+
 def cmd(model, row, out):
-    """Part N's command (run_gsm8k_lmeval.cmd)."""
-    return [G.py(model), "-u", "-m", "evaluation.downstream", "--model", model, "--revision", Z.REV[model],
+    """Part N's command (run_gsm8k_lmeval.cmd); amendment 3's two rows go through gsm8k6_date.py."""
+    launch = ["-u", HERE / "gsm8k6_date.py", DATE_PIN[(model, row)]] if (model, row) in DATE_PIN else ["-u", "-m"]
+    return [G.py(model), *launch, "evaluation.downstream", "--model", model, "--revision", Z.REV[model],
             *quant(model, row), "--tasks", TASK, "--apply-chat-template", *THINK_OFF.get(model, []),
             "--batch-size", batch(model, row), "--gen-lengths", "--samples-out", Path(out).with_suffix(""), "--out", out]
 
