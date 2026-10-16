@@ -12,6 +12,7 @@ import gzip
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -64,6 +65,34 @@ def quant(model, row):
 #: amendment 3: Llama-3.2-1B-Instruct's chat template writes today's date into its system header; its fake rows render
 #: the date its native rows saw (gsm8k6_date.py pins strftime_now and nothing else)
 DATE_PIN = {("llama3.2-1b-instruct", "if4"): "2026-10-15", ("llama3.2-1b-instruct", "zou"): "2026-10-15"}
+
+
+#: amendment 4: Qwen3.8-27B's fake rows ran out of memory at batch 64 under the default allocator (fragmentation, 13:08
+#: UTC 2026-10-16); these two rows run with expandable segments, every other row as registered
+ALLOC = {("qwen3.8-27b", "if4"): "expandable_segments:True", ("qwen3.8-27b", "zou"): "expandable_segments:True"}
+
+
+def run_ts_env(name, cmd_, out, cwd, extra):
+    """run_gsm8k.run_ts with extra environment variables, which it writes to the job's log (amendment 4)."""
+    if G.done(out):
+        return None
+    G.idle()
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    G.log(f"START {name}")
+    t0 = time.time()
+    with open(out.with_suffix(".log"), "a") as f:
+        f.write(f"{time.time():.3f} ENV " + " ".join(f"{k}={v}" for k, v in extra.items()) + "\n")
+        f.write(f"{time.time():.3f} CMD " + " ".join(map(str, cmd_)) + "\n")
+        f.flush()
+        p = subprocess.Popen(list(map(str, cmd_)), cwd=cwd, env=G.env(extra), stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, bufsize=1)
+        for line in p.stdout:
+            f.write(f"{time.time():.3f} {line}")
+            f.flush()
+        rc = p.wait()
+    G.log(f"END {name} rc={rc} {time.time() - t0:.0f}s")
+    return rc
 
 
 def cmd(model, row, out):
@@ -226,12 +255,41 @@ def run_row(model, row, check=True):
         bad = Z.verify_inputs(model, row)
         if bad:
             G.stop(f"gsm8k6 {model} {row}: {bad}")
-    must(M.run_ts(f"gsm8k6_{model}_{row}", cmd(model, row, out), out, FQ), f"{model} {row}")
+    if (model, row) in ALLOC:
+        rc = run_ts_env(f"gsm8k6_{model}_{row}", cmd(model, row, out), out, FQ,
+                        {"PYTORCH_CUDA_ALLOC_CONF": ALLOC[(model, row)]})
+    else:
+        rc = M.run_ts(f"gsm8k6_{model}_{row}", cmd(model, row, out), out, FQ)
+    must(rc, f"{model} {row}")
     if check:
         _LIBS = _LIBS or G.manifests()
         bad = check_record(model, row, out, _LIBS, _DIGESTS.setdefault(model, {}))
         if bad:
             G.stop(f"gsm8k6 {model} {row}: {bad}")
+
+
+def amend4_check():
+    """Amendment 4's pre-check: Qwen3.8-27B IF4 with --limit 64 (one batch of 64), under the default allocator and
+    under expandable segments. Every generation and extracted answer must be byte-identical."""
+    model, row, d = "qwen3.8-27b", "if4", ROOT / "amend4"
+    checkout(FQ, FQ_COMMIT)
+    outs = {}
+    for tag, extra in (("default", None), ("expandable", {"PYTORCH_CUDA_ALLOC_CONF": ALLOC[(model, row)]})):
+        out = d / f"{model}_{row}_limit64_{tag}.json"
+        c = cmd(model, row, out) + ["--limit", 64]
+        name = f"gsm8k6_amend4_check_{tag}"
+        must(run_ts_env(name, c, out, FQ, extra) if extra else M.run_ts(name, c, out, FQ), f"amendment 4 check {tag}")
+        outs[tag] = out
+    a, b = (samples(outs[t].with_suffix(f".{TASK}.jsonl.gz")) for t in ("default", "expandable"))
+    keys = sorted(set(a) | set(b))
+    gen = sum(k in a and k in b and a[k][0] == b[k][0] for k in keys)
+    ans = sum(k in a and k in b and a[k][1] == b[k][1] for k in keys)
+    res = dict(samples=len(keys), generations_identical=gen, answers_identical=ans,
+               ok=len(keys) == 2 * 64 and gen == ans == len(keys), records={t: str(o) for t, o in outs.items()})
+    (d / "check.json").write_text(json.dumps(res, indent=1) + "\n")
+    G.log(f"gsm8k6 amendment 4 pre-check: generations {gen}/{len(keys)}, answers {ans}/{len(keys)} byte-identical")
+    if not res["ok"]:
+        G.stop("gsm8k6 amendment 4 pre-check: the allocator changed the output (RUN/gsm8k6/amend4/check.json)")
 
 
 def panel():
@@ -254,6 +312,9 @@ if __name__ == "__main__":
         step0_parity()
         step0_identity()
         G.log("DONE gsm8k6 step0 runs")
+    elif what == "amend4_check":
+        G.log("gsm8k6 amendment 4 pre-check")
+        amend4_check()
     elif what == "panel":
         G.log("gsm8k6 panel")
         panel()

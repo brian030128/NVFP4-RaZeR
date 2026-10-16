@@ -1714,3 +1714,24 @@ run; part X's verified artifacts are reused, no earlier output.
 - **Validation (b)** (4 processes, 13:17:45–13:18:26 UTC). Every registered check passed. The graph times are within
   0.2–3.4 % of part W's. The note is results/paper_eval/latency_rounds_smoke/NOTE.md.
 - **Report.** results/paper_eval/llama_bc/ (LLAMA_BC.md, llama_bc.json).
+
+### Part Y, amendment 4 (registered 2026-10-16, at its commit; the coordinator's decision, relayed): Qwen3.8-27B's fake rows with expandable segments
+
+- **What happened.** At 13:08:31 UTC Qwen3.8-27B IF4 (simulated, batch 64) stopped with rc 1. The log shows
+  torch.OutOfMemoryError: 73.58 GiB allocated plus 20.37 GiB reserved but unallocated (fragmentation), of 94.97 GiB.
+  It failed to allocate 2.68 GiB in an MLP, in the 2nd batch.
+  - The first batch, which holds the longest prompts, had taken 14.5 min.
+  - Part N never ran Qwen3.8-27B in fake mode. Part Y's env is part N's: run_gpu.env, with the default allocator.
+  - No record was written. The log is kept as if4_oom-b64-default-alloc.log (renamed; sha256 unchanged).
+- **The change.** Qwen3.8-27B IF4 and MixFP4 (Zou) run at batch 64 with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
+  (part X's setting). It applies only to these two rows (run_gsm8k6.ALLOC). Every other row and record stays as is.
+  - The setting is written to the job's log (an ENV line), since the record does not hold the environment.
+  - The batch stays 64, so these rows see the same batch composition as the model's native quantized rows.
+- **Pre-check, before the full rows** (run_gsm8k6.py amend4_check): Qwen3.8-27B IF4 with `--limit 64` (one batch of
+  64), once under the default allocator and once under expandable segments.
+  - Required: all 128 samples (64 problems x 2 filters) have byte-identical generations and extracted answers.
+  - Otherwise: stop and report, and do not run the full rows.
+  - Records: RUN/gsm8k6/amend4/.
+- **If a full row still runs out of memory:** stop and report. No fallback to batch 32 or 48: that would break the
+  batch-64 pairing, and is the user's call.
+- **Report.** These two rows' allocator is flagged next to the date pin (§) and the BF16 batch-48 mark (◊).
