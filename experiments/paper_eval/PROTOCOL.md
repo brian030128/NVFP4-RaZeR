@@ -1666,3 +1666,37 @@ run; part X's verified artifacts are reused, no earlier output.
   GSM8K record it compares against, if that line differs from 15 Oct 2026.
 - **Measured.** The fake rows cost about 9x a native row: Llama-3.2-1B-Instruct IF4 took 50.6 min against 5.6 min for
   FO6. The 12 fake rows take about 32 h.
+
+## Part Z (registered 2026-10-16, at its commit): memory (B) and ownership (C1) for the two Llama-Instruct models; latency-rounds validation (b)
+
+- **The request** (the coordinator, 2026-10-16). Close two paper claims that rest on the old six-model set:
+  - **Memory:** "for every model", FlipQuant's installed weights equal NVFP4 / FourOverSix to the byte, and after load
+    and at the prefill peak they differ by at most 0.02 GiB.
+  - **Ownership:** every release map is exact with 0 mismatches. With the 6 Llama maps that makes 24 maps, and a new
+    total of checked weight elements.
+- **Models:** llama3.2-1b-instruct @ 9213176726f5 and llama3.1-8b-instruct @ 0e9e39f249a1 (the registry pins of
+  paper-sm120-runs).
+- **B (memory):** a30df07's protocol (run_gpu.memory). mem_probe.py per (model, policy), for bf16, nvfp4, fo6, fq-8x64,
+  fq-16x64 and fq-256x64; flipquant's loader and install; build_V; run_gpu.env.
+- **C1 (ownership):** run_gpu.ownership. `evaluation.ppl --paper-convention --ownership-check --limit 1` per (model,
+  unit), for 8x64, 16x64 and 256x64.
+- **Deviations** (part W's arrangement):
+  - **Code:** flipquant paper-sm120-runs (worktree sm120runs/wt, code = 4bbe0b1, checked clean) instead of main
+    120173a, whose registry lacks both Instruct models. mem_probe.py takes its flipquant path from MEM_PROBE_FLIPQUANT;
+    its default (120173a) is B's.
+  - **Maps:** part P's, RUN/llama_instruct/<model>/maps/flipquant_<unit>.pt. The Llama release repositories hold these
+    files with their meta cleaned and the tiles identical.
+- **Records:** RUN/memory/<model>/<policy>.json and RUN/ownership/<model>_<unit>.json. The report is
+  results/paper_eval/llama_bc/ (LLAMA_BC.md, llama_bc.json; report_llama_bc.py). B's and C1's own reports do not change.
+- **Criteria** (reported, not gates; a failed job stops the run):
+  - the installed quantized linears and the whole model are byte-equal, FlipQuant 8x64 / 16x64 / 256x64 against
+    NVFP4 and FourOverSix;
+  - max |Δ| after load and at the 1x2048 peak ≤ 0.02 GiB;
+  - every map exact, with 0 mismatches.
+- **Latency-rounds validation (b)**, the GPU smoke test of the latency-rounds port:
+  - flipquant latency-rounds 80cd3f0's scripts/run_prefill_latency.py on llama3.2-1b-instruct: fo6 and fq-16x64,
+    2 rounds, 1x128 and 1x2048, reps 3;
+  - build_V via --kernel-build-dir; part P's 16x64 map via --model-maps;
+  - it passes if every registered check passes and the graph ms are within a few % of part W's (RUN/latency_llama);
+  - records RUN/latency_rounds_smoke/; a short note in results/paper_eval/latency_rounds_smoke/NOTE.md.
+- **Order:** B, then C1, then validation (b), then part Y amendment 4.

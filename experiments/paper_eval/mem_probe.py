@@ -19,7 +19,9 @@ import sys
 import time
 from pathlib import Path
 
-FQ = Path("/home/dev/n16k64_campaign/fqopt/wt")
+# flipquant: main 120173a (part B) by default; part Z points MEM_PROBE_FLIPQUANT at paper-sm120-runs, whose registry has
+# both Llama-Instruct models
+FQ = Path(os.environ.get("MEM_PROBE_FLIPQUANT", "/home/dev/n16k64_campaign/fqopt/wt"))
 sys.path.insert(0, str(FQ))
 
 import torch  # noqa: E402
@@ -55,7 +57,7 @@ def main():
     model, spec, layers, info, seconds = L.load_policy(args)
     torch.cuda.synchronize()
     res = dict(model=args.model, label=args.label, mode=args.mode, weight=args.weight if args.mode != "bf16" else "bf16",
-               policy=info, seconds=seconds, gpu=B.gpu_info(),
+               policy=info, seconds=seconds, gpu=B.gpu_info(), flipquant=str(FQ),
                allocator=os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "default"))
     res["allocated_after_load"] = torch.cuda.memory_allocated()
     res["reserved_after_load"] = torch.cuda.memory_reserved()
