@@ -303,6 +303,28 @@ def panel():
         rec["summary"][r] = dict(mean=mean, per_model=dict(zip(ORDER, vals)))
         md.append(f"| {NAMES[r]} | " + " | ".join("TBD" if v is None else f"{v:.2f}" for v in vals)
                   + (f" | {mean:.2f} |" if mean is not None else " | |"))
+    # pooled vs FourOverSix (tab:main-acc's "Mean" marks): strict-match discordant counts summed over the models
+    md += ["", "## Pooled vs FourOverSix: strict-match over all six models", "",
+           "Per method: the problems where only the method or only FourOverSix is correct (strict-match), summed over the "
+           "models with both rows. The exact two-sided McNemar p on the summed counts, and the pooled difference in "
+           "points (row-only − FourOverSix-only, over every problem). ◊ = one of the model pairs ran at different batch "
+           "sizes (Qwen3.8-27B BF16 at 48).", "",
+           "| method | models | row-only / FourOverSix-only | pooled difference | p |", "|---|---:|---:|---:|---:|"]
+    rec["pooled_vs_fo6"] = {}
+    for r in Y.ROWS:
+        if r == "fo6":
+            continue
+        pairs = [(m, data[m][r], data[m]["fo6"]) for m in ORDER if r in data[m] and "fo6" in data[m]]
+        if not pairs:
+            continue
+        ps = [paired(v, f) for _, v, f in pairs]
+        b, c, n = sum(x["row_only"] for x in ps), sum(x["ref_only"] for x in ps), sum(x["n"] for x in ps)
+        mixed = any(v["batch_size"] != f["batch_size"] for _, v, f in pairs)
+        rec["pooled_vs_fo6"][r] = dict(models=[m for m, _, _ in pairs], row_only=b, fo6_only=c, n=n,
+                                       diff=100 * (b - c) / n, p=mcnemar(c, b), batch_mixed=mixed)
+        md.append(f"| {NAMES[r]} | {len(pairs)} | {b} / {c} | {100 * (b - c) / n:+.2f} | {mcnemar(c, b):.2g}"
+                  f"{'*' if mcnemar(c, b) < 0.05 else ''}{'◊' if mixed else ''} |")
+    md += ["", "`*` = p < 0.05."]
     # fidelity to BF16
     md += ["", "## Fidelity to BF16", "",
            "Per problem against the same model's BF16 run: the extracted answer equal (strict, flexible) after the "

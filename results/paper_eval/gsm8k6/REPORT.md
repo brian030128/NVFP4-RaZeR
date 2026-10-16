@@ -113,6 +113,24 @@ Mean = the unweighted mean over the models with all ten rows (6).
 | FlipQuant 16x64 | 31.61 | 80.06 | 44.81 | 89.31 | 92.12 | 95.15 | 72.18 |
 | FlipQuant 256x64 | 31.08 | 81.73 | 44.73 | 88.93 | 92.42 | 95.45 | 72.39 |
 
+## Pooled vs FourOverSix: strict-match over all six models
+
+Per method: the problems where only the method or only FourOverSix is correct (strict-match), summed over the models with both rows. The exact two-sided McNemar p on the summed counts, and the pooled difference in points (row-only − FourOverSix-only, over every problem). ◊ = one of the model pairs ran at different batch sizes (Qwen3.8-27B BF16 at 48).
+
+| method | models | row-only / FourOverSix-only | pooled difference | p |
+|---|---:|---:|---:|---:|
+| BF16 | 6 | 695 / 355 | +4.30 | 4.8e-26*◊ |
+| NVFP4 | 6 | 536 / 530 | +0.08 | 0.88 |
+| FOCUS | 6 | 517 / 519 | -0.03 | 0.98 |
+| GPTQ‡ | 6 | 543 / 484 | +0.75 | 0.07 |
+| IF4† | 6 | 541 / 468 | +0.92 | 0.023* |
+| MixFP4 (Zou)† | 6 | 557 / 489 | +0.86 | 0.038* |
+| FlipQuant 8x64 | 6 | 484 / 443 | +0.52 | 0.19 |
+| FlipQuant 16x64 | 6 | 487 / 433 | +0.68 | 0.081 |
+| FlipQuant 256x64 | 6 | 492 / 421 | +0.90 | 0.02* |
+
+`*` = p < 0.05.
+
 ## Fidelity to BF16
 
 Per problem against the same model's BF16 run: the extracted answer equal (strict, flexible) after the scorer's own normalization (lm-eval's exact_match: `,`, `$`, `#### ` and a trailing `.` removed, case ignored), correctness flips (row-only + BF16-only correct, strict), and byte-identical generations. Pooled = over every problem of the models shown. ◊ = the two runs had different batch sizes (Qwen3.8-27B BF16 ran at batch 48), so their batch compositions differ.
