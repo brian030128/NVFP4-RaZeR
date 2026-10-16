@@ -70,6 +70,27 @@ DATE_PIN = {("llama3.2-1b-instruct", "if4"): "2026-10-15", ("llama3.2-1b-instruc
 #: amendment 4: Qwen3.8-27B's fake rows ran out of memory at batch 64 under the default allocator (fragmentation, 13:08
 #: UTC 2026-10-16); these two rows run with expandable segments, every other row as registered
 ALLOC = {("qwen3.8-27b", "if4"): "expandable_segments:True", ("qwen3.8-27b", "zou"): "expandable_segments:True"}
+#: amendment 4's addendum (the user's approval): these rows fall back to batch 48, then 32, each only after a CUDA OOM
+#: at the batch before; an OOM at 32 stops the run
+FALLBACK = (64, 48, 32)
+
+
+def oom_log(model, row, b):
+    """The log of a run of an ALLOC row that ran out of memory at batch b (kept, renamed)."""
+    return ROOT / model / f"{row}_oom-b{b}-expandable.log"
+
+
+def expected_batches(model, row):
+    """The batch sizes a complete record may carry: the registered one; for the ALLOC rows also each fallback batch
+    whose predecessor's OOM log exists."""
+    if (model, row) not in ALLOC:
+        return {batch(model, row)}
+    ok = {FALLBACK[0]}
+    for prev, nxt in zip(FALLBACK, FALLBACK[1:]):
+        if not oom_log(model, row, prev).exists():
+            break
+        ok.add(nxt)
+    return ok
 
 
 def run_ts_env(name, cmd_, out, cwd, extra):
@@ -95,12 +116,14 @@ def run_ts_env(name, cmd_, out, cwd, extra):
     return rc
 
 
-def cmd(model, row, out):
-    """Part N's command (run_gsm8k_lmeval.cmd); amendment 3's two rows go through gsm8k6_date.py."""
+def cmd(model, row, out, batch_size=None):
+    """Part N's command (run_gsm8k_lmeval.cmd); amendment 3's two rows go through gsm8k6_date.py; amendment 4's
+    fallback passes its batch."""
     launch = ["-u", HERE / "gsm8k6_date.py", DATE_PIN[(model, row)]] if (model, row) in DATE_PIN else ["-u", "-m"]
     return [G.py(model), *launch, "evaluation.downstream", "--model", model, "--revision", Z.REV[model],
             *quant(model, row), "--tasks", TASK, "--apply-chat-template", *THINK_OFF.get(model, []),
-            "--batch-size", batch(model, row), "--gen-lengths", "--samples-out", Path(out).with_suffix(""), "--out", out]
+            "--batch-size", batch_size or batch(model, row), "--gen-lengths", "--samples-out", Path(out).with_suffix(""),
+            "--out", out]
 
 
 def must(rc, what):
@@ -187,8 +210,8 @@ def check_record(model, row, path, libs, digests):
         bad.append(f"revision {(pol.get('source') or {}).get('revision')}")
     if r["versions"]["lm_eval"] != "0.4.11":
         bad.append(f"lm_eval {r['versions']['lm_eval']}")
-    if r["batch_size"] != batch(model, row):
-        bad.append(f"batch {r['batch_size']}")
+    if r["batch_size"] not in expected_batches(model, row):
+        bad.append(f"batch {r['batch_size']} (allowed {sorted(expected_batches(model, row))})")
     co = r.get("chat_options") or {}
     want_sys = "/no_think" if model == "nemotron-nano-9b-v2" else None
     want_think = "false" if model == "qwen3.8-27b" else None
@@ -247,6 +270,38 @@ def check_record(model, row, path, libs, digests):
 _LIBS, _DIGESTS = None, {}
 
 
+def alloc_row(model, row, out):
+    """Amendment 4 (+ addendum): expandable segments at batch 64, then 48, then 32. Each fallback happens only after a
+    CUDA out-of-memory error at the batch before; that run's log is kept as oom_log(). Any other failure returns its rc
+    (the caller stops)."""
+    extra = {"PYTORCH_CUDA_ALLOC_CONF": ALLOC[(model, row)]}
+    out, rc = Path(out), None
+    for i, b in enumerate(FALLBACK):
+        if G.done(out):
+            return rc
+        if i and not oom_log(model, row, FALLBACK[i - 1]).exists():
+            continue                                  # reached only by a complete earlier batch (done above)
+        if oom_log(model, row, b).exists():
+            continue                                  # this batch already ran out of memory (a restart)
+        rc = run_ts_env(f"gsm8k6_{model}_{row}", cmd(model, row, out, b), out, FQ, extra)
+        if rc == 0:
+            return rc
+        log = out.with_suffix(".log")
+        text = log.read_text(errors="replace") if log.exists() else ""
+        if "torch.OutOfMemoryError" not in text and "CUDA out of memory" not in text:
+            return rc
+        log.rename(oom_log(model, row, b))
+        for f in (out, out.with_suffix(f".{TASK}.jsonl.gz")):
+            if f.exists():
+                f.rename(f.with_name(f.name.replace(f"{row}.", f"{row}_oom-b{b}-expandable.", 1)))
+        nxt = FALLBACK[i + 1] if i + 1 < len(FALLBACK) else None
+        G.log(f"gsm8k6 {model} {row}: CUDA out of memory at batch {b} (amendment 4 addendum); "
+              + (f"rerunning at batch {nxt}" if nxt else "no fallback left"))
+    if not G.done(out):
+        G.stop(f"gsm8k6 {model} {row}: CUDA out of memory at batch {FALLBACK[-1]} (amendment 4 addendum: stop and report)")
+    return 0
+
+
 def run_row(model, row, check=True):
     global _LIBS
     out = ROOT / model / f"{row}.json"
@@ -256,8 +311,7 @@ def run_row(model, row, check=True):
         if bad:
             G.stop(f"gsm8k6 {model} {row}: {bad}")
     if (model, row) in ALLOC:
-        rc = run_ts_env(f"gsm8k6_{model}_{row}", cmd(model, row, out), out, FQ,
-                        {"PYTORCH_CUDA_ALLOC_CONF": ALLOC[(model, row)]})
+        rc = alloc_row(model, row, out)
     else:
         rc = M.run_ts(f"gsm8k6_{model}_{row}", cmd(model, row, out), out, FQ)
     must(rc, f"{model} {row}")

@@ -1735,3 +1735,16 @@ run; part X's verified artifacts are reused, no earlier output.
 - **If a full row still runs out of memory:** stop and report. No fallback to batch 32 or 48: that would break the
   batch-64 pairing, and is the user's call.
 - **Report.** These two rows' allocator is flagged next to the date pin (§) and the BF16 batch-48 mark (◊).
+- **Addendum (2026-10-16; the user's approval, relayed by the coordinator; registered before the full rows start).** It
+  replaces "no fallback" for these two rows only.
+  - Each row runs at batch 64 with expandable segments, after the pre-check.
+  - If a full row runs out of CUDA memory at 64, that row reruns at batch 48; at 48, at 32 (expandable segments kept).
+    An OOM at 32 stops the run and is reported.
+  - A fallback happens only on a CUDA out-of-memory error. Any other failure stops the run. Each OOM run's log is kept
+    as `<row>_oom-b<batch>-expandable.log` (run_gsm8k6.alloc_row).
+  - The record holds the batch the row ran at. The record check accepts a fallback batch only when the OOM log of the
+    batch before exists (run_gsm8k6.expected_batches).
+  - The report flags any row not at 64, like the BF16 ◊: its pairings with batch-64 rows compare different batch
+    compositions. A row at 48 shares Qwen3.8-27B BF16's batch composition, and the report says so.
+  - The pre-check rule is unchanged: generations not byte-identical means stop and report. The fallback does not cover
+    that.
