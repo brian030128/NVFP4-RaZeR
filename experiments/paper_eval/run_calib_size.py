@@ -740,7 +740,7 @@ def panel(n, models):
     for model in models:
         windows_for(model)
         a = audit_for(model)
-        if not a[f"ok_{n}"]:
+        if not a.get(f"ok_{n}", not any(h["membership"] == str(n) for h in a["hits"])):     # the first run's entries
             stop(f"audit {model}: a hit among the {n} set's new windows (windows/audit.json)")
         identity_for(model)
         ppl_refs_for(model)

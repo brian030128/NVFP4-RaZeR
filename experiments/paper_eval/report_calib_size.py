@@ -20,13 +20,21 @@ import tables_cpu as T  # noqa: E402
 import tables_final as TF  # noqa: E402
 
 OUT = G.RZ / "results" / "paper_eval" / "calib_size"
-TITLES = {"llama3.2-1b-instruct": "Llama-3.2-1B-Instruct", "phi4-14b": "Phi-4", "qwen3.8-27b": "Qwen3.8-27B"}
+TITLES = {"llama3.2-1b-instruct": "Llama-3.2-1B-Instruct", "phi4-14b": "Phi-4", "qwen3.8-27b": "Qwen3.8-27B",
+          "mistral-7b": "Mistral-7B-Instruct-v0.3", "llama3.1-8b-instruct": "Llama-3.1-8B-Instruct",
+          "nemotron-nano-9b-v2": "Nemotron-Nano-9B-v2", "qwen3-1.7b": "Qwen3-1.7B", "qwen3-8b": "Qwen3-8B"}
+SHORT = {"llama3.2-1b-instruct": "Llama-1B", "phi4-14b": "Phi-4", "qwen3.8-27b": "Qwen27B", "mistral-7b": "Mistral",
+         "llama3.1-8b-instruct": "Llama-8B", "nemotron-nano-9b-v2": "Nemotron", "qwen3-1.7b": "Qwen3-1.7B",
+         "qwen3-8b": "Qwen3-8B"}
+SIZES = (1024, 2048)
 GIB = 2 ** 30
 #: the pilot's rows: (label, source); a part X / Y row name, or a calib-size eval name
 BASE_ROWS = [("BF16", "bf16"), ("NVFP4", "nvfp4"), ("FourOverSix", "fo6"), ("IF4†", "if4"), ("MixFP4 (Zou)†", "zou"),
              ("GPTQ‡", "gptq"), ("FlipQuant 8x64", "fq-8x64"), ("FlipQuant 256x64", "fq-256x64")]
-NEW_ROWS = [("FOCUS, 256", "focus256"), ("FOCUS, 1,024", "focus_1024"), ("FlipQuant 16x64, 256", "fq16_256"),
-            ("FlipQuant 16x64, 1,024", "fq16_1024")]
+NEW_ROWS = [("FOCUS, 256", "focus256"), ("FOCUS, 1,024", "focus_1024"), ("FOCUS, 2,048", "focus_2048"),
+            ("FlipQuant 16x64, 256", "fq16_256"), ("FlipQuant 16x64, 1,024", "fq16_1024"),
+            ("FlipQuant 16x64, 2,048", "fq16_2048")]
+NEW = ("focus_1024", "fq16_1024", "focus_2048", "fq16_2048", "focus256_rerun")
 RERUN = ("FOCUS, 256 (retrained, step 0 d)", "focus256_rerun")
 
 
@@ -47,15 +55,17 @@ def zs_record(model, name):
     """Zero-shot: part X's record for a baseline row; the 256 rows are part X's cells (their identity is step 0 (c));
     the new rows are calib-size's."""
     x = {"focus256": "focus", "fq16_256": "fq-16x64"}.get(name, name)
-    if name in ("focus_1024", "fq16_1024", "focus256_rerun"):
+    if name in NEW:
         return load(CS.ROOT / model / "eval" / "zs" / f"{name}.json")
     return load(Z.ZS / "panel" / model / f"{x}.json")
 
 
 def gsm_record(model, name):
     x = {"focus256": "focus", "fq16_256": "fq-16x64"}.get(name, name)
-    if name in ("focus_1024", "fq16_1024", "focus256_rerun"):
+    if name in NEW:
         r = load(CS.ROOT / model / "eval" / "gsm8k" / f"{name}.json")
+    elif model in CS.QWEN3:                 # amendment 1: Qwen3's native GSM8K baselines are this part's runs
+        r = load(CS.ROOT / model / "eval" / "gsm8k" / f"{x}.json")
     else:
         r = load(Y.ROOT / model / f"{x}.json")
     return r if r is not None and r.get("status") == "complete" else None
@@ -64,7 +74,7 @@ def gsm_record(model, name):
 def ppl_path(model, name):
     """PPL: the step-0 (c2) calib-size runs for FO6 / FQ16-256 / FOCUS-256 (one harness with the new rows), the new
     rows', and the final table's records for the other baselines."""
-    if name in ("fo6", "fq16_256", "focus256", "focus_1024", "fq16_1024", "focus256_rerun"):
+    if name in ("fo6", "fq16_256", "focus256") + NEW:
         return CS.ROOT / model / "eval" / "ppl" / f"{name}.json"
     mp = T.git_json(T.MAIN_PPL_COMMIT, "results/main_ppl/main_ppl.json")["models"]
     mkey = next(k for key, k, _ in TF.FINAL_MODELS if key == model)
@@ -125,11 +135,16 @@ def compare(model, a, b):
     return out
 
 
-COMPARISONS = [("FQ16-1k vs FourOverSix", "fq16_1024", "fo6"), ("FQ16-1k vs FQ16-256", "fq16_1024", "fq16_256"),
-               ("FOCUS-1k vs FourOverSix", "focus_1024", "fo6"), ("FOCUS-1k vs FOCUS-256", "focus_1024", "focus256"),
-               ("FQ16-1k vs FOCUS-1k", "fq16_1024", "focus_1024"), ("FQ16-256 vs FOCUS-256", "fq16_256", "focus256"),
-               ("FQ16-1k vs IF4†", "fq16_1024", "if4"), ("FQ16-1k vs MixFP4 (Zou)†", "fq16_1024", "zou"),
-               ("FQ16-256 vs MixFP4 (Zou)†", "fq16_256", "zou")]
+K = {1024: "1k", 2048: "2k"}
+COMPARISONS = ([("FQ16-256 vs FOCUS-256", "fq16_256", "focus256")]
+               + [c for n in SIZES for c in (
+                   (f"FQ16-{K[n]} vs FourOverSix", f"fq16_{n}", "fo6"), (f"FQ16-{K[n]} vs FQ16-256", f"fq16_{n}", "fq16_256"),
+                   (f"FOCUS-{K[n]} vs FourOverSix", f"focus_{n}", "fo6"),
+                   (f"FOCUS-{K[n]} vs FOCUS-256", f"focus_{n}", "focus256"),
+                   (f"FQ16-{K[n]} vs FOCUS-{K[n]}", f"fq16_{n}", f"focus_{n}"),
+                   (f"FQ16-{K[n]} vs IF4†", f"fq16_{n}", "if4"), (f"FQ16-{K[n]} vs MixFP4 (Zou)†", f"fq16_{n}", "zou"))]
+               + [("FQ16-2k vs FQ16-1k", "fq16_2048", "fq16_1024"), ("FOCUS-2k vs FOCUS-1k", "focus_2048", "focus_1024"),
+                  ("FQ16-256 vs IF4†", "fq16_256", "if4"), ("FQ16-256 vs MixFP4 (Zou)†", "fq16_256", "zou")])
 
 
 # ---------------------------------------------------------------------------------------------- cost
@@ -151,16 +166,19 @@ def cost_rows(model):
                          gpu_peak_reserved_gib=(t.get("gpu_peak_reserved_gib") or [None])[0],
                          device_peak_mib=r.get("device_peak_mib"), cpu_peak_rss_gib=t.get("cpu_peak_rss_gib"),
                          teacher_bytes=(r.get("teacher_storage") or {}).get("bytes")))
-    j = load(CS.ROOT / model / "fq16_1024.job.json")
-    if j:
+    for n in SIZES:
+        j = load(CS.ROOT / model / f"fq16_{n}.job.json")
+        if not j:
+            continue
         t = j["trainer"]
-        rows.append(dict(method="FlipQuant 16x64", windows=1024, source="pilot", steps=5 * 1024 // 8,
+        rows.append(dict(method="FlipQuant 16x64", windows=n, source="this part", steps=5 * n // 8,
                          e0m3_share=j["e0m3_share"], job_seconds=j["job_seconds"],
                          training_seconds=t.get("training_seconds"), setup_seconds=t.get("setup_seconds"),
                          gpu_peak_allocated_gib=(t.get("gpu_peak_allocated_gib") or [None])[0],
                          gpu_peak_reserved_gib=(t.get("gpu_peak_reserved_gib") or [None])[0],
                          device_peak_mib=j["device_peak_mib"], cpu_peak_rss_gib=t.get("cpu_peak_rss_gib"),
-                         teacher_bytes=(j.get("teacher_storage") or {}).get("bytes")))
+                         teacher_bytes=(j.get("teacher_storage") or {}).get("bytes"),
+                         teacher_devices=(j.get("teacher_storage") or {}).get("devices")))
     f = load(Path(Z.focus_state(model)).parent / "report.json")
     if f:
         rows.append(dict(method="FOCUS", windows=256, source="part P" if model == CS.LLAMA1B else "part K",
@@ -168,9 +186,11 @@ def cost_rows(model):
                          training_seconds=f.get("training_seconds"), calibration_seconds=f.get("calibration_seconds"),
                          gpu_peak_allocated_gib=((f.get("resources") or {}).get("gpu_peak_gib") or [None])[0],
                          state_bytes=Path(Z.focus_state(model)).stat().st_size))
-    j = load(CS.ROOT / model / "focus_1024" / "state.job.json")
-    if j:
-        rows.append(dict(method="FOCUS", windows=1024, source="pilot", steps=j["steps"], micro=j["micro"],
+    for n in SIZES:
+        j = load(CS.ROOT / model / f"focus_{n}" / "state.job.json")
+        if not j:
+            continue
+        rows.append(dict(method="FOCUS", windows=n, source="this part", steps=j["steps"], micro=j["micro"],
                          job_seconds=j["job_seconds"], training_seconds=j["training_seconds"],
                          calibration_seconds=j["calibration_seconds"],
                          gpu_peak_allocated_gib=(j.get("gpu_peak_gib") or [None])[0], device_peak_mib=j["device_peak_mib"],
@@ -194,17 +214,67 @@ def f2(v, d=2):
     return "—" if v is None else f"{v:.{d}f}"
 
 
-def pilot_md(rec):
-    L = ["# Calibration size: FlipQuant 16x64 and FOCUS at 1,024 windows (part AA pilot)", "",
-         "PROTOCOL.md part AA. FlipQuant 16x64 (release settings: 5 epochs, top-1000 teacher, seed 0, last-step map) and "
-         "FOCUS (part K's FOCUS_COMMON: 1 epoch, global batch 32) trained on 1,024 windows of 512 tokens instead of the "
-         "release's 256. The 1,024 set contains the 256 set (WINDOWS.md); FlipQuant and FOCUS read the same windows "
-         "(token sha256 checked). flipquant calib-size f912a30; evaluation exactly as parts X (zero-shot) and Y "
-         "(GSM8K), plus PPL (paper convention). Step 0: STEP0.md. 2,048-window memory probes: PROBES.md.", ""]
-    for model in CS.PILOT:
-        m = rec["models"].get(model)
-        if not m:
-            continue
+def pooled(rec):
+    """Per comparison, the discordant counts summed over the models that have both rows, with the exact McNemar p
+    (part Y's pooled-vs-FourOverSix formula), for zero-shot (all questions of the six tasks) and GSM8K."""
+    out = {}
+    for label, _, _ in COMPARISONS:
+        for ev in ("zeroshot", "gsm8k"):
+            got = [(m, v["paired"][label][ev]) for m, v in rec["models"].items() if ev in v["paired"].get(label, {})]
+            if not got:
+                continue
+            a, b, n = (sum(x[k] for _, x in got) for k in ("row_only", "ref_only", "n"))
+            out.setdefault(label, {})[ev] = dict(models=[m for m, _ in got], row_only=a, ref_only=b, n=n,
+                                                 diff=100 * (a - b) / n, p=RX.mcnemar(b, a))
+    return out
+
+
+def summary_md(rec):
+    models = list(rec["models"])
+    L = ["## Summary", "",
+         "Per model: zero-shot Avg. (%), GSM8K strict-match (%) and WikiText-2 PPL of each method and calibration size "
+         "(TBD: not run yet; —: not in the scope).", ""]
+    for what, key, fmt in (("Zero-shot Avg. (%)", "zeroshot", lambda v: f2(v["avg"])),
+                           ("GSM8K strict-match (%)", "gsm8k", lambda v: f2(v[0])),
+                           ("WikiText-2 PPL", "ppl", lambda v: f2(v["wiki"], 3))):
+        L += [f"**{what}:**", "", "| method | " + " | ".join(SHORT[m] for m in models) + " |",
+              "|---|" + "---:|" * len(models)]
+        for label, name in [("FourOverSix", "fo6")] + NEW_ROWS:
+            cells = []
+            for m in models:
+                v = rec["models"][m]["values"].get(name, {}).get(key)
+                cells.append(fmt(v) if v is not None else "TBD")
+            L.append(f"| {label} | " + " | ".join(cells) + " |")
+        L.append("")
+    P = rec.get("pooled") or {}
+    if P:
+        L += ["**Pooled over the models** (discordant counts summed; difference in points over all pooled questions; "
+              "exact McNemar p; * = p < 0.05):", "",
+              "| comparison | zero-shot | models | GSM8K | models |", "|---|---|---|---|---|"]
+        for label, _, _ in COMPARISONS:
+            c = P.get(label)
+            if not c:
+                continue
+            cells = []
+            for ev in ("zeroshot", "gsm8k"):
+                x = c.get(ev)
+                cells += [fmt_pair(x) if x else "TBD", ", ".join(SHORT[m] for m in x["models"]) if x else ""]
+            L.append(f"| {label} | " + " | ".join(cells) + " |")
+        L.append("")
+    return L
+
+
+def report_md(rec):
+    L = ["# Calibration size: FlipQuant 16x64 and FOCUS at 1,024 and 2,048 windows (part AA)", "",
+         "PROTOCOL.md part AA and its amendment 1. FlipQuant 16x64 (release settings: 5 epochs, top-1000 teacher, seed 0, "
+         "last-step map) and FOCUS (part K's FOCUS_COMMON: 1 epoch, global batch 32, micro 8) trained on 1,024 or 2,048 "
+         "windows of 512 tokens instead of the release's 256. The sets are nested, 256 ⊂ 1,024 ⊂ 2,048, and audited "
+         "against every evaluation text (WINDOWS.md). FlipQuant and FOCUS read the same windows (token sha256 checked). "
+         "flipquant calib-size f912a30. Evaluation exactly as parts X (zero-shot) and Y (GSM8K), plus PPL (paper "
+         "convention). Step 0: STEP0.md. 2,048-window memory probes: PROBES.md.", ""]
+    L += summary_md(rec)
+    for model in rec["models"]:
+        m = rec["models"][model]
         L += [f"## {TITLES[model]}", "",
               "Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / "
               "Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 "
@@ -232,6 +302,7 @@ def pilot_md(rec):
             L.append(f"| {label} | {fmt_pair(c.get('zeroshot'))} | {fmt_pair(c.get('gsm8k'))} | "
                      f"{fmt_nll(nll.get('wiki'))} | {fmt_nll(nll.get('c4'))} |")
         main = [k for k in ("FQ16-1k vs FQ16-256", "FOCUS-1k vs FOCUS-256", "FQ16-1k vs FOCUS-1k",
+                            "FQ16-2k vs FQ16-256", "FOCUS-2k vs FOCUS-256", "FQ16-2k vs FOCUS-2k",
                             "FQ16-256 vs FOCUS-256") if "zeroshot_tasks" in m["paired"].get(k, {})]
         if main:
             L += ["", "Zero-shot per task (difference in points, counts, exact p):", "",
@@ -261,7 +332,9 @@ def pilot_md(rec):
 
 def build():
     rec = dict(models={})
-    for model in CS.PILOT:
+    for model in CS.ORDER:
+        if model not in CS.PILOT and not (CS.ROOT / model / "fq16_1024.job.json").exists():
+            continue
         rows = BASE_ROWS + NEW_ROWS
         if load(CS.ROOT / model / "eval" / "zs" / "focus256_rerun.json") is not None:
             rows = rows + [RERUN]
@@ -286,6 +359,7 @@ def build():
         paired = {label: compare(model, a, b) for label, a, b in comps}
         rec["models"][model] = dict(rows=rows, values=values, paired=paired, cost=cost_rows(model),
                                     eval_seconds=eval_seconds(model))
+    rec["pooled"] = pooled(rec)
     return rec
 
 
@@ -502,7 +576,7 @@ def main():
     rec["step0"] = load(CS.ROOT / "step0" / "step0.json")
     rec["probes"] = load(CS.ROOT / "probes" / "probes.json")
     (OUT / "calib_size.json").write_text(json.dumps(rec, indent=1, default=str) + "\n")
-    (OUT / "REPORT.md").write_text("\n".join(pilot_md(rec)) + "\n")
+    (OUT / "REPORT.md").write_text("\n".join(report_md(rec)) + "\n")
     (OUT / "WINDOWS.md").write_text("\n".join(windows_md()) + "\n")
     (OUT / "STEP0.md").write_text("\n".join(step0_md()) + "\n")
     (OUT / "PROBES.md").write_text("\n".join(probes_md()) + "\n")
