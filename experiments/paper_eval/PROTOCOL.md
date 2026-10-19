@@ -1780,3 +1780,162 @@ run; part X's verified artifacts are reused, no earlier output.
     reported.
   - An unpublished preview had compared raw strings ("20." vs "20").
 - **Report.** results/paper_eval/gsm8k6/: REPORT.md and gsm8k6.json; STEP0.md and step0.json.
+
+## Part AA (registered 2026-10-19, at its commit): calibration size, 1,024 / 2,048 fit windows for FlipQuant 16x64 and FOCUS
+
+The user's request, relayed by the coordinator on 2026-10-19. **This registration covers step 0, the windows, the 2k
+memory probes and the pilot. The full eight-model study and every 2,048-window calibration need the user's OK (a later
+amendment); after the pilot the run stops and reports.**
+- **Question.** Do 1,024 or 2,048 windows of 512 tokens, instead of the release's 256 (still 5 epochs), improve
+  FlipQuant's downstream accuracy? FOCUS trained on the same windows is the comparison.
+- **Motivating paired losses.**
+  - Zero-shot: FlipQuant is below FOCUS on Phi-4 and Nemotron-Nano-9B-v2, and below IF4 on Qwen3.8-27B, at all three
+    tiles (part X / X2).
+  - GSM8K: FlipQuant is below MixFP4 (Zou) on Phi-4 (part Y).
+- **Methods. Only the data changes.**
+  - **FlipQuant 16x64** with the release settings: `calibration.train_map --unit 16x64 --fit-windows N --epochs 5
+    --teacher-topk 1000 --data-root fqrel/tmopt_data`. That is Adam lr 0.02, eps 1e-12, 8 sequences per step (Qwen3.8-27B
+    and Nemotron 2 x 4), theta_u = -1, seed 0, deterministic, the top-1000 + tail-bucket teacher, no development set,
+    the last-step map. 640 steps at N = 1,024; 1,280 at 2,048.
+  - **FOCUS** with part K's FOCUS_COMMON unchanged (run_sm120.FOCUS_COMMON): 1 epoch, global batch 32, lr 5e-3 / 1e-3,
+    KL-Top k = 1000, num_sub 2, init_q 6, FourOverSix per-token activations, seed 42, seqlen 512; micro-batch 8, halved
+    on OOM (part K's rule; the global batch stays 32). 32 steps at 1,024; 64 at 2,048. Deployed as part K: NVFP4 codes,
+    FourOverSix per-token activations, native.
+- **Code: flipquant branch calib-size**, cut from paper-sm120-runs caf69be (whose code is 4bbe0b1's, parts Y and Z),
+  at f912a30, in the worktree `/home/dev/n16k64_campaign/calib_size/wt`. flipquant main is not touched.
+  - f912a30 changes only calibration code and tests. Nothing under evaluation/, flipquant/, models/ or kernels/
+    changes, and the vendored calibration/tmopt files are byte-identical (tests/test_stage3.py).
+    - `calibration/tmopt_launch.py --teacher-host` and `calibration.train_map --teacher-host`: the top-K teacher's rows
+      in host memory instead of on the GPU. The rows are about 3 MB per window, so 1,024 / 2,048 windows add
+      2.2 / 5.1 GiB to a 256-window run, and Qwen3.8-27B's 256-window run already peaks at 91.25 GiB of the card's
+      95.6 GiB. The losses read the rows only through `topk_teacher.batch_rows`, which moves each micro-batch's rows to
+      the GPU, so the map is the GPU-teacher map (checked bitwise in step 0 (b)).
+    - `--probe-steps N` for train_map (the vendored trainer's own probe) and train_focus: memory probes that stop
+      after N optimizer steps and write no map or state.
+    - `calibration.fit_windows`: the trainer's N-window fit set, drawn on the CPU without training. It is written as a
+      `--calib-extension` file.
+  - Tests: tests/test_calib_size.py, 7 CPU tests, pass. The whole suite on the CPU: 224 passed, 108 skipped, 3 failed.
+    The same 3 tests also fail on the unmodified caf69be, so the failures are not this branch's: test_ifeval_scoring
+    (a scorer module missing from the env), test_every_block_can_take_four_with_256, and test_topk_kl_bounds_full_kl
+    (a BF16 tolerance).
+  - Every job checks that the worktree is clean at the registered commit. Kernels: build_V. Envs: n16k64, with
+    n16k64-fast for Nemotron and Qwen3.8-27B.
+- **Data, per model, with the model's tokenizer.** The release set's rule, extended:
+  - **The rule.** The calibration record's 128 windows (`fqrel/tmopt_data/<key>/calibration/report.json`), then N - 128
+    by the vendored extension rule (`calibration/tmopt/fit_extension.py`).
+    - Seed 20260930, on OpenWebMath train-00000 @ fde8ef8 and CodeParrot-clean file-000000000001 @ 35a59fb.
+    - (N - 128) / 2 windows per source, math first, one window per document.
+    - It skips the record's fit documents, the model's three development records, and its published C4 evaluation
+      documents (where the trainer has them).
+  - **Drawn before training** with `calibration.fit_windows` (CPU) for N = 1,024 and 2,048. Records:
+    `RUN/calib_size/windows/<model>_<N>.json`.
+  - **Nested (256 ⊂ 1,024 ⊂ 2,048).** Each source's windows come from one seeded stream in file order. Checked from
+    the records (document sha256, offset, token sha256), before any calibration:
+    - each source's first 64 extension windows at 1,024 equal the release extension's (the release 16x64 trainer
+      report);
+    - each source's first 448 at 2,048 equal the 1,024 set's;
+    - the skip counts equal the release run's.
+  - **Byte-identical for FlipQuant and FOCUS.** FlipQuant draws the set in its trainer (`--fit-windows N`). FOCUS
+    reads `--data release --calib-record <record> --calib-extension <that FlipQuant run's trainer report>`, as part K
+    did; that path rebuilds every window and checks each token sha256.
+    - Required: the FlipQuant run's extension records equal the pre-drawn file's, and the FOCUS report's token sha256
+      list (record + extension, in order) equals the FlipQuant run's.
+    - Recorded per (model, N): the sha256 of the ordered token-sha256 list.
+  - **Disjoint from the evaluation sets.**
+    - (i) By document, through the rule's skip set, as the release.
+    - (ii) A 13-gram audit (CPU) of every window of each model's 2,048 set, which contains the 1,024 and 256 sets.
+      The windows are compared against the texts actually evaluated:
+      - the WikiText-2 test windows and C4 validation windows of the PPL evaluation (`flipquant.data.eval_windows`,
+        decoded with the same tokenizer);
+      - the six zero-shot tasks' evaluated documents (lm-eval 0.4.11's task objects with flipquant's dataset pins:
+        context plus every choice);
+      - GSM8K test (question and answer) and gsm8k_llama's eight few-shot exemplars.
+    - Normalization: lowercase, every character outside [a-z0-9] a space, a whitespace split; word 13-grams within
+      each text (the GPT-3 / lm-eval decontamination convention).
+    - A hit is a window that shares at least one 13-gram with an evaluation text. Every hit is listed, with the
+      window, its document, the evaluation set and item, and the first shared 13-gram.
+    - **Stop rule:** a hit among the 1,024 set's new windows (not in the release 256) stops the pilot before any
+      calibration and is reported. Hits in the release 256 are in the existing maps and states and are reported. Hits
+      only in the 2,048 set are reported for the later decision.
+- **Evaluation: parts X and Y exactly, plus PPL.** Commands, envs, batches and per-run checks are those parts', with
+  the new map or state path.
+  - **Zero-shot:** `evaluation.downstream --tasks piqa,hellaswag,winogrande,arc_easy,arc_challenge,lambada_openai`,
+    0-shot, batch 16 (Qwen3.8-27B 8). Env: run_gpu.env() + `CUBLAS_WORKSPACE_CONFIG=:4096:8` +
+    `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`. Part X's checks: every example, the pins, lm-eval 0.4.11, the
+    revision, kernel families and coverage from build_V. Also each task's sample_digest equals the model's part X
+    records'.
+  - **GSM8K:** part N's / Y's command (`evaluation.downstream --tasks gsm8k_llama --apply-chat-template` + thinking
+    switches, batch 64, `--gen-lengths --samples-out`), env run_gpu.env(), part Y's checks.
+    - Llama-3.2-1B-Instruct runs through amendment 3's launcher (gsm8k6_date.py 2026-10-15), so its prompts render
+      "15 Oct 2026" like every Llama-1B GSM8K record. The sample_digest must equal the model's part Y records'.
+  - **PPL:** `evaluation.ppl --paper-convention` (WikiText-2 / C4), native. FlipQuant uses `--weight mixfp4 --act
+    fourover6 --map`; FOCUS uses part K's `--weight focus --focus <state> --focus-deploy --act fourover6 --act-scope
+    row`.
+  - Recorded per map: the E0M3 share (the map's meta).
+- **Step 0** (any failure stops part AA before the pilot and is reported):
+  - **(a) Code.** `git diff caf69be f912a30` touches only the five files above, and `evaluation/` is byte-identical.
+  - **(b) Calibration identity.** Llama-3.2-1B-Instruct FlipQuant 16x64 at the release settings (`--fit-windows 256`,
+    part P's command) on calib-size, twice:
+    - with the GPU teacher;
+    - with `--teacher-host`.
+    - Both runs' trainer map (`run_map_sha256`) and tiles must equal part P's.
+  - **(c) Evaluation identity**, on calib-size:
+    - Llama-1B FlipQuant 16x64 with part P's map: the six zero-shot tasks against part X's record (per task: equal
+      sample_digest, per-example correctness, bit-identical per-choice log-likelihoods, equal metrics); GSM8K with
+      the date pin against part Y's samples (every generation and extracted answer byte-identical, 1,319 x 2
+      filters); PPL against part P's record (bit-identical per-window NLL).
+  - **(c2) PPL references** (not a stop condition): FourOverSix, FlipQuant 16x64 at 256 (part P's / the release map)
+    and FOCUS at 256 (part P's / part K's state), for both pilot models, evaluated on calib-size. These runs are the
+    references of the pilot's PPL statistics (one harness and session for every PPL row). Each is compared with the
+    per-window NLL of the record the final table uses (part P; main-ppl 44f8cea and the release records for Phi-4;
+    part K), and any difference is reported.
+  - **(d) FOCUS reproducibility.** Llama-3.2-1B-Instruct FOCUS at 256 windows is retrained with part P's command on
+    calib-size, and its state is compared tensor by tensor with part P's. train_focus was nondeterministic in part U.
+    If the state differs, it is evaluated like a pilot row (zero-shot, GSM8K, PPL) as a run-to-run reference for
+    FOCUS's 1,024-vs-256 comparison.
+- **Memory probes at 2,048 windows** (the two worst cases of the 256-window runs), after step 0:
+  - **FlipQuant Qwen3.8-27B 16x64:** `--fit-windows 2048 --epochs 5 --teacher-topk 1000 --teacher-host
+    --probe-steps 4` (micro 2 x accumulation 4, as the release). With the teacher on the GPU it cannot fit:
+    91.25 + 5.12 = 96.4 GiB allocated, more than the card's 95.6 GiB (from the 256-window record; not run).
+  - **FOCUS Phi-4:** FOCUS_COMMON, micro 8, `--probe-steps 2` (8 micro-batches), on the pre-drawn 2,048 set.
+  - Recorded:
+    - per-phase peak allocated / reserved GiB;
+    - the device peak (nvidia-smi every 2 s, part P's sampler);
+    - host RSS;
+    - the teacher's bytes and device, and the windows' cache files on disk. The teacher has no disk cache: train_map
+      keeps it in memory, and FOCUS recomputes the teacher's logits per micro-batch.
+- **Pilot:** Llama-3.2-1B-Instruct and Phi-4, N = 1,024, FlipQuant 16x64 and FOCUS: 4 calibrations and 4 evaluation
+  rows (zero-shot, GSM8K, PPL).
+  - **Order:** Llama-1B FQ16, Llama-1B FOCUS, their six evaluations; then the same for Phi-4.
+  - **Records:** `RUN/calib_size/<model>/{fq16_1024/ (train_map's output), focus_1024/state/, eval/<row>/...}`.
+  - **Measured per calibration:** wall time (train_map / train_focus, and the job), the trainer's training time, peak
+    GPU allocated / reserved, the device peak (sampler), host RSS, and the teacher's bytes.
+  - **Disk:** a Phi-4 FOCUS state is 10.2 GB, a Llama-1B state 0.73 GB. /home had 48 GB free at registration.
+- **Report** (results/paper_eval/calib_size/: REPORT.md, calib_size.json, WINDOWS.md, STEP0.md, PROBES.md):
+  - Per model, the rows FQ16-256, FQ16-1k, FOCUS-256 and FOCUS-1k, with the part X / Y baselines for context (BF16,
+    NVFP4, FO6, GPTQ‡, IF4, MixFP4, FQ8 / FQ256): six zero-shot tasks and Avg., GSM8K strict (± 2 SE), PPL.
+  - Paired: each new row vs FourOverSix and vs its 256 counterpart, and FQ16 vs FOCUS at the same size (also at 256).
+    - Zero-shot: pooled exact McNemar over all questions of the six tasks (part X's formula), and per task.
+    - GSM8K: exact McNemar on strict-match.
+    - PPL: ΔNLL ± 2 SE per corpus, on the step-0 (c2) references.
+  - Also: the E0M3 share at 256 vs 1,024; calibration time and memory; the FOCUS run-to-run reference if (d) applies.
+  - The measured times, re-estimated for the full study, and its disk need.
+  - What the later parts need, with no runs:
+    - Qwen3.8-27B FOCUS on 2 x H200 on the cluster, as focus_qwen27b (account gov113008, partition taide_h200);
+    - Qwen3-1.7B / Qwen3-8B have no GSM8K baselines;
+    - Qwen3.8-27B and Nemotron FlipQuant at 2 x 4.
+- **Rules.**
+  - One GPU job at a time on an idle GPU; no ncu, no clock locking, no reboot.
+  - /home stays above 10 GB free; nothing is deleted (the coordinator decides about deletions); retries get new
+    names.
+  - Wait loops wait on a PID or an END line.
+  - Commits: paper-eval and flipquant calib-size, each pushed once per stage (the code + registration; the pilot). A
+    denied push is reported.
+- **ETA.**
+  - Windows and the audit: about 1 h of CPU.
+  - Step 0: about 40 min of GPU.
+  - Probes: about 45 min. Qwen3.8-27B's teacher pass over 2,048 windows is about 22 min, from the release's
+    163 s per 256.
+  - Pilot: about 2.5 h. Phi-4 FQ16 at 1k is about 30 min and its FOCUS about 28 min; the evaluations take about
+    80 min.
+  - Total about 5 h.
