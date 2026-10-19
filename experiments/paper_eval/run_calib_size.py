@@ -29,7 +29,10 @@ import run_sm120 as S  # noqa: E402
 import run_zeroshot6 as Z  # noqa: E402
 
 FQ3 = Path("/home/dev/n16k64_campaign/calib_size/wt")              # flipquant calib-size
-CODE = "f912a30"                                                    # the registered commit (full hash checked below)
+#: the registered commit: f912a30 for step 0, the probes and the pilot; 898d00e (+ train_focus --offload) for the panel,
+#: after calib-size's fast-forward (amendment 2)
+CODE = "898d00e"
+VAULT = Path("/vault/flipquant_paper_eval/calib_size")             # amendment 2: FOCUS states after the pilot
 ROOT = G.RUN / "calib_size"
 WIN = ROOT / "windows"
 DATA = S.DATA_ROOT                                                  # fqrel/tmopt_data, the release runs' records
@@ -42,7 +45,9 @@ ORDER = PILOT + ["mistral-7b", "llama3.1-8b-instruct", "nemotron-nano-9b-v2", "q
 SIZES = {m: (1024, 2048) for m in ORDER}
 QWEN3 = ("qwen3-1.7b", "qwen3-8b")
 HOST_TEACHER = {"qwen3.8-27b"}               # amendment 1: its top-K teacher cannot stay on the GPU at either size
-FOCUS_PENDING = {"qwen3.8-27b"}              # amendment 1: the route (cluster / local) is the user's decision
+FOCUS_PENDING = set()                        # amendment 2: Qwen3.8-27B's FOCUS runs locally with the offload
+FOCUS_EXTRA = {"qwen3.8-27b": ["--offload"]}  # amendment 2: part U's host-offloaded AdamW (ported, 898d00e)
+FOCUS_MICRO = {"qwen3.8-27b": 1}              # batch1_only (as focus_qwen27b and part U); every other model 8
 THINK = dict(Y.THINK_OFF, **{m: ["--enable-thinking", "false"] for m in QWEN3})
 QWEN3_GSM_ROWS = ["bf16", "nvfp4", "fo6", "gptq", "fq-16x64", "focus"]   # amendment 1: native GSM8K baselines
 FLOOR = 10e9                                 # /home's floor (bytes)
@@ -164,9 +169,10 @@ def train_map_cmd(model, n, out, host=False, probe=None):
     return cmd + ["--out", out]
 
 
-def focus_cmd(model, extension, micro, out, probe=None):
+def focus_cmd(model, extension, micro, out, probe=None, extra=()):
     cmd = [G.py(model), "-m", "calibration.train_focus", "--model", model, "--revision", Z.REV[model], "--data",
-           "release", "--calib-record", record(model), "--calib-extension", extension, *S.FOCUS_COMMON, "--micro", micro]
+           "release", "--calib-record", record(model), "--calib-extension", extension, *S.FOCUS_COMMON, "--micro", micro,
+           *extra]
     if probe:
         cmd += ["--probe-steps", probe]
     return cmd + ["--out", out]
@@ -218,19 +224,21 @@ def focus_state_ok(state):
     return (state / "report.json").exists() and json.loads((state / "report.json").read_text()).get("status") == "complete"
 
 
-def calibrate_focus(model, extension, d, tag):
-    """FOCUS with FOCUS_COMMON at micro-batch 8, the micro-batch of every local 256-window FOCUS run. Amendment 1 (the
-    coordinator's gate): an OOM is not worked around (no halving); it stops the run. Returns the job record
-    (d/<tag>.job.json)."""
-    meta = d / f"{tag}.job.json"
+def calibrate_focus(model, extension, d, tag, meta_dir=None, micro=8, extra=()):
+    """FOCUS with FOCUS_COMMON at micro-batch 8, the micro-batch of every local 256-window FOCUS run (Qwen3.8-27B: 1,
+    with the offload). Amendment 1 (the coordinator's gate): an OOM is not worked around (no halving); it stops the run.
+    The state goes to d/<tag> (amendment 2: /vault); the job record to meta_dir/<tag>.job.json (default d), with a copy of
+    the state's report.json. Returns the job record."""
+    meta_dir = meta_dir or d
+    meta = meta_dir / f"{tag}.job.json"
     state = d / tag
     if focus_state_ok(state) and meta.exists():
         return json.loads(meta.read_text())
     d.mkdir(parents=True, exist_ok=True)
-    micro = 8
+    meta_dir.mkdir(parents=True, exist_ok=True)
     if state.exists():
         stop(f"{state} exists from an earlier attempt; inspect it")
-    cmd = focus_cmd(model, extension, micro, state)
+    cmd = focus_cmd(model, extension, micro, state, extra=extra)
     rc, seconds, peak = measured(f"cs_focus_{model}_{tag}_micro{micro}", cmd, state / "report.json")
     if rc != 0:
         log = (G.RUN / "logs" / f"cs_focus_{model}_{tag}_micro{micro}.log").read_text(errors="replace")
@@ -241,10 +249,22 @@ def calibrate_focus(model, extension, d, tag):
                job_seconds=seconds, device_peak_mib=peak, steps=r.get("steps"), windows=r["data"]["windows"],
                training_seconds=r.get("training_seconds"), calibration_seconds=r.get("calibration_seconds"),
                gpu_peak_gib=(r.get("resources") or {}).get("gpu_peak_gib"),
-               state_bytes=(state / "focus.pt").stat().st_size, state_sha256=Z.sha256_file(state / "focus.pt"),
-               token_sha256=r["data"]["records"])
+               cpu_peak_rss_gib=(r.get("resources") or {}).get("cpu_peak_rss_gib"), offload=r.get("offload"),
+               state=str(state / "focus.pt"), state_bytes=(state / "focus.pt").stat().st_size,
+               state_sha256=file_sha256(state / "focus.pt"), token_sha256=r["data"]["records"])
+    if meta_dir != d:
+        (meta_dir / "report.json").write_text((state / "report.json").read_text())
     write_meta(meta, **rec)
     return rec
+
+
+def file_sha256(path):
+    """A fresh read of the whole file (no cache): amendment 2's write record and read-back check."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 24), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 # ---------------------------------------------------------------------------------------------- evaluation rows
@@ -352,12 +372,21 @@ def check_ppl(path):
     return bad
 
 
-def eval_row(model, name, kind, artifact, which=("zs", "gsm", "ppl")):
-    """One row: zero-shot (part X), GSM8K (part Y), PPL (paper convention), each from calib-size."""
+def eval_row(model, name, kind, artifact, which=("zs", "gsm", "ppl"), expect_sha=None):
+    """One row: zero-shot (part X), GSM8K (part Y), PPL (paper convention), each from calib-size. expect_sha
+    (amendment 2): the FOCUS state is re-read and its sha256 checked before each evaluation that has not run yet."""
     d = ROOT / model / "eval"
+
+    def verify(out):
+        if expect_sha and not G.done(out):
+            got = file_sha256(artifact)
+            if got != expect_sha:
+                stop(f"{model} {name}: the state's sha256 {got[:12]} != the recorded {expect_sha[:12]} ({artifact})")
+            G.log(f"calib_size {model} {name}: state sha256 verified before {Path(out).parent.name}")
     if "zs" in which:
         out = d / "zs" / f"{name}.json"
         q = quant_zs(kind, artifact)
+        verify(out)
         checkout()
         must(G.run(f"cs_zs_{model}_{name}", zs_cmd(model, q, out), out, FQ3, Z.ENV), f"zero-shot {model} {name}")
         bad = check_zs(model, kind, out, artifact)
@@ -366,6 +395,7 @@ def eval_row(model, name, kind, artifact, which=("zs", "gsm", "ppl")):
     if "gsm" in which:
         out = d / "gsm8k" / f"{name}.json"
         q = quant_fq(artifact) if kind == "fq" else quant_focus(artifact) if kind == "focus" else quant_fo6()
+        verify(out)
         if not G.done(out):
             checkout()
             out.parent.mkdir(parents=True, exist_ok=True)
@@ -377,6 +407,7 @@ def eval_row(model, name, kind, artifact, which=("zs", "gsm", "ppl")):
         out = d / "ppl" / f"{name}.json"
         q = quant_fq(artifact, ppl=True) if kind == "fq" else quant_focus(artifact) if kind == "focus" \
             else quant_fo6(ppl=True)
+        verify(out)
         checkout()
         must(G.run(f"cs_ppl_{model}_{name}", ppl_cmd(model, q, out), out, FQ3), f"ppl {model} {name}")
         bad = check_ppl(out)
@@ -700,10 +731,10 @@ def qwen3_gsm(model):
 
 
 def disk_ok(model):
-    """Amendment 1: /home keeps the floor after a state of the model's 256-window size plus 1 GB."""
-    free = shutil.disk_usage("/home").free
+    """Amendments 1-2: /vault holds a state of the model's 256-window size plus 1 GB, and /home keeps its floor."""
     need = Path(Z.focus_state(model)).stat().st_size + 1e9
-    return free - need >= FLOOR, free, need
+    vault, home = shutil.disk_usage(VAULT).free, shutil.disk_usage("/home").free
+    return vault >= need and home >= FLOOR + 1e9, dict(vault_free=vault, home_free=home), need
 
 
 def calibrate_size(model, n):
@@ -719,24 +750,68 @@ def calibrate_size(model, n):
         stop(f"{model} {n}: the FlipQuant run's fit extension differs from windows/{model}_{n}.json")
     eval_row(model, f"fq16_{n}", "fq", d / f"fq16_{n}" / "map.pt")
     if model in FOCUS_PENDING:
-        G.log(f"NOTE calib_size {model} {n}: FOCUS pending the user's decision on its route (amendment 1); TBD")
+        G.log(f"NOTE calib_size {model} {n}: FOCUS pending the user's decision on its route; TBD")
         return
-    if not focus_state_ok(d / f"focus_{n}" / "state"):
+    meta_dir = d / f"focus_{n}"
+    if (meta_dir / "state.job.json").exists():           # the pilot's (state in RUN) or an earlier panel run's
+        foc = json.loads((meta_dir / "state.job.json").read_text())
+    else:
         ok, free, need = disk_ok(model)
         if not ok:
-            stop(f"PAUSE disk before FOCUS {model} {n}: /home free {free / 1e9:.1f} GB, the state needs about "
-                 f"{need / 1e9:.1f} GB, floor {FLOOR / 1e9:.0f} GB (amendment 1: the user's decision)")
-    foc = calibrate_focus(model, run, d / f"focus_{n}", "state")
+            stop(f"PAUSE disk before FOCUS {model} {n}: {free}, the state needs about {need / 1e9:.1f} GB "
+                 f"(/home floor {FLOOR / 1e9:.0f} GB)")
+        if model in FOCUS_EXTRA:
+            offload_test()
+        foc = calibrate_focus(model, run, VAULT / model / f"focus_{n}", "state", meta_dir=meta_dir,
+                              micro=FOCUS_MICRO.get(model, 8), extra=FOCUS_EXTRA.get(model, ()))
     if foc["token_sha256"] != pre["token_sha256"] or foc["windows"] != n or foc["steps"] != n // 32:
         stop(f"{model} {n}: FOCUS's windows differ from the FlipQuant run's ({foc['windows']} windows, "
              f"{foc['steps']} steps)")
-    eval_row(model, f"focus_{n}", "focus", d / f"focus_{n}" / "state" / "focus.pt")
+    state = Path(foc.get("state") or meta_dir / "state" / "focus.pt")
+    eval_row(model, f"focus_{n}", "focus", state, expect_sha=foc["state_sha256"])
     G.log(f"calib_size {model} {n}: FQ16 E0M3 share {fq['e0m3_share']:.4f}; FOCUS {foc['steps']} steps; rows done")
+
+
+def offload_test():
+    """Amendment 2: tests/test_focus_offload.py on the GPU, on calib-size, before the first offloaded FOCUS run."""
+    out = ROOT / "offload_test.json"
+    if out.exists() and json.loads(out.read_text())["ok"]:
+        return
+    head = checkout()
+    G.idle()
+    G.log("START cs_offload_test")
+    t0 = time.time()
+    r = subprocess.run([G.PY_FAST, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_focus_offload.py"],
+                       cwd=FQ3, env=G.env(), capture_output=True, text=True)
+    G.log(f"END cs_offload_test rc={r.returncode} {time.time() - t0:.0f}s")
+    res = dict(flipquant=head, rc=r.returncode, output=(r.stdout + r.stderr)[-2000:],
+               ok=r.returncode == 0 and "1 passed" in r.stdout)
+    out.write_text(json.dumps(res, indent=1) + "\n")
+    if not res["ok"]:
+        stop(f"offload test: rc={r.returncode} ({out})")
+
+
+def wait_checkout(timeout=6 * 3600):
+    """Amendment 2: the panel waits until calib_size/wt is fast-forwarded to CODE after the pilot."""
+    t0, noted = time.time(), False
+    while True:
+        r = subprocess.run(["git", "-C", str(FQ3), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+        dirty = subprocess.run(["git", "-C", str(FQ3), "status", "--porcelain", "--untracked-files=no"],
+                               capture_output=True, text=True).stdout.strip()
+        if r.startswith(CODE) and not dirty:
+            return r
+        if not noted:
+            G.log(f"NOTE calib_size panel: waiting for {FQ3} at {CODE} (now {r[:7]}; amendment 2's fast-forward)")
+            noted = True
+        if time.time() - t0 > timeout:
+            stop(f"panel: {FQ3} not at {CODE} after {timeout / 3600:.0f} h")
+        time.sleep(30)
 
 
 def panel(n, models):
     if not json.loads((ROOT / "step0" / "step0_ok.json").read_text()).get("ok"):
         stop("panel: step 0 has not passed")
+    wait_checkout()
     for model in models:
         windows_for(model)
         a = audit_for(model)

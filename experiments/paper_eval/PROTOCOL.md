@@ -1999,3 +1999,41 @@ report after the pilot".
     1.2 h, evaluations 5 h, identity and references 1.2 h, Qwen3 GSM8K baselines 2.4 h.
   - The 2,048 panel takes about 23 h: FlipQuant 13.6 h, FOCUS 3.3 h, evaluations 6.4 h.
   - Both exclude Qwen3.8-27B FOCUS.
+
+### Part AA, amendment 2 (registered 2026-10-19, at its commit, during the pilot; the user's two decisions, relayed): Qwen3.8-27B FOCUS locally; FOCUS states on /vault
+
+The coordinator relayed both decisions at 12:55 UTC. Amendment 1 had left them pending. This amendment applies from
+the first run beyond the pilot; the pilot runs as registered.
+- **Qwen3.8-27B FOCUS (1,024 and 2,048): trained locally on one RTX PRO 6000**, with part U's host-offloaded AdamW.
+  - The user approved porting the offload feature only, and pushing it with calib-size. The port is
+    `calibration.train_focus --offload` (HostAdamW) and its GPU test, flipquant calib-size 898d00e (from f912a30).
+    Part U's `--init fourover6`, `focus.init_m` and the formats refactor are not ported. The part-u branch and part U's
+    records stay local and unpushed.
+  - HostAdamW keeps the scale parameters on the GPU. Their gradients go into pinned FP32 host accumulators, in the GPU
+    path's order, and AdamW runs on the CPU in FP32. The step's gradient sum is bitwise the GPU path's; the update can
+    differ by one ulp.
+  - **Settings:** FOCUS_COMMON (global batch 32: 32 / 64 steps; the 1,024 / 2,048 windows) with `--offload --micro 1`
+    (Qwen3.8-27B is batch1_only), device_map cuda, n16k64-fast.
+  - **Recorded deviation from focus_qwen27b:** one PRO 6000 with offloaded AdamW instead of 2 x H200 with device_map
+    balanced; micro 1 in both. Only the summation order differs.
+  - **Cost** (part U's 256-window offload run: 622 s per step, GPU peak 92.1 GiB, host RSS 84 GiB): about 5.5 h at
+    1,024 and 11 h at 2,048.
+  - Before the first run, the offload's GPU test (tests/test_focus_offload.py, against the GPU AdamW path) runs as a
+    queued job on calib-size.
+  - An OOM, or any need to change a setting, stops the run as for every row. Evaluation is native, as registered.
+- **FOCUS states on /vault.** Every FOCUS state trained after the pilot goes to
+  `/vault/flipquant_paper_eval/calib_size/<model>/focus_<N>/state/`. Only that directory is written on /vault.
+  - The state's report.json is copied into `RUN/calib_size/<model>/focus_<N>/` with its job record.
+  - The state's sha256 is recorded after the write. It is re-read and verified against that record before each of
+    its evaluations; a mismatch stops the run.
+  - Other large part AA artifacts may go to the same directory if /home would cross its floor. Nothing is deleted
+    anywhere, and /home keeps its 10 GB floor.
+  - The pilot's two states stay where the pilot wrote them (RUN on /home).
+  - The disk gate of amendment 1 now checks /vault for the state and /home for its floor.
+- **Code:** the panel runs on calib-size 898d00e. calib-size is fast-forwarded from f912a30 after the pilot's last job.
+  - f912a30..898d00e changes only calibration/train_focus.py (the opt-in `--offload`; a default run constructs the
+    same `torch.optim.AdamW`) and adds tests/test_focus_offload.py.
+  - evaluation/, flipquant/, models/, kernels/ and calibration/train_map.py are unchanged, so step 0's identity
+    stands.
+- **ETA:** the full scope grows by about 17 h with Qwen3.8-27B FOCUS (16.6 h of training and evaluation), to about
+  55–60 h after the pilot.
