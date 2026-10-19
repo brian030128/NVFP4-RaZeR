@@ -45,17 +45,21 @@ def splices(seed=7):
     return out
 
 
-def main():
+def main(models=None):
     from transformers import AutoTokenizer
     from flipquant import data as D
+    models = models or list(CS.SIZES)
     toks = {}
-    for m in CS.SIZES:
+    for m in models:
         w = json.loads(CS.windows_file(m, 2048).read_text())
         toks[m] = AutoTokenizer.from_pretrained(w["tokenizer"]["source"], revision=w["tokenizer"]["revision"])
     idx, _ = A.eval_index(toks)
     items = splices()
-    res = dict(items=[dict(eval_set=s, item=i, words=len(A.words(t))) for s, i, t in items], models={})
-    for m in CS.SIZES:
+    path = CS.WIN / "audit_control.json"
+    prev = json.loads(path.read_text()) if path.exists() else {}
+    res = dict(items=[dict(eval_set=s, item=i, words=len(A.words(t))) for s, i, t in items],
+               models=prev.get("models", {}))
+    for m in models:
         rel = D.calibration_release(toks[m], CS.record(m), CS.windows_file(m, 2048))
         texts = [toks[m].decode(ids[0].tolist(), skip_special_tokens=True) for ids in rel["fit"]]
         scanned = sum(max(0, len(A.words(t)) - A.N + 1) for t in texts)
@@ -75,9 +79,10 @@ def main():
                                 spliced_detected=detect, picked=len(pick))
     res["ok"] = all(v["plain_windows_with_hits"] == 0 and all(d == v["picked"] for d in v["spliced_detected"].values())
                     for v in res["models"].values())
-    (CS.WIN / "audit_control.json").write_text(json.dumps(res, indent=1) + "\n")
+    path.write_text(json.dumps(res, indent=1) + "\n")
     print(json.dumps(res, indent=1))
 
 
 if __name__ == "__main__":
-    main()
+    sel = [a.split("=", 1)[1].split(",") for a in sys.argv[1:] if a.startswith("--models=")]
+    main(sel[0] if sel else None)

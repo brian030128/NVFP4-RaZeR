@@ -1,7 +1,7 @@
 """Part AA (PROTOCOL.md): the 13-gram audit of each model's 2,048-window calibration set (which contains its 1,024 and
 256 sets) against every evaluation text. CPU.
 
-    python calib_size_audit.py      # after run_calib_size.py windows; writes RUN/calib_size/windows/audit.json
+    python calib_size_audit.py [--models=a,b]   # after the windows; RUN/calib_size/windows/audit.json (merged per model)
 
 - Windows: flipquant.data.calibration_release(tok, record, windows/<model>_2048.json) on calib-size, so every window is
   rebuilt from its document and checked by token sha256, then decoded with the model's tokenizer.
@@ -13,7 +13,8 @@
 - Normalization: lowercase, every character outside [a-z0-9] a separator; word 13-grams within each text.
 - A hit is a window sharing at least one 13-gram with an evaluation text; every hit is listed with the shared n-grams.
   Membership: release (the 128 record windows and each source's first 64 extension windows), 1024 (the next 384 per
-  source), 2048 (the rest). pilot_ok: no hit in the 1024 membership of the pilot models.
+  source), 2048 (the rest). pilot_ok: no hit in the 1024 membership of the pilot models. Per model (amendment 1):
+  ok_1024 / ok_2048, no hit among the windows that set adds. A run for some models keeps the other models' results.
 """
 import json
 import re
@@ -109,19 +110,22 @@ def membership(i, rec):
     return "release" if k < 64 else "1024" if k < 448 else "2048"
 
 
-def main():
+def main(models=None):
     from transformers import AutoTokenizer
     from flipquant import data as D
     t0 = time.time()
-    models = list(CS.SIZES)
+    models = models or list(CS.SIZES)
     files = {m: CS.windows_file(m, 2048) for m in models}
     toks = {}
     for m in models:
         w = json.loads(files[m].read_text())
         toks[m] = AutoTokenizer.from_pretrained(w["tokenizer"]["source"], revision=w["tokenizer"]["revision"])
     idx, info = eval_index(toks)
+    path = CS.WIN / "audit.json"
+    prev = json.loads(path.read_text()) if path.exists() else {}
     out = dict(n=N, normalization="lowercase; characters outside [a-z0-9] separate words; word 13-grams within each "
-                                  "text", eval_sets=idx.stats, **info, models={})
+                                  "text", eval_sets=idx.stats, **info, models=prev.get("models", {}),
+               runs=prev.get("runs", []) + [dict(models=models, eval_sets=idx.stats, **info)])
     for m in models:
         w = json.loads(files[m].read_text())
         rel = D.calibration_release(toks[m], CS.record(m), files[m])
@@ -148,14 +152,16 @@ def main():
                                  offset=rec["offset"] if rec else None, eval_set=name, item=item,
                                  shared_grams=len(gs), first_gram=gs[0]))
         out["models"][m] = dict(windows=len(rel["fit"]), token_list_sha256=CS.token_list_sha(w["token_sha256"]),
-                                hits=hits, windows_with_hits={s: {k: len(v) for k, v in d.items()} for s, d in by.items()})
+                                hits=hits, windows_with_hits={s: {k: len(v) for k, v in d.items()} for s, d in by.items()},
+                                ok_1024=not any(h["membership"] == "1024" for h in hits),
+                                ok_2048=not any(h["membership"] == "2048" for h in hits))
     out["pilot_ok"] = not any(h["membership"] == "1024" for m in CS.PILOT for h in out["models"][m]["hits"])
     out["seconds"] = time.time() - t0
-    path = CS.WIN / "audit.json"
     path.write_text(json.dumps(out, indent=1, default=str) + "\n")
     print(json.dumps(dict(pilot_ok=out["pilot_ok"], eval_sets=idx.stats,
                           hits={m: v["windows_with_hits"] for m, v in out["models"].items()}), indent=1))
 
 
 if __name__ == "__main__":
-    main()
+    sel = [a.split("=", 1)[1].split(",") for a in sys.argv[1:] if a.startswith("--models=")]
+    main(sel[0] if sel else None)

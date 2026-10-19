@@ -6,12 +6,14 @@ calib-size f912a30 (worktree calib_size/wt).
                                          # (d) FOCUS reproducibility
     python run_calib_size.py probes      # 2,048-window memory probes: FlipQuant Qwen3.8-27B, FOCUS Phi-4
     python run_calib_size.py pilot       # Llama-3.2-1B-Instruct and Phi-4 at 1,024: FQ16 + FOCUS, zero-shot / GSM8K / PPL
+    python run_calib_size.py panel --size=1024 [--models=a,b]    # amendment 1: the full panel at one size, ORDER
 
 The audit is calib_size_audit.py (CPU). Records under RUN/calib_size/; START / END in RUN/queue.log; one GPU job at a
 time on an idle GPU (run_gpu). A finished record is not run again; a failed job or check stops the part (STOP).
 """
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -31,9 +33,19 @@ CODE = "f912a30"                                                    # the regist
 ROOT = G.RUN / "calib_size"
 WIN = ROOT / "windows"
 DATA = S.DATA_ROOT                                                  # fqrel/tmopt_data, the release runs' records
-KEYS = {"llama3.2-1b-instruct": "llama1b_ins", "phi4-14b": "phi4", "qwen3.8-27b": "qwen27b"}
+KEYS = {"llama3.2-1b-instruct": "llama1b_ins", "phi4-14b": "phi4", "qwen3.8-27b": "qwen27b", "mistral-7b": "mistral7b_ins",
+        "llama3.1-8b-instruct": "llama8b_ins", "nemotron-nano-9b-v2": "nemotron9b", "qwen3-1.7b": "qwen3_1p7b",
+        "qwen3-8b": "qwen3_8b"}
 PILOT = ["llama3.2-1b-instruct", "phi4-14b"]
-SIZES = {"llama3.2-1b-instruct": (1024, 2048), "phi4-14b": (1024, 2048), "qwen3.8-27b": (2048,)}
+#: amendment 1: the pilot, then the coordinator's order; 1,024 for all, then 2,048 in the same order
+ORDER = PILOT + ["mistral-7b", "llama3.1-8b-instruct", "nemotron-nano-9b-v2", "qwen3.8-27b", "qwen3-1.7b", "qwen3-8b"]
+SIZES = {m: (1024, 2048) for m in ORDER}
+QWEN3 = ("qwen3-1.7b", "qwen3-8b")
+HOST_TEACHER = {"qwen3.8-27b"}               # amendment 1: its top-K teacher cannot stay on the GPU at either size
+FOCUS_PENDING = {"qwen3.8-27b"}              # amendment 1: the route (cluster / local) is the user's decision
+THINK = dict(Y.THINK_OFF, **{m: ["--enable-thinking", "false"] for m in QWEN3})
+QWEN3_GSM_ROWS = ["bf16", "nvfp4", "fo6", "gptq", "fq-16x64", "focus"]   # amendment 1: native GSM8K baselines
+FLOOR = 10e9                                 # /home's floor (bytes)
 TRAIN = ["--unit", "16x64", "--epochs", 5, "--teacher-topk", 1000]
 DATE = "2026-10-15"                                                 # part Y amendment 3: Llama-1B's GSM8K prompts
 LLAMA1B = "llama3.2-1b-instruct"
@@ -238,14 +250,15 @@ def calibrate_focus(model, extension, d, tag):
 # ---------------------------------------------------------------------------------------------- evaluation rows
 
 def zs_cmd(model, quant, out):
-    return [*Z.launcher(model, "evaluation.downstream"), "--model", model, "--revision", Z.REV[model], *quant,
+    """Part X's command; every model runs python -m (calib-size's registry has llama3.1-8b-instruct, amendment 1)."""
+    return [G.py(model), "-m", "evaluation.downstream", "--model", model, "--revision", Z.REV[model], *quant,
             "--tasks", Z.TASKS, "--out", out]
 
 
 def gsm_cmd(model, quant, out):
     launch = ["-u", HERE / "gsm8k6_date.py", DATE] if model == LLAMA1B else ["-u", "-m"]
     return [G.py(model), *launch, "evaluation.downstream", "--model", model, "--revision", Z.REV[model], *quant,
-            "--tasks", Y.TASK, "--apply-chat-template", *Y.THINK_OFF.get(model, []), "--batch-size", Y.batch(model, "x"),
+            "--tasks", Y.TASK, "--apply-chat-template", *THINK.get(model, []), "--batch-size", Y.batch(model, "x"),
             "--gen-lengths", "--samples-out", Path(out).with_suffix(""), "--out", out]
 
 
@@ -294,12 +307,34 @@ def check_zs(model, kind, path, artifact):
     return bad
 
 
+def gsm_digest(model):
+    """The model's GSM8K sample digest: part Y's FO6 record, or (Qwen3) this part's BF16 baseline."""
+    ref = Y.ROOT / model / "fo6.json"
+    if not ref.exists():
+        ref = ROOT / model / "eval" / "gsm8k" / "bf16.json"
+    return json.loads(ref.read_text())["tasks"][Y.TASK]["sample_digest"]
+
+
+def y_checks(model, row, path, digest):
+    """run_gsm8k6.check_record; for Qwen3 (amendment 1) its chat-option check is replaced by thinking off through
+    --enable-thinking false (chat options and the template's args), as Qwen3.8-27B's."""
+    bad = Y.check_record(model, row, path, G.manifests(), {"digest": digest})
+    if model in QWEN3:
+        bad = [b for b in bad if not b.startswith(("chat options", "chat_template_args"))]
+        r = json.loads(Path(path).read_text())
+        co = r.get("chat_options") or {}
+        if not (co.get("apply_chat_template") and co.get("fewshot_as_multiturn")) or co.get("system_instruction") \
+                or co.get("enable_thinking") != "false" \
+                or (r.get("chat_template_args") or {}).get("enable_thinking") is not False:
+            bad.append(f"Qwen3 chat options {co} / {r.get('chat_template_args')}")
+    return bad
+
+
 def check_gsm(model, kind, path, artifact):
-    """Part Y's checks (run_gsm8k6.check_record) with this row's artifact; the digest must equal part Y's rows'."""
+    """Part Y's checks (run_gsm8k6.check_record) with this row's artifact; the digest must equal the model's GSM8K
+    records' (part Y's; Qwen3: this part's BF16 baseline)."""
     row = {"fq": "fq-16x64", "focus": "focus", "fo6": "fo6"}[kind]
-    digest = json.loads((Y.ROOT / model / "fo6.json").read_text())["tasks"][Y.TASK]["sample_digest"]
-    bad = [b for b in Y.check_record(model, row, path, G.manifests(), {"digest": digest})
-           if b not in ("map path", "FOCUS state path")]
+    bad = [b for b in y_checks(model, row, path, gsm_digest(model)) if b not in ("map path", "FOCUS state path")]
     pol = json.loads(Path(path).read_text()).get("policy") or {}
     got = (pol.get("map") or {}).get("path") if kind == "fq" else (pol.get("focus") or {}).get("state") if kind == "focus" \
         else None
@@ -571,6 +606,151 @@ def pilot():
     G.log("DONE calib_size pilot")
 
 
+# ---------------------------------------------------------------------------------------------- amendment 1: the panel
+
+def merge_json(path, key, value):
+    d = json.loads(path.read_text()) if path.exists() else {}
+    d[key] = value
+    path.write_text(json.dumps(d, indent=1, default=str) + "\n")
+
+
+def windows_for(model):
+    """The model's 1,024 / 2,048 sets (CPU) and the nesting checks (windows/nesting.json, merged)."""
+    checkout()
+    for n in SIZES[model]:
+        out = windows_file(model, n)
+        must(cpu_run(f"cs_windows_{model}_{n}", [G.PY, "-m", "calibration.fit_windows", "--model", model,
+                                                 "--fit-windows", n, "--data-root", DATA, "--out", out], out, FQ3),
+             f"windows {model} {n}")
+    res = nesting(model)
+    merge_json(WIN / "nesting.json", model, res)
+    if not res["ok"]:
+        stop(f"windows {model}: nesting / skip checks failed (windows/nesting.json)")
+
+
+def audit_for(model):
+    """The 13-gram audit and its positive control for the model (CPU), unless recorded; returns the model's entry."""
+    a, c = WIN / "audit.json", WIN / "audit_control.json"
+    have = lambda p: p.exists() and model in (json.loads(p.read_text()).get("models") or {})  # noqa: E731
+    for script, path in (("calib_size_audit.py", a), ("calib_size_audit_control.py", c)):
+        if not have(path):
+            G.log(f"START cs_{script[:-3]}_{model} (CPU)")
+            t0 = time.time()
+            with open(G.RUN / "logs" / f"cs_{script[:-3]}_{model}.log", "w") as f:
+                rc = subprocess.run([G.PY, HERE / script, f"--models={model}"], cwd=HERE,
+                                    env=G.env({"CUDA_VISIBLE_DEVICES": ""}), stdout=f, stderr=subprocess.STDOUT,
+                                    stdin=subprocess.DEVNULL).returncode
+            G.log(f"END cs_{script[:-3]}_{model} rc={rc} {time.time() - t0:.0f}s")
+            must(rc, f"{script} {model}")
+    ctl = json.loads(c.read_text())["models"][model]
+    if ctl["plain_windows_with_hits"] or any(d != ctl["picked"] for d in ctl["spliced_detected"].values()):
+        stop(f"audit control {model}: {ctl}")
+    return json.loads(a.read_text())["models"][model]
+
+
+def identity_for(model):
+    """Amendment 1: the model's FlipQuant 16x64 (256) zero-shot row on calib-size, bit-identical to part X / X2's."""
+    rec = ROOT / model / "identity.json"
+    if rec.exists() and json.loads(rec.read_text())["ok"]:
+        return
+    eval_row(model, "fq16_256", "fq", Z.map_path(model, "16x64"), which=("zs",))
+    res = zs_identity(ROOT / model / "eval" / "zs" / "fq16_256.json", Z.ZS / "panel" / model / "fq-16x64.json")
+    rec.write_text(json.dumps(res, indent=1) + "\n")
+    if not res["ok"]:
+        stop(f"identity {model}: calib-size's zero-shot differs from part X's record ({rec})")
+    G.log(f"calib_size identity {model}: zero-shot FQ16-256 bit-identical to part X / X2")
+
+
+def ppl_refs_for(model):
+    """(c2) for the model: FO6, FQ16-256, FOCUS-256 PPL on calib-size vs the final table's records (reported)."""
+    rec = ROOT / model / "ppl_refs.json"
+    if rec.exists():
+        return
+    out = {}
+    for name, kind, art in (("fo6", "fo6", None), ("fq16_256", "fq", Z.map_path(model, "16x64")),
+                            ("focus256", "focus", Z.focus_state(model))):
+        eval_row(model, name, kind, art, which=("ppl",))
+        ref = ppl_reference(model, kind)
+        out[name] = dict(record=str(ref), identity=ppl_identity(ROOT / model / "eval" / "ppl" / f"{name}.json", ref))
+    rec.write_text(json.dumps(out, indent=1) + "\n")
+    G.log(f"calib_size ppl references {model}: " + ", ".join(f"{k} {v['identity']['ok']}" for k, v in out.items()))
+
+
+def qwen3_gsm(model):
+    """Amendment 1: the native GSM8K baselines of Qwen3-1.7B / Qwen3-8B (part Y's protocol, thinking off)."""
+    import run_zs6_qwen3 as X2                     # X2's registered FOCUS-state and codes-file hashes
+    d = ROOT / model / "eval" / "gsm8k"
+    for row in QWEN3_GSM_ROWS:
+        out = d / f"{row}.json"
+        if not G.done(out):
+            checkout()
+            bad = X2.verify_inputs(model, row)
+            if bad:
+                stop(f"qwen3 gsm8k {model} {row}: {bad}")
+            out.parent.mkdir(parents=True, exist_ok=True)
+        q = Y.quant(model, row)
+        cmd = [G.py(model), "-u", "-m", "evaluation.downstream", "--model", model, "--revision", Z.REV[model], *q,
+               "--tasks", Y.TASK, "--apply-chat-template", *THINK[model], "--batch-size", 64, "--gen-lengths",
+               "--samples-out", out.with_suffix(""), "--out", out]
+        must(M.run_ts(f"cs_gsm8k_{model}_{row}", cmd, out, FQ3), f"qwen3 gsm8k {model} {row}")
+        bad = y_checks(model, row, out, gsm_digest(model))
+        if bad:
+            stop(f"qwen3 gsm8k {model} {row}: {bad}")
+    G.log(f"calib_size qwen3 gsm8k baselines {model}: {len(QWEN3_GSM_ROWS)} rows")
+
+
+def disk_ok(model):
+    """Amendment 1: /home keeps the floor after a state of the model's 256-window size plus 1 GB."""
+    free = shutil.disk_usage("/home").free
+    need = Path(Z.focus_state(model)).stat().st_size + 1e9
+    return free - need >= FLOOR, free, need
+
+
+def calibrate_size(model, n):
+    d = ROOT / model
+    fq = calibrate_fq(model, n, d / f"fq16_{n}", host=model in HOST_TEACHER)
+    if fq["e0m3_share"] > E0M3_MAX:
+        stop(f"{model} {n}: E0M3 share {fq['e0m3_share']:.3f} above {E0M3_MAX} (amendment 1: implausible)")
+    run = d / f"fq16_{n}" / "run" / "report.json"
+    pre = json.loads(windows_file(model, n).read_text())
+    got = json.loads(run.read_text())["fit_extension"]
+    if got["records"] != pre["fit_extension"]["records"] or got["skipped_documents"] != pre["fit_extension"][
+            "skipped_documents"]:
+        stop(f"{model} {n}: the FlipQuant run's fit extension differs from windows/{model}_{n}.json")
+    eval_row(model, f"fq16_{n}", "fq", d / f"fq16_{n}" / "map.pt")
+    if model in FOCUS_PENDING:
+        G.log(f"NOTE calib_size {model} {n}: FOCUS pending the user's decision on its route (amendment 1); TBD")
+        return
+    if not focus_state_ok(d / f"focus_{n}" / "state"):
+        ok, free, need = disk_ok(model)
+        if not ok:
+            stop(f"PAUSE disk before FOCUS {model} {n}: /home free {free / 1e9:.1f} GB, the state needs about "
+                 f"{need / 1e9:.1f} GB, floor {FLOOR / 1e9:.0f} GB (amendment 1: the user's decision)")
+    foc = calibrate_focus(model, run, d / f"focus_{n}", "state")
+    if foc["token_sha256"] != pre["token_sha256"] or foc["windows"] != n or foc["steps"] != n // 32:
+        stop(f"{model} {n}: FOCUS's windows differ from the FlipQuant run's ({foc['windows']} windows, "
+             f"{foc['steps']} steps)")
+    eval_row(model, f"focus_{n}", "focus", d / f"focus_{n}" / "state" / "focus.pt")
+    G.log(f"calib_size {model} {n}: FQ16 E0M3 share {fq['e0m3_share']:.4f}; FOCUS {foc['steps']} steps; rows done")
+
+
+def panel(n, models):
+    if not json.loads((ROOT / "step0" / "step0_ok.json").read_text()).get("ok"):
+        stop("panel: step 0 has not passed")
+    for model in models:
+        windows_for(model)
+        a = audit_for(model)
+        if not a[f"ok_{n}"]:
+            stop(f"audit {model}: a hit among the {n} set's new windows (windows/audit.json)")
+        identity_for(model)
+        ppl_refs_for(model)
+        if model in QWEN3:
+            qwen3_gsm(model)
+        calibrate_size(model, n)
+        G.log(f"calib_size panel {n}: {model} done")
+    G.log(f"DONE calib_size panel {n}")
+
+
 if __name__ == "__main__":
     what = sys.argv[1]
     if what == "windows":
@@ -581,5 +761,9 @@ if __name__ == "__main__":
         probes()
     elif what == "pilot":
         pilot()
+    elif what == "panel":
+        size = int(next(a.split("=", 1)[1] for a in sys.argv[2:] if a.startswith("--size=")))
+        sel = [a.split("=", 1)[1].split(",") for a in sys.argv[2:] if a.startswith("--models=")]
+        panel(size, [m for m in ORDER if not sel or m in sel[0]])
     else:
         raise SystemExit(f"unknown part {what}")
