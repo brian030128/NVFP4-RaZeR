@@ -2037,3 +2037,28 @@ the first run beyond the pilot; the pilot runs as registered.
     stands.
 - **ETA:** the full scope grows by about 17 h with Qwen3.8-27B FOCUS (16.6 h of training and evaluation), to about
   55–60 h after the pilot.
+
+### Part AA: step 0, probes and pilot, the run (2026-10-19 12:01–15:10 UTC); every check passed
+
+- **Windows and audit (CPU).** All eight models' 1,024 / 2,048 sets were drawn; 256 ⊂ 1,024 ⊂ 2,048 holds, record by
+  record, and the skip counts equal the release's. The 13-gram audit finds 0 hits in every model's 2,048 set. Its
+  positive control detects each of five spliced evaluation items in 30 / 30 windows per model. RUN/calib_size/windows/.
+- **Step 0.**
+  - (a) The diff is as registered.
+  - (b) Llama-1B FQ16-256 on calib-size reproduces part P's trainer map (00c5e22b…) with the GPU teacher and with
+    `--teacher-host`. The host teacher lowers the peak by exactly the teacher's 0.73 GiB, at +3 % training time.
+  - (c) Bit-identical to part X (zero-shot, 6 / 6 tasks) and part Y (GSM8K 2,638 / 2,638, date pinned); PPL equal to
+    part P.
+  - (c2) The six PPL references are bit-identical to the final table's records.
+  - (d) FOCUS is not reproducible run to run: all 224 tensors differ, mean |Δm| 0.0065 against a training drift of
+    0.013. The retrained state is evaluated as the run-to-run reference.
+- **Probes at 2,048** (both fit):
+  - FQ16 Qwen3.8-27B with `--teacher-host`: 90.52 GiB allocated, device peak 95,020 MiB. The teacher is 6.28 GB on the
+    host; 13.6 s per step.
+  - FOCUS Phi-4: 91.04 GiB allocated (the 256 value), device peak 96,148 MiB; 51.6 s per step.
+- **Pilot (1,024 windows).**
+  - Calibrations: Llama-1B FQ16 225 s and FOCUS 173 s; Phi-4 FQ16 1,688 s and FOCUS 1,702 s.
+  - E0M3 share: Llama-1B 14.8 % (2.8 % at 256); Phi-4 3.7 % (0.6 %).
+  - Every gate passed. Evaluations: results/paper_eval/calib_size/REPORT.md.
+- **Code for the panel:** calib-size was fast-forwarded to 898d00e at 15:10 UTC (amendment 2), and the panel started
+  right after.

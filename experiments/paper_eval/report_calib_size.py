@@ -563,6 +563,9 @@ def probes_md():
               "--teacher-host) and FOCUS recomputes the teacher's logits per micro-batch. The windows are cached once per "
               "tokenizer and set (flipquant.data's cache):", ""]
         L += [f"- `{k}`: {v:,} bytes" for k, v in disk.items()]
+        L += ["", f"Total: {len(disk)} files, {sum(disk.values()) / 1e6:.1f} MB (2,048 windows = 9.15 MB, 1,024 = 4.58 MB, "
+                  "256 = 1.15 MB per tokenizer; the audit's tokenizers, loaded from their snapshot paths, have their own "
+                  "cache keys)."]
     return L
 
 
