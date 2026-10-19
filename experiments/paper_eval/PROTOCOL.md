@@ -1939,3 +1939,63 @@ amendment); after the pilot the run stops and reports.**
   - Pilot: about 2.5 h. Phi-4 FQ16 at 1k is about 30 min and its FOCUS about 28 min; the evaluations take about
     80 min.
   - Total about 5 h.
+
+### Part AA, amendment 1 (registered 2026-10-19, at its commit, before the pilot started; the user's decision, relayed): the full scope
+
+The coordinator relayed on 2026-10-19 (during step 0) that the user approved the full scope. This replaces "stop and
+report after the pilot".
+- **Scope:** all eight models at 1,024 and then 2,048 windows. FlipQuant 16x64 and FOCUS keep the registered settings,
+  and the evaluation stays as registered (zero-shot, GSM8K, PPL).
+  - **1,024 panel first:** the pilot (Llama-3.2-1B-Instruct, Phi-4), then Mistral-7B-Instruct-v0.3,
+    Llama-3.1-8B-Instruct, Nemotron-Nano-9B-v2, Qwen3.8-27B, Qwen3-1.7B and Qwen3-8B (the coordinator's order).
+  - **Then 2,048** for all eight, in the same order, the pilot models first.
+- **Gates.** These are the coordinator's rules; each stops the run and is reported:
+  - After the pilot: a short report to the coordinator. If every check passed, the run continues without waiting.
+  - **It stops** on anything implausible:
+    - any failed check;
+    - any OOM. FOCUS runs at micro-batch 8 for every local model, as every 256-window FOCUS run did. The registered
+      halving rule is withdrawn: an OOM stops the run instead.
+    - an E0M3 share above 25 %.
+- **Per model, before its first new calibration:**
+  - **Windows:** its 1,024 and 2,048 sets drawn (calibration.fit_windows, CPU) and the nesting checks.
+  - **Audit:** the 13-gram audit of its 2,048 set, with the positive control. A hit among the new windows of a set
+    stops that set's calibrations.
+  - **Zero-shot identity.** Part X / X2 ran on flipquant main 3db0072; calib-size's registry and model code are
+    paper-sm120-runs'. So the model's FlipQuant 16x64 (256) zero-shot row is re-run on calib-size and must be
+    bit-identical to part X / X2's record: per task, digest, per-example correctness, per-choice log-likelihoods and
+    metrics. Every model runs `python -m evaluation.downstream`. calib-size's registry has llama3.1-8b-instruct, so
+    zs6_fq.py is not used. A difference stops that model's new rows.
+  - **GSM8K:** part Y ran on 4bbe0b1, whose evaluation code equals calib-size's. Step 0 (c) stands for every model, and
+    each new row's sample_digest must equal the model's part Y records'.
+  - **PPL references (as (c2)):** FourOverSix, FlipQuant 16x64 (256) and FOCUS (256) on calib-size, compared with the
+    final table's records. Qwen3.8-27B's FOCUS-256 is part Q's state (HF snapshot b84ff372a7, sha256 baf02d9c…).
+- **Qwen3-1.7B and Qwen3-8B GSM8K baselines** (native only, as approved). The six rows are BF16, NVFP4, FourOverSix,
+  GPTQ‡, FlipQuant 16x64 (256, the release map) and FOCUS (256, part K's state).
+  - Inputs: X2's registered inputs (FOCUS-state and codes-file sha256) and the release maps' sha256.
+  - Protocol: part Y's (gsm8k_llama, chat template, 8-shot, greedy, 1,024 tokens, batch 64, run_gpu.env()). Thinking
+    is off through `--enable-thinking false`, the Qwen3 template's switch, as for Qwen3.8-27B.
+  - Checks: part Y's, with `enable_thinking=False`, and equal sample digests across the model's rows.
+  - The simulated IF4 / MixFP4 GSM8K rows are not run for Qwen3 (not approved).
+- **Qwen3.8-27B:**
+  - FlipQuant 16x64 at both sizes runs with `--teacher-host`; the teacher cannot stay on the GPU next to the model at
+    either size. It runs micro 2 x accumulation 4, as the release.
+  - FOCUS at both sizes: the route is the user's decision. The registered route (2 x H200 on the cluster, as
+    focus_qwen27b) cannot be submitted from this machine (no cluster access). Until decided, its FOCUS cells are TBD and
+    the panel continues.
+- **Disk.**
+  - FOCUS states take about 51.7 GB per size for the eight models (Qwen3.8-27B 18.3 GB, Phi-4 10.2 GB). That is more
+    than /home holds above its 10 GB floor.
+  - Before each FOCUS calibration, the driver checks that /home keeps 10 GB free after a state of the model's
+    256-window size plus 1 GB. Otherwise it stops before starting, pending the user's decision.
+  - Nothing is deleted. The 1,024 panel's local states fit; the 2,048 states need the decision.
+- **Reporting:**
+  - short messages after the pilot, after the 1,024 panel and at the end;
+  - per model and size: vs FourOverSix, vs the 256 counterpart, and FlipQuant 16x64 vs FOCUS at the same size (exact
+    McNemar per model, and pooled over the models with the discordant counts summed); ΔNLL ± 2 SE; E0M3 share;
+    calibration time and peak memory.
+- **Pushes:** flipquant calib-size and paper-eval, once per completed stage (the pilot, the 1,024 panel, the end).
+- **ETA,** from the 256-window records: FlipQuant scales with windows; FOCUS with steps.
+  - After the pilot, the 1,024 panel takes about 16 h: FlipQuant 6.4 h (Nemotron 2.9 h, Qwen3.8-27B 2.7 h), FOCUS
+    1.2 h, evaluations 5 h, identity and references 1.2 h, Qwen3 GSM8K baselines 2.4 h.
+  - The 2,048 panel takes about 23 h: FlipQuant 13.6 h, FOCUS 3.3 h, evaluations 6.4 h.
+  - Both exclude Qwen3.8-27B FOCUS.

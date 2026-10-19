@@ -37,6 +37,7 @@ SIZES = {"llama3.2-1b-instruct": (1024, 2048), "phi4-14b": (1024, 2048), "qwen3.
 TRAIN = ["--unit", "16x64", "--epochs", 5, "--teacher-topk", 1000]
 DATE = "2026-10-15"                                                 # part Y amendment 3: Llama-1B's GSM8K prompts
 LLAMA1B = "llama3.2-1b-instruct"
+E0M3_MAX = 0.25                                                     # amendment 1: a larger E0M3 share stops the run
 
 
 def stop(msg):
@@ -206,27 +207,23 @@ def focus_state_ok(state):
 
 
 def calibrate_focus(model, extension, d, tag):
-    """FOCUS with FOCUS_COMMON, micro 8 halved on OOM (part K's rule); a failed attempt's directory is renamed, never
-    deleted. Returns the job record (d/<tag>.job.json)."""
+    """FOCUS with FOCUS_COMMON at micro-batch 8, the micro-batch of every local 256-window FOCUS run. Amendment 1 (the
+    coordinator's gate): an OOM is not worked around (no halving); it stops the run. Returns the job record
+    (d/<tag>.job.json)."""
     meta = d / f"{tag}.job.json"
     state = d / tag
     if focus_state_ok(state) and meta.exists():
         return json.loads(meta.read_text())
     d.mkdir(parents=True, exist_ok=True)
-    for micro in (8, 4, 2, 1):
-        if state.exists():
-            stop(f"{state} exists from an earlier attempt; inspect it")
-        cmd = focus_cmd(model, extension, micro, state)
-        rc, seconds, peak = measured(f"cs_focus_{model}_{tag}_micro{micro}", cmd, state / "report.json")
-        if rc == 0:
-            break
+    micro = 8
+    if state.exists():
+        stop(f"{state} exists from an earlier attempt; inspect it")
+    cmd = focus_cmd(model, extension, micro, state)
+    rc, seconds, peak = measured(f"cs_focus_{model}_{tag}_micro{micro}", cmd, state / "report.json")
+    if rc != 0:
         log = (G.RUN / "logs" / f"cs_focus_{model}_{tag}_micro{micro}.log").read_text(errors="replace")
-        if "OutOfMemoryError" not in log and "CUDA out of memory" not in log:
-            stop(f"focus {model} {tag}: rc={rc}")
-        state.rename(d / f"{tag}_oom-micro{micro}")
-        G.log(f"NOTE calib_size focus {model} {tag}: OOM at micro {micro}; halving (global batch 32 unchanged)")
-    else:
-        stop(f"focus {model} {tag}: OOM even at micro 1")
+        oom = "OutOfMemoryError" in log or "CUDA out of memory" in log
+        stop(f"focus {model} {tag}: {'CUDA out of memory at micro 8 (amendment 1: stop, no halving)' if oom else f'rc={rc}'}")
     r = json.loads((state / "report.json").read_text())
     rec = dict(model=model, tag=tag, micro=micro, command=" ".join(map(str, cmd[1:])), checkout=checkout(), rc=rc,
                job_seconds=seconds, device_peak_mib=peak, steps=r.get("steps"), windows=r["data"]["windows"],
@@ -555,6 +552,8 @@ def pilot():
     for model in PILOT:
         d = ROOT / model
         fq = calibrate_fq(model, n, d / f"fq16_{n}")
+        if fq["e0m3_share"] > E0M3_MAX:
+            stop(f"pilot {model}: E0M3 share {fq['e0m3_share']:.3f} above {E0M3_MAX} (amendment 1: implausible)")
         run = d / f"fq16_{n}" / "run" / "report.json"
         pre = json.loads(windows_file(model, n).read_text())
         got = json.loads(run.read_text())["fit_extension"]
