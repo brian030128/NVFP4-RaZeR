@@ -2160,3 +2160,25 @@ The FOCUS calibration job names, and so their stdout logs, now include the windo
   KL still decreases (0.0810 at the end of 1,024; 0.0805 at the end of 2,048).
 - **Reported to the coordinator** with options: evaluate this map; raise or lift the gate; leave it TBD; stop. Nothing
   runs until the decision.
+
+### Part AA, amendment 4 (registered 2026-10-20, at its commit, before anything ran after the stop; the user's choice, relayed): the E0M3 gate at 40 %; Llama-1B FQ16-2k evaluated; the 2,048 panel resumed
+
+- **Gate:** for the rest of the 2,048 panel, an E0M3 share above **40 %** stops the run, instead of 25 %. Every other gate
+  is unchanged (a failed check; any OOM, with no halving; the disk gate).
+- **Evaluation and resume.** The 2,048 panel driver is restarted at once, with the new gate, on calib-size 898d00e. Its
+  first jobs are Llama-3.2-1B-Instruct FQ16-2k's zero-shot, GSM8K (date pinned) and PPL. The finished calibration is
+  not rerun. The result goes to the coordinator as soon as it is in: vs FourOverSix, vs FQ16-256 and FQ16-1k, and vs
+  FOCUS-2k once that exists. The panel then continues as registered.
+  - The restarted driver uses the size-tagged FOCUS log names in code. They are the same names the symlinks point at.
+- **Report additions:**
+  - per map and size: the E0M3 share, and the per-epoch E0M3 count and within-epoch flips from the trainer's
+    report.json;
+  - for the Llama-1B 2k map: the fraction of its E0M3 tiles whose final θ is within one step of the threshold
+    (|θ| < 0.02 = lr).
+- **θ for that fraction.** The paper's trainer saves θ only when a development set is drawn, and there is none here. So
+  after the 2,048 panel, the Llama-1B FQ16-2k calibration is re-run once with a passive θ-saving launcher hook
+  (`calibration/tmopt_launch.py --save-theta`, which records the trainer's own Adam parameters after its last step).
+  - The hook is a flipquant calib-size commit on a side branch, fast-forwarded after the panel. It changes no setting and
+    no evaluation code.
+  - The rerun must reproduce the panel's map bit for bit (the trainer's map sha256, deterministic training), so its θ
+    is the evaluated map's θ.

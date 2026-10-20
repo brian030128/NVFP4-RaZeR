@@ -54,7 +54,7 @@ FLOOR = 10e9                                 # /home's floor (bytes)
 TRAIN = ["--unit", "16x64", "--epochs", 5, "--teacher-topk", 1000]
 DATE = "2026-10-15"                                                 # part Y amendment 3: Llama-1B's GSM8K prompts
 LLAMA1B = "llama3.2-1b-instruct"
-E0M3_MAX = 0.25                                                     # amendment 1: a larger E0M3 share stops the run
+E0M3_MAX = 0.40                 # amendment 4 (was 0.25, amendment 1): a larger E0M3 share stops the run
 
 
 def stop(msg):
