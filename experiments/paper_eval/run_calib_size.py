@@ -239,9 +239,10 @@ def calibrate_focus(model, extension, d, tag, meta_dir=None, micro=8, extra=()):
     if state.exists():
         stop(f"{state} exists from an earlier attempt; inspect it")
     cmd = focus_cmd(model, extension, micro, state, extra=extra)
-    rc, seconds, peak = measured(f"cs_focus_{model}_{tag}_micro{micro}", cmd, state / "report.json")
+    name = f"cs_focus_{model}_{d.name}_micro{micro}"     # the 2026-10-20 naming fix: the size (or control) in the name
+    rc, seconds, peak = measured(name, cmd, state / "report.json")
     if rc != 0:
-        log = (G.RUN / "logs" / f"cs_focus_{model}_{tag}_micro{micro}.log").read_text(errors="replace")
+        log = (G.RUN / "logs" / f"{name}.log").read_text(errors="replace")
         oom = "OutOfMemoryError" in log or "CUDA out of memory" in log
         stop(f"focus {model} {tag}: {'CUDA out of memory at micro 8 (amendment 1: stop, no halving)' if oom else f'rc={rc}'}")
     r = json.loads((state / "report.json").read_text())

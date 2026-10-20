@@ -2115,3 +2115,19 @@ while its zero-shot (+0.38*) and NLL (−0.0117* / −0.0021*) improved.
   - The other seven 1,024 FOCUS logs were copied to `logs/cs_focus_<model>_1024_micro8.log` before their 2,048 runs.
     The control's log is copied when it ends (calib_size/keep_control_log.sh).
 - **Results:** results/paper_eval/calib_size/REPORT.md (all eight models at 1,024; pooled McNemar per comparison).
+
+### Part AA: FOCUS log names (2026-10-20, the coordinator's request, before the 2,048 FOCUS runs; naming only)
+
+The FOCUS calibration job names, and so their stdout logs, now include the window size, so no 2,048 log overwrites a
+1,024 or control log. No run setting changes.
+- **Driver code** (any later driver process): `cs_focus_<model>_<dir>_micro<m>`, with `<dir>` = focus_1024 /
+  focus_2048 / focus_256_local.
+- **The 2,048 driver already running** (started 12:24 UTC with the control) keeps the old names in memory, so it is not
+  stopped or changed. Instead, each old name `logs/cs_focus_<model>_state_micro<m>.log` was renamed to
+  `…state_micro<m>.before-2048.log` (the 1,024 log) and replaced by a symlink to `logs/cs_focus_<model>_focus_2048_micro<m>.log`.
+  The running driver's open(…, "w") writes each 2,048 log into its own file.
+  - Done for the seven local models at 12:50 UTC.
+  - For Qwen3.8-27B it is done once the control has ended and its log is kept as
+    `cs_focus_qwen3.8-27b_256local_micro1.log` (calib_size/qwen27b_log_symlink.sh), well before its 2,048 FOCUS run.
+- **The 1,024 logs** stay in three places: the earlier copies `cs_focus_<model>_1024_micro8.log`, the renamed originals
+  (identical, cmp-checked), and every state's report.json.
