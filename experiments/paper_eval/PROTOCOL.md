@@ -2131,3 +2131,21 @@ The FOCUS calibration job names, and so their stdout logs, now include the windo
     `cs_focus_qwen3.8-27b_256local_micro1.log` (calib_size/qwen27b_log_symlink.sh), well before its 2,048 FOCUS run.
 - **The 1,024 logs** stay in three places: the earlier copies `cs_focus_<model>_1024_micro8.log`, the renamed originals
   (identical, cmp-checked), and every state's report.json.
+
+### Part AA, amendment 3: the control, the run (2026-10-20 12:24–14:38 UTC)
+
+- **Training:** 8 steps in 4,453 s (557 s per step), 256 windows equal in order to the cluster state's. GPU peak 91.79 GiB,
+  device 95,388 MiB, host RSS 84.7 GiB. The state (18.26 GB) is on /vault; its sha256 was verified before each
+  evaluation.
+- **GSM8K endings** (strict no-answer / cut at "The final…" / mean tokens; strict, flexible %):
+  - control 19 / 6 / 167.5; 95.60, 95.91;
+  - cluster FOCUS-256 35 / 11 / 166.5; 93.56, 94.31;
+  - FOCUS-1k 115 / 34 / 147.6; 88.40, 90.90.
+- **Paired** (zero-shot; GSM8K; ΔNLL Wiki / C4):
+  - control vs cluster FOCUS-256: +0.22 (p=0.12); +2.05* (45/18, p=0.0009); −0.0058* / −0.0007;
+  - FOCUS-1k vs control (same environment): +0.16 (p=0.29); −7.20* (22/117, p=8e-17); −0.0060* / −0.0014*;
+  - FQ16-256 vs control: −0.19 (p=0.22); −0.45 (p=0.48);
+  - FQ16-1k vs control: −0.02 (p=0.90); +0.30 (p=0.62).
+- **Reading:** the control does not stop early; it does so less often than the cluster state. With the environment held
+  fixed, FOCUS-1k stops early, so the window count (32 steps instead of 8) is the likelier cause. Each arm is one FOCUS
+  run, and FOCUS's run-to-run noise applies: here the control and the cluster state differ by 2.05 GSM8K points.

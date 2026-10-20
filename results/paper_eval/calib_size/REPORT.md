@@ -520,7 +520,7 @@ Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 2
 | FlipQuant 16x64, 256 | 81.77 | 82.50 | 74.66 | 75.08 | 58.36 | 71.07 | 73.91 | 95.15 ± 1.18 | 7.186 | 10.141 |
 | FlipQuant 16x64, 1,024 | 81.72 | 82.22 | 75.85 | 75.97 | 59.30 | 71.41 | 74.41 | 95.91 ± 1.09 | 7.078 | 10.122 |
 | FlipQuant 16x64, 2,048 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| FOCUS, 256 (local control, amendment 3) | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
+| FOCUS, 256 (local control, amendment 3) | 81.61 | 82.56 | 75.45 | 76.94 | 59.22 | 70.56 | 74.39 | 95.60 ± 1.13 | 7.233 | 10.150 |
 
 **Paired.**
 - Zero-shot: pooled over all questions of the six tasks.
@@ -550,11 +550,11 @@ Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 2
 | FOCUS-2k vs FOCUS-1k | TBD | TBD | TBD | TBD |
 | FQ16-256 vs IF4† | -0.45* (557/655, p=0.0053) | -0.45 (21/27, p=0.47) | -0.0204 ± 0.0039* | -0.0024 ± 0.0011* |
 | FQ16-256 vs MixFP4 (Zou)† | -0.09 (539/558, p=0.59) | -0.23 (24/27, p=0.78) | -0.0222 ± 0.0041* | -0.0023 ± 0.0011* |
-| FOCUS-256 local vs FOCUS-256 cluster | TBD | TBD | TBD | TBD |
-| FQ16-256 vs FOCUS-256 local (FOCUS in this environment) | TBD | TBD | TBD | TBD |
-| FOCUS-1k vs FOCUS-256 local (same environment) | TBD | TBD | TBD | TBD |
+| FOCUS-256 local vs FOCUS-256 cluster | +0.22 (490/442, p=0.12) | +2.05* (45/18, p=0.0009) | -0.0058 ± 0.0036* | -0.0007 ± 0.0008 |
+| FQ16-256 vs FOCUS-256 local (FOCUS in this environment) | -0.19 (520/561, p=0.22) | -0.45 (22/28, p=0.48) | -0.0065 ± 0.0042* | -0.0009 ± 0.0010 |
+| FOCUS-1k vs FOCUS-256 local (same environment) | +0.16 (524/489, p=0.29) | -7.20* (22/117, p=7.6e-17) | -0.0060 ± 0.0037* | -0.0014 ± 0.0009* |
 | FOCUS-2k vs FOCUS-256 local (same environment) | TBD | TBD | TBD | TBD |
-| FQ16-1k vs FOCUS-256 local | TBD | TBD | TBD | TBD |
+| FQ16-1k vs FOCUS-256 local | -0.02 (542/547, p=0.9) | +0.30 (20/16, p=0.62) | -0.0216 ± 0.0045* | -0.0027 ± 0.0010* |
 
 GSM8K generation endings (amendment 3): strict-match no-answer count, generations cut at "The final [answer [is]]", mean / max generated tokens and budget (1,024) hits, of 1,319:
 
@@ -572,6 +572,7 @@ GSM8K generation endings (amendment 3): strict-match no-answer count, generation
 | FOCUS, 1,024 | 115 | 34 | 147.6 | 1024 | 7 |
 | FlipQuant 16x64, 256 | 21 | 5 | 184.6 | 1024 | 13 |
 | FlipQuant 16x64, 1,024 | 17 | 4 | 193.5 | 1024 | 13 |
+| FOCUS, 256 (local control, amendment 3) | 19 | 6 | 167.5 | 1024 | 11 |
 
 Zero-shot per task (difference in points, counts, exact p):
 
@@ -589,8 +590,9 @@ Zero-shot per task (difference in points, counts, exact p):
 | FlipQuant 16x64 | 1,024 | this part | 640 | 0.0253 | 9478 | 8643 | 90.52 | 95000 | 51.92 | 3,141,677,056 |
 | FOCUS | 256 | part Q (cluster) | 8 | — | — | 2249 | 78.62 | — | — | 18,263,340,091 |
 | FOCUS | 1,024 | this part | 32 | — | 17972 | 17810 | 91.79 | 95388 | — | 18,263,340,091 |
+| FOCUS (local control) | 256 | this part | 8 | — | 4576 | 4453 | 91.79 | 95388 | — | 18,263,340,091 |
 
-Evaluation wall times (s): gsm8k_focus_1024 1759, gsm8k_fq16_1024 2180, ppl_fo6 123, ppl_focus256 123, ppl_focus_1024 123, ppl_fq16_1024 131, ppl_fq16_256 131, zs_focus_1024 1134, zs_fq16_1024 1100, zs_fq16_256 1125.
+Evaluation wall times (s): gsm8k_focus256_local 2088, gsm8k_focus_1024 1759, gsm8k_fq16_1024 2180, ppl_fo6 123, ppl_focus256 123, ppl_focus256_local 123, ppl_focus_1024 123, ppl_fq16_1024 131, ppl_fq16_256 131, zs_focus256_local 1116, zs_focus_1024 1134, zs_fq16_1024 1100, zs_fq16_256 1125.
 
 ## Qwen3-1.7B
 
