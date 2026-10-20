@@ -34,7 +34,14 @@ BASE_ROWS = [("BF16", "bf16"), ("NVFP4", "nvfp4"), ("FourOverSix", "fo6"), ("IF4
 NEW_ROWS = [("FOCUS, 256", "focus256"), ("FOCUS, 1,024", "focus_1024"), ("FOCUS, 2,048", "focus_2048"),
             ("FlipQuant 16x64, 256", "fq16_256"), ("FlipQuant 16x64, 1,024", "fq16_1024"),
             ("FlipQuant 16x64, 2,048", "fq16_2048")]
-NEW = ("focus_1024", "fq16_1024", "focus_2048", "fq16_2048", "focus256_rerun")
+NEW = ("focus_1024", "fq16_1024", "focus_2048", "fq16_2048", "focus256_rerun", "focus256_local")
+#: amendment 3: Qwen3.8-27B's FOCUS-256 retrained locally as its 1,024 / 2,048 runs (offload, micro 1), the
+#: environment-matched reference; the cluster state (part Q) stays, marked as a different environment
+CONTROL = ("FOCUS, 256 (local control, amendment 3)", "focus256_local")
+CONTROL_COMPARISONS = [("FOCUS-256 local vs FOCUS-256 cluster", "focus256_local", "focus256"),
+                       ("FOCUS-1k vs FOCUS-256 local (same environment)", "focus_1024", "focus256_local"),
+                       ("FOCUS-2k vs FOCUS-256 local (same environment)", "focus_2048", "focus256_local"),
+                       ("FQ16-1k vs FOCUS-256 local", "fq16_1024", "focus256_local")]
 RERUN = ("FOCUS, 256 (retrained, step 0 d)", "focus256_rerun")
 
 
@@ -145,6 +152,31 @@ COMPARISONS = ([("FQ16-256 vs FOCUS-256", "fq16_256", "focus256")]
                    (f"FQ16-{K[n]} vs IF4†", f"fq16_{n}", "if4"), (f"FQ16-{K[n]} vs MixFP4 (Zou)†", f"fq16_{n}", "zou"))]
                + [("FQ16-2k vs FQ16-1k", "fq16_2048", "fq16_1024"), ("FOCUS-2k vs FOCUS-1k", "focus_2048", "focus_1024"),
                   ("FQ16-256 vs IF4†", "fq16_256", "if4"), ("FQ16-256 vs MixFP4 (Zou)†", "fq16_256", "zou")])
+
+
+def gsm8k_stops(model, rows):
+    """Amendment 3's GSM8K diagnostics per row: strict-match no-answer ([invalid]) count, generations ending at "The
+    final [answer [is]]" (a cut before the number), mean / max generated tokens and budget hits."""
+    import gzip
+    import re
+    out = {}
+    for label, name in rows:
+        r = gsm_record(model, name)
+        if r is None:
+            continue
+        x = {"focus256": "focus", "fq16_256": "fq-16x64"}.get(name, name)
+        if name in NEW or model in CS.QWEN3:
+            path = CS.ROOT / model / "eval" / "gsm8k" / f"{x}.{Y.TASK}.jsonl.gz"
+        else:
+            path = Y.ROOT / model / f"{x}.{Y.TASK}.jsonl.gz"
+        cut = 0
+        with gzip.open(path, "rt") as f:
+            for line in f:
+                smp = json.loads(line)
+                if smp["filter"] == "strict_match" and re.search(r"The final( answer( is)?)?$", smp["resps"][0][0].rstrip()):
+                    cut += 1
+        out[name] = dict(label=label, strict_no_answer=RY.no_answer(r), cut_at_final=cut, **RY.lengths(r))
+    return out
 
 
 # ---------------------------------------------------------------------------------------------- cost
@@ -301,6 +333,15 @@ def report_md(rec):
             nll = c.get("nll") or {}
             L.append(f"| {label} | {fmt_pair(c.get('zeroshot'))} | {fmt_pair(c.get('gsm8k'))} | "
                      f"{fmt_nll(nll.get('wiki'))} | {fmt_nll(nll.get('c4'))} |")
+        st = m.get("gsm8k_stops") or {}
+        if st:
+            L += ["", "GSM8K generation endings (amendment 3): strict-match no-answer count, generations cut at \"The "
+                  "final [answer [is]]\", mean / max generated tokens and budget (1,024) hits, of 1,319:", "",
+                  "| method | strict no-answer | cut at \"The final…\" | mean tokens | max | budget hits |",
+                  "|---|---:|---:|---:|---:|---:|"]
+            for name, v in st.items():
+                L.append(f"| {v['label']} | {v['strict_no_answer']} | {v['cut_at_final']} | {v['mean']:.1f} | {v['max']} | "
+                         f"{v['budget_hits']} |")
         main = [k for k in ("FQ16-1k vs FQ16-256", "FOCUS-1k vs FOCUS-256", "FQ16-1k vs FOCUS-1k",
                             "FQ16-2k vs FQ16-256", "FOCUS-2k vs FOCUS-256", "FQ16-2k vs FOCUS-2k",
                             "FQ16-256 vs FOCUS-256") if "zeroshot_tasks" in m["paired"].get(k, {})]
@@ -338,6 +379,8 @@ def build():
         rows = BASE_ROWS + NEW_ROWS
         if load(CS.ROOT / model / "eval" / "zs" / "focus256_rerun.json") is not None:
             rows = rows + [RERUN]
+        if model == "qwen3.8-27b":
+            rows = rows + [CONTROL]
         values = {}
         for label, name in rows:
             v = {}
@@ -353,12 +396,15 @@ def build():
                 v["nll_mean"] = {c: T.mean(n[c]) for c, _ in T.CORPORA}
             values[name] = v
         comps = list(COMPARISONS)
+        if CONTROL in rows:
+            comps = [((f"{label} (cluster: a different environment)" if b == "focus256" and a.startswith("focus_")
+                       else label), a, b) for label, a, b in comps] + CONTROL_COMPARISONS
         if RERUN in rows:
             comps.append(("FOCUS-256 retrained vs FOCUS-256", "focus256_rerun", "focus256"))
             comps.append(("FOCUS-1k vs FOCUS-256 retrained", "focus_1024", "focus256_rerun"))
         paired = {label: compare(model, a, b) for label, a, b in comps}
         rec["models"][model] = dict(rows=rows, values=values, paired=paired, cost=cost_rows(model),
-                                    eval_seconds=eval_seconds(model))
+                                    eval_seconds=eval_seconds(model), gsm8k_stops=gsm8k_stops(model, rows))
     rec["pooled"] = pooled(rec)
     return rec
 
