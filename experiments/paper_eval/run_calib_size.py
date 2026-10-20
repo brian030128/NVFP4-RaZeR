@@ -852,6 +852,71 @@ def panel(n, models):
     G.log(f"DONE calib_size panel {n}")
 
 
+# ---------------------------------------------------------------------------------------------- amendment 4: theta
+
+THETA_CODE = "9f19863"             # calib-size + tmopt_launch --save-theta (fast-forwarded after the 2,048 panel)
+
+
+def theta_rerun(model=LLAMA1B, n=2048):
+    """Amendment 4: the model's FQ16-n calibration re-run once with the passive --save-theta hook, from the exact
+    command the panel ran (its train.log's first line; only --out and the hook differ). The rerun's map must equal the
+    panel's (the trainer's map sha256); then, from theta: the share of E0M3 tiles with theta < 0.02 (one step of lr
+    0.02 above the threshold), and the share of all tiles with |theta| < 0.02."""
+    rec_path = ROOT / model / f"theta_{n}.json"
+    if rec_path.exists():
+        return json.loads(rec_path.read_text())
+    def git(*a):
+        return subprocess.run(["git", "-C", str(FQ3), *a], capture_output=True, text=True).stdout.strip()
+    head, dirty = git("rev-parse", "HEAD"), git("status", "--porcelain", "--untracked-files=no")
+    if not head.startswith(THETA_CODE) or dirty:
+        stop(f"theta: {FQ3} at {head[:7]} (dirty {bool(dirty)}), not {THETA_CODE}")
+    panel = ROOT / model / f"fq16_{n}"
+    cmd = (panel / "train.log").read_text().splitlines()[0].split()
+    out = ROOT / model / f"theta_{n}"
+    if out.exists():
+        stop(f"theta: {out} exists from an earlier attempt; inspect it")
+    i = cmd.index("--out")
+    cmd[i + 1] = str(out / "run")
+    j = cmd.index("--")
+    cmd[j:j] = ["--save-theta", str(out / "theta.pt")]
+    if not cmd[1].endswith("calibration/tmopt_launch.py"):
+        stop(f"theta: unexpected trainer command {cmd[:3]}")
+    sys.path.insert(0, str(FQ3))
+    from calibration import tmopt_common as RC
+    out.mkdir(parents=True)
+    G.idle()
+    G.log(f"START cs_theta_{model}_{n}")
+    t0 = time.time()
+    with open(G.RUN / "logs" / f"cs_theta_{model}_{n}.log", "w") as f:
+        f.write(" ".join(cmd) + "\n")
+        f.flush()
+        rc = subprocess.run(cmd, cwd=RC.ENGINE, env=RC.env(), stdout=f, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL).returncode
+    G.log(f"END cs_theta_{model}_{n} rc={rc} {time.time() - t0:.0f}s")
+    must(rc, f"theta {model} {n}")
+    import torch
+    a = json.loads((panel / "run" / "report.json").read_text())["map_sha256"]
+    b = json.loads((out / "run" / "report.json").read_text())["map_sha256"]
+    theta = torch.load(out / "theta.pt", map_location="cpu", weights_only=True)
+    hard = torch.load(panel / "run" / "map.pt", map_location="cpu", weights_only=True)
+    same = a == b and all(torch.equal(theta[k] > 0, hard[k].bool()) for k in hard)
+    t = torch.cat([v.flatten().float() for v in theta.values()])
+    e = t[t > 0]
+    res = dict(model=model, windows=n, flipquant=head, map_sha256_panel=a, map_sha256_rerun=b, reproduces=same,
+               tiles=t.numel(), e0m3_tiles=e.numel(), e0m3_share=e.numel() / t.numel(),
+               e0m3_within_one_step=float((e < 0.02).float().mean()),
+               all_within_one_step=float((t.abs() < 0.02).float().mean()),
+               e2m1_within_one_step=float(((t <= 0) & (t > -0.02)).float().sum() / (t <= 0).sum()),
+               quantiles_e0m3=[float(x) for x in torch.quantile(e, torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9]))],
+               seconds=time.time() - t0)
+    rec_path.write_text(json.dumps(res, indent=1) + "\n")
+    if not same:
+        stop(f"theta: the rerun's map differs from the panel's ({rec_path})")
+    G.log(f"calib_size theta {model} {n}: map reproduced; E0M3 tiles with theta < 0.02: "
+          f"{res['e0m3_within_one_step']:.1%}")
+    return res
+
+
 if __name__ == "__main__":
     what = sys.argv[1]
     if what == "windows":
@@ -862,6 +927,8 @@ if __name__ == "__main__":
         probes()
     elif what == "pilot":
         pilot()
+    elif what == "theta":
+        theta_rerun()
     elif what == "panel":
         size = int(next(a.split("=", 1)[1] for a in sys.argv[2:] if a.startswith("--size=")))
         sel = [a.split("=", 1)[1].split(",") for a in sys.argv[2:] if a.startswith("--models=")]
