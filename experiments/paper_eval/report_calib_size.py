@@ -39,6 +39,7 @@ NEW = ("focus_1024", "fq16_1024", "focus_2048", "fq16_2048", "focus256_rerun", "
 #: environment-matched reference; the cluster state (part Q) stays, marked as a different environment
 CONTROL = ("FOCUS, 256 (local control, amendment 3)", "focus256_local")
 CONTROL_COMPARISONS = [("FOCUS-256 local vs FOCUS-256 cluster", "focus256_local", "focus256"),
+                       ("FQ16-256 vs FOCUS-256 local (FOCUS in this environment)", "fq16_256", "focus256_local"),
                        ("FOCUS-1k vs FOCUS-256 local (same environment)", "focus_1024", "focus256_local"),
                        ("FOCUS-2k vs FOCUS-256 local (same environment)", "focus_2048", "focus256_local"),
                        ("FQ16-1k vs FOCUS-256 local", "fq16_1024", "focus256_local")]
@@ -249,13 +250,19 @@ def f2(v, d=2):
     return "—" if v is None else f"{v:.{d}f}"
 
 
-def pooled(rec):
+#: the coordinator's request (2026-10-20): FQ16 vs FOCUS pooled also without Qwen3.8-27B, whose FOCUS-1k stops early
+#: on GSM8K (amendment 3); the 8-model figure stays, marked
+WITHOUT_QWEN27B = ("FQ16-256 vs FOCUS-256", "FQ16-1k vs FOCUS-1k", "FQ16-2k vs FOCUS-2k")
+
+
+def pooled(rec, exclude=()):
     """Per comparison, the discordant counts summed over the models that have both rows, with the exact McNemar p
     (part Y's pooled-vs-FourOverSix formula), for zero-shot (all questions of the six tasks) and GSM8K."""
     out = {}
     for label, _, _ in COMPARISONS:
         for ev in ("zeroshot", "gsm8k"):
-            got = [(m, v["paired"][label][ev]) for m, v in rec["models"].items() if ev in v["paired"].get(label, {})]
+            got = [(m, v["paired"][label][ev]) for m, v in rec["models"].items()
+                   if m not in exclude and ev in v["paired"].get(label, {})]
             if not got:
                 continue
             a, b, n = (sum(x[k] for _, x in got) for k in ("row_only", "ref_only", "n"))
@@ -286,16 +293,22 @@ def summary_md(rec):
         L += ["**Pooled over the models** (discordant counts summed; difference in points over all pooled questions; "
               "exact McNemar p; * = p < 0.05):", "",
               "| comparison | zero-shot | models | GSM8K | models |", "|---|---|---|---|---|"]
+        P7 = rec.get("pooled_without_qwen27b") or {}
         for label, _, _ in COMPARISONS:
-            c = P.get(label)
-            if not c:
-                continue
-            cells = []
-            for ev in ("zeroshot", "gsm8k"):
-                x = c.get(ev)
-                cells += [fmt_pair(x) if x else "TBD", ", ".join(SHORT[m] for m in x["models"]) if x else ""]
-            L.append(f"| {label} | " + " | ".join(cells) + " |")
-        L.append("")
+            for tag, src in (("", P), (" — without Qwen27B", P7)):
+                c = src.get(label)
+                if not c or (tag and label not in WITHOUT_QWEN27B):
+                    continue
+                mark = " — all models" if not tag and label in WITHOUT_QWEN27B and any(
+                    "qwen3.8-27b" in (c.get(ev) or {}).get("models", []) for ev in ("zeroshot", "gsm8k")) else tag
+                cells = []
+                for ev in ("zeroshot", "gsm8k"):
+                    x = c.get(ev)
+                    cells += [fmt_pair(x) if x else "TBD", ", ".join(SHORT[m] for m in x["models"]) if x else ""]
+                L.append(f"| {label}{mark} | " + " | ".join(cells) + " |")
+        L += ["", "\"All models\" includes Qwen3.8-27B, whose FOCUS-1k stops early on GSM8K (amendment 3); \"without "
+              "Qwen27B\" pools the other seven (the coordinator's request). Qwen3.8-27B's environment-matched comparisons "
+              "against its local control are in its section.", ""]
     return L
 
 
@@ -409,6 +422,8 @@ def build():
         rec["models"][model] = dict(rows=rows, values=values, paired=paired, cost=cost_rows(model),
                                     eval_seconds=eval_seconds(model), gsm8k_stops=gsm8k_stops(model, rows))
     rec["pooled"] = pooled(rec)
+    rec["pooled_without_qwen27b"] = {k: v for k, v in pooled(rec, exclude=("qwen3.8-27b",)).items()
+                                     if k in WITHOUT_QWEN27B}
     return rec
 
 

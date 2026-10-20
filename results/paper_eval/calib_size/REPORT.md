@@ -46,16 +46,20 @@ Per model: zero-shot Avg. (%), GSM8K strict-match (%) and WikiText-2 PPL of each
 
 | comparison | zero-shot | models | GSM8K | models |
 |---|---|---|---|---|
-| FQ16-256 vs FOCUS-256 | -0.06 (6098/6201, p=0.36) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +0.90* (769/674, p=0.013) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B |
+| FQ16-256 vs FOCUS-256 — all models | -0.06 (6098/6201, p=0.36) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +0.90* (769/674, p=0.013) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B |
+| FQ16-256 vs FOCUS-256 — without Qwen27B | -0.07 (5540/5650, p=0.3) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen3-1.7B, Qwen3-8B | +0.80* (728/654, p=0.05) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen3-1.7B, Qwen3-8B |
 | FQ16-1k vs FourOverSix | +0.82* (6422/4983, p=2e-41) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +2.18* (768/538, p=2.1e-10) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B |
 | FQ16-1k vs FQ16-256 | +0.09 (5163/5014, p=0.14) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +1.60* (716/547, p=2.2e-06) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B |
 | FOCUS-1k vs FourOverSix | +0.99* (7422/5697, p=2.4e-51) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +0.28 (809/779, p=0.47) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B |
 | FOCUS-1k vs FOCUS-256 | +0.16* (5170/4921, p=0.014) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen3-1.7B, Qwen3-8B | +1.43* (735/603, p=0.00034) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen3-1.7B, Qwen3-8B |
-| FQ16-1k vs FOCUS-1k | -0.16* (5817/6103, p=0.009) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +1.90* (838/638, p=2.1e-07) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B |
+| FQ16-1k vs FOCUS-1k — all models | -0.16* (5817/6103, p=0.009) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +1.90* (838/638, p=2.1e-07) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B |
+| FQ16-1k vs FOCUS-1k — without Qwen27B | -0.16* (5299/5545, p=0.019) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen3-1.7B, Qwen3-8B | +1.09* (722/621, p=0.0063) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen3-1.7B, Qwen3-8B |
 | FQ16-1k vs IF4† | +0.51* (7007/6107, p=4e-15) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +0.76 (538/478, p=0.064) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B |
 | FQ16-1k vs MixFP4 (Zou)† | +0.57* (7038/6039, p=2.5e-18) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +0.82* (548/483, p=0.046) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B |
 | FQ16-256 vs IF4† | +0.43* (6943/6192, p=5.9e-11) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | -0.24 (497/516, p=0.57) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B |
 | FQ16-256 vs MixFP4 (Zou)† | +0.49* (7050/6200, p=1.6e-13) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | -0.18 (522/536, p=0.69) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B |
+
+"All models" includes Qwen3.8-27B, whose FOCUS-1k stops early on GSM8K (amendment 3); "without Qwen27B" pools the other seven (the coordinator's request). Qwen3.8-27B's environment-matched comparisons against its local control are in its section.
 
 ## Llama-3.2-1B-Instruct
 
@@ -547,6 +551,7 @@ Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 2
 | FQ16-256 vs IF4† | -0.45* (557/655, p=0.0053) | -0.45 (21/27, p=0.47) | -0.0204 ± 0.0039* | -0.0024 ± 0.0011* |
 | FQ16-256 vs MixFP4 (Zou)† | -0.09 (539/558, p=0.59) | -0.23 (24/27, p=0.78) | -0.0222 ± 0.0041* | -0.0023 ± 0.0011* |
 | FOCUS-256 local vs FOCUS-256 cluster | TBD | TBD | TBD | TBD |
+| FQ16-256 vs FOCUS-256 local (FOCUS in this environment) | TBD | TBD | TBD | TBD |
 | FOCUS-1k vs FOCUS-256 local (same environment) | TBD | TBD | TBD | TBD |
 | FOCUS-2k vs FOCUS-256 local (same environment) | TBD | TBD | TBD | TBD |
 | FQ16-1k vs FOCUS-256 local | TBD | TBD | TBD | TBD |
