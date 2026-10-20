@@ -8,7 +8,18 @@ The release rule, extended (PROTOCOL.md part AA): the calibration record's 128 w
 | Llama-3.2-1B-Instruct | 2,048 | 1,920 | 128 / 192 / 0 | 1,024 | all pass | `ed177316f06aa935…` | 35 |
 | Phi-4 | 1,024 | 896 | 128 / 192 / 0 | 256 | all pass | `a78f561bb8561686…` | 29 |
 | Phi-4 | 2,048 | 1,920 | 128 / 192 / 0 | 1,024 | all pass | `18dfa61a5184b5cb…` | 37 |
-| Qwen3.8-27B | 2,048 | 1,920 | 128 / 192 / 233 | 256 | all pass | `68bbb9e7e840635d…` | 34 |
+| Qwen3.8-27B | 1,024 | 896 | 128 / 192 / 233 | 256 | all pass | `4892a27ce5e95286…` | 26 |
+| Qwen3.8-27B | 2,048 | 1,920 | 128 / 192 / 233 | 1,024 | all pass | `68bbb9e7e840635d…` | 34 |
+| Mistral-7B-Instruct-v0.3 | 1,024 | 896 | 128 / 192 / 0 | 256 | all pass | `15803812b91f9d8c…` | 26 |
+| Mistral-7B-Instruct-v0.3 | 2,048 | 1,920 | 128 / 192 / 0 | 1,024 | all pass | `80a2ab26cd93bc99…` | 31 |
+| Llama-3.1-8B-Instruct | 1,024 | 896 | 128 / 192 / 231 | 256 | all pass | `e4b509c5b0e7f90c…` | 27 |
+| Llama-3.1-8B-Instruct | 2,048 | 1,920 | 128 / 192 / 231 | 1,024 | all pass | `cb50d9424e1bf6a8…` | 35 |
+| Nemotron-Nano-9B-v2 | 1,024 | 896 | 128 / 192 / 0 | 256 | all pass | `12038dae8cce1844…` | 28 |
+| Nemotron-Nano-9B-v2 | 2,048 | 1,920 | 128 / 192 / 0 | 1,024 | all pass | `eef7ec70f282f7e9…` | 36 |
+| Qwen3-1.7B | 1,024 | 896 | 128 / 192 / 0 | 256 | all pass | `bd5ef53d52cfa59b…` | 28 |
+| Qwen3-1.7B | 2,048 | 1,920 | 128 / 192 / 0 | 1,024 | all pass | `d6f34b6e454763a0…` | 39 |
+| Qwen3-8B | 1,024 | 896 | 128 / 192 / 0 | 256 | all pass | `bd5ef53d52cfa59b…` | 28 |
+| Qwen3-8B | 2,048 | 1,920 | 128 / 192 / 0 | 1,024 | all pass | `d6f34b6e454763a0…` | 36 |
 
 Nesting: each source's first (n - 128) / 2 extension windows equal the smaller set's (the release 16x64 trainer report for 256), record by record; the skip counts equal the release run's; every token hash is distinct. The full token-list sha256 values are in calib_size.json.
 

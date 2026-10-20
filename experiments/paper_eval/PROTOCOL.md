@@ -2095,3 +2095,23 @@ while its zero-shot (+0.38*) and NLL (−0.0117* / −0.0021*) improved.
 - **Interpretation is not fixed in advance.**
   - If the control also stops early, the cause is the run or the environment.
   - If it does not, the window count is the likelier cause; FOCUS's run-to-run noise still applies.
+
+### Part AA: the 1,024 panel, the run (2026-10-19 15:10 UTC – 2026-10-20 12:24 UTC); every gate passed
+
+- **Per model:** for all eight models, the zero-shot FQ16-256 re-run on calib-size is bit-identical to part X / X2. All
+  24 PPL references equal the final table's records. The FOCUS states trained after the pilot are on /vault, and each
+  sha256 was verified before every evaluation.
+- **E0M3 share at 1,024** (256 in parentheses): Llama-1B 14.8 % (2.8), Phi-4 3.7 (0.6), Mistral 5.3 (1.1), Llama-8B 5.5
+  (0.8), Nemotron 5.6 (1.1), Qwen3.8-27B 2.5 (0.4), Qwen3-1.7B 8.2 (1.2), Qwen3-8B 4.4 (0.6). Every value is under the
+  25 % gate.
+- **Qwen3-1.7B / Qwen3-8B GSM8K baselines** (6 rows each, thinking off): every check passed.
+- **Qwen3.8-27B FOCUS-1k** (local, offloaded) stopped early on GSM8K: −5.16* vs the cluster FOCUS-256. The coordinator
+  was told, and the user approved amendment 3's local control, which runs first in the 2,048 panel.
+- **Logs.** FOCUS calibration job names do not include the window size, and run_sm120.run_fresh_dir writes each log
+  fresh. So a later run of the same model overwrote an earlier log:
+  - step 0 (d)'s Llama-1B FOCUS-256 rerun log, by the pilot;
+  - Qwen3.8-27B's FOCUS-1k log, by the control.
+  - Both runs' per-step training logs remain in their states' report.json, and its copies in RUN.
+  - The other seven 1,024 FOCUS logs were copied to `logs/cs_focus_<model>_1024_micro8.log` before their 2,048 runs.
+    The control's log is copied when it ends (calib_size/keep_control_log.sh).
+- **Results:** results/paper_eval/calib_size/REPORT.md (all eight models at 1,024; pooled McNemar per comparison).

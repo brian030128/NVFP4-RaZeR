@@ -185,13 +185,13 @@ def cost_rows(model):
     """Calibration cost per method and size: the pilot's job records, part P's / the release's (FQ16-256) and part
     K's / P's FOCUS report (FOCUS-256)."""
     rows = []
-    if model == CS.LLAMA1B:
+    if model in Z.LLAMA:                     # part P's two Llama-Instruct models
         r = load(G.RUN / "llama_instruct" / model / "records" / "16x64" / "run.json")
     else:
         r = load(G.REL / model / "records" / "16x64" / "run.json")
     if r:
         t = r["trainer"]
-        rows.append(dict(method="FlipQuant 16x64", windows=256, source="release" if model != CS.LLAMA1B else "part P",
+        rows.append(dict(method="FlipQuant 16x64", windows=256, source="release" if model not in Z.LLAMA else "part P",
                          steps=5 * 256 // 8, e0m3_share=r["e0m3_share"], job_seconds=r.get("seconds"),
                          training_seconds=t.get("training_seconds"), setup_seconds=t.get("setup_seconds"),
                          gpu_peak_allocated_gib=(t.get("gpu_peak_allocated_gib") or [None])[0],
@@ -211,18 +211,21 @@ def cost_rows(model):
                          device_peak_mib=j["device_peak_mib"], cpu_peak_rss_gib=t.get("cpu_peak_rss_gib"),
                          teacher_bytes=(j.get("teacher_storage") or {}).get("bytes"),
                          teacher_devices=(j.get("teacher_storage") or {}).get("devices")))
-    f = load(Path(Z.focus_state(model)).parent / "report.json")
+    f = load(G.RUN / "focus_qwen27b" / "report.json" if model == "qwen3.8-27b"      # part Q's cluster run (2 x H200)
+             else Path(Z.focus_state(model)).parent / "report.json")
     if f:
-        rows.append(dict(method="FOCUS", windows=256, source="part P" if model == CS.LLAMA1B else "part K",
+        rows.append(dict(method="FOCUS", windows=256, source="part P" if model in Z.LLAMA else
+                         "part Q (cluster)" if model == "qwen3.8-27b" else "part K",
                          steps=f.get("steps"), micro=f["args"].get("micro"), job_seconds=None,
                          training_seconds=f.get("training_seconds"), calibration_seconds=f.get("calibration_seconds"),
                          gpu_peak_allocated_gib=((f.get("resources") or {}).get("gpu_peak_gib") or [None])[0],
                          state_bytes=Path(Z.focus_state(model)).stat().st_size))
-    for n in SIZES:
-        j = load(CS.ROOT / model / f"focus_{n}" / "state.job.json")
+    for n, sub in [(n, f"focus_{n}") for n in SIZES] + [(256, "focus_256_local")]:
+        j = load(CS.ROOT / model / sub / "state.job.json")
         if not j:
             continue
-        rows.append(dict(method="FOCUS", windows=n, source="this part", steps=j["steps"], micro=j["micro"],
+        rows.append(dict(method="FOCUS" + (" (local control)" if sub == "focus_256_local" else ""), windows=n,
+                         source="this part", steps=j["steps"], micro=j["micro"],
                          job_seconds=j["job_seconds"], training_seconds=j["training_seconds"],
                          calibration_seconds=j["calibration_seconds"],
                          gpu_peak_allocated_gib=(j.get("gpu_peak_gib") or [None])[0], device_peak_mib=j["device_peak_mib"],
