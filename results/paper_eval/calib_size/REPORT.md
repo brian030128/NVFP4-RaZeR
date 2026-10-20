@@ -16,7 +16,7 @@ Per model: zero-shot Avg. (%), GSM8K strict-match (%) and WikiText-2 PPL of each
 | FOCUS, 2,048 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 | FlipQuant 16x64, 256 | 57.25 | 72.58 | 75.77 | 72.58 | 70.74 | 73.91 | 58.08 | 69.73 |
 | FlipQuant 16x64, 1,024 | 57.93 | 72.78 | 75.69 | 72.28 | 71.09 | 74.41 | 58.15 | 70.18 |
-| FlipQuant 16x64, 2,048 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
+| FlipQuant 16x64, 2,048 | 57.72 | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 
 **GSM8K strict-match (%):**
 
@@ -28,7 +28,7 @@ Per model: zero-shot Avg. (%), GSM8K strict-match (%) and WikiText-2 PPL of each
 | FOCUS, 2,048 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 | FlipQuant 16x64, 256 | 31.61 | 92.12 | 44.81 | 80.06 | 89.31 | 95.15 | 61.33 | 89.31 |
 | FlipQuant 16x64, 1,024 | 35.18 | 93.18 | 45.79 | 80.36 | 88.63 | 95.91 | 67.25 | 90.22 |
-| FlipQuant 16x64, 2,048 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
+| FlipQuant 16x64, 2,048 | 34.27 | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 
 **WikiText-2 PPL:**
 
@@ -40,7 +40,7 @@ Per model: zero-shot Avg. (%), GSM8K strict-match (%) and WikiText-2 PPL of each
 | FOCUS, 2,048 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 | FlipQuant 16x64, 256 | 14.454 | 6.633 | 5.653 | 7.711 | 8.353 | 7.186 | 15.398 | 9.590 |
 | FlipQuant 16x64, 1,024 | 14.387 | 6.618 | 5.636 | 7.652 | 8.327 | 7.078 | 15.762 | 9.584 |
-| FlipQuant 16x64, 2,048 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
+| FlipQuant 16x64, 2,048 | 14.390 | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 
 **Pooled over the models** (discordant counts summed; difference in points over all pooled questions; exact McNemar p; * = p < 0.05):
 
@@ -56,6 +56,11 @@ Per model: zero-shot Avg. (%), GSM8K strict-match (%) and WikiText-2 PPL of each
 | FQ16-1k vs FOCUS-1k — without Qwen27B | -0.16* (5299/5545, p=0.019) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen3-1.7B, Qwen3-8B | +1.09* (722/621, p=0.0063) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen3-1.7B, Qwen3-8B |
 | FQ16-1k vs IF4† | +0.51* (7007/6107, p=4e-15) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +0.76 (538/478, p=0.064) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B |
 | FQ16-1k vs MixFP4 (Zou)† | +0.57* (7038/6039, p=2.5e-18) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +0.82* (548/483, p=0.046) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B |
+| FQ16-2k vs FourOverSix | +1.77* (1367/980, p=1.4e-15) | Llama-1B | +4.55* (189/129, p=0.00091) | Llama-1B |
+| FQ16-2k vs FQ16-256 | +0.32 (1053/982, p=0.12) | Llama-1B | +2.65* (159/124, p=0.043) | Llama-1B |
+| FQ16-2k vs IF4† | +1.00* (1337/1119, p=1.2e-05) | Llama-1B | +0.76 (164/154, p=0.61) | Llama-1B |
+| FQ16-2k vs MixFP4 (Zou)† | +0.79* (1312/1140, p=0.00055) | Llama-1B | +0.68 (150/141, p=0.64) | Llama-1B |
+| FQ16-2k vs FQ16-1k | -0.05 (1003/1013, p=0.84) | Llama-1B | -0.91 (143/155, p=0.52) | Llama-1B |
 | FQ16-256 vs IF4† | +0.43* (6943/6192, p=5.9e-11) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | -0.24 (497/516, p=0.57) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B |
 | FQ16-256 vs MixFP4 (Zou)† | +0.49* (7050/6200, p=1.6e-13) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | -0.18 (522/536, p=0.69) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B |
 
@@ -80,7 +85,7 @@ Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 2
 | FOCUS, 2,048 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 | FlipQuant 16x64, 256 | 72.85 | 59.31 | 58.09 | 61.15 | 36.35 | 55.75 | 57.25 | 31.61 ± 2.56 | 14.454 | 19.684 |
 | FlipQuant 16x64, 1,024 | 73.39 | 59.36 | 60.46 | 62.08 | 36.26 | 56.05 | 57.93 | 35.18 ± 2.63 | 14.387 | 19.605 |
-| FlipQuant 16x64, 2,048 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
+| FlipQuant 16x64, 2,048 | 72.69 | 59.41 | 60.06 | 61.66 | 36.18 | 56.32 | 57.72 | 34.27 ± 2.61 | 14.390 | 19.610 |
 | FOCUS, 256 (retrained, step 0 d) | 72.14 | 59.05 | 59.75 | 61.91 | 37.71 | 55.66 | 57.70 | 34.04 ± 2.61 | 14.685 | 19.881 |
 
 **Paired.**
@@ -100,14 +105,14 @@ Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 2
 | FQ16-1k vs FOCUS-1k | -0.08 (1135/1152, p=0.74) | +2.96* (164/125, p=0.025) | -0.0207 ± 0.0022* | -0.0107 ± 0.0019* |
 | FQ16-1k vs IF4† | +1.04* (1359/1131, p=5.3e-06) | +1.67 (168/146, p=0.24) | -0.0645 ± 0.0034* | -0.0722 ± 0.0037* |
 | FQ16-1k vs MixFP4 (Zou)† | +0.83* (1326/1144, p=0.00027) | +1.59 (152/131, p=0.23) | -0.0582 ± 0.0033* | -0.0711 ± 0.0036* |
-| FQ16-2k vs FourOverSix | TBD | TBD | TBD | TBD |
-| FQ16-2k vs FQ16-256 | TBD | TBD | TBD | TBD |
+| FQ16-2k vs FourOverSix | +1.77* (1367/980, p=1.4e-15) | +4.55* (189/129, p=0.00091) | -0.0623 ± 0.0031* | -0.0896 ± 0.0037* |
+| FQ16-2k vs FQ16-256 | +0.32 (1053/982, p=0.12) | +2.65* (159/124, p=0.043) | -0.0044 ± 0.0022* | -0.0038 ± 0.0016* |
 | FOCUS-2k vs FourOverSix | TBD | TBD | TBD | TBD |
 | FOCUS-2k vs FOCUS-256 | TBD | TBD | TBD | TBD |
 | FQ16-2k vs FOCUS-2k | TBD | TBD | TBD | TBD |
-| FQ16-2k vs IF4† | TBD | TBD | TBD | TBD |
-| FQ16-2k vs MixFP4 (Zou)† | TBD | TBD | TBD | TBD |
-| FQ16-2k vs FQ16-1k | TBD | TBD | TBD | TBD |
+| FQ16-2k vs IF4† | +1.00* (1337/1119, p=1.2e-05) | +0.76 (164/154, p=0.61) | -0.0642 ± 0.0035* | -0.0720 ± 0.0036* |
+| FQ16-2k vs MixFP4 (Zou)† | +0.79* (1312/1140, p=0.00055) | +0.68 (150/141, p=0.64) | -0.0579 ± 0.0034* | -0.0708 ± 0.0035* |
+| FQ16-2k vs FQ16-1k | -0.05 (1003/1013, p=0.84) | -0.91 (143/155, p=0.52) | +0.0002 ± 0.0022 | +0.0003 ± 0.0015 |
 | FOCUS-2k vs FOCUS-1k | TBD | TBD | TBD | TBD |
 | FQ16-256 vs IF4† | +0.67* (1272/1125, p=0.0029) | -1.90 (128/153, p=0.15) | -0.0598 ± 0.0035* | -0.0682 ± 0.0038* |
 | FQ16-256 vs MixFP4 (Zou)† | +0.46* (1292/1191, p=0.045) | -1.97 (130/156, p=0.14) | -0.0535 ± 0.0034* | -0.0670 ± 0.0037* |
@@ -130,6 +135,7 @@ GSM8K generation endings (amendment 3): strict-match no-answer count, generation
 | FOCUS, 1,024 | 86 | 0 | 99.6 | 1024 | 15 |
 | FlipQuant 16x64, 256 | 73 | 0 | 88.2 | 1024 | 5 |
 | FlipQuant 16x64, 1,024 | 34 | 0 | 94.0 | 1024 | 5 |
+| FlipQuant 16x64, 2,048 | 53 | 0 | 99.5 | 1024 | 14 |
 | FOCUS, 256 (retrained, step 0 d) | 48 | 0 | 97.3 | 1024 | 12 |
 
 Zero-shot per task (difference in points, counts, exact p):
@@ -139,7 +145,16 @@ Zero-shot per task (difference in points, counts, exact p):
 | FQ16-1k vs FQ16-256 | +0.54 (88/78, p=0.48) | +0.05 (299/294, p=0.87) | +2.37 (164/134, p=0.093) | +0.93 (131/109, p=0.18) | -0.09 (60/61, p=1) | +0.29 (304/289, p=0.57) |
 | FOCUS-1k vs FOCUS-256 | +0.16 (89/86, p=0.88) | -0.30 (299/329, p=0.25) | +0.55 (147/140, p=0.72) | +1.05 (124/99, p=0.11) | -0.17 (63/65, p=0.93) | +1.69* (363/276, p=0.00066) |
 | FQ16-1k vs FOCUS-1k | +0.65 (97/85, p=0.41) | +0.09 (366/357, p=0.77) | +0.79 (157/147, p=0.61) | +0.17 (134/130, p=0.85) | -0.60 (61/68, p=0.6) | -0.87 (320/365, p=0.093) |
+| FQ16-2k vs FQ16-256 | -0.16 (79/82, p=0.87) | +0.10 (304/294, p=0.71) | +1.97 (155/130, p=0.16) | +0.51 (137/125, p=0.5) | -0.17 (62/64, p=0.93) | +0.56 (316/287, p=0.25) |
 | FQ16-256 vs FOCUS-256 | +0.27 (95/90, p=0.77) | -0.26 (328/354, p=0.34) | -1.03 (156/169, p=0.51) | +0.29 (136/129, p=0.71) | -0.68 (66/74, p=0.55) | +0.52 (352/325, p=0.32) |
+
+**FlipQuant 16x64 training per epoch** (amendment 4; the trainer's report.json): training KL, E0M3 tiles at the epoch's end, and tile flips within the epoch (a tile crossing theta = 0 counts each time).
+
+| windows | tiles | epoch 1 | epoch 2 | epoch 3 | epoch 4 | epoch 5 | final E0M3 share |
+|---:|---:|---|---|---|---|---|---:|
+| 256 | 950,272 | KL 0.1539; E0M3 0; flips 0 | KL 0.1431; E0M3 3,576; flips 3,576 | KL 0.1153; E0M3 9,032; flips 8,736 | KL 0.1037; E0M3 16,480; flips 11,720 | KL 0.0964; E0M3 26,656; flips 16,202 | 2.81 % |
+| 1,024 | 950,272 | KL 0.1320; E0M3 10,557; flips 17,555 | KL 0.1019; E0M3 36,803; flips 67,462 | KL 0.0918; E0M3 71,470; flips 129,839 | KL 0.0852; E0M3 106,747; flips 188,903 | KL 0.0810; E0M3 141,062; flips 240,011 | 14.84 % |
+| 2,048 | 950,272 | KL 0.1183; E0M3 33,627; flips 84,427 | KL 0.0937; E0M3 95,225; flips 310,902 | KL 0.0861; E0M3 158,150; flips 527,185 | KL 0.0821; E0M3 211,676; flips 696,756 | KL 0.0805; E0M3 256,459; flips 827,389 | 26.99 % |
 
 **Calibration cost and E0M3 share.**
 
@@ -147,10 +162,11 @@ Zero-shot per task (difference in points, counts, exact p):
 |---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|
 | FlipQuant 16x64 | 256 | part P | 160 | 0.0281 | 83 | 39 | 14.40 | 15842 | 3.27 | 785,419,264 |
 | FlipQuant 16x64 | 1,024 | this part | 640 | 0.1484 | 225 | 156 | 16.60 | 18112 | 3.25 | 3,141,677,056 |
+| FlipQuant 16x64 | 2,048 | this part | 1280 | 0.2699 | 414 | 316 | 19.52 | 21094 | 3.25 | 6,283,354,112 |
 | FOCUS | 256 | part P | 8 | — | — | 35 | 13.57 | — | — | 729,889,075 |
 | FOCUS | 1,024 | this part | 32 | — | 173 | 139 | 13.57 | 15650 | — | 729,889,075 |
 
-Evaluation wall times (s): gsm8k_focus256_rerun 340, gsm8k_focus_1024 386, gsm8k_fq16_1024 292, gsm8k_fq16_256 285, ppl_fo6 19, ppl_focus256 18, ppl_focus256_rerun 19, ppl_focus_1024 19, ppl_fq16_1024 19, ppl_fq16_256 19, zs_focus256_rerun 186, zs_focus_1024 186, zs_fq16_1024 188, zs_fq16_256 183.
+Evaluation wall times (s): gsm8k_focus256_rerun 340, gsm8k_focus_1024 386, gsm8k_fq16_1024 292, gsm8k_fq16_2048 470, gsm8k_fq16_256 285, ppl_fo6 19, ppl_focus256 18, ppl_focus256_rerun 19, ppl_focus_1024 19, ppl_fq16_1024 19, ppl_fq16_2048 19, ppl_fq16_256 19, zs_focus256_rerun 186, zs_focus_1024 186, zs_fq16_1024 188, zs_fq16_2048 183, zs_fq16_256 183.
 
 ## Phi-4
 
@@ -227,6 +243,13 @@ Zero-shot per task (difference in points, counts, exact p):
 | FOCUS-1k vs FOCUS-256 | +0.76 (37/23, p=0.092) | -0.16 (123/139, p=0.35) | -0.55 (73/80, p=0.63) | +0.38 (59/50, p=0.44) | -0.85 (31/41, p=0.29) | -0.14 (138/145, p=0.72) |
 | FQ16-1k vs FOCUS-1k | +0.11 (34/32, p=0.9) | -0.14 (135/149, p=0.44) | -1.34 (82/99, p=0.23) | -0.51 (49/61, p=0.29) | +0.68 (37/29, p=0.39) | -0.43 (166/188, p=0.26) |
 | FQ16-256 vs FOCUS-256 | +0.49 (40/31, p=0.34) | -0.13 (146/159, p=0.49) | -1.66 (80/101, p=0.14) | -0.80 (42/61, p=0.076) | -0.68 (28/36, p=0.38) | -0.56 (153/182, p=0.13) |
+
+**FlipQuant 16x64 training per epoch** (amendment 4; the trainer's report.json): training KL, E0M3 tiles at the epoch's end, and tile flips within the epoch (a tile crossing theta = 0 counts each time).
+
+| windows | tiles | epoch 1 | epoch 2 | epoch 3 | epoch 4 | epoch 5 | final E0M3 share |
+|---:|---:|---|---|---|---|---|---:|
+| 256 | 13,312,000 | KL 0.0357; E0M3 0; flips 0 | KL 0.0358; E0M3 142; flips 142 | KL 0.0352; E0M3 5,261; flips 5,299 | KL 0.0323; E0M3 33,031; flips 30,546 | KL 0.0293; E0M3 79,591; flips 58,550 | 0.60 % |
+| 1,024 | 13,312,000 | KL 0.0363; E0M3 3,587; flips 5,239 | KL 0.0337; E0M3 80,171; flips 122,744 | KL 0.0295; E0M3 229,344; flips 388,787 | KL 0.0268; E0M3 368,694; flips 583,900 | KL 0.0252; E0M3 491,665; flips 717,973 | 3.69 % |
 
 **Calibration cost and E0M3 share.**
 
@@ -315,6 +338,13 @@ Zero-shot per task (difference in points, counts, exact p):
 | FQ16-1k vs FOCUS-1k | +0.49 (54/45, p=0.42) | +0.07 (155/148, p=0.73) | +1.10 (72/58, p=0.25) | -0.93 (47/69, p=0.051) | +0.17 (51/49, p=0.92) | +1.01* (205/153, p=0.0069) |
 | FQ16-256 vs FOCUS-256 | +0.16 (56/53, p=0.85) | +0.55* (230/175, p=0.0072) | -0.24 (64/67, p=0.86) | -1.18* (64/92, p=0.03) | +2.22* (63/37, p=0.012) | +2.17* (298/186, p=4e-07) |
 
+**FlipQuant 16x64 training per epoch** (amendment 4; the trainer's report.json): training KL, E0M3 tiles at the epoch's end, and tile flips within the epoch (a tile crossing theta = 0 counts each time).
+
+| windows | tiles | epoch 1 | epoch 2 | epoch 3 | epoch 4 | epoch 5 | final E0M3 share |
+|---:|---:|---|---|---|---|---|---:|
+| 256 | 6,815,744 | KL 0.0577; E0M3 0; flips 0 | KL 0.0560; E0M3 2,551; flips 2,551 | KL 0.0468; E0M3 12,925; flips 10,716 | KL 0.0408; E0M3 37,613; flips 27,518 | KL 0.0343; E0M3 75,906; flips 47,991 | 1.11 % |
+| 1,024 | 6,815,744 | KL 0.0525; E0M3 14,979; flips 17,057 | KL 0.0381; E0M3 72,722; flips 107,571 | KL 0.0321; E0M3 176,890; flips 267,062 | KL 0.0285; E0M3 272,103; flips 384,053 | KL 0.0264; E0M3 359,840; flips 481,003 | 5.28 % |
+
 **Calibration cost and E0M3 share.**
 
 | method | windows | source | steps | E0M3 share | job (s) | training (s) | peak allocated (GiB) | device peak (MiB) | host RSS (GiB) | teacher / state (bytes) |
@@ -402,6 +432,13 @@ Zero-shot per task (difference in points, counts, exact p):
 | FQ16-1k vs FOCUS-1k | -0.76 (41/55, p=0.18) | -0.09 (202/211, p=0.69) | +1.18 (101/86, p=0.31) | -0.59 (77/91, p=0.32) | -1.96* (45/68, p=0.038) | -1.46* (182/257, p=0.0004) |
 | FQ16-256 vs FOCUS-256 | -0.82 (41/56, p=0.15) | +0.09 (204/195, p=0.69) | +1.89 (99/75, p=0.081) | +1.43* (111/77, p=0.016) | -0.77 (58/67, p=0.47) | -0.35 (192/210, p=0.4) |
 
+**FlipQuant 16x64 training per epoch** (amendment 4; the trainer's report.json): training KL, E0M3 tiles at the epoch's end, and tile flips within the epoch (a tile crossing theta = 0 counts each time).
+
+| windows | tiles | epoch 1 | epoch 2 | epoch 3 | epoch 4 | epoch 5 | final E0M3 share |
+|---:|---:|---|---|---|---|---|---:|
+| 256 | 6,815,744 | KL 0.1024; E0M3 0; flips 0 | KL 0.0972; E0M3 1,154; flips 1,194 | KL 0.0824; E0M3 8,279; flips 7,673 | KL 0.0754; E0M3 26,524; flips 21,213 | KL 0.0682; E0M3 52,719; flips 35,265 | 0.77 % |
+| 1,024 | 6,815,744 | KL 0.0929; E0M3 11,553; flips 14,573 | KL 0.0754; E0M3 62,803; flips 96,872 | KL 0.0647; E0M3 168,470; flips 254,775 | KL 0.0563; E0M3 279,675; flips 374,617 | KL 0.0511; E0M3 377,393; flips 445,836 | 5.54 % |
+
 **Calibration cost and E0M3 share.**
 
 | method | windows | source | steps | E0M3 share | job (s) | training (s) | peak allocated (GiB) | device peak (MiB) | host RSS (GiB) | teacher / state (bytes) |
@@ -488,6 +525,13 @@ Zero-shot per task (difference in points, counts, exact p):
 | FOCUS-1k vs FOCUS-256 | -0.87* (18/34, p=0.036) | -0.06 (155/161, p=0.78) | -0.95 (62/74, p=0.35) | +0.04 (45/44, p=1) | +0.85 (36/26, p=0.25) | +1.28* (225/159, p=0.00089) |
 | FQ16-1k vs FOCUS-1k | +0.54 (39/29, p=0.27) | -0.16 (148/164, p=0.4) | -0.16 (65/67, p=0.93) | -1.01* (32/56, p=0.014) | -1.54* (24/42, p=0.036) | -1.07* (163/218, p=0.0056) |
 | FQ16-256 vs FOCUS-256 | -0.05 (30/31, p=1) | -0.13 (160/173, p=0.51) | -2.13* (58/85, p=0.029) | -0.97* (33/56, p=0.019) | -1.11 (25/38, p=0.13) | -0.82* (176/218, p=0.039) |
+
+**FlipQuant 16x64 training per epoch** (amendment 4; the trainer's report.json): training KL, E0M3 tiles at the epoch's end, and tile flips within the epoch (a tile crossing theta = 0 counts each time).
+
+| windows | tiles | epoch 1 | epoch 2 | epoch 3 | epoch 4 | epoch 5 | final E0M3 share |
+|---:|---:|---|---|---|---|---|---:|
+| 256 | 7,530,880 | KL 0.0368; E0M3 0; flips 0 | KL 0.0357; E0M3 2,102; flips 2,150 | KL 0.0315; E0M3 7,934; flips 8,140 | KL 0.0286; E0M3 35,254; flips 30,386 | KL 0.0256; E0M3 80,098; flips 56,086 | 1.06 % |
+| 1,024 | 7,530,880 | KL 0.0341; E0M3 7,037; flips 11,213 | KL 0.0286; E0M3 78,730; flips 121,355 | KL 0.0251; E0M3 210,605; flips 338,449 | KL 0.0229; E0M3 318,302; flips 486,979 | KL 0.0215; E0M3 420,667; flips 603,719 | 5.59 % |
 
 **Calibration cost and E0M3 share.**
 
@@ -582,6 +626,13 @@ Zero-shot per task (difference in points, counts, exact p):
 | FQ16-1k vs FOCUS-1k | +0.44 (41/33, p=0.42) | -0.23 (124/147, p=0.18) | -0.39 (70/75, p=0.74) | -1.18* (73/101, p=0.04) | -0.85 (46/56, p=0.37) | +0.35 (164/146, p=0.33) |
 | FQ16-256 vs FOCUS-256 | +0.22 (42/38, p=0.74) | +0.31 (166/135, p=0.084) | -0.71 (64/73, p=0.49) | -1.60* (60/98, p=0.0031) | -1.19 (45/59, p=0.2) | +0.64 (181/148, p=0.078) |
 
+**FlipQuant 16x64 training per epoch** (amendment 4; the trainer's report.json): training KL, E0M3 tiles at the epoch's end, and tile flips within the epoch (a tile crossing theta = 0 counts each time).
+
+| windows | tiles | epoch 1 | epoch 2 | epoch 3 | epoch 4 | epoch 5 | final E0M3 share |
+|---:|---:|---|---|---|---|---|---:|
+| 256 | 23,779,840 | KL 0.0490; E0M3 0; flips 0 | KL 0.0492; E0M3 164; flips 164 | KL 0.0473; E0M3 5,225; flips 5,179 | KL 0.0435; E0M3 38,482; flips 35,215 | KL 0.0379; E0M3 105,278; flips 79,760 | 0.44 % |
+| 1,024 | 23,779,840 | KL 0.0490; E0M3 5,091; flips 6,041 | KL 0.0445; E0M3 79,927; flips 117,788 | KL 0.0381; E0M3 263,869; flips 398,918 | KL 0.0333; E0M3 458,052; flips 633,763 | KL 0.0304; E0M3 602,694; flips 723,232 | 2.53 % |
+
 **Calibration cost and E0M3 share.**
 
 | method | windows | source | steps | E0M3 share | job (s) | training (s) | peak allocated (GiB) | device peak (MiB) | host RSS (GiB) | teacher / state (bytes) |
@@ -666,6 +717,13 @@ Zero-shot per task (difference in points, counts, exact p):
 | FQ16-1k vs FOCUS-1k | -0.38 (90/97, p=0.66) | +0.42 (413/371, p=0.14) | -2.37 (162/192, p=0.12) | +1.01 (155/131, p=0.17) | +0.26 (80/77, p=0.87) | +0.47 (333/309, p=0.36) |
 | FQ16-256 vs FOCUS-256 | -0.82 (99/114, p=0.34) | +0.11 (395/384, p=0.72) | -1.97 (166/191, p=0.2) | -0.04 (157/158, p=1) | -0.68 (77/85, p=0.58) | -0.12 (299/305, p=0.84) |
 
+**FlipQuant 16x64 training per epoch** (amendment 4; the trainer's report.json): training KL, E0M3 tiles at the epoch's end, and tile flips within the epoch (a tile crossing theta = 0 counts each time).
+
+| windows | tiles | epoch 1 | epoch 2 | epoch 3 | epoch 4 | epoch 5 | final E0M3 share |
+|---:|---:|---|---|---|---|---|---:|
+| 256 | 1,376,256 | KL 0.1655; E0M3 0; flips 0 | KL 0.1632; E0M3 926; flips 1,076 | KL 0.1389; E0M3 4,759; flips 4,455 | KL 0.1277; E0M3 9,470; flips 6,387 | KL 0.1189; E0M3 16,351; flips 9,751 | 1.19 % |
+| 1,024 | 1,376,256 | KL 0.1596; E0M3 5,110; flips 6,636 | KL 0.1299; E0M3 19,594; flips 28,726 | KL 0.1163; E0M3 46,249; flips 66,963 | KL 0.1046; E0M3 78,236; flips 105,105 | KL 0.0954; E0M3 112,189; flips 138,241 | 8.15 % |
+
 **Calibration cost and E0M3 share.**
 
 | method | windows | source | steps | E0M3 share | job (s) | training (s) | peak allocated (GiB) | device peak (MiB) | host RSS (GiB) | teacher / state (bytes) |
@@ -748,6 +806,13 @@ Zero-shot per task (difference in points, counts, exact p):
 | FOCUS-1k vs FOCUS-256 | +0.27 (60/55, p=0.71) | +0.32 (233/201, p=0.14) | +0.63 (108/100, p=0.63) | -0.13 (73/76, p=0.87) | +2.39* (74/46, p=0.013) | -0.37 (190/209, p=0.37) |
 | FQ16-1k vs FOCUS-1k | +0.00 (60/60, p=1) | +0.08 (234/226, p=0.74) | -1.82 (104/127, p=0.15) | +0.17 (83/79, p=0.81) | -2.05* (48/72, p=0.035) | -0.62 (196/228, p=0.13) |
 | FQ16-256 vs FOCUS-256 | -1.20* (42/64, p=0.041) | +0.44 (267/223, p=0.052) | -0.71 (122/131, p=0.62) | -1.39* (61/94, p=0.0099) | -0.51 (54/60, p=0.64) | -0.43 (217/239, p=0.33) |
+
+**FlipQuant 16x64 training per epoch** (amendment 4; the trainer's report.json): training KL, E0M3 tiles at the epoch's end, and tile flips within the epoch (a tile crossing theta = 0 counts each time).
+
+| windows | tiles | epoch 1 | epoch 2 | epoch 3 | epoch 4 | epoch 5 | final E0M3 share |
+|---:|---:|---|---|---|---|---|---:|
+| 256 | 6,782,976 | KL 0.0885; E0M3 0; flips 0 | KL 0.0873; E0M3 683; flips 693 | KL 0.0802; E0M3 4,071; flips 4,058 | KL 0.0734; E0M3 15,576; flips 13,007 | KL 0.0654; E0M3 37,511; flips 26,785 | 0.55 % |
+| 1,024 | 6,782,976 | KL 0.0883; E0M3 4,790; flips 6,458 | KL 0.0748; E0M3 35,920; flips 51,092 | KL 0.0650; E0M3 118,439; flips 168,127 | KL 0.0557; E0M3 210,556; flips 269,605 | KL 0.0489; E0M3 300,918; flips 352,050 | 4.44 % |
 
 **Calibration cost and E0M3 share.**
 

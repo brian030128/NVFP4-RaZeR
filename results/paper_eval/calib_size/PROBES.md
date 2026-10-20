@@ -41,6 +41,7 @@ The teacher has no disk cache: train_map keeps it in memory (GPU, or the host wi
 - `meta-llama--Llama-3.1-8B-Instruct-6ea727c43071/calibration_release_0ac8e91818609669.pt`: 1,145,069 bytes
 - `meta-llama--Llama-3.1-8B-Instruct-6ea727c43071/calibration_release_19e8d63a59745d73.pt`: 4,576,517 bytes
 - `meta-llama--Llama-3.2-1B-Instruct-6ea727c43071/calibration_release_04038ca921734be9.pt`: 4,576,517 bytes
+- `meta-llama--Llama-3.2-1B-Instruct-6ea727c43071/calibration_release_7434eb003f7220a6.pt`: 9,153,861 bytes
 - `meta-llama--Llama-3.2-1B-Instruct-6ea727c43071/calibration_release_f7b75d21a77289be.pt`: 1,145,069 bytes
 - `microsoft--phi-4-9f5fe260f741/calibration_release_6c0c464b6f74cccb.pt`: 4,576,517 bytes
 - `microsoft--phi-4-9f5fe260f741/calibration_release_9b118c9b16c2d088.pt`: 9,153,797 bytes
@@ -50,4 +51,4 @@ The teacher has no disk cache: train_map keeps it in memory (GPU, or the host wi
 - `nvidia--NVIDIA-Nemotron-Nano-9B-v2-59306981dec2/calibration_release_37f2cef261f67cd2.pt`: 1,145,069 bytes
 - `nvidia--NVIDIA-Nemotron-Nano-9B-v2-59306981dec2/calibration_release_3d305ffbc5a39dca.pt`: 4,576,517 bytes
 
-Total: 25 files, 128.2 MB (2,048 windows = 9.15 MB, 1,024 = 4.58 MB, 256 = 1.15 MB per tokenizer; the audit's tokenizers, loaded from their snapshot paths, have their own cache keys).
+Total: 26 files, 137.3 MB (2,048 windows = 9.15 MB, 1,024 = 4.58 MB, 256 = 1.15 MB per tokenizer; the audit's tokenizers, loaded from their snapshot paths, have their own cache keys).

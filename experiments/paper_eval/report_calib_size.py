@@ -180,6 +180,26 @@ def gsm8k_stops(model, rows):
     return out
 
 
+def training_curves(model):
+    """Amendment 4: per FlipQuant 16x64 map and size, the trainer's per-epoch training KL, E0M3 tile count and
+    within-epoch flips (report.json epochs), and the final E0M3 share; for a size with a theta rerun, the theta record."""
+    out = {}
+    rel = (G.RUN / "llama_instruct" / model / "records" / "16x64" / "trainer_report.json" if model in Z.LLAMA
+           else G.REL / model / "records" / "16x64" / "trainer_report.json")
+    for n, path in [(256, rel)] + [(n, CS.ROOT / model / f"fq16_{n}" / "run" / "report.json") for n in SIZES]:
+        r = load(path)
+        if not r or not r.get("epochs"):
+            continue
+        tiles = r.get("tiles")
+        out[n] = dict(epochs=[dict(epoch=e["epoch"], train_kl=e["train_kl"], e0m3=e["e0m3_units"], flips=e["hard_flips"])
+                              for e in r["epochs"]], tiles=tiles,
+                      final_e0m3=r.get("final_e0m3_units", r["epochs"][-1]["e0m3_units"]))
+        th = load(CS.ROOT / model / f"theta_{n}.json")
+        if th:
+            out[n]["theta"] = th
+    return out
+
+
 # ---------------------------------------------------------------------------------------------- cost
 
 def cost_rows(model):
@@ -368,6 +388,29 @@ def report_md(rec):
             for k in main:
                 tp = m["paired"][k]["zeroshot_tasks"]
                 L.append(f"| {k} | " + " | ".join(fmt_pair(tp[t]) for t, _ in RX.TASK_NAMES) + " |")
+        cv = m.get("curves") or {}
+        if cv:
+            L += ["", "**FlipQuant 16x64 training per epoch** (amendment 4; the trainer's report.json): training KL, E0M3 "
+                  "tiles at the epoch's end, and tile flips within the epoch (a tile crossing theta = 0 counts each time).",
+                  ""]
+            L += ["| windows | tiles | " + " | ".join(f"epoch {i + 1}" for i in range(5)) + " | final E0M3 share |",
+                  "|---:|---:|" + "---|" * 5 + "---:|"]
+            for n, c in cv.items():
+                cells = [f"KL {e['train_kl']:.4f}; E0M3 {e['e0m3']:,}; flips {e['flips']:,}" for e in c["epochs"]]
+                share = c["final_e0m3"] / c["tiles"] if c.get("tiles") else None
+                L.append(f"| {n:,} | {format(c['tiles'], ',') if c.get('tiles') else '—'} | " + " | ".join(cells)
+                         + f" | {f2(share * 100 if share is not None else None)} % |")
+            for n, c in cv.items():
+                th = c.get("theta")
+                if th:
+                    L += ["", f"**Theta at the end of the {n:,}-window run** (a rerun with `--save-theta` whose map equals "
+                          f"the evaluated one: {'yes' if th['reproduces'] else 'NO'}):",
+                          f"- E0M3 tiles with theta < 0.02 (within one lr step of the threshold): "
+                          f"{th['e0m3_within_one_step']:.1%} of {th['e0m3_tiles']:,};",
+                          f"- E2M1 tiles with theta in (-0.02, 0]: {th['e2m1_within_one_step']:.1%}; all tiles with "
+                          f"|theta| < 0.02: {th['all_within_one_step']:.1%} of {th['tiles']:,};",
+                          f"- E0M3 theta quantiles (10/25/50/75/90 %): "
+                          + ", ".join(f"{q:.3f}" for q in th["quantiles_e0m3"]) + "."]
         L += ["", "**Calibration cost and E0M3 share.**", "",
               "| method | windows | source | steps | E0M3 share | job (s) | training (s) | peak allocated (GiB) | "
               "device peak (MiB) | host RSS (GiB) | teacher / state (bytes) |",
@@ -420,7 +463,8 @@ def build():
             comps.append(("FOCUS-1k vs FOCUS-256 retrained", "focus_1024", "focus256_rerun"))
         paired = {label: compare(model, a, b) for label, a, b in comps}
         rec["models"][model] = dict(rows=rows, values=values, paired=paired, cost=cost_rows(model),
-                                    eval_seconds=eval_seconds(model), gsm8k_stops=gsm8k_stops(model, rows))
+                                    eval_seconds=eval_seconds(model), gsm8k_stops=gsm8k_stops(model, rows),
+                                    curves=training_curves(model))
     rec["pooled"] = pooled(rec)
     rec["pooled_without_qwen27b"] = {k: v for k, v in pooled(rec, exclude=("qwen3.8-27b",)).items()
                                      if k in WITHOUT_QWEN27B}
