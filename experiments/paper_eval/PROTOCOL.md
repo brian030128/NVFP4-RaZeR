@@ -2149,3 +2149,14 @@ The FOCUS calibration job names, and so their stdout logs, now include the windo
 - **Reading:** the control does not stop early; it does so less often than the cluster state. With the environment held
   fixed, FOCUS-1k stops early, so the window count (32 steps instead of 8) is the likelier cause. Each arm is one FOCUS
   run, and FOCUS's run-to-run noise applies: here the control and the cluster state differ by 2.05 GSM8K points.
+
+### Part AA: the 2,048 panel stopped at its first job (2026-10-20 14:44 UTC, amendment 1's E0M3 gate)
+
+- Llama-3.2-1B-Instruct FQ16 at 2,048 windows (rc 0, 414 s) has an E0M3 share of 27.0 %, above the 25 % gate. The
+  driver stopped before any evaluation. The map is kept (RUN/calib_size/llama3.2-1b-instruct/fq16_2048/).
+- **The share grows with the steps:** 2.8 % at 256, 14.8 % at 1,024, 27.0 % at 2,048. The growth is even across layer
+  types (2,048: 25–31 %), and the count rises in every epoch without a plateau.
+- **Within-epoch flips** grow from 84k to 827k (of about 950k tiles), so many tiles cross θ = 0 repeatedly. The training
+  KL still decreases (0.0810 at the end of 1,024; 0.0805 at the end of 2,048).
+- **Reported to the coordinator** with options: evaluate this map; raise or lift the gate; leave it TBD; stop. Nothing
+  runs until the decision.
