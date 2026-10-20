@@ -791,6 +791,29 @@ def offload_test():
         stop(f"offload test: rc={r.returncode} ({out})")
 
 
+def control_qwen27b():
+    """Amendment 3: Qwen3.8-27B FOCUS-256 retrained locally exactly as its 1,024 run (FOCUS_COMMON, --offload --micro
+    1, device_map cuda, the release 256 windows), the environment-matched reference; then its zero-shot, GSM8K and
+    PPL (row focus256_local). The state goes to /vault with the sha256 checks of amendment 2."""
+    model = "qwen3.8-27b"
+    meta_dir = ROOT / model / "focus_256_local"
+    if (meta_dir / "state.job.json").exists():
+        foc = json.loads((meta_dir / "state.job.json").read_text())
+    else:
+        ok, free, need = disk_ok(model)
+        if not ok:
+            stop(f"PAUSE disk before the control: {free}, the state needs about {need / 1e9:.1f} GB")
+        offload_test()
+        foc = calibrate_focus(model, S.trainer_report(model), VAULT / model / "focus_256_local", "state",
+                              meta_dir=meta_dir, micro=FOCUS_MICRO[model], extra=FOCUS_EXTRA[model])
+    cluster = json.loads((G.RUN / "focus_qwen27b" / "report.json").read_text())["data"]["records"]
+    if foc["windows"] != 256 or foc["steps"] != 8 or foc["token_sha256"] != cluster:
+        stop(f"control {model}: {foc['windows']} windows, {foc['steps']} steps; windows equal to the cluster "
+             f"state's: {foc['token_sha256'] == cluster}")
+    eval_row(model, "focus256_local", "focus", Path(foc["state"]), expect_sha=foc["state_sha256"])
+    G.log(f"calib_size control {model}: FOCUS-256 local (amendment 3) trained and evaluated")
+
+
 def wait_checkout(timeout=6 * 3600):
     """Amendment 2: the panel waits until calib_size/wt is fast-forwarded to CODE after the pilot."""
     t0, noted = time.time(), False
@@ -812,6 +835,8 @@ def panel(n, models):
     if not json.loads((ROOT / "step0" / "step0_ok.json").read_text()).get("ok"):
         stop("panel: step 0 has not passed")
     wait_checkout()
+    if n == 2048:                                    # amendment 3: the control runs before the 2,048 panel
+        control_qwen27b()
     for model in models:
         windows_for(model)
         a = audit_for(model)

@@ -2062,3 +2062,36 @@ the first run beyond the pilot; the pilot runs as registered.
   - Every gate passed. Evaluations: results/paper_eval/calib_size/REPORT.md.
 - **Code for the panel:** calib-size was fast-forwarded to 898d00e at 15:10 UTC (amendment 2), and the panel started
   right after.
+
+### Part AA, amendment 3 (registered 2026-10-20, at its commit, during the 1,024 panel; the user's approval, relayed): a local FOCUS-256 control for Qwen3.8-27B
+
+**Why.** Qwen3.8-27B's FOCUS-1k scored GSM8K 88.40 against 93.56 for the cluster FOCUS-256 (−5.16, exact p = 1e-8),
+while its zero-shot (+0.38*) and NLL (−0.0117* / −0.0021*) improved.
+- **The failure is early stopping:** 102 of the 106 lost problems are strict [invalid]. The model stops mid-sentence
+  ("… The final") or before the final sentence. Strict no-answer 115 vs 35; mean length 148 vs 167 tokens.
+- **The cause is confounded.** FOCUS-1k is the first Qwen3.8-27B state trained locally with the offloaded AdamW
+  (amendment 2), while FOCUS-256 was trained on the cluster. FOCUS is also not reproducible run to run (step 0 (d)).
+
+**The control.** Qwen3.8-27B FOCUS-256 retrained locally, exactly as the 1,024 run: FOCUS_COMMON, `--offload --micro
+1`, device_map cuda, calib-size 898d00e, one RTX PRO 6000, on the release 256 windows (the record plus the release
+16x64 trainer report's extension). That gives 8 steps, about 75 min.
+- **Checks:** 256 windows, 8 steps, and token sha256 equal in order to the cluster state's (part Q's report.json data
+  records).
+- **Storage:** `/vault/flipquant_paper_eval/calib_size/qwen3.8-27b/focus_256_local/state/`. The sha256 is recorded at
+  the write and verified before each evaluation; the job record and a report copy go to
+  `RUN/calib_size/qwen3.8-27b/focus_256_local/`.
+- **Evaluation:** zero-shot, GSM8K and PPL, as every row; row name `focus256_local`.
+- **Schedule:** right after the 1,024 panel and before the 2,048 panel. The 2,048 panel driver runs it first. Nothing
+  else in the 2,048 plan changes.
+
+**Report.**
+- **GSM8K diagnostics:** strict [invalid] count, generations ending at "The final [answer [is]]", and mean generated
+  length, for the control next to the cluster FOCUS-256 and FOCUS-1k (and FOCUS-2k once it exists).
+- **Paired** (zero-shot, GSM8K, ΔNLL):
+  - control vs cluster FOCUS-256;
+  - FOCUS-1k vs control, which holds the training environment fixed.
+- **Qwen3.8-27B FOCUS-2k:** the control is its environment-matched reference. The cluster FOCUS-256 comparisons stay,
+  marked as a different environment.
+- **Interpretation is not fixed in advance.**
+  - If the control also stops early, the cause is the run or the environment.
+  - If it does not, the window count is the likelier cause; FOCUS's run-to-run noise still applies.
