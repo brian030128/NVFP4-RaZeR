@@ -114,6 +114,12 @@ def main():
          "  - Native on the RTX PRO 6000 (build_V). IF4 and MixFP4 (Zou) are simulated, from the zero-shot / GSM8K panels.",
          "- **Code:** this branch: f912a30 (`--teacher-host`, `--probe-steps`, `calibration.fit_windows`), 898d00e "
          "(`train_focus --offload`), 9f19863 (`tmopt_launch --save-theta`).",
+         "- **BF16 rows** come from the existing records, with no new runs: zero-shot from the zero-shot panel, GSM8K "
+         "from the GSM8K panel (the two Qwen3 models: this study's baselines), PPL from the main table's records. Each "
+         "value equals its source record's own metric (PPL to float32 precision for the main-table records that "
+         "store float32). Each matches the protocol of the rows beside it: zero-shot sample digests and batch, the "
+         "GSM8K digest, the PPL window counts. Qwen3.8-27B's BF16 GSM8K ran at batch 48 (◊). BF16 has no E0M3 share "
+         "and enters no paired comparison here.",
          "- **Statistics:**",
          "  - Paired differences in points (row-only / reference-only correct, exact McNemar p).",
          "  - Pooled rows sum the discordant counts over the models.",
@@ -146,17 +152,28 @@ def main():
         e0 = {c["windows"]: c.get("e0m3_share") for c in mm["cost"] if c["method"] == "FlipQuant 16x64"}
         L += [f"### {title}", "", "| method | windows | zero-shot Avg. | GSM8K strict | Wiki PPL | C4 PPL | E0M3 share |",
               "|---|---:|---:|---:|---:|---:|---:|"]
-        lines = [("FourOverSix", "—", "fo6", None)]
+        lines = [("BF16", "—", "bf16", None), ("FourOverSix", "—", "fo6", None)]
         lines += [("FOCUS", f"{n:,}", name, None) for n, name in ((256, "focus256"), (1024, "focus_1024"), (2048, "focus_2048"))]
         if m == "qwen3.8-27b":
             lines.insert(2, ("FOCUS, local control", "256", "focus256_local", None))
         lines += [("FlipQuant 16x64", f"{n:,}", name, n) for n, name in ((256, "fq16_256"), (1024, "fq16_1024"), (2048, "fq16_2048"))]
+        bc = mm.get("bf16_check") or {}
         for method, w, name, n in lines:
             x = val.get(name) or {}
             zs, g, pp = x.get("zeroshot"), x.get("gsm8k"), x.get("ppl")
             label = method + (" (cluster)" if m == "qwen3.8-27b" and name == "focus256" else "")
-            L.append(f"| {label} | {w} | {v(zs and zs['avg'])} | {v(g and g[0])} | {v(pp and pp['wiki'], 3)} | "
-                     f"{v(pp and pp['c4'], 3)} | {v(100 * e0[n], 1) + ' %' if n and e0.get(n) is not None else '—'} |")
+            cells = [v(zs and zs["avg"]), v(g and g[0]), v(pp and pp["wiki"], 3), v(pp and pp["c4"], 3)]
+            if name == "bf16":             # checked against its source records (calib_size.json bf16_check)
+                ok = {k: (bc.get(k) or {}).get("ok", False) for k in ("zeroshot", "gsm8k", "ppl")}
+                cells = [cells[0] if ok["zeroshot"] else "mismatch", cells[1] if ok["gsm8k"] else "mismatch",
+                         *(cells[2:] if ok["ppl"] else ["mismatch", "mismatch"])]
+                if ok["gsm8k"] and (bc.get("gsm8k") or {}).get("batch_mark"):
+                    cells[1] += " ◊"
+            L.append(f"| {label} | {w} | " + " | ".join(cells) + f" | "
+                     f"{v(100 * e0[n], 1) + ' %' if n and e0.get(n) is not None else '—'} |")
+        if (bc.get("gsm8k") or {}).get("batch_mark"):
+            L += ["", f"◊ BF16 GSM8K ran at batch {bc['gsm8k']['batch']} (the GSM8K panel), every other row at "
+                  f"{bc['gsm8k']['batch_next']}; generations depend on the batch composition."]
         L += ["", "| comparison | zero-shot | GSM8K | ΔNLL Wiki | ΔNLL C4 |", "|---|---|---|---|---|"]
         comps = [("FlipQuant 1,024 vs 256", "FQ16-1k vs FQ16-256"), ("FlipQuant 2,048 vs 256", "FQ16-2k vs FQ16-256")]
         if m == "qwen3.8-27b":

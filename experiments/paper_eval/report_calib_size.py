@@ -203,6 +203,48 @@ def training_curves(model):
     return out
 
 
+def bf16_check(model):
+    """The BF16 row (the user's request, 2026-10-22): each value against its source record's own metric, and its
+    protocol against the rows it sits next to (the FQ16-1k row): zero-shot sample digests and batch; GSM8K digest and
+    batch (Qwen3.8-27B BF16 ran at 48, marked); PPL window counts per corpus."""
+    out = {}
+    z, zn = zs_record(model, "bf16"), zs_record(model, "fq16_1024")
+    if z and zn:
+        metric = sum(z["tasks"][t]["metrics"][Z.PRIMARY[t] + ",none"] for t in Z.SIZES) / len(Z.SIZES) * 100
+        out["zeroshot"] = dict(value=zs_avg(z), record_metric=metric, equal=abs(zs_avg(z) - metric) < 1e-9,
+                               batch=z["batch_size"], batch_next=zn["batch_size"],
+                               digests_equal=all(z["tasks"][t]["sample_digest"] == zn["tasks"][t]["sample_digest"]
+                                                 for t in Z.SIZES))
+        out["zeroshot"]["ok"] = (out["zeroshot"]["equal"] and out["zeroshot"]["digests_equal"]
+                                 and out["zeroshot"]["batch"] == out["zeroshot"]["batch_next"])
+    g, gn = gsm_record(model, "bf16"), gsm_record(model, "fq16_1024")
+    if g and gn:
+        metric = 100 * g["tasks"][Y.TASK]["metrics"]["exact_match,strict_match"]
+        out["gsm8k"] = dict(value=RY.acc(g)[0], record_metric=metric, equal=abs(RY.acc(g)[0] - metric) < 1e-9,
+                            batch=g["batch_size"], batch_next=gn["batch_size"],
+                            digest_equal=g["tasks"][Y.TASK]["sample_digest"] == gn["tasks"][Y.TASK]["sample_digest"])
+        out["gsm8k"]["ok"] = out["gsm8k"]["equal"] and out["gsm8k"]["digest_equal"]
+        out["gsm8k"]["batch_mark"] = out["gsm8k"]["batch"] != out["gsm8k"]["batch_next"]      # ◊, as part Y
+    nb, nn, pp = ppl_nll(model, "bf16"), ppl_nll(model, "fq16_1024"), ppl_path(model, "bf16")
+    if nb and nn:
+        r = load(pp)
+        if "results" in r:
+            reported = {c: r["results"][c]["ppl"] for c, _ in T.CORPORA}
+        else:
+            ev = next(iter(r["evaluations"].values()))["evaluation"]
+            reported = {c: ev[c]["ppl"] for c, _ in T.CORPORA}
+        value = {c: math.exp(T.mean(nb[c])) for c, _ in T.CORPORA}
+        rel = {c: abs(value[c] - reported[c]) / reported[c] for c in value}
+        # main-ppl's records (run_ppl_deploy) store their PPL in float32; flipquant's in float64. The value here is
+        # exp(mean) of the record's own per-window NLL, so it must agree to float32 precision
+        out["ppl"] = dict(value=value, record_ppl=reported, relative_difference=rel,
+                          equal=all(x <= 1e-6 for x in rel.values()),
+                          windows={c: len(nb[c]) for c in nb}, windows_next={c: len(nn[c]) for c in nn})
+        out["ppl"]["ok"] = out["ppl"]["equal"] and out["ppl"]["windows"] == out["ppl"]["windows_next"]
+    out["ok"] = all(v["ok"] for v in out.values() if isinstance(v, dict))
+    return out
+
+
 # ---------------------------------------------------------------------------------------------- cost
 
 def cost_rows(model):
@@ -412,9 +454,14 @@ def report_md(rec):
         L += [f"## {TITLES[model]}", "",
               "Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / "
               "Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 "
-              "(c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines.", "",
+              "(c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 "
+              "included).",
+              "The BF16 row's values are checked against their source records' own metrics, and against the protocol "
+              "of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would "
+              "show \"mismatch\" (calib_size.json bf16_check).", "",
               "| method | " + " | ".join(n for _, n in RX.TASK_NAMES) + " | Avg. | GSM8K | Wiki PPL | C4 PPL |",
               "|---|" + "---:|" * (len(RX.TASK_NAMES) + 4)]
+        bc = m.get("bf16_check") or {}
         for label, name in m["rows"]:
             r = m["values"].get(name, {})
             zs = r.get("zeroshot")
@@ -423,7 +470,20 @@ def report_md(rec):
             cells.append(f"{g[0]:.2f} ± {g[1]:.2f}" if g else "TBD")
             p = r.get("ppl")
             cells += [f2(p["wiki"], 3), f2(p["c4"], 3)] if p else ["TBD", "TBD"]
+            if name == "bf16":
+                if not (bc.get("zeroshot") or {}).get("ok", True):
+                    cells[:len(RX.TASK_NAMES) + 1] = ["mismatch"] * (len(RX.TASK_NAMES) + 1)
+                if not (bc.get("gsm8k") or {}).get("ok", True):
+                    cells[len(RX.TASK_NAMES) + 1] = "mismatch"
+                elif (bc.get("gsm8k") or {}).get("batch_mark"):
+                    cells[len(RX.TASK_NAMES) + 1] += " ◊"
+                if not (bc.get("ppl") or {}).get("ok", True):
+                    cells[-2:] = ["mismatch", "mismatch"]
             L.append(f"| {label} | " + " | ".join(cells) + " |")
+        if (bc.get("gsm8k") or {}).get("batch_mark"):
+            L += ["", f"◊ BF16 GSM8K ran at batch {bc['gsm8k']['batch']} (part Y), every other row at "
+                  f"{bc['gsm8k']['batch_next']}. Generations depend on the batch composition, so its paired comparisons "
+                  "would compare different batches; it enters none here."]
         L += ["", "**Paired.**",
               "- Zero-shot: pooled over all questions of the six tasks.",
               "- GSM8K: strict-match.",
@@ -531,7 +591,7 @@ def build():
         paired = {label: compare(model, a, b) for label, a, b in comps}
         rec["models"][model] = dict(rows=rows, values=values, paired=paired, cost=cost_rows(model),
                                     eval_seconds=eval_seconds(model), gsm8k_stops=gsm8k_stops(model, rows),
-                                    curves=training_curves(model))
+                                    curves=training_curves(model), bf16_check=bf16_check(model))
     rec["pooled"] = pooled(rec)
     rec["gpu_time_seconds"] = study_cost()
     rec["pooled_without_qwen27b"] = {k: v for k, v in pooled(rec, exclude=("qwen3.8-27b",)).items()

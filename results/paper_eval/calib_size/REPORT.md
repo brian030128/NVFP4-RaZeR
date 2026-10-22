@@ -100,7 +100,8 @@ Per model: zero-shot Avg. (%), GSM8K strict-match (%) and WikiText-2 PPL of each
 
 ## Llama-3.2-1B-Instruct
 
-Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines.
+Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
+The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -213,7 +214,8 @@ Evaluation wall times (s): gsm8k_focus256_rerun 340, gsm8k_focus_1024 386, gsm8k
 
 ## Phi-4
 
-Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines.
+Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
+The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -317,7 +319,8 @@ Evaluation wall times (s): gsm8k_focus_1024 1176, gsm8k_focus_2048 1154, gsm8k_f
 
 ## Mistral-7B-Instruct-v0.3
 
-Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines.
+Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
+The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -421,7 +424,8 @@ Evaluation wall times (s): gsm8k_focus_1024 860, gsm8k_focus_2048 885, gsm8k_fq1
 
 ## Llama-3.1-8B-Instruct
 
-Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines.
+Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
+The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -525,7 +529,8 @@ Evaluation wall times (s): gsm8k_focus_1024 1393, gsm8k_focus_2048 1266, gsm8k_f
 
 ## Nemotron-Nano-9B-v2
 
-Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines.
+Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
+The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -629,11 +634,12 @@ Evaluation wall times (s): gsm8k_focus_1024 374, gsm8k_focus_2048 375, gsm8k_fq1
 
 ## Qwen3.8-27B
 
-Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines.
+Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
+The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| BF16 | 81.50 | 82.86 | 75.93 | 73.11 | 58.36 | 72.02 | 73.96 | 95.68 ± 1.12 | 7.052 | 9.893 |
+| BF16 | 81.50 | 82.86 | 75.93 | 73.11 | 58.36 | 72.02 | 73.96 | 95.68 ± 1.12 ◊ | 7.052 | 9.893 |
 | NVFP4 | 80.90 | 82.39 | 73.88 | 76.22 | 59.73 | 70.17 | 73.88 | 95.38 ± 1.16 | 7.574 | 10.223 |
 | FourOverSix | 81.07 | 82.35 | 75.14 | 74.12 | 58.96 | 70.56 | 73.70 | 94.62 ± 1.24 | 7.302 | 10.190 |
 | IF4† | 80.85 | 82.32 | 74.74 | 78.28 | 60.75 | 71.61 | 74.76 | 95.60 ± 1.13 | 7.334 | 10.166 |
@@ -648,6 +654,8 @@ Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 2
 | FlipQuant 16x64, 1,024 | 81.72 | 82.22 | 75.85 | 75.97 | 59.30 | 71.41 | 74.41 | 95.91 ± 1.09 | 7.078 | 10.122 |
 | FlipQuant 16x64, 2,048 | 81.61 | 82.35 | 74.66 | 77.23 | 60.15 | 71.26 | 74.55 | 95.68 ± 1.12 | 7.070 | 10.117 |
 | FOCUS, 256 (local control, amendment 3) | 81.61 | 82.56 | 75.45 | 76.94 | 59.22 | 70.56 | 74.39 | 95.60 ± 1.13 | 7.233 | 10.150 |
+
+◊ BF16 GSM8K ran at batch 48 (part Y), every other row at 64. Generations depend on the batch composition, so its paired comparisons would compare different batches; it enters none here.
 
 **Paired.**
 - Zero-shot: pooled over all questions of the six tasks.
@@ -739,7 +747,8 @@ Evaluation wall times (s): gsm8k_focus256_local 2088, gsm8k_focus_1024 1759, gsm
 
 ## Qwen3-1.7B
 
-Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines.
+Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
+The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -839,7 +848,8 @@ Evaluation wall times (s): gsm8k_bf16 461, gsm8k_fo6 443, gsm8k_focus 389, gsm8k
 
 ## Qwen3-8B
 
-Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines.
+Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
+The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
