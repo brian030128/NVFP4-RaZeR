@@ -2284,3 +2284,23 @@ FQ16 and FOCUS, and evaluate it as those rows were.
     and pooled over the eight models;
   - calib_size.json, REPORT.md and the flipquant README, re-rendered and scanned.
   - Push paper-eval and flipquant calib-size only.
+
+### Part AA, amendment 5: step 0 and the ETA gate, the run (2026-10-22 08:37–08:50 UTC); every check passed
+
+- **Arguments.** For all eight models, with the main table's windows and codes files, the driver's PPL command is
+  identical to the command the main table ran (parts J / P's job logs). The zero-shot and GSM8K arguments are identical
+  to parts X / Y's GPTQ‡ rows'.
+- **Llama-3.2-1B-Instruct GPTQ‡-256 on calib-size 8dbe2e4:**
+  - codes `952850d7…`, equal to part P's (required);
+  - the codes file `5f65382f…`, byte-identical to the HF GPTQ-BF16Calib upload;
+  - GPTQ 122 s, job 141 s, device peak 7,152 MiB.
+- **Its evaluations, reading that file:**
+  - PPL per-window NLL equal to part P's record on WikiText-2 and C4;
+  - zero-shot equal to part X's GPTQ‡ row on all six tasks;
+  - GSM8K (date pinned) 2,638 / 2,638 samples identical to part Y's.
+- **ETA gate, Llama-1B GPTQ‡-1k:**
+  - GPTQ 150 s, job 169 s; device peak 10,236 MiB; allocated 6.87 GiB (4.90 at 256).
+  - Codes `af0ad75b…`; output error 0.476 × RTN; WikiText-2 15.473, C4 21.101.
+  - GPTQ's time is mostly the per-column solve, which does not depend on the window count.
+  - The driver's ETA for the rest is 11.8 h. Allowing batch-1 Qwen3.8-27B to scale with its FLOPs, it is about 13 h.
+  - That is under 20 h, so the panel continued at 08:51 UTC without waiting; the ETA went to the coordinator.
