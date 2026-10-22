@@ -165,8 +165,9 @@ def main():
         lines = [("BF16", "—", "bf16", None), ("FourOverSix", "—", "fo6", None), ("GPTQ‡", "256", "gptq", None),
                  ("IF4†", "—", "if4", None), ("MixFP4 (Zou)†", "—", "zou", None)]
         lines += [("FOCUS", f"{n:,}", name, None) for n, name in ((256, "focus256"), (1024, "focus_1024"), (2048, "focus_2048"))]
-        if m == "qwen3.8-27b":
-            lines.insert(2, ("FOCUS, local control", "256", "focus256_local", None))
+        if m == "qwen3.8-27b":         # the local control right after the cluster FOCUS-256 row
+            at = next(i for i, ln in enumerate(lines) if ln[2] == "focus256") + 1
+            lines.insert(at, ("FOCUS, local control", "256", "focus256_local", None))
         lines += [("FlipQuant 16x64", f"{n:,}", name, n) for n, name in ((256, "fq16_256"), (1024, "fq16_1024"), (2048, "fq16_2048"))]
         checks = mm.get("baseline_check") or {}
         marks = set()
@@ -216,8 +217,10 @@ def main():
         for label, key in comps:
             c = pr.get(key) or {}
             nll = c.get("nll") or {}
-            L.append(f"| {label} | {d(c.get('zeroshot'))} | {d(c.get('gsm8k'))} | {dn(nll.get('wiki'))} | "
-                     f"{dn(nll.get('c4'))} |")
+            gsm = d(c.get("gsm8k"))
+            if gsm == "—" and m in ("qwen3-1.7b", "qwen3-8b") and ("IF4" in key or "MixFP4" in key):
+                gsm = "not run"
+            L.append(f"| {label} | {d(c.get('zeroshot'))} | {gsm} | {dn(nll.get('wiki'))} | {dn(nll.get('c4'))} |")
         L.append("")
 
     def z(m, key, ev="zeroshot"):
