@@ -93,6 +93,9 @@ Per model: zero-shot Avg. (%), GSM8K strict-match (%) and WikiText-2 PPL of each
 | FOCUS-2k vs FOCUS-1k | -0.11 (5400/5596, p=0.063) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +1.66* (809/634, p=4.5e-06) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B |
 | FQ16-1k vs FOCUS-256 | +0.03 (6193/6147, p=0.69) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +2.50* (839/575, p=2.3e-12) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B |
 | FQ16-2k vs FOCUS-256 | +0.08 (6324/6177, p=0.19) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +2.20* (831/599, p=9.3e-10) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B |
+| FQ16-256 vs GPTQ‡ | +0.80* (7559/6154, p=3.6e-33) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | -0.69 (688/761, p=0.059) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B |
+| FQ16-1k vs GPTQ‡ | +0.89* (7606/6052, p=2.2e-40) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +0.91* (760/664, p=0.012) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B |
+| FQ16-2k vs GPTQ‡ | +0.95* (7694/6039, p=2.4e-45) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | +0.61 (753/689, p=0.097) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B |
 | FQ16-256 vs IF4† | +0.43* (6943/6192, p=5.9e-11) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | -0.24 (497/516, p=0.57) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B |
 | FQ16-256 vs MixFP4 (Zou)† | +0.49* (7050/6200, p=1.6e-13) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B, Qwen3-1.7B, Qwen3-8B | -0.18 (522/536, p=0.69) | Llama-1B, Phi-4, Mistral, Llama-8B, Nemotron, Qwen27B |
 
@@ -101,15 +104,15 @@ Per model: zero-shot Avg. (%), GSM8K strict-match (%) and WikiText-2 PPL of each
 ## Llama-3.2-1B-Instruct
 
 Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
-The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
+The BF16, GPTQ‡, IF4† and MixFP4† rows' values are checked against their source records' own metrics, and against the protocol of the rows beside them (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json baseline_check). † simulated with each method's own rules at 1x16, calibration-free; ‡ GPTQ with BF16 propagation on the release 256 windows (the main-table variant). IF4 / MixFP4 GSM8K was not run for the Qwen3 models.
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | BF16 | 75.14 | 61.67 | 61.48 | 63.80 | 37.97 | 59.46 | 59.92 | 45.41 ± 2.74 | 13.163 | 18.519 |
 | NVFP4 | 71.65 | 57.72 | 59.91 | 59.97 | 36.26 | 53.10 | 56.43 | 29.19 ± 2.50 | 15.535 | 21.767 |
 | FourOverSix | 71.38 | 57.74 | 58.17 | 60.19 | 36.35 | 53.64 | 56.24 | 29.72 ± 2.52 | 15.315 | 21.449 |
-| IF4† | 71.93 | 58.31 | 60.77 | 60.52 | 36.18 | 54.86 | 57.09 | 33.51 ± 2.60 | 15.345 | 21.074 |
-| MixFP4 (Zou)† | 74.21 | 58.50 | 60.30 | 60.35 | 35.84 | 54.82 | 57.34 | 33.59 ± 2.60 | 15.248 | 21.049 |
+| IF4† | 71.93 | 58.31 | 60.77 | 60.52 | 36.18 | 54.86 | 57.09 | 33.51 ± 2.60 § | 15.345 | 21.074 |
+| MixFP4 (Zou)† | 74.21 | 58.50 | 60.30 | 60.35 | 35.84 | 54.82 | 57.34 | 33.59 ± 2.60 § | 15.248 | 21.049 |
 | GPTQ‡ | 71.06 | 57.62 | 59.91 | 59.89 | 36.26 | 54.49 | 56.54 | 30.78 ± 2.54 | 15.533 | 21.019 |
 | FlipQuant 8x64 | 72.52 | 59.59 | 59.27 | 62.25 | 37.80 | 56.10 | 57.92 | 30.63 ± 2.54 | 14.453 | 19.679 |
 | FlipQuant 256x64 | 73.07 | 59.01 | 61.01 | 60.82 | 36.35 | 56.08 | 57.72 | 31.08 ± 2.55 | 14.657 | 20.059 |
@@ -120,6 +123,8 @@ The BF16 row's values are checked against their source records' own metrics, and
 | FlipQuant 16x64, 1,024 | 73.39 | 59.36 | 60.46 | 62.08 | 36.26 | 56.05 | 57.93 | 35.18 ± 2.63 | 14.387 | 19.605 |
 | FlipQuant 16x64, 2,048 | 72.69 | 59.41 | 60.06 | 61.66 | 36.18 | 56.32 | 57.72 | 34.27 ± 2.61 | 14.390 | 19.610 |
 | FOCUS, 256 (retrained, step 0 d) | 72.14 | 59.05 | 59.75 | 61.91 | 37.71 | 55.66 | 57.70 | 34.04 ± 2.61 | 14.685 | 19.881 |
+
+§ GSM8K run with the chat template's date pinned to 15 Oct 2026 (part Y amendment 3), the date the native rows saw; this part's rows of this model are pinned too. All prompts are equal (equal sample digests).
 
 **Paired.**
 - Zero-shot: pooled over all questions of the six tasks.
@@ -149,6 +154,9 @@ The BF16 row's values are checked against their source records' own metrics, and
 | FOCUS-2k vs FOCUS-1k | -0.15 (1035/1068, p=0.49) | +1.82 (148/124, p=0.16) | -0.0071 ± 0.0025* | +0.0016 ± 0.0020 |
 | FQ16-1k vs FOCUS-256 | +0.33 (1192/1119, p=0.13) | +3.03* (173/133, p=0.026) | -0.0189 ± 0.0024* | -0.0142 ± 0.0018* |
 | FQ16-2k vs FOCUS-256 | +0.29 (1213/1150, p=0.2) | +2.12 (154/126, p=0.11) | -0.0187 ± 0.0025* | -0.0139 ± 0.0019* |
+| FQ16-256 vs GPTQ‡ | +1.26* (1414/1138, p=5.1e-08) | +0.83 (151/140, p=0.56) | -0.0720 ± 0.0387* | -0.0656 ± 0.0045* |
+| FQ16-1k vs GPTQ‡ | +1.63* (1462/1105, p=2e-12) | +4.40* (186/128, p=0.0013) | -0.0766 ± 0.0387* | -0.0696 ± 0.0046* |
+| FQ16-2k vs GPTQ‡ | +1.59* (1454/1107, p=7.5e-12) | +3.49* (174/128, p=0.0095) | -0.0764 ± 0.0386* | -0.0694 ± 0.0045* |
 | FQ16-256 vs IF4† | +0.67* (1272/1125, p=0.0029) | -1.90 (128/153, p=0.15) | -0.0598 ± 0.0035* | -0.0682 ± 0.0038* |
 | FQ16-256 vs MixFP4 (Zou)† | +0.46* (1292/1191, p=0.045) | -1.97 (130/156, p=0.14) | -0.0535 ± 0.0034* | -0.0670 ± 0.0037* |
 | FOCUS-256 retrained vs FOCUS-256 | +0.01 (967/964, p=0.96) | +1.90 (145/120, p=0.14) | +0.0016 ± 0.0021 | -0.0002 ± 0.0014 |
@@ -215,7 +223,7 @@ Evaluation wall times (s): gsm8k_focus256_rerun 340, gsm8k_focus_1024 386, gsm8k
 ## Phi-4
 
 Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
-The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
+The BF16, GPTQ‡, IF4† and MixFP4† rows' values are checked against their source records' own metrics, and against the protocol of the rows beside them (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json baseline_check). † simulated with each method's own rules at 1x16, calibration-free; ‡ GPTQ with BF16 propagation on the release 256 windows (the main-table variant). IF4 / MixFP4 GSM8K was not run for the Qwen3 models.
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -262,6 +270,9 @@ The BF16 row's values are checked against their source records' own metrics, and
 | FOCUS-2k vs FOCUS-1k | -0.22 (463/512, p=0.12) | +0.76 (35/25, p=0.25) | -0.0031 ± 0.0013* | -0.0016 ± 0.0009* |
 | FQ16-1k vs FOCUS-256 | -0.33* (479/551, p=0.027) | +0.45 (20/14, p=0.39) | -0.0015 ± 0.0015 | -0.0019 ± 0.0009* |
 | FQ16-2k vs FOCUS-256 | -0.42* (480/571, p=0.0055) | +0.15 (25/23, p=0.89) | -0.0035 ± 0.0014* | -0.0026 ± 0.0009* |
+| FQ16-256 vs GPTQ‡ | +0.09 (609/590, p=0.6) | -0.08 (27/28, p=1) | -0.0084 ± 0.0020* | -0.0036 ± 0.0011* |
+| FQ16-1k vs GPTQ‡ | +0.13 (604/576, p=0.43) | +0.99 (32/19, p=0.092) | -0.0106 ± 0.0022* | -0.0048 ± 0.0011* |
+| FQ16-2k vs GPTQ‡ | +0.04 (588/579, p=0.81) | +0.68 (27/18, p=0.23) | -0.0126 ± 0.0020* | -0.0055 ± 0.0011* |
 | FQ16-256 vs IF4† | +0.05 (577/565, p=0.74) | -0.53 (21/28, p=0.39) | -0.0003 ± 0.0017 | +0.0005 ± 0.0011 |
 | FQ16-256 vs MixFP4 (Zou)† | +0.03 (575/568, p=0.86) | -1.29* (18/35, p=0.027) | -0.0010 ± 0.0018 | +0.0009 ± 0.0010 |
 
@@ -320,7 +331,7 @@ Evaluation wall times (s): gsm8k_focus_1024 1176, gsm8k_focus_2048 1154, gsm8k_f
 ## Mistral-7B-Instruct-v0.3
 
 Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
-The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
+The BF16, GPTQ‡, IF4† and MixFP4† rows' values are checked against their source records' own metrics, and against the protocol of the rows beside them (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json baseline_check). † simulated with each method's own rules at 1x16, calibration-free; ‡ GPTQ with BF16 propagation on the release 256 windows (the main-table variant). IF4 / MixFP4 GSM8K was not run for the Qwen3 models.
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -367,6 +378,9 @@ The BF16 row's values are checked against their source records' own metrics, and
 | FOCUS-2k vs FOCUS-1k | +0.28 (531/470, p=0.058) | -1.74 (137/160, p=0.2) | +0.0006 ± 0.0011 | -0.0010 ± 0.0010 |
 | FQ16-1k vs FOCUS-256 | +0.68* (764/616, p=7.5e-05) | +2.43 (162/130, p=0.069) | -0.0076 ± 0.0015* | -0.0045 ± 0.0012* |
 | FQ16-2k vs FOCUS-256 | +0.60* (748/617, p=0.00043) | +3.18* (169/127, p=0.017) | -0.0089 ± 0.0015* | -0.0058 ± 0.0012* |
+| FQ16-256 vs GPTQ‡ | +0.30 (645/579, p=0.063) | -0.61 (146/154, p=0.69) | -0.0144 ± 0.0015* | -0.0109 ± 0.0014* |
+| FQ16-1k vs GPTQ‡ | +0.22 (626/577, p=0.17) | +0.38 (155/150, p=0.82) | -0.0175 ± 0.0016* | -0.0133 ± 0.0017* |
+| FQ16-2k vs GPTQ‡ | +0.15 (634/602, p=0.38) | +1.14 (162/147, p=0.43) | -0.0189 ± 0.0015* | -0.0147 ± 0.0016* |
 | FQ16-256 vs IF4† | +0.27 (568/509, p=0.077) | -0.38 (151/156, p=0.82) | -0.0030 ± 0.0014* | -0.0046 ± 0.0013* |
 | FQ16-256 vs MixFP4 (Zou)† | +0.06 (557/543, p=0.7) | -0.76 (158/168, p=0.62) | -0.0017 ± 0.0014* | -0.0054 ± 0.0013* |
 
@@ -425,7 +439,7 @@ Evaluation wall times (s): gsm8k_focus_1024 860, gsm8k_focus_2048 885, gsm8k_fq1
 ## Llama-3.1-8B-Instruct
 
 Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
-The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
+The BF16, GPTQ‡, IF4† and MixFP4† rows' values are checked against their source records' own metrics, and against the protocol of the rows beside them (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json baseline_check). † simulated with each method's own rules at 1x16, calibration-free; ‡ GPTQ with BF16 propagation on the release 256 windows (the main-table variant). IF4 / MixFP4 GSM8K was not run for the Qwen3 models.
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -472,6 +486,9 @@ The BF16 row's values are checked against their source records' own metrics, and
 | FOCUS-2k vs FOCUS-1k | -0.59* (565/694, p=0.00031) | +0.91 (107/95, p=0.44) | +0.0022 ± 0.0016* | -0.0018 ± 0.0013* |
 | FQ16-1k vs FOCUS-256 | -0.11 (663/688, p=0.51) | +2.50* (112/79, p=0.02) | -0.0078 ± 0.0020* | -0.0110 ± 0.0024* |
 | FQ16-2k vs FOCUS-256 | +0.25 (721/666, p=0.15) | +3.71* (118/69, p=0.00042) | -0.0107 ± 0.0020* | -0.0124 ± 0.0031* |
+| FQ16-256 vs GPTQ‡ | +0.69* (853/702, p=0.00014) | -1.74 (87/110, p=0.12) | -0.0153 ± 0.0048* | -0.0199 ± 0.0189* |
+| FQ16-1k vs GPTQ‡ | +0.46* (804/703, p=0.01) | -1.44 (86/105, p=0.19) | -0.0229 ± 0.0051* | -0.0291 ± 0.0189* |
+| FQ16-2k vs GPTQ‡ | +0.83* (879/698, p=5.7e-06) | -0.23 (89/92, p=0.88) | -0.0258 ± 0.0049* | -0.0306 ± 0.0191* |
 | FQ16-256 vs IF4† | +0.24 (746/693, p=0.17) | -0.38 (106/111, p=0.79) | -0.0037 ± 0.0021* | -0.0033 ± 0.0024* |
 | FQ16-256 vs MixFP4 (Zou)† | +0.41* (790/700, p=0.021) | -0.61 (99/107, p=0.63) | -0.0027 ± 0.0023* | -0.0015 ± 0.0023 |
 
@@ -530,7 +547,7 @@ Evaluation wall times (s): gsm8k_focus_1024 1393, gsm8k_focus_2048 1266, gsm8k_f
 ## Nemotron-Nano-9B-v2
 
 Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
-The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
+The BF16, GPTQ‡, IF4† and MixFP4† rows' values are checked against their source records' own metrics, and against the protocol of the rows beside them (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json baseline_check). † simulated with each method's own rules at 1x16, calibration-free; ‡ GPTQ with BF16 propagation on the release 256 windows (the main-table variant). IF4 / MixFP4 GSM8K was not run for the Qwen3 models.
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -577,6 +594,9 @@ The BF16 row's values are checked against their source records' own metrics, and
 | FOCUS-2k vs FOCUS-1k | -0.14 (479/509, p=0.36) | +1.59* (57/36, p=0.038) | -0.0009 ± 0.0014 | -0.0017 ± 0.0008* |
 | FQ16-1k vs FOCUS-256 | -0.28 (519/581, p=0.066) | -0.53 (57/64, p=0.59) | -0.0050 ± 0.0014* | -0.0029 ± 0.0009* |
 | FQ16-2k vs FOCUS-256 | -0.06 (552/566, p=0.7) | -2.12* (51/79, p=0.018) | -0.0057 ± 0.0014* | -0.0047 ± 0.0010* |
+| FQ16-256 vs GPTQ‡ | -0.11 (590/613, p=0.53) | +2.12* (81/53, p=0.019) | -0.0091 ± 0.0017* | -0.0048 ± 0.0011* |
+| FQ16-1k vs GPTQ‡ | +0.16 (610/576, p=0.34) | +1.44 (80/61, p=0.13) | -0.0123 ± 0.0018* | -0.0053 ± 0.0011* |
+| FQ16-2k vs GPTQ‡ | +0.38* (666/584, p=0.022) | -0.15 (79/81, p=0.94) | -0.0130 ± 0.0017* | -0.0070 ± 0.0012* |
 | FQ16-256 vs IF4† | -0.05 (555/565, p=0.79) | +2.20* (70/41, p=0.0076) | -0.0045 ± 0.0016* | -0.0004 ± 0.0010 |
 | FQ16-256 vs MixFP4 (Zou)† | -0.20 (557/601, p=0.21) | +3.79* (93/43, p=2.2e-05) | -0.0066 ± 0.0015* | -0.0011 ± 0.0010* |
 
@@ -635,15 +655,15 @@ Evaluation wall times (s): gsm8k_focus_1024 374, gsm8k_focus_2048 375, gsm8k_fq1
 ## Qwen3.8-27B
 
 Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
-The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
+The BF16, GPTQ‡, IF4† and MixFP4† rows' values are checked against their source records' own metrics, and against the protocol of the rows beside them (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json baseline_check). † simulated with each method's own rules at 1x16, calibration-free; ‡ GPTQ with BF16 propagation on the release 256 windows (the main-table variant). IF4 / MixFP4 GSM8K was not run for the Qwen3 models.
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | BF16 | 81.50 | 82.86 | 75.93 | 73.11 | 58.36 | 72.02 | 73.96 | 95.68 ± 1.12 ◊ | 7.052 | 9.893 |
 | NVFP4 | 80.90 | 82.39 | 73.88 | 76.22 | 59.73 | 70.17 | 73.88 | 95.38 ± 1.16 | 7.574 | 10.223 |
 | FourOverSix | 81.07 | 82.35 | 75.14 | 74.12 | 58.96 | 70.56 | 73.70 | 94.62 ± 1.24 | 7.302 | 10.190 |
-| IF4† | 80.85 | 82.32 | 74.74 | 78.28 | 60.75 | 71.61 | 74.76 | 95.60 ± 1.13 | 7.334 | 10.166 |
-| MixFP4 (Zou)† | 80.63 | 82.48 | 75.45 | 75.04 | 58.53 | 71.67 | 73.97 | 95.38 ± 1.16 | 7.348 | 10.164 |
+| IF4† | 80.85 | 82.32 | 74.74 | 78.28 | 60.75 | 71.61 | 74.76 | 95.60 ± 1.13 ¤ | 7.334 | 10.166 |
+| MixFP4 (Zou)† | 80.63 | 82.48 | 75.45 | 75.04 | 58.53 | 71.67 | 73.97 | 95.38 ± 1.16 ¤ | 7.348 | 10.164 |
 | GPTQ‡ | 80.63 | 81.99 | 74.90 | 75.21 | 60.07 | 71.30 | 74.02 | 96.06 ± 1.07 | 7.528 | 10.158 |
 | FlipQuant 8x64 | 81.28 | 82.29 | 76.16 | 75.00 | 58.87 | 70.75 | 74.06 | 95.53 ± 1.14 | 7.140 | 10.144 |
 | FlipQuant 256x64 | 81.12 | 82.41 | 74.74 | 75.29 | 58.70 | 71.32 | 73.93 | 95.45 ± 1.15 | 7.220 | 10.161 |
@@ -656,6 +676,8 @@ The BF16 row's values are checked against their source records' own metrics, and
 | FOCUS, 256 (local control, amendment 3) | 81.61 | 82.56 | 75.45 | 76.94 | 59.22 | 70.56 | 74.39 | 95.60 ± 1.13 | 7.233 | 10.150 |
 
 ◊ BF16 GSM8K ran at batch 48 (part Y), every other row at 64. Generations depend on the batch composition, so its paired comparisons would compare different batches; it enters none here.
+
+¤ GSM8K run with expandable segments (part Y amendment 4; an allocator setting, which its pre-check showed changes no generation).
 
 **Paired.**
 - Zero-shot: pooled over all questions of the six tasks.
@@ -685,6 +707,9 @@ The BF16 row's values are checked against their source records' own metrics, and
 | FOCUS-2k vs FOCUS-1k | -0.42* (468/559, p=0.005) | +8.26* (120/11, p=2.6e-24) | -0.0177 ± 0.0040* | -0.0001 ± 0.0009 |
 | FQ16-1k vs FOCUS-256 | +0.20 (559/516, p=0.2) | +2.35* (43/12, p=3.3e-05) | -0.0274 ± 0.0051* | -0.0034 ± 0.0011* |
 | FQ16-2k vs FOCUS-256 | +0.32* (574/503, p=0.033) | +2.12* (44/16, p=0.00039) | -0.0285 ± 0.0056* | -0.0040 ± 0.0011* |
+| FQ16-256 vs GPTQ‡ | +0.16 (582/547, p=0.31) | -0.91 (17/29, p=0.1) | -0.0465 ± 0.0079* | -0.0016 ± 0.0015* |
+| FQ16-1k vs GPTQ‡ | +0.32* (617/546, p=0.04) | -0.15 (16/18, p=0.86) | -0.0616 ± 0.0092* | -0.0035 ± 0.0017* |
+| FQ16-2k vs GPTQ‡ | +0.45* (612/513, p=0.0035) | -0.38 (20/25, p=0.55) | -0.0627 ± 0.0096* | -0.0040 ± 0.0017* |
 | FQ16-256 vs IF4† | -0.45* (557/655, p=0.0053) | -0.45 (21/27, p=0.47) | -0.0204 ± 0.0039* | -0.0024 ± 0.0011* |
 | FQ16-256 vs MixFP4 (Zou)† | -0.09 (539/558, p=0.59) | -0.23 (24/27, p=0.78) | -0.0222 ± 0.0041* | -0.0023 ± 0.0011* |
 | FOCUS-256 local vs FOCUS-256 cluster | +0.22 (490/442, p=0.12) | +2.05* (45/18, p=0.0009) | -0.0058 ± 0.0036* | -0.0007 ± 0.0008 |
@@ -748,15 +773,15 @@ Evaluation wall times (s): gsm8k_focus256_local 2088, gsm8k_focus_1024 1759, gsm
 ## Qwen3-1.7B
 
 Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
-The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
+The BF16, GPTQ‡, IF4† and MixFP4† rows' values are checked against their source records' own metrics, and against the protocol of the rows beside them (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json baseline_check). † simulated with each method's own rules at 1x16, calibration-free; ‡ GPTQ with BF16 propagation on the release 256 windows (the main-table variant). IF4 / MixFP4 GSM8K was not run for the Qwen3 models.
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | BF16 | 72.25 | 60.40 | 61.01 | 69.70 | 42.92 | 50.48 | 59.46 | 74.53 ± 2.40 | 16.716 | 19.246 |
 | NVFP4 | 70.24 | 57.61 | 58.41 | 62.88 | 37.54 | 42.71 | 54.90 | 61.64 ± 2.68 | 18.871 | 21.035 |
 | FourOverSix | 70.57 | 58.03 | 58.48 | 65.49 | 40.36 | 43.86 | 56.13 | 61.87 ± 2.67 | 19.475 | 20.907 |
-| IF4† | 68.44 | 58.81 | 58.72 | 66.62 | 38.48 | 43.49 | 55.76 | TBD | 19.601 | 20.954 |
-| MixFP4 (Zou)† | 68.34 | 58.49 | 57.38 | 65.66 | 39.08 | 43.00 | 55.32 | TBD | 19.503 | 21.555 |
+| IF4† | 68.44 | 58.81 | 58.72 | 66.62 | 38.48 | 43.49 | 55.76 | not run | 19.601 | 20.954 |
+| MixFP4 (Zou)† | 68.34 | 58.49 | 57.38 | 65.66 | 39.08 | 43.00 | 55.32 | not run | 19.503 | 21.555 |
 | GPTQ‡ | 69.26 | 56.74 | 57.54 | 64.65 | 39.93 | 43.55 | 55.28 | 66.72 ± 2.59 | 18.672 | 21.070 |
 | FlipQuant 8x64 | 71.11 | 59.37 | 59.51 | 69.61 | 42.58 | 48.65 | 58.47 | TBD | 15.404 | 19.449 |
 | FlipQuant 256x64 | 70.95 | 58.63 | 59.43 | 65.03 | 41.98 | 46.77 | 57.13 | TBD | 15.968 | 19.762 |
@@ -795,6 +820,9 @@ The BF16 row's values are checked against their source records' own metrics, and
 | FOCUS-2k vs FOCUS-1k | +0.23 (1146/1095, p=0.29) | +0.23 (141/138, p=0.9) | +0.0217 ± 0.0030* | +0.0097 ± 0.0019* |
 | FQ16-1k vs FOCUS-256 | -0.20 (1244/1287, p=0.4) | +5.99* (183/104, p=3.6e-06) | +0.0437 ± 0.0043* | +0.0019 ± 0.0023 |
 | FQ16-2k vs FOCUS-256 | -0.33 (1241/1314, p=0.15) | +5.16* (186/118, p=0.00011) | +0.0601 ± 0.0043* | +0.0096 ± 0.0028* |
+| FQ16-256 vs GPTQ‡ | +3.24* (1896/1188, p=1.9e-37) | -5.38* (120/191, p=6.7e-05) | -0.1928 ± 0.0083* | -0.0821 ± 0.0041* |
+| FQ16-1k vs GPTQ‡ | +3.25* (1892/1183, p=1.2e-37) | +0.53 (144/137, p=0.72) | -0.1694 ± 0.0085* | -0.0738 ± 0.0040* |
+| FQ16-2k vs GPTQ‡ | +3.11* (1866/1187, p=6.9e-35) | -0.30 (144/148, p=0.86) | -0.1529 ± 0.0082* | -0.0661 ± 0.0036* |
 | FQ16-256 vs IF4† | +2.16* (1699/1226, p=2.2e-18) | TBD | -0.2413 ± 0.0120* | -0.0765 ± 0.0044* |
 | FQ16-256 vs MixFP4 (Zou)† | +2.59* (1765/1200, p=2.8e-25) | TBD | -0.2363 ± 0.0113* | -0.1048 ± 0.0049* |
 
@@ -849,15 +877,15 @@ Evaluation wall times (s): gsm8k_bf16 461, gsm8k_fo6 443, gsm8k_focus 389, gsm8k
 ## Qwen3-8B
 
 Zero-shot accuracy (%) per task and Avg.; GSM8K strict-match (%) ± 2 SE; PPL. 256-window rows: the part X / Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 (c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 included).
-The BF16 row's values are checked against their source records' own metrics, and against the protocol of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json bf16_check).
+The BF16, GPTQ‡, IF4† and MixFP4† rows' values are checked against their source records' own metrics, and against the protocol of the rows beside them (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would show "mismatch" (calib_size.json baseline_check). † simulated with each method's own rules at 1x16, calibration-free; ‡ GPTQ with BF16 propagation on the release 256 windows (the main-table variant). IF4 / MixFP4 GSM8K was not run for the Qwen3 models.
 
 | method | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | LAMBADA | Avg. | GSM8K | Wiki PPL | C4 PPL |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | BF16 | 77.80 | 74.93 | 68.03 | 80.85 | 56.91 | 64.25 | 70.46 | 91.36 ± 1.55 | 9.725 | 13.300 |
 | NVFP4 | 76.44 | 73.16 | 67.56 | 79.80 | 55.38 | 62.47 | 69.13 | 88.25 ± 1.77 | 10.048 | 13.770 |
 | FourOverSix | 75.95 | 73.18 | 67.17 | 79.71 | 54.86 | 62.72 | 68.93 | 88.25 ± 1.77 | 10.007 | 13.757 |
-| IF4† | 76.66 | 73.74 | 67.40 | 78.07 | 54.10 | 63.69 | 68.94 | TBD | 9.885 | 13.603 |
-| MixFP4 (Zou)† | 76.33 | 73.76 | 68.67 | 78.37 | 53.92 | 62.95 | 69.00 | TBD | 9.861 | 13.592 |
+| IF4† | 76.66 | 73.74 | 67.40 | 78.07 | 54.10 | 63.69 | 68.94 | not run | 9.885 | 13.603 |
+| MixFP4 (Zou)† | 76.33 | 73.76 | 68.67 | 78.37 | 53.92 | 62.95 | 69.00 | not run | 9.861 | 13.592 |
 | GPTQ‡ | 76.44 | 72.84 | 67.25 | 79.84 | 54.69 | 63.48 | 69.09 | 89.08 ± 1.72 | 10.129 | 13.704 |
 | FlipQuant 8x64 | 77.64 | 74.12 | 68.82 | 80.56 | 55.80 | 63.24 | 70.03 | TBD | 9.608 | 13.528 |
 | FlipQuant 256x64 | 76.50 | 73.78 | 68.98 | 79.84 | 55.03 | 63.57 | 69.62 | TBD | 9.678 | 13.565 |
@@ -896,6 +924,9 @@ The BF16 row's values are checked against their source records' own metrics, and
 | FOCUS-2k vs FOCUS-1k | +0.11 (713/689, p=0.54) | +1.44 (64/45, p=0.084) | -0.0022 ± 0.0021* | -0.0009 ± 0.0013 |
 | FQ16-1k vs FOCUS-256 | -0.07 (773/789, p=0.7) | +3.79* (89/39, p=1.2e-05) | +0.0016 ± 0.0023 | -0.0062 ± 0.0016* |
 | FQ16-2k vs FOCUS-256 | +0.02 (795/790, p=0.92) | +3.26* (84/41, p=0.00015) | +0.0053 ± 0.0021* | -0.0002 ± 0.0016 |
+| FQ16-256 vs GPTQ‡ | +0.79* (970/797, p=4.2e-05) | +0.23 (59/56, p=0.85) | -0.0546 ± 0.0038* | -0.0109 ± 0.0023* |
+| FQ16-1k vs GPTQ‡ | +0.94* (991/786, p=1.3e-06) | +1.14 (61/46, p=0.18) | -0.0553 ± 0.0038* | -0.0159 ± 0.0021* |
+| FQ16-2k vs GPTQ‡ | +1.03* (995/769, p=8.1e-08) | +0.61 (58/50, p=0.5) | -0.0516 ± 0.0037* | -0.0099 ± 0.0024* |
 | FQ16-256 vs IF4† | +0.53* (969/854, p=0.0076) | TBD | -0.0303 ± 0.0038* | -0.0035 ± 0.0019* |
 | FQ16-256 vs MixFP4 (Zou)† | +0.62* (975/839, p=0.0015) | TBD | -0.0279 ± 0.0034* | -0.0027 ± 0.0019* |
 

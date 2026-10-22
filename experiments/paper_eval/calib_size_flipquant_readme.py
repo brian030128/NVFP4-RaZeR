@@ -114,12 +114,22 @@ def main():
          "  - Native on the RTX PRO 6000 (build_V). IF4 and MixFP4 (Zou) are simulated, from the zero-shot / GSM8K panels.",
          "- **Code:** this branch: f912a30 (`--teacher-host`, `--probe-steps`, `calibration.fit_windows`), 898d00e "
          "(`train_focus --offload`), 9f19863 (`tmopt_launch --save-theta`).",
-         "- **BF16 rows** come from the existing records, with no new runs: zero-shot from the zero-shot panel, GSM8K "
-         "from the GSM8K panel (the two Qwen3 models: this study's baselines), PPL from the main table's records. Each "
-         "value equals its source record's own metric (PPL to float32 precision for the main-table records that "
-         "store float32). Each matches the protocol of the rows beside it: zero-shot sample digests and batch, the "
-         "GSM8K digest, the PPL window counts. Qwen3.8-27B's BF16 GSM8K ran at batch 48 (◊). BF16 has no E0M3 share "
-         "and enters no paired comparison here.",
+         "- **BF16, GPTQ‡, IF4† and MixFP4† rows** come from the existing records, with no new runs, as measured "
+         "before.",
+         "  - Sources: zero-shot from the zero-shot panel; GSM8K from the GSM8K panel (the two Qwen3 models: this "
+         "study's BF16 and GPTQ‡ baselines); PPL from the main table's records.",
+         "  - † IF4 and MixFP4 (Zou) are simulated with each method's own rules at 1x16 and are calibration-free. ‡ GPTQ "
+         "is the main-table variant, with BF16 propagation on the release 256 windows.",
+         "  - IF4 / MixFP4 GSM8K was not run for the two Qwen3 models.",
+         "  - Each value equals its source record's own metric (PPL to float32 precision for the main-table records "
+         "that store float32).",
+         "  - Each row matches the protocol of the rows beside it: zero-shot sample digests and batch, the GSM8K digest, "
+         "the PPL window counts.",
+         "  - Marks, from each GSM8K job's own log: ◊ batch 48 (Qwen3.8-27B BF16); § the chat-template date pin "
+         "(Llama-3.2-1B-Instruct IF4 / MixFP4); ¤ expandable segments (Qwen3.8-27B IF4 / MixFP4).",
+         "  - Every PPL cell of a model comes from the same environment as the rows beside it: n16k64, or n16k64-fast "
+         "for Nemotron and Qwen3.8-27B (their IF4 / MixFP4 jobs included, per the jobs' logged interpreter).",
+         "  - These rows have no E0M3 share.",
          "- **Statistics:**",
          "  - Paired differences in points (row-only / reference-only correct, exact McNemar p).",
          "  - Pooled rows sum the discordant counts over the models.",
@@ -152,28 +162,42 @@ def main():
         e0 = {c["windows"]: c.get("e0m3_share") for c in mm["cost"] if c["method"] == "FlipQuant 16x64"}
         L += [f"### {title}", "", "| method | windows | zero-shot Avg. | GSM8K strict | Wiki PPL | C4 PPL | E0M3 share |",
               "|---|---:|---:|---:|---:|---:|---:|"]
-        lines = [("BF16", "—", "bf16", None), ("FourOverSix", "—", "fo6", None)]
+        lines = [("BF16", "—", "bf16", None), ("FourOverSix", "—", "fo6", None), ("GPTQ‡", "256", "gptq", None),
+                 ("IF4†", "—", "if4", None), ("MixFP4 (Zou)†", "—", "zou", None)]
         lines += [("FOCUS", f"{n:,}", name, None) for n, name in ((256, "focus256"), (1024, "focus_1024"), (2048, "focus_2048"))]
         if m == "qwen3.8-27b":
             lines.insert(2, ("FOCUS, local control", "256", "focus256_local", None))
         lines += [("FlipQuant 16x64", f"{n:,}", name, n) for n, name in ((256, "fq16_256"), (1024, "fq16_1024"), (2048, "fq16_2048"))]
-        bc = mm.get("bf16_check") or {}
+        checks = mm.get("baseline_check") or {}
+        marks = set()
         for method, w, name, n in lines:
             x = val.get(name) or {}
             zs, g, pp = x.get("zeroshot"), x.get("gsm8k"), x.get("ppl")
             label = method + (" (cluster)" if m == "qwen3.8-27b" and name == "focus256" else "")
             cells = [v(zs and zs["avg"]), v(g and g[0]), v(pp and pp["wiki"], 3), v(pp and pp["c4"], 3)]
-            if name == "bf16":             # checked against its source records (calib_size.json bf16_check)
-                ok = {k: (bc.get(k) or {}).get("ok", False) for k in ("zeroshot", "gsm8k", "ppl")}
-                cells = [cells[0] if ok["zeroshot"] else "mismatch", cells[1] if ok["gsm8k"] else "mismatch",
+            ck = checks.get(name)
+            if ck is not None:             # checked against its source records (calib_size.json baseline_check)
+                gk = ck.get("gsm8k") or {}
+                ok = {k: (ck.get(k) or {}).get("ok", False) for k in ("zeroshot", "gsm8k", "ppl")}
+                cells = [cells[0] if ok["zeroshot"] else "mismatch",
+                         "not run" if gk.get("not_run") else cells[1] if ok["gsm8k"] else "mismatch",
                          *(cells[2:] if ok["ppl"] else ["mismatch", "mismatch"])]
-                if ok["gsm8k"] and (bc.get("gsm8k") or {}).get("batch_mark"):
-                    cells[1] += " ◊"
+                if ok["gsm8k"] and not gk.get("not_run"):
+                    for mk, key in ((" ◊", "batch_mark"), (" §", "date_pin"), (" ¤", "expandable")):
+                        if gk.get(key):
+                            cells[1] += mk
+                            marks.add(key)
             L.append(f"| {label} | {w} | " + " | ".join(cells) + f" | "
                      f"{v(100 * e0[n], 1) + ' %' if n and e0.get(n) is not None else '—'} |")
-        if (bc.get("gsm8k") or {}).get("batch_mark"):
-            L += ["", f"◊ BF16 GSM8K ran at batch {bc['gsm8k']['batch']} (the GSM8K panel), every other row at "
-                  f"{bc['gsm8k']['batch_next']}; generations depend on the batch composition."]
+        if "batch_mark" in marks:
+            bk = checks["bf16"]["gsm8k"]
+            L += ["", f"◊ BF16 GSM8K ran at batch {bk['batch']} (the GSM8K panel), every other row at {bk['batch_next']}; "
+                  "generations depend on the batch composition."]
+        if "date_pin" in marks:
+            L += ["", "§ GSM8K run with the chat template's date pinned to 15 Oct 2026, the date the native rows saw; this "
+                  "study's rows of this model are pinned too, and all prompts are equal (equal sample digests)."]
+        if "expandable" in marks:
+            L += ["", "¤ GSM8K run with expandable segments, an allocator setting whose pre-check changed no generation."]
         L += ["", "| comparison | zero-shot | GSM8K | ΔNLL Wiki | ΔNLL C4 |", "|---|---|---|---|---|"]
         comps = [("FlipQuant 1,024 vs 256", "FQ16-1k vs FQ16-256"), ("FlipQuant 2,048 vs 256", "FQ16-2k vs FQ16-256")]
         if m == "qwen3.8-27b":
@@ -187,6 +211,8 @@ def main():
             comps += [("FlipQuant vs FOCUS, 256 local", "FQ16-256 vs FOCUS-256 local (FOCUS in this environment)")]
         comps += [("FlipQuant vs FOCUS, 1,024", "FQ16-1k vs FOCUS-1k"), ("FlipQuant vs FOCUS, 2,048", "FQ16-2k vs FOCUS-2k"),
                   ("FlipQuant 2,048 vs FourOverSix", "FQ16-2k vs FourOverSix")]
+        comps += [(f"FlipQuant {k} vs {lab}", f"FQ16-{kk} vs {key}") for k, kk in (("1,024", "1k"), ("2,048", "2k"))
+                  for lab, key in (("IF4†", "IF4†"), ("MixFP4 (Zou)†", "MixFP4 (Zou)†"), ("GPTQ‡", "GPTQ‡"))]
         for label, key in comps:
             c = pr.get(key) or {}
             nll = c.get("nll") or {}

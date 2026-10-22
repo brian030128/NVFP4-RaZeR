@@ -155,6 +155,8 @@ COMPARISONS = ([("FQ16-256 vs FOCUS-256", "fq16_256", "focus256")]
                + [("FQ16-2k vs FQ16-1k", "fq16_2048", "fq16_1024"), ("FOCUS-2k vs FOCUS-1k", "focus_2048", "focus_1024"),
                   # the motivating losses against the fixed 256-window FOCUS reference (flipquant README, 2026-10-22)
                   ("FQ16-1k vs FOCUS-256", "fq16_1024", "focus256"), ("FQ16-2k vs FOCUS-256", "fq16_2048", "focus256"),
+                  ("FQ16-256 vs GPTQ‡", "fq16_256", "gptq"), ("FQ16-1k vs GPTQ‡", "fq16_1024", "gptq"),
+                  ("FQ16-2k vs GPTQ‡", "fq16_2048", "gptq"),
                   ("FQ16-256 vs IF4†", "fq16_256", "if4"), ("FQ16-256 vs MixFP4 (Zou)†", "fq16_256", "zou")])
 
 
@@ -203,12 +205,17 @@ def training_curves(model):
     return out
 
 
-def bf16_check(model):
-    """The BF16 row (the user's request, 2026-10-22): each value against its source record's own metric, and its
-    protocol against the rows it sits next to (the FQ16-1k row): zero-shot sample digests and batch; GSM8K digest and
-    batch (Qwen3.8-27B BF16 ran at 48, marked); PPL window counts per corpus."""
+BASELINES = ("bf16", "gptq", "if4", "zou")
+
+
+def bf16_check(model, name="bf16"):
+    """A baseline row (BF16, GPTQ‡, IF4†, MixFP4†; the user's requests, 2026-10-22): each value against its source
+    record's own metric, and its protocol against the rows it sits next to (the FQ16-1k row): zero-shot sample digests
+    and batch; GSM8K digest and batch (Qwen3.8-27B BF16 ran at 48, marked ◊); PPL window counts per corpus. GSM8K's
+    marks from the job's own log: § the chat-template date pin (part Y amendment 3), ¤ expandable segments (amendment
+    4). IF4 / MixFP4 GSM8K for the Qwen3 models was not run (not approved): not_run."""
     out = {}
-    z, zn = zs_record(model, "bf16"), zs_record(model, "fq16_1024")
+    z, zn = zs_record(model, name), zs_record(model, "fq16_1024")
     if z and zn:
         metric = sum(z["tasks"][t]["metrics"][Z.PRIMARY[t] + ",none"] for t in Z.SIZES) / len(Z.SIZES) * 100
         out["zeroshot"] = dict(value=zs_avg(z), record_metric=metric, equal=abs(zs_avg(z) - metric) < 1e-9,
@@ -217,7 +224,9 @@ def bf16_check(model):
                                                  for t in Z.SIZES))
         out["zeroshot"]["ok"] = (out["zeroshot"]["equal"] and out["zeroshot"]["digests_equal"]
                                  and out["zeroshot"]["batch"] == out["zeroshot"]["batch_next"])
-    g, gn = gsm_record(model, "bf16"), gsm_record(model, "fq16_1024")
+    g, gn = gsm_record(model, name), gsm_record(model, "fq16_1024")
+    if g is None and name in ("if4", "zou") and model in CS.QWEN3:
+        out["gsm8k"] = dict(not_run=True, ok=True)
     if g and gn:
         metric = 100 * g["tasks"][Y.TASK]["metrics"]["exact_match,strict_match"]
         out["gsm8k"] = dict(value=RY.acc(g)[0], record_metric=metric, equal=abs(RY.acc(g)[0] - metric) < 1e-9,
@@ -225,7 +234,11 @@ def bf16_check(model):
                             digest_equal=g["tasks"][Y.TASK]["sample_digest"] == gn["tasks"][Y.TASK]["sample_digest"])
         out["gsm8k"]["ok"] = out["gsm8k"]["equal"] and out["gsm8k"]["digest_equal"]
         out["gsm8k"]["batch_mark"] = out["gsm8k"]["batch"] != out["gsm8k"]["batch_next"]      # ◊, as part Y
-    nb, nn, pp = ppl_nll(model, "bf16"), ppl_nll(model, "fq16_1024"), ppl_path(model, "bf16")
+        log = ((CS.ROOT / model / "eval" / "gsm8k" if model in CS.QWEN3 else Y.ROOT / model) / f"{name}.log")
+        text = log.read_text(errors="replace") if log.exists() else ""
+        out["gsm8k"].update(log=log.name, date_pin="gsm8k6_date.py" in text,                    # §
+                            expandable="ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments" in text)  # ¤
+    nb, nn, pp = ppl_nll(model, name), ppl_nll(model, "fq16_1024"), ppl_path(model, name)
     if nb and nn:
         r = load(pp)
         if "results" in r:
@@ -456,9 +469,11 @@ def report_md(rec):
               "Y cells (FOCUS-256 and FQ16-256 are the existing state and map); PPL: the calib-size runs of step 0 "
               "(c2) for FourOverSix / FQ16-256 / FOCUS-256, the final table's records for the other baselines (BF16 "
               "included).",
-              "The BF16 row's values are checked against their source records' own metrics, and against the protocol "
-              "of the rows beside it (zero-shot digests and batch, GSM8K digest, PPL windows); a failed check would "
-              "show \"mismatch\" (calib_size.json bf16_check).", "",
+              "The BF16, GPTQ‡, IF4† and MixFP4† rows' values are checked against their source records' own metrics, "
+              "and against the protocol of the rows beside them (zero-shot digests and batch, GSM8K digest, PPL "
+              "windows); a failed check would show \"mismatch\" (calib_size.json baseline_check). † simulated with "
+              "each method's own rules at 1x16, calibration-free; ‡ GPTQ with BF16 propagation on the release 256 "
+              "windows (the main-table variant). IF4 / MixFP4 GSM8K was not run for the Qwen3 models.", "",
               "| method | " + " | ".join(n for _, n in RX.TASK_NAMES) + " | Avg. | GSM8K | Wiki PPL | C4 PPL |",
               "|---|" + "---:|" * (len(RX.TASK_NAMES) + 4)]
         bc = m.get("bf16_check") or {}
@@ -470,20 +485,35 @@ def report_md(rec):
             cells.append(f"{g[0]:.2f} ± {g[1]:.2f}" if g else "TBD")
             p = r.get("ppl")
             cells += [f2(p["wiki"], 3), f2(p["c4"], 3)] if p else ["TBD", "TBD"]
-            if name == "bf16":
-                if not (bc.get("zeroshot") or {}).get("ok", True):
-                    cells[:len(RX.TASK_NAMES) + 1] = ["mismatch"] * (len(RX.TASK_NAMES) + 1)
-                if not (bc.get("gsm8k") or {}).get("ok", True):
-                    cells[len(RX.TASK_NAMES) + 1] = "mismatch"
-                elif (bc.get("gsm8k") or {}).get("batch_mark"):
-                    cells[len(RX.TASK_NAMES) + 1] += " ◊"
-                if not (bc.get("ppl") or {}).get("ok", True):
+            ck = (m.get("baseline_check") or {}).get(name)
+            if ck is not None:
+                gi = len(RX.TASK_NAMES) + 1
+                if not (ck.get("zeroshot") or {}).get("ok", True):
+                    cells[:gi] = ["mismatch"] * gi
+                gk = ck.get("gsm8k") or {}
+                if gk.get("not_run"):
+                    cells[gi] = "not run"
+                elif not gk.get("ok", True):
+                    cells[gi] = "mismatch"
+                else:
+                    cells[gi] += "".join(mk for mk, on in ((" ◊", gk.get("batch_mark")), (" §", gk.get("date_pin")),
+                                                           (" ¤", gk.get("expandable"))) if on)
+                if not (ck.get("ppl") or {}).get("ok", True):
                     cells[-2:] = ["mismatch", "mismatch"]
             L.append(f"| {label} | " + " | ".join(cells) + " |")
-        if (bc.get("gsm8k") or {}).get("batch_mark"):
+        marks = {k for ck in (m.get("baseline_check") or {}).values() for k in ("batch_mark", "date_pin", "expandable")
+                 if (ck.get("gsm8k") or {}).get(k)}
+        if "batch_mark" in marks:
             L += ["", f"◊ BF16 GSM8K ran at batch {bc['gsm8k']['batch']} (part Y), every other row at "
                   f"{bc['gsm8k']['batch_next']}. Generations depend on the batch composition, so its paired comparisons "
                   "would compare different batches; it enters none here."]
+        if "date_pin" in marks:
+            L += ["", "§ GSM8K run with the chat template's date pinned to 15 Oct 2026 (part Y amendment 3), the date "
+                  "the native rows saw; this part's rows of this model are pinned too. All prompts are equal (equal "
+                  "sample digests)."]
+        if "expandable" in marks:
+            L += ["", "¤ GSM8K run with expandable segments (part Y amendment 4; an allocator setting, which its "
+                  "pre-check showed changes no generation)."]
         L += ["", "**Paired.**",
               "- Zero-shot: pooled over all questions of the six tasks.",
               "- GSM8K: strict-match.",
@@ -591,7 +621,8 @@ def build():
         paired = {label: compare(model, a, b) for label, a, b in comps}
         rec["models"][model] = dict(rows=rows, values=values, paired=paired, cost=cost_rows(model),
                                     eval_seconds=eval_seconds(model), gsm8k_stops=gsm8k_stops(model, rows),
-                                    curves=training_curves(model), bf16_check=bf16_check(model))
+                                    curves=training_curves(model), bf16_check=bf16_check(model),
+                                    baseline_check={b: bf16_check(model, b) for b in BASELINES})
     rec["pooled"] = pooled(rec)
     rec["gpu_time_seconds"] = study_cost()
     rec["pooled_without_qwen27b"] = {k: v for k, v in pooled(rec, exclude=("qwen3.8-27b",)).items()
