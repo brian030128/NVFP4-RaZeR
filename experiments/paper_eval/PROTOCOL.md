@@ -2207,3 +2207,80 @@ The FOCUS calibration job names, and so their stdout logs, now include the windo
   zero-shot 4.7 h, PPL 0.9 h, probes 0.5 h.
 - **Report:** results/paper_eval/calib_size/REPORT.md (findings, the pooled tables with and without Qwen3.8-27B, per model
   and size); STEP0.md, WINDOWS.md, PROBES.md, calib_size.json.
+
+### Part AA, amendment 5 (registered 2026-10-22, at its commit, before any run; the user's request, relayed): GPTQ‡ at 1,024 / 2,048 windows
+
+The user's request (fairness), relayed by the coordinator: recalibrate GPTQ‡ on the same 1,024 and 2,048 windows as
+FQ16 and FOCUS, and evaluate it as those rows were.
+- **Scope:** the eight part AA models × {1,024, 2,048}: 16 GPTQ‡ calibrations and 16 rows (zero-shot, GSM8K, PPL).
+  Nothing else is rerun.
+- **GPTQ‡ exactly as the main table.** The settings are part J's (`run_sm120.GPTQ_ROWS["nvfp4-fo6"]` with
+  `gptq_flags`); for the two Llama-Instruct models, part P's command.
+  - NVFP4 weights on the RTN-fixed grid; FourOverSix per-token activations (`--any-act`).
+  - `--gptq-propagate bf16 --gptq-hessian-input bf16 --gptq-calib release`, block 128, damp 0.01.
+  - Batch 8; Qwen3.8-27B 1 (batch1_only).
+  - The model's calibration record and release revision.
+  - The model's env (n16k64-fast for Nemotron and Qwen3.8-27B), no extra environment variables, native build_V.
+  - **Only the windows change:** `--gptq-calib-extension RUN/calib_size/windows/<model>_<N>.json`. These are part AA's
+    nested sets: the record's 128 windows, then N − 128 by the extension rule.
+    - `flipquant.data.calibration_release` rebuilds every window and checks its token sha256 against the file.
+    - Before each calibration, the file's token-list sha256 must equal calib_size.json's (WINDOWS.md's prefix), and the
+      model's nesting checks must be ok.
+    - The cache key records the windows' token-id sha256 (`data_sha256`).
+- **Route, as the main table:** the codes are computed inside the row's PPL job. That job is `evaluation.ppl --mode
+  native ... --paper-convention` with the GPTQ flags and `--gptq-cache` on /vault.
+  - The PPL row is that job's record, as the main table's GPTQ‡ PPL is.
+  - GPTQ's own time is the record's `ptq.seconds`. The job's device peak (the release sampler) covers GPTQ and the PPL
+    evaluation.
+  - Zero-shot (part X's row arguments) and GSM8K (part Y's; Llama-1B's date pinned, Qwen3 with thinking off) then run
+    with the same flags and read the cache. flipquant refuses a cache whose key differs.
+- **Code:** flipquant calib-size 8dbe2e4. It has 9f19863's code: 9f19863..8dbe2e4 adds results/calib_size and one
+  .gitignore line. evaluation/, flipquant/, models/ and kernels/ are unchanged since caf69be (step 0 (a)).
+- **Step 0, before anything else:** Llama-3.2-1B-Instruct GPTQ‡ at 256 on calib-size, with part P's command (part P's
+  16x64 trainer report as the extension) and a cache in RUN/calib_size/step0/gptq_256/.
+  - **Required:** codes_sha256 equal to part P's record, `952850d7…`. That is also the digest of the HF
+    GPTQ-BF16Calib upload's codes and of part X step 0's. Otherwise the run stops and is reported.
+  - **Also required; a difference stops the run:**
+    - the per-window PPL NLL equals part P's record;
+    - the zero-shot equals part X's GPTQ‡ row;
+    - the GSM8K (date pinned) equals part Y's GPTQ‡ row.
+
+    This is step 0 (c) as done for FQ16. With it, the existing records are this row's 256 references.
+  - **Reported:** the cache file's sha256 against the uploaded file's (`5f65382f…`).
+  - **Also checked:** the driver's GPTQ arguments for all eight models, with the main-table windows and codes files,
+    against parts J / P's logged commands and parts X / Y's row arguments.
+- **ETA gate:** next comes Llama-1B GPTQ‡-1k's calibration job, its PPL included. Its GPTQ seconds and peak give the
+  ETA, which goes to the coordinator. If it is under about 20 h the run continues; otherwise it waits.
+  - **Prior estimate:** GPTQ at 256 took 1.5 h for the eight models (`ptq.seconds`). If it is linear in the window
+    count: about 5 h at 1,024 and 10 h at 2,048. The evaluations add about 6.5 h (part AA's FQ16 rows). Total: about
+    20–23 h.
+- **Order:** 1,024 for the eight models in part AA's ORDER, then 2,048 in the same order. Per model and size:
+  calibration (with PPL), zero-shot, GSM8K.
+- **Storage:** codes go to `/vault/flipquant_paper_eval/calib_size/<model>/gptq_<N>/codes_nvfp4_act-fo6.pt`. That is
+  about 39 GB per size, 78 GB in all.
+  - The sha256 is recorded right after the job that writes the file, from a fresh full read. It is verified before each
+    later evaluation.
+  - The job record goes to RUN/calib_size/<model>/gptq_<N>.job.json.
+  - Nothing else is written on /vault. Nothing is deleted anywhere. /home keeps its 10 GB floor; step 0's 0.55 GB
+    file stays in RUN.
+- **Checks:**
+  - calibration: rc 0; `ptq.loaded` false; the key's window count N, release calibration, BF16 Hessian input and
+    propagation, damp 0.01, block 128; `gptq_calibration` names the windows file;
+  - every evaluation: `ptq.loaded` true, `ptq.codes_sha256` equal to the calibration's, the cache path the /vault file.
+    Otherwise parts X / Y's record checks apply; this codes check replaces their 256-codes check.
+- **Gates (stop and report):**
+  - a failed check;
+  - any OOM. No setting is changed to get around one; batch 8 / 1 stays.
+  - a predicted OOM: before each 2,048 calibration, the model's peak allocation is extrapolated linearly from its 256
+    and 1,024 jobs. If it is above 91 GiB, the run stops before the calibration starts.
+  - an implausible result, any of:
+    - GPTQ's calibration output error is not below RTN's (`mean_output_error_vs_rtn` ≥ 1);
+    - a PPL is non-finite or more than 5 % above GPTQ‡-256's;
+    - the zero-shot average is more than 3 points below GPTQ‡-256's;
+    - the GSM8K strict score is more than 10 points below GPTQ‡-256's.
+- **Report additions:**
+  - GPTQ‡ 1,024 / 2,048 rows in every per-model table, and their calibration cost;
+  - "GPTQ‡-1k / 2k vs GPTQ‡ (256)", "GPTQ‡-2k vs GPTQ‡-1k", "FQ16-1k vs GPTQ‡-1k" and "FQ16-2k vs GPTQ‡-2k", per model
+    and pooled over the eight models;
+  - calib_size.json, REPORT.md and the flipquant README, re-rendered and scanned.
+  - Push paper-eval and flipquant calib-size only.
