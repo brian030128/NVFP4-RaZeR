@@ -77,10 +77,10 @@ def main():
         return [d(x.get("zeroshot")), d(x.get("gsm8k")), ", ".join(SHORT[m] for m in (x.get("gsm8k") or x.get(
             "zeroshot") or {}).get("models", []))]
 
-    L = ["# Calibration size: FlipQuant 16x64 and FOCUS at 256, 1,024 and 2,048 windows", "",
+    L = ["# Calibration size: FlipQuant 16x64, FOCUS and GPTQ‡ at 256, 1,024 and 2,048 windows", "",
          "**Source.**",
          f"- Every number here comes from NVFP4-RaZeR paper-eval {commit}: `{SRC}/calib_size.json`, rendered by "
-         f"`{GENERATOR}`. The protocol is `experiments/paper_eval/PROTOCOL.md` there (part AA, amendments 1–4).",
+         f"`{GENERATOR}`. The protocol is `experiments/paper_eval/PROTOCOL.md` there (part AA, amendments 1–5).",
          "- " + (", ".join(f"`{f}`" for f in copied) + " here are that commit's files, unchanged." if copied else
                  "No report file could be copied."),
          *([f"- Not copied, because they hold local paths or user names: "
@@ -88,14 +88,15 @@ def main():
             + f". They are in paper-eval {commit}, `{SRC}/`."] if left else []),
          "", "## The question and the settings", "",
          "- **Question:** do more calibration windows (1,024 or 2,048 of 512 tokens, instead of the release's 256) "
-         "improve FlipQuant's downstream accuracy? FOCUS, trained on the same windows, is the comparison.",
+         "improve FlipQuant's downstream accuracy? FOCUS and GPTQ‡, calibrated on the same windows, are the "
+         "comparisons.",
          "- **Windows.** The release builder: the calibration record's 128 windows, then (N − 128) / 2 per source.",
          "  - The sources are OpenWebMath train-00000 @ fde8ef8 and CodeParrot-clean file-000000000001 @ 35a59fb, one "
          "window per document, seed 20260930.",
          "  - The record's fit documents, the three development records and the published C4 evaluation documents are "
          "skipped.",
          "  - The sets are nested, 256 ⊂ 1,024 ⊂ 2,048, record by record.",
-         "  - FlipQuant and FOCUS read byte-identical windows (token sha256 checked).",
+         "  - FlipQuant, FOCUS and GPTQ‡ read byte-identical windows (token sha256 checked).",
          "  - A word 13-gram audit of every 2,048 set against all evaluation texts finds 0 hits. Its positive control "
          "detects spliced evaluation items 30 / 30 per model.",
          "- **FlipQuant 16x64:** the release settings at 5 epochs, i.e. 160 / 640 / 1,280 optimizer steps.",
@@ -107,19 +108,27 @@ def main():
          "2; init_q 6; FourOverSix per-token activations; seed 42), micro-batch 8.",
          "  - Qwen3.8-27B is trained locally on one RTX PRO 6000 with host-offloaded AdamW, micro 1.",
          "  - Its 256 baseline was trained on 2 x H200 (part Q); a local 256 run is the environment-matched control.",
+         "- **GPTQ‡** (amendment 5): the main table's GPTQ variant, recalibrated on the same 1,024 / 2,048 windows.",
+         "  - NVFP4 codes on the RTN-fixed grid, FourOverSix per-token activations; BF16 propagation and Hessian input; "
+         "block 128, damp 0.01; batch 8 (Qwen3.8-27B 1).",
+         "  - As in the main table, the codes are computed inside the row's PPL job; zero-shot and GSM8K read them from "
+         "the codes file, whose sha256 is checked before each evaluation.",
+         "  - Step 0 on this branch: Llama-3.2-1B-Instruct's 256-window run reproduces the main-table codes (and the "
+         "published codes file) bit for bit, and its zero-shot, GSM8K and PPL equal the main table's records.",
          "- **Evaluation**, exactly as the paper's zero-shot and GSM8K panels:",
          "  - zero-shot: six tasks (PIQA, HellaSwag, WinoGrande, ARC-e, ARC-c, LAMBADA), lm-eval 0.4.11;",
          "  - GSM8K: `gsm8k_llama`, 8-shot CoT, chat template, greedy, 1,024 tokens, strict-match primary;",
          "  - WikiText-2 / C4 PPL, paper convention.",
          "  - Native on the RTX PRO 6000 (build_V). IF4 and MixFP4 (Zou) are simulated, from the zero-shot / GSM8K panels.",
          "- **Code:** this branch: f912a30 (`--teacher-host`, `--probe-steps`, `calibration.fit_windows`), 898d00e "
-         "(`train_focus --offload`), 9f19863 (`tmopt_launch --save-theta`).",
+         "(`train_focus --offload`), 9f19863 (`tmopt_launch --save-theta`). GPTQ‡ ran on 8dbe2e4, which adds only "
+         "this directory's earlier files to 9f19863.",
          "- **BF16, GPTQ‡, IF4† and MixFP4† rows** come from the existing records, with no new runs, as measured "
          "before.",
          "  - Sources: zero-shot from the zero-shot panel; GSM8K from the GSM8K panel (the two Qwen3 models: this "
          "study's BF16 and GPTQ‡ baselines); PPL from the main table's records.",
          "  - † IF4 and MixFP4 (Zou) are simulated with each method's own rules at 1x16 and are calibration-free. ‡ GPTQ "
-         "is the main-table variant, with BF16 propagation on the release 256 windows.",
+         "(256) is the main-table variant, with BF16 propagation on the release 256 windows.",
          "  - IF4 / MixFP4 GSM8K was not run for the two Qwen3 models.",
          "  - Each value equals its source record's own metric (PPL to float32 precision for the main-table records "
          "that store float32).",
@@ -147,6 +156,10 @@ def main():
             ("FlipQuant vs FOCUS, 1,024, without Qwen27B", "FQ16-1k vs FOCUS-1k", P7),
             ("FlipQuant vs FOCUS, 2,048", "FQ16-2k vs FOCUS-2k", P),
             ("FlipQuant vs FOCUS, 2,048, without Qwen27B", "FQ16-2k vs FOCUS-2k", P7),
+            ("GPTQ‡ 1,024 vs its 256", "GPTQ‡-1k vs GPTQ‡-256", P), ("GPTQ‡ 2,048 vs its 256", "GPTQ‡-2k vs GPTQ‡-256", P),
+            ("GPTQ‡ 2,048 vs 1,024", "GPTQ‡-2k vs GPTQ‡-1k", P),
+            ("FlipQuant vs GPTQ‡, 256", "FQ16-256 vs GPTQ‡-256", P), ("FlipQuant vs GPTQ‡, 1,024", "FQ16-1k vs GPTQ‡-1k", P),
+            ("FlipQuant vs GPTQ‡, 2,048", "FQ16-2k vs GPTQ‡-2k", P),
             ("FlipQuant 2,048 vs IF4† (GSM8K: 6 models)", "FQ16-2k vs IF4†", P),
             ("FlipQuant 2,048 vs MixFP4 (Zou)† (GSM8K: 6 models)", "FQ16-2k vs MixFP4 (Zou)†", P)]
     for label, key, src in rows:
@@ -163,6 +176,7 @@ def main():
         L += [f"### {title}", "", "| method | windows | zero-shot Avg. | GSM8K strict | Wiki PPL | C4 PPL | E0M3 share |",
               "|---|---:|---:|---:|---:|---:|---:|"]
         lines = [("BF16", "—", "bf16", None), ("FourOverSix", "—", "fo6", None), ("GPTQ‡", "256", "gptq", None),
+                 ("GPTQ‡", "1,024", "gptq_1024", None), ("GPTQ‡", "2,048", "gptq_2048", None),
                  ("IF4†", "—", "if4", None), ("MixFP4 (Zou)†", "—", "zou", None)]
         lines += [("FOCUS", f"{n:,}", name, None) for n, name in ((256, "focus256"), (1024, "focus_1024"), (2048, "focus_2048"))]
         if m == "qwen3.8-27b":         # the local control right after the cluster FOCUS-256 row
@@ -211,9 +225,12 @@ def main():
         if m == "qwen3.8-27b":
             comps += [("FlipQuant vs FOCUS, 256 local", "FQ16-256 vs FOCUS-256 local (FOCUS in this environment)")]
         comps += [("FlipQuant vs FOCUS, 1,024", "FQ16-1k vs FOCUS-1k"), ("FlipQuant vs FOCUS, 2,048", "FQ16-2k vs FOCUS-2k"),
+                  ("GPTQ‡ 1,024 vs 256", "GPTQ‡-1k vs GPTQ‡-256"), ("GPTQ‡ 2,048 vs 256", "GPTQ‡-2k vs GPTQ‡-256"),
+                  ("FlipQuant vs GPTQ‡, 256", "FQ16-256 vs GPTQ‡-256"), ("FlipQuant vs GPTQ‡, 1,024", "FQ16-1k vs GPTQ‡-1k"),
+                  ("FlipQuant vs GPTQ‡, 2,048", "FQ16-2k vs GPTQ‡-2k"),
                   ("FlipQuant 2,048 vs FourOverSix", "FQ16-2k vs FourOverSix")]
         comps += [(f"FlipQuant {k} vs {lab}", f"FQ16-{kk} vs {key}") for k, kk in (("1,024", "1k"), ("2,048", "2k"))
-                  for lab, key in (("IF4†", "IF4†"), ("MixFP4 (Zou)†", "MixFP4 (Zou)†"), ("GPTQ‡", "GPTQ‡"))]
+                  for lab, key in (("IF4†", "IF4†"), ("MixFP4 (Zou)†", "MixFP4 (Zou)†"), ("GPTQ‡ (256)", "GPTQ‡-256"))]
         for label, key in comps:
             c = pr.get(key) or {}
             nll = c.get("nll") or {}
@@ -242,9 +259,11 @@ def main():
           f"{z('phi4-14b', 'FQ16-1k vs MixFP4 (Zou)†', 'gsm8k')} | {z('phi4-14b', 'FQ16-2k vs MixFP4 (Zou)†', 'gsm8k')} |",
           "", "## Cost and E0M3 share", "",
           "Job wall time (s) of each calibration, its peak allocated GPU memory (GiB), and FlipQuant's E0M3 share; 256: the "
-          "release / part P / part K runs (Qwen3.8-27B FOCUS-256: 2 x H200, training seconds).", "",
+          "release / part P / part K runs (Qwen3.8-27B FOCUS-256: 2 x H200, training seconds). GPTQ‡: GPTQ's own time "
+          "(the job also measures the row's PPL); 256: the main table's job.", "",
           "| model | FlipQuant 256 / 1,024 / 2,048 (s) | FlipQuant peak (GiB) | E0M3 share 256 / 1,024 / 2,048 | FOCUS training 256 / "
-          "1,024 / 2,048 (s) | FOCUS peak (GiB) |", "|---|---|---|---|---|---|"]
+          "1,024 / 2,048 (s) | FOCUS peak (GiB) | GPTQ‡ 256 / 1,024 / 2,048 (s) | GPTQ‡ peak (GiB) |",
+          "|---|---|---|---|---|---|---|---|"]
     for m, title in MODELS:
         mm = M.get(m)
         if not mm:
@@ -252,12 +271,15 @@ def main():
         c = {(x["method"], x["windows"]): x for x in mm["cost"]}
         fq = [c.get(("FlipQuant 16x64", n), {}) for n in (256, 1024, 2048)]
         fo = [c.get(("FOCUS", n), {}) for n in (256, 1024, 2048)]
+        gq = [c.get(("GPTQ‡", n), {}) for n in (256, 1024, 2048)]
         L.append(f"| {SHORT[m]} | " + " / ".join(v(x.get("job_seconds"), 0) for x in fq) + " | "
                  + " / ".join(v(x.get("gpu_peak_allocated_gib"), 1) for x in fq) + " | "
                  + " / ".join(v(100 * x["e0m3_share"], 1) if x.get("e0m3_share") is not None else "—" for x in fq) + " % | "
                  + " / ".join(v(x.get("training_seconds"), 0) for x in fo) + " | "
                  + " / ".join(v(x.get("gpu_peak_allocated_gib"), 1) for x in fo)
-                 + (" (256: GPU 0 of 2 x H200)" if m == "qwen3.8-27b" else "") + " |")
+                 + (" (256: GPU 0 of 2 x H200)" if m == "qwen3.8-27b" else "") + " | "
+                 + " / ".join(v(x.get("training_seconds"), 0) for x in gq) + " | "
+                 + " / ".join(v(x.get("gpu_peak_allocated_gib"), 1) for x in gq) + " |")
     gt = rec.get("gpu_time_seconds") or {}
     L += ["", "GPU time of the whole study: " + ", ".join(f"{k} {s / 3600:.1f} h" for k, s in gt.items())
           + f"; {sum(gt.values()) / 3600:.1f} h in all (one RTX PRO 6000).", ""]

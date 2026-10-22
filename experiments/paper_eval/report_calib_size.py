@@ -34,7 +34,9 @@ BASE_ROWS = [("BF16", "bf16"), ("NVFP4", "nvfp4"), ("FourOverSix", "fo6"), ("IF4
 NEW_ROWS = [("FOCUS, 256", "focus256"), ("FOCUS, 1,024", "focus_1024"), ("FOCUS, 2,048", "focus_2048"),
             ("FlipQuant 16x64, 256", "fq16_256"), ("FlipQuant 16x64, 1,024", "fq16_1024"),
             ("FlipQuant 16x64, 2,048", "fq16_2048")]
-NEW = ("focus_1024", "fq16_1024", "focus_2048", "fq16_2048", "focus256_rerun", "focus256_local")
+#: amendment 5: GPTQ‡ recalibrated on the 1,024 / 2,048 windows; in the tables right after GPTQ‡ (256)
+GPTQ_ROWS = [("GPTQ‡, 1,024", "gptq_1024"), ("GPTQ‡, 2,048", "gptq_2048")]
+NEW = ("focus_1024", "fq16_1024", "focus_2048", "fq16_2048", "focus256_rerun", "focus256_local", "gptq_1024", "gptq_2048")
 #: amendment 3: Qwen3.8-27B's FOCUS-256 retrained locally as its 1,024 / 2,048 runs (offload, micro 1), the
 #: environment-matched reference; the cluster state (part Q) stays, marked as a different environment
 CONTROL = ("FOCUS, 256 (local control, amendment 3)", "focus256_local")
@@ -155,9 +157,23 @@ COMPARISONS = ([("FQ16-256 vs FOCUS-256", "fq16_256", "focus256")]
                + [("FQ16-2k vs FQ16-1k", "fq16_2048", "fq16_1024"), ("FOCUS-2k vs FOCUS-1k", "focus_2048", "focus_1024"),
                   # the motivating losses against the fixed 256-window FOCUS reference (flipquant README, 2026-10-22)
                   ("FQ16-1k vs FOCUS-256", "fq16_1024", "focus256"), ("FQ16-2k vs FOCUS-256", "fq16_2048", "focus256"),
-                  ("FQ16-256 vs GPTQ‡", "fq16_256", "gptq"), ("FQ16-1k vs GPTQ‡", "fq16_1024", "gptq"),
-                  ("FQ16-2k vs GPTQ‡", "fq16_2048", "gptq"),
-                  ("FQ16-256 vs IF4†", "fq16_256", "if4"), ("FQ16-256 vs MixFP4 (Zou)†", "fq16_256", "zou")])
+                  ("FQ16-256 vs GPTQ‡-256", "fq16_256", "gptq"), ("FQ16-1k vs GPTQ‡-256", "fq16_1024", "gptq"),
+                  ("FQ16-2k vs GPTQ‡-256", "fq16_2048", "gptq"),
+                  ("FQ16-256 vs IF4†", "fq16_256", "if4"), ("FQ16-256 vs MixFP4 (Zou)†", "fq16_256", "zou")]
+               # amendment 5: GPTQ‡ against its 256, and FlipQuant against GPTQ‡ at the same size
+               + [("GPTQ‡-1k vs GPTQ‡-256", "gptq_1024", "gptq"), ("GPTQ‡-2k vs GPTQ‡-256", "gptq_2048", "gptq"),
+                  ("GPTQ‡-2k vs GPTQ‡-1k", "gptq_2048", "gptq_1024"), ("FQ16-1k vs GPTQ‡-1k", "fq16_1024", "gptq_1024"),
+                  ("FQ16-2k vs GPTQ‡-2k", "fq16_2048", "gptq_2048")])
+
+
+def table_rows():
+    """The per-model table's rows: BASE_ROWS with amendment 5's GPTQ‡ rows after GPTQ‡ (256), then NEW_ROWS."""
+    out = []
+    for row in BASE_ROWS:
+        out.append(row)
+        if row[1] == "gptq":
+            out += GPTQ_ROWS
+    return out + NEW_ROWS
 
 
 def gsm8k_stops(model, rows):
@@ -299,6 +315,20 @@ def cost_rows(model):
                          training_seconds=f.get("training_seconds"), calibration_seconds=f.get("calibration_seconds"),
                          gpu_peak_allocated_gib=((f.get("resources") or {}).get("gpu_peak_gib") or [None])[0],
                          state_bytes=Path(Z.focus_state(model)).stat().st_size))
+    g = load(Z.gptq_record(model))
+    if g:                                    # the main table's GPTQ‡ job (part J; part P for the Llama-Instruct models)
+        jobs = CS.queue_seconds("llama_gptq_" if model in Z.LLAMA else "gptq_")
+        rows.append(dict(method="GPTQ‡", windows=256, source="part P" if model in Z.LLAMA else "part J",
+                         job_seconds=jobs.get(f"llama_gptq_{model}" if model in Z.LLAMA else f"gptq_{model}_nvfp4-fo6"),
+                         training_seconds=g["ptq"]["seconds"],
+                         gpu_peak_allocated_gib=((g.get("resources") or {}).get("gpu_peak_gib") or [None])[0],
+                         state_bytes=Path(Z.codes_file(model)).stat().st_size))
+    for n in SIZES:                          # amendment 5
+        j = load(CS.ROOT / model / f"gptq_{n}.job.json")
+        if j:
+            rows.append(dict(method="GPTQ‡", windows=n, source="this part (amendment 5)", job_seconds=j["job_seconds"],
+                             training_seconds=j["gptq_seconds"], gpu_peak_allocated_gib=(j.get("gpu_peak_gib") or [None])[0],
+                             device_peak_mib=j["device_peak_mib"], state_bytes=j["cache_bytes"]))
     for n, sub in [(n, f"focus_{n}") for n in SIZES] + [(256, "focus_256_local")]:
         j = load(CS.ROOT / model / sub / "state.job.json")
         if not j:
@@ -359,7 +389,7 @@ def summary_md(rec):
                            ("WikiText-2 PPL", "ppl", lambda v: f2(v["wiki"], 3))):
         L += [f"**{what}:**", "", "| method | " + " | ".join(SHORT[m] for m in models) + " |",
               "|---|" + "---:|" * len(models)]
-        for label, name in [("FourOverSix", "fo6")] + NEW_ROWS:
+        for label, name in [("FourOverSix", "fo6"), ("GPTQ‡, 256", "gptq")] + GPTQ_ROWS + NEW_ROWS:
             cells = []
             for m in models:
                 v = rec["models"][m]["values"].get(name, {}).get(key)
@@ -392,16 +422,35 @@ def summary_md(rec):
 
 def study_cost():
     """GPU job time of the part (queue.log START / END of its cs_* jobs), by kind."""
-    kinds = {"cs_fq16_": "FlipQuant calibration", "cs_focus_": "FOCUS calibration", "cs_zs_": "zero-shot",
-             "cs_gsm8k_": "GSM8K", "cs_ppl_": "PPL", "cs_probe_": "probes", "cs_theta_": "theta rerun",
-             "cs_offload_test": "offload test"}
+    kinds = {"cs_fq16_": "FlipQuant calibration", "cs_focus_": "FOCUS calibration",
+             "cs_gptq_": "GPTQ‡ calibration with its PPL", "cs_zs_": "zero-shot", "cs_gsm8k_": "GSM8K", "cs_ppl_": "PPL",
+             "cs_probe_": "probes", "cs_theta_": "theta rerun", "cs_offload_test": "offload test"}
     out = {}
+    for name, sec in cs_jobs():
+        k = next((v for pre, v in kinds.items() if name.startswith(pre)), None)
+        if k:
+            out[k] = out.get(k, 0) + sec
+    return out
+
+
+def cs_jobs():
+    """(name, seconds) of the part's finished jobs (queue.log END lines of cs_*)."""
+    out = []
     for line in (G.RUN / "queue.log").read_text().splitlines():
         q = line.split()
         if len(q) >= 5 and q[1] == "END" and q[2].startswith("cs_") and q[4].endswith("s") and q[4][:-1].isdigit():
-            k = next((v for pre, v in kinds.items() if q[2].startswith(pre)), None)
-            if k:
-                out[k] = out.get(k, 0) + int(q[4][:-1])
+            out.append((q[2], int(q[4][:-1])))
+    return out
+
+
+def gptq_cost():
+    """Amendment 5's GPU time: its calibration jobs (with their PPL) and its zero-shot / GSM8K jobs, step 0 included."""
+    out = {}
+    for name, sec in cs_jobs():
+        if name.startswith("cs_gptq_") or name.endswith(("_gptq256", "_gptq_1024", "_gptq_2048")):
+            k = "calibration with PPL" if name.startswith("cs_gptq_") else "zero-shot" if name.startswith("cs_zs_") \
+                else "GSM8K"
+            out[k] = out.get(k, 0) + sec
     return out
 
 
@@ -411,7 +460,7 @@ def findings_md(rec):
     def g(label, ev, src=None):
         x = (src if src is not None else P).get(label, {}).get(ev)
         return "TBD" if not x else f"{x['diff']:+.2f}{'*' if x['p'] < 0.05 else ''} (p={x['p']:.2g})"
-    cost = study_cost()
+    cost, gc = study_cost(), gptq_cost()
     L = ["## Findings", "",
          "Pooled exact McNemar over the eight models (discordant counts summed; * = p < 0.05). The per-model tables "
          "below have every pair.", "",
@@ -433,6 +482,13 @@ def findings_md(rec):
          f"{g('FQ16-2k vs MixFP4 (Zou)†', 'zeroshot')} at 2,048 ({g('FQ16-256 vs IF4†', 'zeroshot')} / "
          f"{g('FQ16-256 vs MixFP4 (Zou)†', 'zeroshot')} at 256); GSM8K {g('FQ16-2k vs IF4†', 'gsm8k')} / "
          f"{g('FQ16-2k vs MixFP4 (Zou)†', 'gsm8k')} (six models).",
+         f"- **GPTQ‡ on the same windows (amendment 5).** vs its 256: GSM8K {g('GPTQ‡-1k vs GPTQ‡-256', 'gsm8k')} at "
+         f"1,024 and {g('GPTQ‡-2k vs GPTQ‡-256', 'gsm8k')} at 2,048 (2,048 vs 1,024: {g('GPTQ‡-2k vs GPTQ‡-1k', 'gsm8k')}); "
+         f"zero-shot {g('GPTQ‡-1k vs GPTQ‡-256', 'zeroshot')} / {g('GPTQ‡-2k vs GPTQ‡-256', 'zeroshot')}.",
+         f"- **FlipQuant vs GPTQ‡ at the same size.** GSM8K {g('FQ16-256 vs GPTQ‡-256', 'gsm8k')} at 256, "
+         f"{g('FQ16-1k vs GPTQ‡-1k', 'gsm8k')} at 1,024, {g('FQ16-2k vs GPTQ‡-2k', 'gsm8k')} at 2,048; zero-shot "
+         f"{g('FQ16-256 vs GPTQ‡-256', 'zeroshot')} / {g('FQ16-1k vs GPTQ‡-1k', 'zeroshot')} / "
+         f"{g('FQ16-2k vs GPTQ‡-2k', 'zeroshot')}.",
          "- **The motivating losses.** Each model's own table has the pairs.",
          "  - Phi-4 GSM8K vs MixFP4: −1.29* at 256 is gone at 1,024 / 2,048.",
          "  - Qwen3.8-27B zero-shot vs IF4: −0.45* at 256 is not significant at 1,024 / 2,048.",
@@ -448,7 +504,9 @@ def findings_md(rec):
          "  - Nemotron's FQ16-2k strict-match loss is format only (flexible-extract unchanged).",
          "  - E0M3 shares grow with the steps (2,048: 6.8–17.2 %, Llama-1B 27.0 %; amendment 4).",
          "- **GPU time of the part:** " + ", ".join(f"{k} {v / 3600:.1f} h" for k, v in cost.items())
-         + f"; {sum(cost.values()) / 3600:.1f} h in all.", ""]
+         + f"; {sum(cost.values()) / 3600:.1f} h in all."
+         + (" Amendment 5 (GPTQ‡, step 0 included): " + ", ".join(f"{k} {v / 3600:.1f} h" for k, v in gc.items())
+            + f"; {sum(gc.values()) / 3600:.1f} h." if gc else ""), ""]
     return L
 
 
@@ -459,7 +517,11 @@ def report_md(rec):
          "windows of 512 tokens instead of the release's 256. The sets are nested, 256 ⊂ 1,024 ⊂ 2,048, and audited "
          "against every evaluation text (WINDOWS.md). FlipQuant and FOCUS read the same windows (token sha256 checked). "
          "flipquant calib-size f912a30. Evaluation exactly as parts X (zero-shot) and Y (GSM8K), plus PPL (paper "
-         "convention). Step 0: STEP0.md. 2,048-window memory probes: PROBES.md.", ""]
+         "convention). Step 0: STEP0.md. 2,048-window memory probes: PROBES.md.",
+         "",
+         "Amendment 5 adds GPTQ‡, the main table's GPTQ variant, recalibrated on the same 1,024 / 2,048 windows. As in "
+         "the main table, its codes are computed inside the row's PPL job; zero-shot and GSM8K read them from the codes "
+         "file. Its step 0 (STEP0.md) reproduces Llama-3.2-1B-Instruct's 256-window codes and rows bit for bit.", ""]
     L += findings_md(rec)
     L += summary_md(rec)
     for model in rec["models"]:
@@ -473,7 +535,9 @@ def report_md(rec):
               "and against the protocol of the rows beside them (zero-shot digests and batch, GSM8K digest, PPL "
               "windows); a failed check would show \"mismatch\" (calib_size.json baseline_check). † simulated with "
               "each method's own rules at 1x16, calibration-free; ‡ GPTQ with BF16 propagation on the release 256 "
-              "windows (the main-table variant). IF4 / MixFP4 GSM8K was not run for the Qwen3 models.", "",
+              "windows (the main-table variant). IF4 / MixFP4 GSM8K was not run for the Qwen3 models.",
+              "GPTQ‡ 1,024 / 2,048 (amendment 5): the same GPTQ on this part's windows; its PPL is its calibration job's, "
+              "as GPTQ‡ (256)'s is the main table's.", "",
               "| method | " + " | ".join(n for _, n in RX.TASK_NAMES) + " | Avg. | GSM8K | Wiki PPL | C4 PPL |",
               "|---|" + "---:|" * (len(RX.TASK_NAMES) + 4)]
         bc = m.get("bf16_check") or {}
@@ -536,7 +600,8 @@ def report_md(rec):
                          f"{v['budget_hits']} |")
         main = [k for k in ("FQ16-1k vs FQ16-256", "FOCUS-1k vs FOCUS-256", "FQ16-1k vs FOCUS-1k",
                             "FQ16-2k vs FQ16-256", "FOCUS-2k vs FOCUS-256", "FQ16-2k vs FOCUS-2k",
-                            "FQ16-256 vs FOCUS-256") if "zeroshot_tasks" in m["paired"].get(k, {})]
+                            "FQ16-256 vs FOCUS-256", "GPTQ‡-1k vs GPTQ‡-256", "GPTQ‡-2k vs GPTQ‡-256",
+                            "FQ16-1k vs GPTQ‡-1k", "FQ16-2k vs GPTQ‡-2k") if "zeroshot_tasks" in m["paired"].get(k, {})]
         if main:
             L += ["", "Zero-shot per task (difference in points, counts, exact p):", "",
                   "| comparison | " + " | ".join(n for _, n in RX.TASK_NAMES) + " |",
@@ -567,9 +632,10 @@ def report_md(rec):
                           f"|theta| < 0.02: {th['all_within_one_step']:.1%} of {th['tiles']:,};",
                           f"- E0M3 theta quantiles (10/25/50/75/90 %): "
                           + ", ".join(f"{q:.3f}" for q in th["quantiles_e0m3"]) + "."]
-        L += ["", "**Calibration cost and E0M3 share.**", "",
+        L += ["", "**Calibration cost and E0M3 share.** GPTQ‡: the job is GPTQ plus the row's PPL evaluation (the main "
+              "table's route), \"training\" is GPTQ's own time (ptq.seconds), and the bytes are the codes file's.", "",
               "| method | windows | source | steps | E0M3 share | job (s) | training (s) | peak allocated (GiB) | "
-              "device peak (MiB) | host RSS (GiB) | teacher / state (bytes) |",
+              "device peak (MiB) | host RSS (GiB) | teacher / state / codes (bytes) |",
               "|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
         for c in m["cost"]:
             L.append(f"| {c['method']} | {c['windows']:,} | {c['source']} | {c.get('steps') or '—'} | "
@@ -591,7 +657,7 @@ def build():
     for model in CS.ORDER:
         if model not in CS.PILOT and not (CS.ROOT / model / "fq16_1024.job.json").exists():
             continue
-        rows = BASE_ROWS + NEW_ROWS
+        rows = table_rows()
         if load(CS.ROOT / model / "eval" / "zs" / "focus256_rerun.json") is not None:
             rows = rows + [RERUN]
         if model == "qwen3.8-27b":
@@ -774,6 +840,43 @@ def step0_md():
                   "(about lr x sign(g)) amplify sign changes of near-zero gradients. The run-to-run row in REPORT.md "
                   "shows the evaluation-level effect.", ""]
     L += [f"**Step 0: {'passed' if s.get('ok') else 'not passed' if 'ok' in s else 'in progress'}.**"]
+    return L + gptq_step0_md()
+
+
+def gptq_step0_md():
+    """Amendment 5's step 0 (RUN/calib_size/step0/gptq_step0.json)."""
+    s = load(CS.ROOT / "step0" / "gptq_step0.json")
+    if not s:
+        return []
+    L = ["", "## Amendment 5, step 0: GPTQ‡", "", f"On flipquant calib-size {CS.GPTQ_CODE}.", ""]
+    a = s.get("args")
+    if a:
+        models = [m for m in a if m != "ok"]
+        L += ["**Arguments.** For each model, with the main table's windows and codes files: the PPL job's command equals "
+              "the main table's logged command (parts J / P; part P ran without a cache file), and the zero-shot / GSM8K "
+              "arguments equal parts X / Y's GPTQ‡ rows': "
+              + ", ".join(f"{TITLES[m]} {'pass' if a[m]['ok'] else 'FAIL'}" for m in models)
+              + f". **{'pass' if a['ok'] else 'FAIL'}**.", ""]
+    c = s.get("calibration")
+    if c:
+        L += [f"**Codes.** Llama-3.2-1B-Instruct GPTQ‡ at 256 windows with part P's command: codes digest "
+              f"`{c['codes_sha256'][:16]}…`, part P's `{c['part_p_codes_sha256'][:16]}…`: "
+              f"**{'equal' if c['codes_equal'] else 'DIFFERENT'}** (required). The codes file's sha256 "
+              f"`{c['file_sha256'][:16]}…` vs the HF upload's `{c['uploaded_file_sha256'][:16]}…`: "
+              f"{'equal' if c['file_equal_uploaded'] else 'different'} (reported). GPTQ {f2(c['gptq_seconds'], 0)} s, "
+              f"job {f2(c['job_seconds'], 0)} s, device peak {c['device_peak_mib']} MiB.", ""]
+    i = s.get("identity")
+    if i:
+        zs, g, p = i["zeroshot"], i["gsm8k"], i["ppl"]
+        L += ["**Evaluations** on calib-size, reading that codes file:",
+              "- zero-shot vs part X's GPTQ‡ record, per task (sample_digest, per-example correctness, per-choice "
+              "log-likelihoods, metrics): " + ", ".join(f"{t} {'equal' if all(v.values()) else 'DIFFERENT ' + str(v)}"
+                                                         for t, v in zs["tasks"].items()) + ";",
+              f"- GSM8K (date pinned to 15 Oct 2026) vs part Y's samples: {g['identical']:,} / {g['samples']:,} "
+              "generations and extracted answers byte-identical;",
+              "- PPL vs part P's record: per-window NLL equal on " + ", ".join(
+                  f"{k} ({p['windows'][k]} windows): {v}" for k, v in p["equal"].items()) + ".", ""]
+    L += [f"**Amendment 5's step 0: {'passed' if s.get('ok') else 'not passed' if 'ok' in s else 'in progress'}.**"]
     return L
 
 
@@ -845,6 +948,8 @@ def main():
                                                                   or {}).items()})
     rec["step0"] = load(CS.ROOT / "step0" / "step0.json")
     rec["probes"] = load(CS.ROOT / "probes" / "probes.json")
+    rec["gptq"] = dict(step0=load(CS.ROOT / "step0" / "gptq_step0.json"), eta=load(CS.ROOT / "gptq_eta.json"),
+                       memory=load(CS.ROOT / "gptq_memory.json"), gpu_time_seconds=gptq_cost())
     (OUT / "calib_size.json").write_text(json.dumps(rec, indent=1, default=str) + "\n")
     (OUT / "REPORT.md").write_text("\n".join(report_md(rec)) + "\n")
     (OUT / "WINDOWS.md").write_text("\n".join(windows_md()) + "\n")
