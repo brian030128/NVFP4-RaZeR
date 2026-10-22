@@ -260,7 +260,9 @@ def main():
           "", "## Cost and E0M3 share", "",
           "Job wall time (s) of each calibration, its peak allocated GPU memory (GiB), and FlipQuant's E0M3 share; 256: the "
           "release / part P / part K runs (Qwen3.8-27B FOCUS-256: 2 x H200, training seconds). GPTQ‡: GPTQ's own time "
-          "(the job also measures the row's PPL); 256: the main table's job.", "",
+          "(the job also measures the row's PPL); 256: the main table's job. Nemotron's GPTQ‡ 256 peak predates a later "
+          "memory fix (GPTQ's collected codes now stay on the host), so it is not comparable with its 1,024 / 2,048 "
+          "peaks.", "",
           "| model | FlipQuant 256 / 1,024 / 2,048 (s) | FlipQuant peak (GiB) | E0M3 share 256 / 1,024 / 2,048 | FOCUS training 256 / "
           "1,024 / 2,048 (s) | FOCUS peak (GiB) | GPTQ‡ 256 / 1,024 / 2,048 (s) | GPTQ‡ peak (GiB) |",
           "|---|---|---|---|---|---|---|---|"]
