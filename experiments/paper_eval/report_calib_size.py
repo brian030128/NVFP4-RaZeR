@@ -332,6 +332,68 @@ def summary_md(rec):
     return L
 
 
+def study_cost():
+    """GPU job time of the part (queue.log START / END of its cs_* jobs), by kind."""
+    kinds = {"cs_fq16_": "FlipQuant calibration", "cs_focus_": "FOCUS calibration", "cs_zs_": "zero-shot",
+             "cs_gsm8k_": "GSM8K", "cs_ppl_": "PPL", "cs_probe_": "probes", "cs_theta_": "theta rerun",
+             "cs_offload_test": "offload test"}
+    out = {}
+    for line in (G.RUN / "queue.log").read_text().splitlines():
+        q = line.split()
+        if len(q) >= 5 and q[1] == "END" and q[2].startswith("cs_") and q[4].endswith("s") and q[4][:-1].isdigit():
+            k = next((v for pre, v in kinds.items() if q[2].startswith(pre)), None)
+            if k:
+                out[k] = out.get(k, 0) + int(q[4][:-1])
+    return out
+
+
+def findings_md(rec):
+    P, P7 = rec.get("pooled") or {}, rec.get("pooled_without_qwen27b") or {}
+
+    def g(label, ev, src=None):
+        x = (src if src is not None else P).get(label, {}).get(ev)
+        return "TBD" if not x else f"{x['diff']:+.2f}{'*' if x['p'] < 0.05 else ''} (p={x['p']:.2g})"
+    cost = study_cost()
+    L = ["## Findings", "",
+         "Pooled exact McNemar over the eight models (discordant counts summed; * = p < 0.05). The per-model tables "
+         "below have every pair.", "",
+         f"- **FlipQuant 16x64 gains GSM8K from more windows, and the gain saturates at 1,024.** vs 256: GSM8K "
+         f"{g('FQ16-1k vs FQ16-256', 'gsm8k')} at 1,024 and {g('FQ16-2k vs FQ16-256', 'gsm8k')} at 2,048; 2,048 vs 1,024 "
+         f"{g('FQ16-2k vs FQ16-1k', 'gsm8k')}. Zero-shot: {g('FQ16-1k vs FQ16-256', 'zeroshot')} / "
+         f"{g('FQ16-2k vs FQ16-256', 'zeroshot')}.",
+         f"- **FOCUS gains too.** vs 256 (seven models; Qwen3.8-27B's 256 reference is in another environment): GSM8K "
+         f"{g('FOCUS-1k vs FOCUS-256', 'gsm8k')} at 1,024 and {g('FOCUS-2k vs FOCUS-256', 'gsm8k')} at 2,048; zero-shot "
+         f"{g('FOCUS-1k vs FOCUS-256', 'zeroshot')} / {g('FOCUS-2k vs FOCUS-256', 'zeroshot')}.",
+         f"- **FlipQuant vs FOCUS at the same size.**",
+         f"  - GSM8K: {g('FQ16-256 vs FOCUS-256', 'gsm8k')} at 256, {g('FQ16-1k vs FOCUS-1k', 'gsm8k')} at 1,024 "
+         f"({g('FQ16-1k vs FOCUS-1k', 'gsm8k', P7)} without Qwen3.8-27B's early-stopping FOCUS-1k), "
+         f"{g('FQ16-2k vs FOCUS-2k', 'gsm8k')} at 2,048.",
+         f"  - Zero-shot: {g('FQ16-256 vs FOCUS-256', 'zeroshot')} / {g('FQ16-1k vs FOCUS-1k', 'zeroshot')} / "
+         f"{g('FQ16-2k vs FOCUS-2k', 'zeroshot')}.",
+         f"  - At 2,048 the two are level on both.",
+         f"- **vs IF4 / MixFP4 (Zou), simulated:** zero-shot {g('FQ16-2k vs IF4†', 'zeroshot')} / "
+         f"{g('FQ16-2k vs MixFP4 (Zou)†', 'zeroshot')} at 2,048 ({g('FQ16-256 vs IF4†', 'zeroshot')} / "
+         f"{g('FQ16-256 vs MixFP4 (Zou)†', 'zeroshot')} at 256); GSM8K {g('FQ16-2k vs IF4†', 'gsm8k')} / "
+         f"{g('FQ16-2k vs MixFP4 (Zou)†', 'gsm8k')} (six models).",
+         "- **The motivating losses.** Each model's own table has the pairs.",
+         "  - Phi-4 GSM8K vs MixFP4: −1.29* at 256 is gone at 1,024 / 2,048.",
+         "  - Qwen3.8-27B zero-shot vs IF4: −0.45* at 256 is not significant at 1,024 / 2,048.",
+         "  - Nemotron's zero-shot gap to FOCUS closes at 2,048.",
+         "  - Phi-4's zero-shot gap stays against FOCUS-256 (−0.42* at 2,048). Against FOCUS-2k it is −0.11 (n.s.), "
+         "but only because FOCUS-2k itself fell (−0.30* vs FOCUS-256).",
+         "- **Caveats.**",
+         "  - Each FOCUS cell is one run, and FOCUS is not reproducible run to run (step 0 (d); amendment 3).",
+         "  - Qwen3.8-27B's FOCUS-1k stops early on GSM8K; its 256 control and its 2,048 run do not, so this is a "
+         "run-specific outcome, not a window-count trend.",
+         "  - FlipQuant is deterministic, but a different window draw was not tried.",
+         "  - Qwen3-1.7B trades WikiText-2 / C4 NLL for GSM8K with more math / code windows, FlipQuant more than FOCUS.",
+         "  - Nemotron's FQ16-2k strict-match loss is format only (flexible-extract unchanged).",
+         "  - E0M3 shares grow with the steps (2,048: 6.8–17.2 %, Llama-1B 27.0 %; amendment 4).",
+         "- **GPU time of the part:** " + ", ".join(f"{k} {v / 3600:.1f} h" for k, v in cost.items())
+         + f"; {sum(cost.values()) / 3600:.1f} h in all.", ""]
+    return L
+
+
 def report_md(rec):
     L = ["# Calibration size: FlipQuant 16x64 and FOCUS at 1,024 and 2,048 windows (part AA)", "",
          "PROTOCOL.md part AA and its amendment 1. FlipQuant 16x64 (release settings: 5 epochs, top-1000 teacher, seed 0, "
@@ -340,6 +402,7 @@ def report_md(rec):
          "against every evaluation text (WINDOWS.md). FlipQuant and FOCUS read the same windows (token sha256 checked). "
          "flipquant calib-size f912a30. Evaluation exactly as parts X (zero-shot) and Y (GSM8K), plus PPL (paper "
          "convention). Step 0: STEP0.md. 2,048-window memory probes: PROBES.md.", ""]
+    L += findings_md(rec)
     L += summary_md(rec)
     for model in rec["models"]:
         m = rec["models"][model]

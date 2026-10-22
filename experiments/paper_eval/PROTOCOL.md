@@ -2182,3 +2182,28 @@ The FOCUS calibration job names, and so their stdout logs, now include the windo
     no evaluation code.
   - The rerun must reproduce the panel's map bit for bit (the trainer's map sha256, deterministic training), so its θ
     is the evaluated map's θ.
+
+### Part AA: the 2,048 panel, the run (2026-10-20 16:14 UTC – 2026-10-22 01:24 UTC); every gate passed after amendment 4
+
+- **E0M3 share at 2,048:** Llama-1B 27.0 % (amendment 4's evaluation), Phi-4 8.2, Mistral 10.7, Llama-8B 11.3, Nemotron
+  11.2, Qwen3.8-27B 6.8, Qwen3-1.7B 17.2, Qwen3-8B 8.8. All are under the 40 % gate.
+- **Qwen3.8-27B:** FQ16-2k ran with the host teacher (5.2 h, 90.52 GiB, as the probe), FOCUS-2k with the offload (64 steps
+  × 560 s).
+  - FOCUS-2k does **not** stop early: GSM8K 96.66, strict no-answer 7. That is +1.06* vs the local control and +8.26* vs
+    FOCUS-1k.
+  - With the environment held fixed, only the 1,024 run stops early. The amendment-3 reading "the window count is the
+    likelier cause" is revised: the early stopping is specific to the FOCUS-1k run, which is consistent with FOCUS's
+    run-to-run spread. It is not a trend in the window count.
+- **Nemotron FQ16-2k:** GSM8K strict −2.27* vs FQ16-256, but flexible-extract −0.30 (p = 0.71). The loss is in the answer
+  format only (strict no-answer 31 → 67).
+- **Theta (amendment 4).** The Llama-1B FQ16-2k rerun with `--save-theta` (calib-size 9f19863, fast-forwarded after the
+  panel) reproduces the panel's map bit for bit (6cd110a6…).
+  - 7.9 % of its 256,459 E0M3 tiles have θ < 0.02, i.e. within one step of the threshold.
+  - 4.2 % of all 950,272 tiles have |θ| < 0.02.
+  - E0M3 θ quantiles (10 / 50 / 90 %): 0.026 / 0.184 / 0.730.
+- **Logs:** every 2,048 FOCUS log has its own name, through the symlinks and the driver's new names. No earlier log was
+  overwritten after 12:50 UTC on 2026-10-20.
+- **GPU time of the part:** 59.6 h (job seconds in queue.log): FlipQuant calibration 20.5 h, FOCUS 21.2 h, GSM8K 11.7 h,
+  zero-shot 4.7 h, PPL 0.9 h, probes 0.5 h.
+- **Report:** results/paper_eval/calib_size/REPORT.md (findings, the pooled tables with and without Qwen3.8-27B, per model
+  and size); STEP0.md, WINDOWS.md, PROBES.md, calib_size.json.
