@@ -288,6 +288,9 @@ def main():
     q27 = M["qwen3.8-27b"]
     st = q27.get("gsm8k_stops") or {}
     nem = M["nemotron-nano-9b-v2"]["paired"]["FQ16-2k vs FQ16-256"]
+    ng = M["nemotron-nano-9b-v2"]["paired"].get("GPTQ‡-2k vs GPTQ‡-256") or {}
+    nst = M["nemotron-nano-9b-v2"].get("gsm8k_stops") or {}
+    l8 = M["llama3.1-8b-instruct"]["paired"].get("GPTQ‡-2k vs GPTQ‡-256") or {}
     q17 = M["qwen3-1.7b"]["paired"]
     L += ["## Caveats", "",
           "- **FOCUS is not reproducible run to run, and each FOCUS cell is one run.**",
@@ -320,6 +323,14 @@ def main():
           f"|theta| < 0.02.",
           "  - These are measured by a `--save-theta` rerun that reproduces the map bit for bit. On every evaluation the "
           "2,048 map is statistically indistinguishable from the 1,024 map.",
+          f"- **GPTQ‡ gains little from more windows** (pooled, vs its 256): GSM8K {pv('GPTQ‡-1k vs GPTQ‡-256')[1]} at "
+          f"1,024 and {pv('GPTQ‡-2k vs GPTQ‡-256')[1]} at 2,048; zero-shot {pv('GPTQ‡-1k vs GPTQ‡-256')[0]} / "
+          f"{pv('GPTQ‡-2k vs GPTQ‡-256')[0]}.",
+          f"  - Nemotron's GPTQ‡-2k GSM8K loss against its 256 (strict {d(ng.get('gsm8k'))}, flexible-extract "
+          f"{d(ng.get('gsm8k_flex'))}) is partly answer format: strict no-answer "
+          f"{(nst.get('gptq') or {}).get('strict_no_answer', '—')} → {(nst.get('gptq_2048') or {}).get('strict_no_answer', '—')}.",
+          f"  - Llama-3.1-8B-Instruct's NLL grows with more windows (2,048 vs 256: ΔNLL Wiki {dn((l8.get('nll') or {}).get('wiki'))}, "
+          f"C4 {dn((l8.get('nll') or {}).get('c4'))}).",
           "- **The Qwen3.8-27B FOCUS deviation:** its 1,024 / 2,048 runs and the 256 control ran locally with offloaded "
           "AdamW on one GPU, not on 2 x H200 like its published 256 state; only the summation order differs.",
           "- **Data draw:** FlipQuant is deterministic, but a different window draw was not tried.", ""]

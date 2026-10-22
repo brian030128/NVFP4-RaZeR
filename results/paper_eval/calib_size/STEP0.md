@@ -42,3 +42,18 @@ How far apart the two states are, against how far training moved part P's state 
 The difference is about half the training drift, so it is not rounding noise. A plausible mechanism, not tested here: train_focus's gradients are nondeterministic, and AdamW's first steps (about lr x sign(g)) amplify sign changes of near-zero gradients. The run-to-run row in REPORT.md shows the evaluation-level effect.
 
 **Step 0: passed.**
+
+## Amendment 5, step 0: GPTQ‡
+
+On flipquant calib-size 8dbe2e4.
+
+**Arguments.** For each model, with the main table's windows and codes files: the PPL job's command equals the main table's logged command (parts J / P; part P ran without a cache file), and the zero-shot / GSM8K arguments equal parts X / Y's GPTQ‡ rows': Llama-3.2-1B-Instruct pass, Phi-4 pass, Mistral-7B-Instruct-v0.3 pass, Llama-3.1-8B-Instruct pass, Nemotron-Nano-9B-v2 pass, Qwen3.8-27B pass, Qwen3-1.7B pass, Qwen3-8B pass. **pass**.
+
+**Codes.** Llama-3.2-1B-Instruct GPTQ‡ at 256 windows with part P's command: codes digest `952850d7d8cf4d3d…`, part P's `952850d7d8cf4d3d…`: **equal** (required). The codes file's sha256 `5f65382fe016aec8…` vs the HF upload's `5f65382fe016aec8…`: equal (reported). GPTQ 122 s, job 141 s, device peak 7152 MiB.
+
+**Evaluations** on calib-size, reading that codes file:
+- zero-shot vs part X's GPTQ‡ record, per task (sample_digest, per-example correctness, per-choice log-likelihoods, metrics): piqa equal, hellaswag equal, winogrande equal, arc_easy equal, arc_challenge equal, lambada_openai equal;
+- GSM8K (date pinned to 15 Oct 2026) vs part Y's samples: 2,638 / 2,638 generations and extracted answers byte-identical;
+- PPL vs part P's record: per-window NLL equal on wiki (141 windows): True, c4 (256 windows): True.
+
+**Amendment 5's step 0: passed.**

@@ -30,7 +30,7 @@ SIZES = (1024, 2048)
 GIB = 2 ** 30
 #: the pilot's rows: (label, source); a part X / Y row name, or a calib-size eval name
 BASE_ROWS = [("BF16", "bf16"), ("NVFP4", "nvfp4"), ("FourOverSix", "fo6"), ("IF4†", "if4"), ("MixFP4 (Zou)†", "zou"),
-             ("GPTQ‡", "gptq"), ("FlipQuant 8x64", "fq-8x64"), ("FlipQuant 256x64", "fq-256x64")]
+             ("GPTQ‡, 256", "gptq"), ("FlipQuant 8x64", "fq-8x64"), ("FlipQuant 256x64", "fq-256x64")]
 NEW_ROWS = [("FOCUS, 256", "focus256"), ("FOCUS, 1,024", "focus_1024"), ("FOCUS, 2,048", "focus_2048"),
             ("FlipQuant 16x64, 256", "fq16_256"), ("FlipQuant 16x64, 1,024", "fq16_1024"),
             ("FlipQuant 16x64, 2,048", "fq16_2048")]
@@ -482,13 +482,17 @@ def findings_md(rec):
          f"{g('FQ16-2k vs MixFP4 (Zou)†', 'zeroshot')} at 2,048 ({g('FQ16-256 vs IF4†', 'zeroshot')} / "
          f"{g('FQ16-256 vs MixFP4 (Zou)†', 'zeroshot')} at 256); GSM8K {g('FQ16-2k vs IF4†', 'gsm8k')} / "
          f"{g('FQ16-2k vs MixFP4 (Zou)†', 'gsm8k')} (six models).",
-         f"- **GPTQ‡ on the same windows (amendment 5).** vs its 256: GSM8K {g('GPTQ‡-1k vs GPTQ‡-256', 'gsm8k')} at "
-         f"1,024 and {g('GPTQ‡-2k vs GPTQ‡-256', 'gsm8k')} at 2,048 (2,048 vs 1,024: {g('GPTQ‡-2k vs GPTQ‡-1k', 'gsm8k')}); "
-         f"zero-shot {g('GPTQ‡-1k vs GPTQ‡-256', 'zeroshot')} / {g('GPTQ‡-2k vs GPTQ‡-256', 'zeroshot')}.",
-         f"- **FlipQuant vs GPTQ‡ at the same size.** GSM8K {g('FQ16-256 vs GPTQ‡-256', 'gsm8k')} at 256, "
-         f"{g('FQ16-1k vs GPTQ‡-1k', 'gsm8k')} at 1,024, {g('FQ16-2k vs GPTQ‡-2k', 'gsm8k')} at 2,048; zero-shot "
-         f"{g('FQ16-256 vs GPTQ‡-256', 'zeroshot')} / {g('FQ16-1k vs GPTQ‡-1k', 'zeroshot')} / "
-         f"{g('FQ16-2k vs GPTQ‡-2k', 'zeroshot')}.",
+         f"- **GPTQ‡ on the same windows (amendment 5): more windows do not help its GSM8K and help its zero-shot a "
+         f"little.** vs its 256: GSM8K {g('GPTQ‡-1k vs GPTQ‡-256', 'gsm8k')} at 1,024 and "
+         f"{g('GPTQ‡-2k vs GPTQ‡-256', 'gsm8k')} at 2,048 (2,048 vs 1,024: {g('GPTQ‡-2k vs GPTQ‡-1k', 'gsm8k')}); "
+         f"zero-shot {g('GPTQ‡-1k vs GPTQ‡-256', 'zeroshot')} / {g('GPTQ‡-2k vs GPTQ‡-256', 'zeroshot')}. Its NLL "
+         "improves on most models; Llama-3.1-8B-Instruct's grows (2,048 vs 256: Wiki +0.028*, C4 +0.015*).",
+         f"- **FlipQuant vs GPTQ‡ at the same size: FlipQuant's GSM8K edge appears with more windows, its zero-shot edge "
+         f"narrows a little, and its NLL edge holds on every model and size.** GSM8K "
+         f"{g('FQ16-256 vs GPTQ‡-256', 'gsm8k')} at 256, {g('FQ16-1k vs GPTQ‡-1k', 'gsm8k')} at 1,024, "
+         f"{g('FQ16-2k vs GPTQ‡-2k', 'gsm8k')} at 2,048; zero-shot {g('FQ16-256 vs GPTQ‡-256', 'zeroshot')} / "
+         f"{g('FQ16-1k vs GPTQ‡-1k', 'zeroshot')} / {g('FQ16-2k vs GPTQ‡-2k', 'zeroshot')}. ΔNLL is beyond 2 SE in "
+         "FlipQuant's favour on both corpora for all eight models at all three sizes.",
          "- **The motivating losses.** Each model's own table has the pairs.",
          "  - Phi-4 GSM8K vs MixFP4: −1.29* at 256 is gone at 1,024 / 2,048.",
          "  - Qwen3.8-27B zero-shot vs IF4: −0.45* at 256 is not significant at 1,024 / 2,048.",
@@ -501,7 +505,8 @@ def findings_md(rec):
          "run-specific outcome, not a window-count trend.",
          "  - FlipQuant is deterministic, but a different window draw was not tried.",
          "  - Qwen3-1.7B trades WikiText-2 / C4 NLL for GSM8K with more math / code windows, FlipQuant more than FOCUS.",
-         "  - Nemotron's FQ16-2k strict-match loss is format only (flexible-extract unchanged).",
+         "  - Nemotron's FQ16-2k strict-match loss is format only (flexible-extract unchanged). Its GPTQ‡-2k loss vs "
+         "GPTQ‡-256 (strict −4.09*, flexible −2.65*) is partly format: strict no-answer 60 → 87.",
          "  - E0M3 shares grow with the steps (2,048: 6.8–17.2 %, Llama-1B 27.0 %; amendment 4).",
          "- **GPU time of the part:** " + ", ".join(f"{k} {v / 3600:.1f} h" for k, v in cost.items())
          + f"; {sum(cost.values()) / 3600:.1f} h in all."
@@ -511,8 +516,8 @@ def findings_md(rec):
 
 
 def report_md(rec):
-    L = ["# Calibration size: FlipQuant 16x64 and FOCUS at 1,024 and 2,048 windows (part AA)", "",
-         "PROTOCOL.md part AA and its amendment 1. FlipQuant 16x64 (release settings: 5 epochs, top-1000 teacher, seed 0, "
+    L = ["# Calibration size: FlipQuant 16x64, FOCUS and GPTQ‡ at 1,024 and 2,048 windows (part AA)", "",
+         "PROTOCOL.md part AA and its amendments 1–5. FlipQuant 16x64 (release settings: 5 epochs, top-1000 teacher, seed 0, "
          "last-step map) and FOCUS (part K's FOCUS_COMMON: 1 epoch, global batch 32, micro 8) trained on 1,024 or 2,048 "
          "windows of 512 tokens instead of the release's 256. The sets are nested, 256 ⊂ 1,024 ⊂ 2,048, and audited "
          "against every evaluation text (WINDOWS.md). FlipQuant and FOCUS read the same windows (token sha256 checked). "
@@ -644,6 +649,10 @@ def report_md(rec):
                      f"{f2(c.get('gpu_peak_allocated_gib'))} | {c.get('device_peak_mib') or '—'} | "
                      f"{f2(c.get('cpu_peak_rss_gib'))} | "
                      f"{format(c.get('teacher_bytes') or c.get('state_bytes') or 0, ',') or '—'} |")
+        if model == "nemotron-nano-9b-v2":
+            L += ["", "GPTQ‡ 256's peak is from the main table's job, which ran before part J's amendment 12 (GPTQ's collected "
+                  "codes then stayed on the GPU; since then they are kept on the host), so it is not comparable with the "
+                  "1,024 / 2,048 jobs' peaks."]
         if m.get("eval_seconds"):
             L += ["", "Evaluation wall times (s): " + ", ".join(f"{k.replace('cs_', '').replace('_' + model, '')} "
                                                             f"{v:.0f}" for k, v in sorted(m["eval_seconds"].items())

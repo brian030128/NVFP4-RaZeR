@@ -2304,3 +2304,37 @@ FQ16 and FOCUS, and evaluate it as those rows were.
   - GPTQ's time is mostly the per-column solve, which does not depend on the window count.
   - The driver's ETA for the rest is 11.8 h. Allowing batch-1 Qwen3.8-27B to scale with its FLOPs, it is about 13 h.
   - That is under 20 h, so the panel continued at 08:51 UTC without waiting; the ETA went to the coordinator.
+
+### Part AA, amendment 5: the panel, the run (2026-10-22 08:51–20:12 UTC); every gate passed
+
+- **Rows:** all 16 (8 models × 1,024 / 2,048) were calibrated and evaluated. Every check passed:
+  - the windows' token lists equal calib_size.json's and WINDOWS.md's; the audits pass;
+  - each codes file's sha256 was recorded at write and verified before each of its evaluations (34 verifications,
+    step 0 included);
+  - every evaluation read its row's codes file (`ptq.loaded`, codes digest equal to the calibration's);
+  - parts X / Y's record checks pass.
+- **Plausibility gates:** none fired.
+  - Output error 0.47–0.58 × RTN.
+  - Every PPL within +5 % of GPTQ‡-256's. The largest increase is Llama-3.1-8B-Instruct at 2,048 on WikiText-2, +2.8 %.
+  - The largest zero-shot drop is Qwen3.8-27B at 1,024, −0.58.
+  - The largest GSM8K drop is Nemotron at 2,048, −4.10 strict; its strict no-answer count goes from 60 to 87.
+- **Memory.** The extrapolation gate passed for every model, with two caveats.
+  - Qwen3.8-27B: its 256 and 1,024 peaks (65.94 GiB) come from a phase that does not depend on the window count, so
+    the extrapolation (65.9 GiB) is below its 2,048 peak: 73.17 GiB allocated, device 90,656 MiB of 97,887. The layer
+    inputs' copies set that peak, as estimated before the run (about 74 GiB).
+  - Nemotron: its 256 job predates part J's amendment 12 memory fix, so its extrapolation (21.1 GiB) means nothing.
+    Its 2,048 peak was 35.42 GiB.
+- **Time.** GPTQ at 1,024 / 2,048:
+  - Llama-1B 150 / 189 s; Phi-4 1,229 / 1,676 s; Mistral 792 / 1,047 s; Llama-8B 790 / 1,045 s;
+  - Nemotron 752 / 1,030 s; Qwen3.8-27B 2,580 / 3,594 s; Qwen3-1.7B 221 / 274 s; Qwen3-8B 775 / 1,021 s.
+  - Amendment 5's GPU time, step 0 included: 11.4 h (calibration with its PPL 5.1 h, zero-shot 1.8 h, GSM8K 4.5 h).
+    The ETA was 11.8 h, about 13 h with the Qwen3.8-27B allowance.
+- **Results, pooled over the eight models:**
+  - GPTQ‡ vs its 256: GSM8K +0.08 / −0.38 (n.s.) at 1,024 / 2,048; zero-shot +0.15* / +0.32*.
+  - FlipQuant 16x64 vs GPTQ‡ at the same size: GSM8K −0.69 (p = 0.059) / +0.83* / +0.99* at 256 / 1,024 / 2,048;
+    zero-shot +0.80* / +0.74* / +0.62*.
+  - ΔNLL favours FlipQuant beyond 2 SE for every model, size and corpus.
+- **Report:** results/paper_eval/calib_size/: REPORT.md (GPTQ‡ rows, comparisons, cost), STEP0.md (amendment 5's
+  step 0), calib_size.json (`gptq`: step 0, ETA, memory, GPU time).
+- **Codes on /vault:** `/vault/flipquant_paper_eval/calib_size/<model>/gptq_<N>/codes_nvfp4_act-fo6.pt`, 16 files,
+  77.6 GB. Each file's sha256 is in its job record.
