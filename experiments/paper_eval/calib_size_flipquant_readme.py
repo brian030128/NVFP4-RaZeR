@@ -101,8 +101,8 @@ def main():
          "- **FlipQuant 16x64:** the release settings at 5 epochs, i.e. 160 / 640 / 1,280 optimizer steps.",
          "  - Adam lr 0.02, eps 1e-12; 8 sequences per step (Qwen3.8-27B and Nemotron 2 x 4); theta_u = −1; seed 0.",
          "  - The top-1000 + tail teacher; no development set; the last-step map.",
-         "  - Qwen3.8-27B keeps the teacher in host memory (`--teacher-host`; the map is the GPU-teacher map, checked "
-         "bit for bit).",
+         "  - Qwen3.8-27B keeps the teacher in host memory (`--teacher-host`). It gives the GPU-teacher map bit for bit, "
+         "as checked on Llama-3.2-1B-Instruct in step 0.",
          "- **FOCUS:** FOCUS_COMMON (1 epoch, global batch 32: 8 / 32 / 64 steps; lr 5e-3 / 1e-3; KL-Top 1,000; num_sub "
          "2; init_q 6; FourOverSix per-token activations; seed 42), micro-batch 8.",
          "  - Qwen3.8-27B is trained locally on one RTX PRO 6000 with host-offloaded AdamW, micro 1.",
@@ -210,7 +210,8 @@ def main():
                  + " / ".join(v(x.get("gpu_peak_allocated_gib"), 1) for x in fq) + " | "
                  + " / ".join(v(100 * x["e0m3_share"], 1) if x.get("e0m3_share") is not None else "—" for x in fq) + " % | "
                  + " / ".join(v(x.get("training_seconds"), 0) for x in fo) + " | "
-                 + " / ".join(v(x.get("gpu_peak_allocated_gib"), 1) for x in fo) + " |")
+                 + " / ".join(v(x.get("gpu_peak_allocated_gib"), 1) for x in fo)
+                 + (" (256: GPU 0 of 2 x H200)" if m == "qwen3.8-27b" else "") + " |")
     gt = rec.get("gpu_time_seconds") or {}
     L += ["", "GPU time of the whole study: " + ", ".join(f"{k} {s / 3600:.1f} h" for k, s in gt.items())
           + f"; {sum(gt.values()) / 3600:.1f} h in all (one RTX PRO 6000).", ""]
@@ -243,13 +244,14 @@ def main():
           "- **E0M3 shares grow with the steps.** Llama-1B goes "
           + " / ".join(f"{100 * x['e0m3_share']:.1f}" for x in sorted((c for c in ll["cost"] if c["method"] ==
                                                                       "FlipQuant 16x64"), key=lambda c: c["windows"]))
-          + " % at 256 / 1,024 / 2,048. Its 2,048 run passed the study's raised 40 % gate after its evaluation.",
+          + " % at 256 / 1,024 / 2,048. Its 2,048 map stopped the study's 25 % gate; it was evaluated, and the gate was "
+          "raised to 40 % for the rest of the study.",
           f"  - In that map, {100 * th.get('e0m3_within_one_step', float('nan')):.1f} % of the "
           f"{th.get('e0m3_tiles', 0):,} E0M3 tiles have theta < 0.02 (within one lr step of the threshold), and "
           f"{100 * th.get('all_within_one_step', float('nan')):.1f} % of all {th.get('tiles', 0):,} tiles have "
           f"|theta| < 0.02.",
-          "  - These are measured by a `--save-theta` rerun that reproduces the map bit for bit. The 2,048 map equals "
-          "the 1,024 map on every evaluation.",
+          "  - These are measured by a `--save-theta` rerun that reproduces the map bit for bit. On every evaluation the "
+          "2,048 map is statistically indistinguishable from the 1,024 map.",
           "- **The Qwen3.8-27B FOCUS deviation:** its 1,024 / 2,048 runs and the 256 control ran locally with offloaded "
           "AdamW on one GPU, not on 2 x H200 like its published 256 state; only the summation order differs.",
           "- **Data draw:** FlipQuant is deterministic, but a different window draw was not tried.", ""]
