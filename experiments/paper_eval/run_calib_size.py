@@ -7,12 +7,16 @@ calib-size f912a30 (worktree calib_size/wt).
     python run_calib_size.py probes      # 2,048-window memory probes: FlipQuant Qwen3.8-27B, FOCUS Phi-4
     python run_calib_size.py pilot       # Llama-3.2-1B-Instruct and Phi-4 at 1,024: FQ16 + FOCUS, zero-shot / GSM8K / PPL
     python run_calib_size.py panel --size=1024 [--models=a,b]    # amendment 1: the full panel at one size, ORDER
+    python run_calib_size.py gptq_step0     # amendment 5: GPTQ‡ arguments; Llama-1B GPTQ‡-256 codes and rows vs P / X / Y
+    python run_calib_size.py gptq_measure   # amendment 5's ETA gate: Llama-1B GPTQ‡-1k's calibration, then the ETA
+    python run_calib_size.py gptq_panel     # amendment 5: GPTQ‡ at 1,024 for the eight models, then 2,048, ORDER
 
 The audit is calib_size_audit.py (CPU). Records under RUN/calib_size/; START / END in RUN/queue.log; one GPU job at a
 time on an idle GPU (run_gpu). A finished record is not run again; a failed job or check stops the part (STOP).
 """
 import hashlib
 import json
+import math
 import shutil
 import subprocess
 import sys
@@ -30,7 +34,7 @@ import run_zeroshot6 as Z  # noqa: E402
 
 FQ3 = Path("/home/dev/n16k64_campaign/calib_size/wt")              # flipquant calib-size
 #: the registered commit: f912a30 for step 0, the probes and the pilot; 898d00e (+ train_focus --offload) for the panel,
-#: after calib-size's fast-forward (amendment 2)
+#: after calib-size's fast-forward (amendment 2); amendment 5's GPTQ‡ commands set it to GPTQ_CODE
 CODE = "898d00e"
 VAULT = Path("/vault/flipquant_paper_eval/calib_size")             # amendment 2: FOCUS states after the pilot
 ROOT = G.RUN / "calib_size"
@@ -313,19 +317,38 @@ def quant_zs(kind, artifact):
     return Z.NATIVE + ["--weight", "fourover6", "--act", "fourover6"]
 
 
-def check_zs(model, kind, path, artifact):
+ROW = {"fq": "fq-16x64", "focus": "focus", "fo6": "fo6", "gptq": "gptq"}
+
+
+def artifact_checks(model, kind, path, artifact, codes=None):
+    """The record's policy names this row's artifact: the map, the FOCUS state, or (amendment 5) GPTQ‡'s codes file,
+    read from the cache (loaded) with the calibration's codes digest. The last replaces parts X / Y's check of the
+    256-window codes digest."""
+    pol = json.loads(Path(path).read_text()).get("policy") or {}
+    if kind == "gptq":
+        p = pol.get("ptq") or {}
+        bad = [] if p.get("loaded") is True else [f"codes not loaded from the cache ({p.get('loaded')})"]
+        if p.get("cache") != str(artifact):
+            bad.append(f"codes file {p.get('cache')} != {artifact}")
+        if not codes or p.get("codes_sha256") != codes:
+            bad.append(f"codes digest {str(p.get('codes_sha256'))[:12]} != the calibration's {str(codes)[:12]}")
+        return bad
+    got = (pol.get("map") or {}).get("path") if kind == "fq" else (pol.get("focus") or {}).get("state") if kind == "focus" \
+        else None
+    return [f"artifact path {got} != {artifact}"] if kind != "fo6" and got != str(artifact) else []
+
+
+def ignored(kind, msg):
+    """Parts X / Y's checks that name their own artifact: the map path, the FOCUS state path, the 256 codes digest."""
+    return msg in ("map path", "FOCUS state path") or (kind == "gptq" and msg.startswith("codes_sha256 "))
+
+
+def check_zs(model, kind, path, artifact, codes=None):
     """Part X's checks (run_zeroshot6.check_record) with this row's artifact; the digests must equal part X's rows'."""
     digests = {t: json.loads((Z.ZS / "panel" / model / "fo6.json").read_text())["tasks"][t]["sample_digest"]
                for t in Z.SIZES}
-    row = {"fq": "fq-16x64", "focus": "focus", "fo6": "fo6"}[kind]
-    bad = [b for b in Z.check_record(model, row, path, G.manifests(), dict(digests))
-           if b not in ("map path", "FOCUS state path")]
-    pol = json.loads(Path(path).read_text()).get("policy") or {}
-    got = (pol.get("map") or {}).get("path") if kind == "fq" else (pol.get("focus") or {}).get("state") if kind == "focus" \
-        else None
-    if kind != "fo6" and got != str(artifact):
-        bad.append(f"artifact path {got} != {artifact}")
-    return bad
+    bad = [b for b in Z.check_record(model, ROW[kind], path, G.manifests(), dict(digests)) if not ignored(kind, b)]
+    return bad + artifact_checks(model, kind, path, artifact, codes)
 
 
 def gsm_digest(model):
@@ -351,17 +374,11 @@ def y_checks(model, row, path, digest):
     return bad
 
 
-def check_gsm(model, kind, path, artifact):
+def check_gsm(model, kind, path, artifact, codes=None):
     """Part Y's checks (run_gsm8k6.check_record) with this row's artifact; the digest must equal the model's GSM8K
     records' (part Y's; Qwen3: this part's BF16 baseline)."""
-    row = {"fq": "fq-16x64", "focus": "focus", "fo6": "fo6"}[kind]
-    bad = [b for b in y_checks(model, row, path, gsm_digest(model)) if b not in ("map path", "FOCUS state path")]
-    pol = json.loads(Path(path).read_text()).get("policy") or {}
-    got = (pol.get("map") or {}).get("path") if kind == "fq" else (pol.get("focus") or {}).get("state") if kind == "focus" \
-        else None
-    if kind != "fo6" and got != str(artifact):
-        bad.append(f"artifact path {got} != {artifact}")
-    return bad
+    bad = [b for b in y_checks(model, ROW[kind], path, gsm_digest(model)) if not ignored(kind, b)]
+    return bad + artifact_checks(model, kind, path, artifact, codes)
 
 
 def check_ppl(path):
@@ -373,37 +390,44 @@ def check_ppl(path):
     return bad
 
 
-def eval_row(model, name, kind, artifact, which=("zs", "gsm", "ppl"), expect_sha=None):
+def eval_row(model, name, kind, artifact, which=("zs", "gsm", "ppl"), expect_sha=None, codes=None):
     """One row: zero-shot (part X), GSM8K (part Y), PPL (paper convention), each from calib-size. expect_sha
-    (amendment 2): the FOCUS state is re-read and its sha256 checked before each evaluation that has not run yet."""
+    (amendment 2): the FOCUS state is re-read and its sha256 checked before each evaluation that has not run yet.
+    Amendment 5: kind "gptq" takes artifact = (windows, codes file) and the calibration's codes digest; its PPL is its
+    calibration job (calibrate_gptq), not run here."""
     d = ROOT / model / "eval"
+    path = artifact[1] if kind == "gptq" else artifact
+    what = "codes file" if kind == "gptq" else "state"
 
     def verify(out):
         if expect_sha and not G.done(out):
-            got = file_sha256(artifact)
+            got = file_sha256(path)
             if got != expect_sha:
-                stop(f"{model} {name}: the state's sha256 {got[:12]} != the recorded {expect_sha[:12]} ({artifact})")
-            G.log(f"calib_size {model} {name}: state sha256 verified before {Path(out).parent.name}")
+                stop(f"{model} {name}: the {what}'s sha256 {got[:12]} != the recorded {expect_sha[:12]} ({path})")
+            G.log(f"calib_size {model} {name}: {what} sha256 verified before {Path(out).parent.name}")
     if "zs" in which:
         out = d / "zs" / f"{name}.json"
-        q = quant_zs(kind, artifact)
+        q = gptq_zs_quant(model, *artifact) if kind == "gptq" else quant_zs(kind, artifact)
         verify(out)
         checkout()
         must(G.run(f"cs_zs_{model}_{name}", zs_cmd(model, q, out), out, FQ3, Z.ENV), f"zero-shot {model} {name}")
-        bad = check_zs(model, kind, out, artifact)
+        bad = check_zs(model, kind, out, path, codes)
         if bad:
             stop(f"zero-shot {model} {name}: {bad}")
     if "gsm" in which:
         out = d / "gsm8k" / f"{name}.json"
-        q = quant_fq(artifact) if kind == "fq" else quant_focus(artifact) if kind == "focus" else quant_fo6()
+        q = gptq_gsm_quant(model, *artifact) if kind == "gptq" else quant_fq(artifact) if kind == "fq" \
+            else quant_focus(artifact) if kind == "focus" else quant_fo6()
         verify(out)
         if not G.done(out):
             checkout()
             out.parent.mkdir(parents=True, exist_ok=True)
         must(M.run_ts(f"cs_gsm8k_{model}_{name}", gsm_cmd(model, q, out), out, FQ3), f"gsm8k {model} {name}")
-        bad = check_gsm(model, kind, out, artifact)
+        bad = check_gsm(model, kind, out, path, codes)
         if bad:
             stop(f"gsm8k {model} {name}: {bad}")
+    if "ppl" in which and kind == "gptq":
+        stop(f"{model} {name}: GPTQ‡'s PPL is its calibration job (amendment 5), not an eval_row run")
     if "ppl" in which:
         out = d / "ppl" / f"{name}.json"
         q = quant_fq(artifact, ppl=True) if kind == "fq" else quant_focus(artifact) if kind == "focus" \
@@ -917,6 +941,349 @@ def theta_rerun(model=LLAMA1B, n=2048):
     return res
 
 
+
+# ---------------------------------------------------------------------------------------------- amendment 5: GPTQ‡
+
+#: calib-size 8dbe2e4: 9f19863's code (9f19863..8dbe2e4 adds results/calib_size and one .gitignore line)
+GPTQ_CODE = "8dbe2e4"
+GPTQ_FILE = "codes_nvfp4_act-fo6.pt"
+GPTQ_Q = ["--weight", "nvfp4", "--act", "fourover6", "--any-act"]
+GPTQ_STEP0 = ROOT / "step0" / "gptq_256"
+GPTQ_MAX_GIB = 91.0            # a 2,048 calibration whose extrapolated peak allocation is above this does not start
+#: Llama-1B GPTQ‡-256: part P's codes digest (its record; also part X step 0's and the HF GPTQ-BF16Calib upload's) and
+#: the uploaded codes file's sha256 (results/paper_eval/hf_gptq_focus)
+P_CODES = "952850d7d8cf4d3d61b0eee6672151a6a2736f3fa6d49264b8dda09417f15e2c"
+HF_FILE = "5f65382fe016aec8736c520051a32ee165ee80ee6572281b946055b78c3a4722"
+#: the cache key's fixed fields (flipquant.gptq.cache_key with propagate bf16: the calibration runs with act "none")
+GPTQ_KEY = dict(weight="nvfp4", act="none", unit=None, mode="fake", map_sha256=None, rotate="none", damp=0.01, block=128,
+                calib="release", rules="modelopt-0.47", hessian_input="bf16", propagate="bf16")
+
+
+def gptq_flags(model, extension, cache):
+    """run_sm120.gptq_flags (part J; part P's flags for the Llama-Instruct models) with this row's windows and codes."""
+    return ["--ptq", "gptq", "--gptq-propagate", "bf16", "--gptq-hessian-input", "bf16", "--gptq-calib", "release",
+            "--gptq-calib-record", record(model), "--gptq-calib-extension", extension, "--gptq-block", 128,
+            "--gptq-damp", 0.01, "--gptq-batch", 1 if model == "qwen3.8-27b" else 8, "--gptq-cache", cache]
+
+
+def gptq_ppl_cmd(model, extension, cache, out):
+    """The main table's GPTQ‡ job (run_sm120.gptq, run_llama_instruct.gptq): evaluation.ppl, native build_V, the
+    nvfp4-fo6 row's flags; GPTQ writes the codes to `cache`, then the row's PPL is measured."""
+    return [G.py(model), "-m", "evaluation.ppl", "--model", model, "--revision", Z.REV[model], *G.NATIVE,
+            "--kernel-set", "auto", *S.GPTQ_ROWS["nvfp4-fo6"][0], *gptq_flags(model, extension, cache), "--out", out]
+
+
+def gptq_zs_quant(model, extension, cache):
+    """run_zeroshot6.row_args(model, "gptq") with this row's windows and codes."""
+    return Z.NATIVE + GPTQ_Q + gptq_flags(model, extension, cache)
+
+
+def gptq_gsm_quant(model, extension, cache):
+    """run_gsm8k6.quant(model, "gptq") with this row's windows and codes."""
+    return [*G.NATIVE, "--kernel-set", "auto", *GPTQ_Q, "--act-scope", "row", *gptq_flags(model, extension, cache)]
+
+
+def strs(cmd):
+    return [str(a) for a in cmd]
+
+
+def gptq_args_check():
+    """Step 0: this driver's GPTQ‡ arguments, with the main table's windows and codes files, against what the main
+    table ran: the PPL job's command as logged (the first line of parts J / P's job logs; part P ran without a cache),
+    and parts X / Y's row arguments."""
+    res = {}
+    for model in ORDER:
+        ext, codes = Z.calib_extension(model), Z.codes_file(model)
+        log = G.RUN / "logs" / (f"llama_gptq_{model}.log" if model in Z.LLAMA else f"gptq_{model}_nvfp4-fo6.log")
+        ran = log.read_text(errors="replace").splitlines()[0].split()
+        mine = strs(gptq_ppl_cmd(model, ext, codes, ran[ran.index("--out") + 1]))
+        if model in Z.LLAMA:
+            i = mine.index("--gptq-cache")
+            del mine[i:i + 2]
+        r = dict(log=log.name, ppl_command=mine == ran,
+                 zeroshot_args=strs(gptq_zs_quant(model, ext, codes)) == strs(Z.row_args(model, "gptq")),
+                 gsm8k_args=strs(gptq_gsm_quant(model, ext, codes)) == strs(Y.quant(model, "gptq")),
+                 record=str(record(model)) == str(Z.calib_record(model)))
+        r["ok"] = all(r[k] for k in ("ppl_command", "zeroshot_args", "gsm8k_args", "record"))
+        if not r["ppl_command"]:
+            r["difference"] = [(a, b) for a, b in zip(mine, ran) if a != b][:4] + [len(mine), len(ran)]
+        res[model] = r
+    res["ok"] = all(v["ok"] for v in res.values())
+    return res
+
+
+def gptq_paths(model, n):
+    """(windows, codes file, PPL record, job record) of a GPTQ‡ row: step 0's at 256 (Llama-1B, part P's windows), the
+    panel's at 1,024 / 2,048 (codes on /vault)."""
+    if n == 256:
+        assert model == LLAMA1B
+        return (Z.calib_extension(model), GPTQ_STEP0 / GPTQ_FILE, ROOT / model / "eval" / "ppl" / "gptq256.json",
+                ROOT / "step0" / "gptq_256.job.json")
+    return (windows_file(model, n), VAULT / model / f"gptq_{n}" / GPTQ_FILE,
+            ROOT / model / "eval" / "ppl" / f"gptq_{n}.json", ROOT / model / f"gptq_{n}.job.json")
+
+
+def gptq_calibration_checks(model, n, rec, extension):
+    """The calibration record: computed (not loaded), the main table's key at n windows, this row's windows file, the
+    digests present, both PPLs finite."""
+    bad = [] if rec["loaded"] is False else [f"loaded {rec['loaded']}"]
+    bad += [f"key {f} {rec['key'].get(f)!r} != {v!r}" for f, v in dict(GPTQ_KEY, windows=n).items()
+            if rec["key"].get(f) != v]
+    cal = rec.get("calibration") or {}
+    if cal.get("trainer_report") != str(extension) or cal.get("record") != str(record(model)) or cal.get("windows") != n:
+        bad.append(f"calibration windows {cal}")
+    if not rec.get("codes_sha256") or not rec["key"].get("data_sha256"):
+        bad.append("codes / data digest missing")
+    if any(v is None or not math.isfinite(v) for v in rec["ppl"].values()):
+        bad.append(f"ppl {rec['ppl']}")
+    return bad
+
+
+def calibrate_gptq(model, n):
+    """GPTQ‡ at n windows inside its PPL job (amendment 5). The job record: the command, the release sampler's device
+    peak, the cost, GPTQ's key and codes digest, the PPL, and the codes file's sha256 from a fresh read after the job.
+    An OOM stops the run (no setting is changed)."""
+    ext, cache, out, meta = gptq_paths(model, n)
+    if meta.exists():
+        return json.loads(meta.read_text())
+    if G.done(out) or Path(cache).exists():
+        stop(f"gptq {model} {n}: {out if G.done(out) else cache} exists without a job record; inspect it")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cmd = gptq_ppl_cmd(model, ext, cache, out)
+    name = f"cs_gptq_{model}_{n}"
+    rc, seconds, peak = measured(name, cmd, out, fresh_dir=False)
+    if rc != 0:
+        log = (G.RUN / "logs" / f"{name}.log").read_text(errors="replace")
+        oom = "OutOfMemoryError" in log or "CUDA out of memory" in log
+        stop(f"gptq {model} {n}: {'CUDA out of memory (amendment 5: stop; no setting is changed)' if oom else f'rc={rc}'}")
+    r = json.loads(out.read_text())
+    p = r.get("ptq") or {}
+    rec = dict(model=model, windows=n, command=" ".join(map(str, cmd[1:])), checkout=checkout(), rc=rc,
+               job_seconds=seconds, device_peak_mib=peak, gptq_seconds=p.get("seconds"), loaded=p.get("loaded"),
+               key={k: p.get(k) for k in (*GPTQ_KEY, "model", "windows", "data_sha256")},
+               codes_sha256=p.get("codes_sha256"), mean_output_error_vs_rtn=p.get("mean_output_error_vs_rtn"),
+               mean_codes_changed=p.get("mean_codes_changed"), calibration=r.get("gptq_calibration"),
+               gpu_peak_gib=(r.get("resources") or {}).get("gpu_peak_gib"), process_seconds=(r.get("resources") or {})
+               .get("seconds"), ppl={c: ((r.get("results") or {}).get(c) or {}).get("ppl") for c in ("wiki", "c4")},
+               cache=str(cache), cache_bytes=Path(cache).stat().st_size, cache_sha256=file_sha256(cache))
+    write_meta(meta, **rec)
+    bad = gptq_calibration_checks(model, n, rec, ext) + check_ppl(out)
+    if bad:
+        stop(f"gptq {model} {n}: {bad} ({meta})")
+    G.log(f"calib_size gptq {model} {n}: GPTQ {rec['gptq_seconds']:.0f}s, job {seconds:.0f}s, device peak {peak} MiB, "
+          f"codes {rec['codes_sha256'][:12]}, file sha256 {rec['cache_sha256'][:12]}")
+    return rec
+
+
+def zs_average(r):
+    return 100 * sum(r["tasks"][t]["metrics"][Z.PRIMARY[t] + ",none"] for t in Z.SIZES) / len(Z.SIZES)
+
+
+def gsm_strict(r):
+    return 100 * r["tasks"][Y.TASK]["metrics"]["exact_match,strict_match"]
+
+
+def gptq_reference(model):
+    """GPTQ‡-256's records: zero-shot (part X / X2), GSM8K (part Y; Qwen3: this part's native baseline), PPL (the main
+    table's job). Step 0 shows calib-size reproduces them."""
+    gsm = (ROOT / model / "eval" / "gsm8k" if model in QWEN3 else Y.ROOT / model) / "gptq.json"
+    return (json.loads((Z.ZS / "panel" / model / "gptq.json").read_text()), json.loads(gsm.read_text()),
+            json.loads(Z.gptq_record(model).read_text()))
+
+
+def gptq_plausible(model, rec=None, zs=None, gsm=None):
+    """Amendment 5's implausible results: GPTQ's calibration output error not below RTN's; a PPL more than 5 % above
+    GPTQ‡-256's; a zero-shot average more than 3 points, or a GSM8K strict score more than 10 points, below it."""
+    z0, g0, p0 = gptq_reference(model)
+    bad = []
+    if rec is not None:
+        if not rec["mean_output_error_vs_rtn"] < 1:
+            bad.append(f"calibration output error {rec['mean_output_error_vs_rtn']} x RTN")
+        for c in ("wiki", "c4"):
+            ref = p0["results"][c]["ppl"]
+            if not (math.isfinite(rec["ppl"][c]) and rec["ppl"][c] <= 1.05 * ref):
+                bad.append(f"{c} PPL {rec['ppl'][c]:.4f} vs GPTQ‡-256 {ref:.4f}")
+    if zs is not None and zs_average(zs) < zs_average(z0) - 3:
+        bad.append(f"zero-shot {zs_average(zs):.2f} vs GPTQ‡-256 {zs_average(z0):.2f}")
+    if gsm is not None and gsm_strict(gsm) < gsm_strict(g0) - 10:
+        bad.append(f"GSM8K {gsm_strict(gsm):.2f} vs GPTQ‡-256 {gsm_strict(g0):.2f}")
+    return bad
+
+
+def gptq_windows_ok(model, n):
+    """The windows file against part AA's committed record: its token-list sha256 equals calib_size.json's (full) and
+    WINDOWS.md's (prefix, in the row of this size), and the model's nesting checks pass."""
+    got = token_list_sha(json.loads(windows_file(model, n).read_text())["token_sha256"])
+    res = G.RZ / "results" / "paper_eval" / "calib_size"
+    nest = json.loads((res / "calib_size.json").read_text())["windows"]["nesting"][model]
+    rows = [ln for ln in (res / "WINDOWS.md").read_text().splitlines() if f"`{got[:16]}…`" in ln and f"| {n:,} |" in ln]
+    bad = [] if nest[str(n)]["token_list_sha256"] == got else [f"token list {got[:12]} != calib_size.json's"]
+    bad += [] if rows else ["token list not in WINDOWS.md at this size"]
+    bad += [] if nest["ok"] and json.loads((WIN / "nesting.json").read_text())[model]["ok"] else ["nesting checks"]
+    return bad
+
+
+def gptq_disk_ok(model):
+    """/vault holds a codes file of the model's 256-window size plus 1 GB; /home keeps its floor."""
+    need = Path(Z.codes_file(model)).stat().st_size + 1e9
+    vault, home = shutil.disk_usage(VAULT).free, shutil.disk_usage("/home").free
+    return vault >= need and home >= FLOOR + 1e9, dict(vault_free=vault, home_free=home), need
+
+
+def gptq_memory(model):
+    """The 2,048 calibration's peak allocation (torch's, the records' gpu_peak_gib), extrapolated linearly in the window
+    count from the main table's 256 job and this part's 1,024 job."""
+    a256 = json.loads(Z.gptq_record(model).read_text())["resources"]["gpu_peak_gib"][0]
+    a1k = json.loads((ROOT / model / "gptq_1024.job.json").read_text())["gpu_peak_gib"][0]
+    return dict(gib_256=a256, gib_1024=a1k, predicted_2048=a1k + (a1k - a256) * (2048 - 1024) / (1024 - 256))
+
+
+def gptq_calibrate_size(model, n):
+    """The pre-run checks (windows, audit, disk; at 2,048 the memory gate), then the calibration and its gates."""
+    ext, cache, out, meta = gptq_paths(model, n)
+    if not meta.exists():
+        bad = gptq_windows_ok(model, n)
+        if bad:
+            stop(f"gptq {model} {n}: windows {bad}")
+        a = json.loads((WIN / "audit.json").read_text())["models"][model]
+        if not a.get(f"ok_{n}", not any(h["membership"] == str(n) for h in a["hits"])):
+            stop(f"gptq {model} {n}: the audit has a hit among the {n} set's windows")
+        ok, free, need = gptq_disk_ok(model)
+        if not ok:
+            stop(f"PAUSE disk before gptq {model} {n}: {free}, the codes need about {need / 1e9:.1f} GB")
+        if n == 2048:
+            mem = gptq_memory(model)
+            merge_json(ROOT / "gptq_memory.json", model, mem)
+            G.log(f"calib_size gptq {model} 2048: predicted peak allocation {mem['predicted_2048']:.1f} GiB "
+                  f"(256: {mem['gib_256']:.1f}, 1,024: {mem['gib_1024']:.1f})")
+            if mem["predicted_2048"] > GPTQ_MAX_GIB:
+                stop(f"gptq {model} 2048: predicted peak allocation {mem['predicted_2048']:.1f} GiB > {GPTQ_MAX_GIB} "
+                     f"(amendment 5: stop before the calibration)")
+    rec = calibrate_gptq(model, n)
+    bad = gptq_plausible(model, rec=rec)
+    if bad:
+        stop(f"gptq {model} {n}: implausible {bad}")
+    return rec
+
+
+def gptq_size(model, n):
+    rec = gptq_calibrate_size(model, n)
+    ext, cache, _, _ = gptq_paths(model, n)
+    eval_row(model, f"gptq_{n}", "gptq", (ext, cache), which=("zs", "gsm"), expect_sha=rec["cache_sha256"],
+             codes=rec["codes_sha256"])
+    d = ROOT / model / "eval"
+    zs, gsm = (json.loads((d / k / f"gptq_{n}.json").read_text()) for k in ("zs", "gsm8k"))
+    bad = gptq_plausible(model, zs=zs, gsm=gsm)
+    if bad:
+        stop(f"gptq {model} {n}: implausible {bad}")
+    G.log(f"calib_size gptq {model} {n}: zero-shot {zs_average(zs):.2f}, GSM8K {gsm_strict(gsm):.2f}, wiki "
+          f"{rec['ppl']['wiki']:.4f}, c4 {rec['ppl']['c4']:.4f}; row done")
+
+
+def gptq_step0():
+    """Amendment 5, step 0 (RUN/calib_size/step0/gptq_step0.json): the arguments; Llama-1B GPTQ‡-256 on calib-size with
+    part P's command: codes equal to part P's (required), the codes file vs the uploaded one (reported), PPL / zero-shot
+    / GSM8K identical to parts P / X / Y."""
+    out = ROOT / "step0" / "gptq_step0.json"
+    res = json.loads(out.read_text()) if out.exists() else {}
+    G.log("calib_size gptq step 0")
+    res["args"] = gptq_args_check()
+    out.write_text(json.dumps(res, indent=1, default=str) + "\n")
+    if not res["args"]["ok"]:
+        stop(f"gptq step 0: the arguments differ from the main table's ({out})")
+    model = LLAMA1B
+    GPTQ_STEP0.mkdir(parents=True, exist_ok=True)
+    rec = calibrate_gptq(model, 256)
+    res["calibration"] = dict(codes_sha256=rec["codes_sha256"], part_p_codes_sha256=P_CODES,
+                              codes_equal=rec["codes_sha256"] == P_CODES, file_sha256=rec["cache_sha256"],
+                              uploaded_file_sha256=HF_FILE, file_equal_uploaded=rec["cache_sha256"] == HF_FILE,
+                              data_sha256=rec["key"]["data_sha256"], gptq_seconds=rec["gptq_seconds"],
+                              job_seconds=rec["job_seconds"], device_peak_mib=rec["device_peak_mib"],
+                              gpu_peak_gib=rec["gpu_peak_gib"])
+    out.write_text(json.dumps(res, indent=1, default=str) + "\n")
+    if not res["calibration"]["codes_equal"]:
+        stop(f"gptq step 0: Llama-1B GPTQ‡-256's codes {rec['codes_sha256'][:12]} != part P's {P_CODES[:12]} ({out})")
+    ext, cache, ppl_out, _ = gptq_paths(model, 256)
+    eval_row(model, "gptq256", "gptq", (ext, cache), which=("zs", "gsm"), expect_sha=rec["cache_sha256"],
+             codes=rec["codes_sha256"])
+    d = ROOT / model / "eval"
+    res["identity"] = dict(ppl=ppl_identity(ppl_out, Z.gptq_record(model)),
+                           zeroshot=zs_identity(d / "zs" / "gptq256.json", Z.ZS / "panel" / model / "gptq.json"),
+                           gsm8k=gsm_identity(d / "gsm8k" / "gptq256.json", Y.ROOT / model / "gptq.json"))
+    res["identity"]["ok"] = all(v["ok"] for v in res["identity"].values())
+    res["ok"] = res["args"]["ok"] and res["calibration"]["codes_equal"] and res["identity"]["ok"]
+    out.write_text(json.dumps(res, indent=1, default=str) + "\n")
+    if not res["ok"]:
+        stop(f"gptq step 0: calib-size's GPTQ‡-256 evaluations differ from parts P / X / Y ({out})")
+    G.log(f"calib_size gptq step 0 done: ok (codes {P_CODES[:12]}, file equal to the upload: "
+          f"{res['calibration']['file_equal_uploaded']})")
+
+
+def queue_seconds(prefix):
+    """{job name: seconds} of the queue.log END lines whose name starts with prefix."""
+    out = {}
+    for line in (G.RUN / "queue.log").read_text().splitlines():
+        p = line.split()
+        if len(p) >= 5 and p[1] == "END" and p[2].startswith(prefix) and p[4].endswith("s"):
+            out[p[2]] = float(p[4][:-1])
+    return out
+
+
+def gptq_eta():
+    """The ETA of the rest of amendment 5 (RUN/calib_size/gptq_eta.json), from Llama-1B's GPTQ seconds at 256 (step 0)
+    and 1,024: GPTQ time linear in the window count, scaled to each model's main-table GPTQ seconds; each job's other
+    time as its main-table job; the codes file written at 100 MB/s; the zero-shot and GSM8K times of part AA's FQ16 row
+    of the same model and size, plus the codes file read twice per evaluation (sha256, load) at 85 MB/s."""
+    s0 = json.loads((ROOT / "step0" / "gptq_256.job.json").read_text())
+    k1 = json.loads((ROOT / LLAMA1B / "gptq_1024.job.json").read_text())
+    per256, slope = s0["gptq_seconds"], (k1["gptq_seconds"] - s0["gptq_seconds"]) / (1024 - 256)
+    jobs = dict(queue_seconds("gptq_"), **queue_seconds("llama_gptq_"))
+    evals = dict(queue_seconds("cs_zs_"), **queue_seconds("cs_gsm8k_"))
+    rows, total = {}, 0.0
+    for n in (1024, 2048):
+        for model in ORDER:
+            done = k1["job_seconds"] if (model, n) == (LLAMA1B, 1024) else None
+            r = json.loads(Z.gptq_record(model).read_text())
+            g256 = r["ptq"]["seconds"]
+            job256 = jobs.get(f"llama_gptq_{model}" if model in Z.LLAMA else f"gptq_{model}_nvfp4-fo6")
+            size = Path(Z.codes_file(model)).stat().st_size
+            gptq = g256 * (per256 + slope * (n - 256)) / per256
+            calib = (job256 - g256) + gptq + size / 100e6
+            ev = evals[f"cs_zs_{model}_fq16_{n}"] + evals[f"cs_gsm8k_{model}_fq16_{n}"] + 4 * size / 85e6
+            rows[f"{model}_{n}"] = dict(calibration_s=done if done is not None else calib, evaluations_s=ev,
+                                        gptq_s=gptq, measured=done is not None)
+            total += (0 if done is not None else calib) + ev
+    out = dict(llama1b_gptq_seconds={"256": per256, "1024": k1["gptq_seconds"]}, slope_s_per_window=slope,
+               llama1b_1024=dict(job_seconds=k1["job_seconds"], device_peak_mib=k1["device_peak_mib"],
+                                 gpu_peak_gib=k1["gpu_peak_gib"]),
+               rows=rows, remaining_hours=total / 3600, utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    (ROOT / "gptq_eta.json").write_text(json.dumps(out, indent=1) + "\n")
+    return out
+
+
+def gptq_measure():
+    """Amendment 5's ETA gate: Llama-1B GPTQ‡-1k's calibration (its PPL included), then the ETA; nothing else."""
+    s0 = ROOT / "step0" / "gptq_step0.json"
+    if not (s0.exists() and json.loads(s0.read_text()).get("ok")):
+        stop("gptq measure: amendment 5's step 0 has not passed")
+    gptq_calibrate_size(LLAMA1B, 1024)
+    eta = gptq_eta()
+    G.log(f"calib_size gptq measure: Llama-1B 1,024 GPTQ {eta['llama1b_gptq_seconds']['1024']:.0f}s (256: "
+          f"{eta['llama1b_gptq_seconds']['256']:.0f}s); remaining ETA {eta['remaining_hours']:.1f} h")
+    G.log("DONE calib_size gptq measure")
+
+
+def gptq_panel(models=ORDER):
+    s0 = ROOT / "step0" / "gptq_step0.json"
+    if not (s0.exists() and json.loads(s0.read_text()).get("ok")):
+        stop("gptq panel: amendment 5's step 0 has not passed")
+    for n in (1024, 2048):
+        for model in models:
+            gptq_size(model, n)
+            G.log(f"calib_size gptq panel {n}: {model} done")
+        G.log(f"calib_size gptq panel {n} done")
+    G.log("DONE calib_size gptq")
+
 if __name__ == "__main__":
     what = sys.argv[1]
     if what == "windows":
@@ -929,6 +1296,9 @@ if __name__ == "__main__":
         pilot()
     elif what == "theta":
         theta_rerun()
+    elif what in ("gptq_step0", "gptq_measure", "gptq_panel"):
+        CODE = GPTQ_CODE                            # amendment 5: calib-size 8dbe2e4
+        {"gptq_step0": gptq_step0, "gptq_measure": gptq_measure, "gptq_panel": gptq_panel}[what]()
     elif what == "panel":
         size = int(next(a.split("=", 1)[1] for a in sys.argv[2:] if a.startswith("--size=")))
         sel = [a.split("=", 1)[1].split(",") for a in sys.argv[2:] if a.startswith("--models=")]
