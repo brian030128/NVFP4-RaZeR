@@ -137,6 +137,7 @@ def compare(model, a, b):
     ga, gb = gsm_record(model, a), gsm_record(model, b)
     if ga is not None and gb is not None:
         out["gsm8k"] = RY.paired(ga, gb)
+        out["gsm8k_flex"] = RY.paired(ga, gb, "flexible_extract")
     na, nb = ppl_nll(model, a), ppl_nll(model, b)
     if na is not None and nb is not None:
         out["nll"] = {c: T.paired(na[c], nb[c]) for c, _ in T.CORPORA}
@@ -152,6 +153,8 @@ COMPARISONS = ([("FQ16-256 vs FOCUS-256", "fq16_256", "focus256")]
                    (f"FQ16-{K[n]} vs FOCUS-{K[n]}", f"fq16_{n}", f"focus_{n}"),
                    (f"FQ16-{K[n]} vs IF4†", f"fq16_{n}", "if4"), (f"FQ16-{K[n]} vs MixFP4 (Zou)†", f"fq16_{n}", "zou"))]
                + [("FQ16-2k vs FQ16-1k", "fq16_2048", "fq16_1024"), ("FOCUS-2k vs FOCUS-1k", "focus_2048", "focus_1024"),
+                  # the motivating losses against the fixed 256-window FOCUS reference (flipquant README, 2026-10-22)
+                  ("FQ16-1k vs FOCUS-256", "fq16_1024", "focus256"), ("FQ16-2k vs FOCUS-256", "fq16_2048", "focus256"),
                   ("FQ16-256 vs IF4†", "fq16_256", "if4"), ("FQ16-256 vs MixFP4 (Zou)†", "fq16_256", "zou")])
 
 
@@ -512,6 +515,7 @@ def build():
             g = gsm_record(model, name)
             if g is not None:
                 v["gsm8k"] = RY.acc(g)
+                v["gsm8k_flex"] = RY.acc(g, "flexible_extract")
             n = ppl_nll(model, name)
             if n is not None:
                 v["ppl"] = {c: math.exp(T.mean(n[c])) for c, _ in T.CORPORA}
@@ -529,6 +533,7 @@ def build():
                                     eval_seconds=eval_seconds(model), gsm8k_stops=gsm8k_stops(model, rows),
                                     curves=training_curves(model))
     rec["pooled"] = pooled(rec)
+    rec["gpu_time_seconds"] = study_cost()
     rec["pooled_without_qwen27b"] = {k: v for k, v in pooled(rec, exclude=("qwen3.8-27b",)).items()
                                      if k in WITHOUT_QWEN27B}
     return rec
