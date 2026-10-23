@@ -2338,3 +2338,69 @@ FQ16 and FOCUS, and evaluate it as those rows were.
   step 0), calib_size.json (`gptq`: step 0, ETA, memory, GPU time).
 - **Codes on /vault:** `/vault/flipquant_paper_eval/calib_size/<model>/gptq_<N>/codes_nvfp4_act-fo6.pt`, 16 files,
   77.6 GB. Each file's sha256 is in its job record.
+
+## Part AB (registered 2026-10-23, at its commit, before anything is staged or uploaded; the user's decision, relayed): the part AA 1,024-window artifacts on Hugging Face
+
+The user decided this in the coordinator's session on 2026-10-23; the coordinator relayed it. **24 new PRIVATE
+repositories** under `edgeai-lab`, one of each kind for each of the eight part AA models. No existing repository is
+touched, including the co-author's `<Base>-GPTQ-NVFP4` repositories.
+- **Names (the user's):** the existing repositories' base names with `-Calib1k`. The base names are
+  Llama-3.2-1B-Instruct, phi-4, Mistral-7B-Instruct-v0.3, Llama-3.1-8B-Instruct, NVIDIA-Nemotron-Nano-9B-v2,
+  Qwen3.8-27B, Qwen3-1.7B and Qwen3-8B.
+  - `<Base>-FlipQuant-Calib1k`: the FQ16-1k map (16x64) only, for now.
+  - `<Base>-FOCUS-NVFP4-Calib1k`: the FOCUS-1k state, `focus.pt`.
+  - `<Base>-GPTQ-BF16Calib-NVFP4-Calib1k`: the GPTQ‡-1k codes, `codes_nvfp4_act-fo6.pt`.
+- **Sources, each verified against its part AA job record before staging (a fresh full read):**
+  - **map:** `RUN/calib_size/<model>/fq16_1024/map.pt`, sha256 = the record's `map_file_sha256`.
+    - Its meta is cleaned as for the earlier FlipQuant repositories: the run and calibration-record paths are made
+      relative, the GitHub owner is removed from the extension reference, and the reference implementation's branch
+      and commit are removed.
+    - The tiles and every tensor record must stay bit-identical; both sha256 are recorded.
+  - **FOCUS:** the evaluated state as is, sha256 = the record's `state_sha256`. The pilot's two states (Llama-1B, Phi-4)
+    are in RUN; the others are on /vault.
+  - **GPTQ‡:** the /vault codes file as is, sha256 = the record's `cache_sha256`. Its code digest must equal the
+    calibration's `codes_sha256`, and its key must be the main-table variant at 1,024 windows.
+- **Staging** goes to `/home/dev/calib1k_hf/<repo>/`: the card, `ppl_summary.json` and the license files are written
+  there. The large file is a symbolic link to its verified source, because /home's 10 GB floor does not allow a copy.
+  Every scan, hash and upload reads the source through the link. The map is small and is written there, cleaned.
+- **Cards:** the layouts of the existing FlipQuant, FOCUS and GPTQ-BF16Calib cards, stating:
+  - **Calibration:** 1,024 nested windows (the record's 128 plus 896 by the extension rule), the builder and the
+    13-gram audit (0 hits; positive control). FQ16 at 640 steps (the release settings, 5 epochs), FOCUS at 32 steps
+    (FOCUS_COMMON), GPTQ‡ on the same windows with the main-table settings.
+  - **Results:** the row's part AA results: PPL (WikiText-2, C4), zero-shot (six tasks) and GSM8K, each against its
+    256-window version and against FourOverSix. The paired statistics are part AA's (exact McNemar; ΔNLL ± 2 SE).
+  - **E0M3 share:** for FlipQuant.
+  - **Cost:** of the calibration.
+  - **Licenses:** the base model's license files, as before. The Llama models also get "Built with Llama",
+    `USE_POLICY.md` and `NOTICE`.
+  - **Qwen3.8-27B FOCUS-1k** is the evaluated state as is (the user's choice). Its card states:
+    - the early stopping on GSM8K (88.40, strict no-answer 115), and that it is specific to this run: the local 256
+      control and the 2,048 run do not stop early;
+    - the local training on one GPU with host-offloaded AdamW, as a deviation from the 2 x H200 run of its 256
+      version.
+- **Gates, as for the earlier uploads; a failure stops the part and is reported:**
+  - **Scan:** the earlier patterns (local paths, user names, host names, tokens, e-mail addresses, pointers to a
+    reference implementation) over every staged file: text lines, binary metadata strings, archive record names and
+    raw bytes.
+    - The map and the FOCUS state may have no hit at all.
+    - A codes file follows the GPTQ upload's binary rule: a raw-byte hit is accepted only inside q / s tensor storage,
+      with no metadata hit, the file sha256 equal to its record, and the exact-token check clean.
+    - Text files may have no hit except the kinds accepted before: Meta's reporting address in `USE_POLICY.md`, and
+      "commit" / "branch" in the FlipQuant card's own sentences.
+  - **Exact-token check:** every staged file's bytes against this machine's HF tokens and their 15-character
+    prefixes; 0 hits. The tokens are never printed, logged or written.
+  - **Account and names:** the active account is `edgeai-lab`, and none of the 24 names exists.
+  - **Privacy before upload:** each repository is created private and checked private (anonymous HTTP 401) before
+    any file goes up.
+  - **Verification:** every file's sha256 equals the staged file's, by a download into /dev/shm (files up to 1 GiB)
+    or by the Hub's LFS sha256 and size (larger files). Also checked: the card metadata, the Hub's YAML validation,
+    and the README equal to the staged one.
+- **Visibility:** this session makes nothing public.
+  - When the 24 uploads are verified, the list and its anonymous status go to the coordinator, and the user changes
+    the visibility.
+  - The record (`results/paper_eval/hf_calib1k/HF_UPLOAD.md`, with the cards and records) is written and paper-eval
+    pushed after the user's change is confirmed, as for the earlier uploads.
+- **Order:** Llama-3.2-1B-Instruct first (the smallest, one of each kind), then the others; within a model the map,
+  then FOCUS, then GPTQ‡.
+- **Code:** `experiments/paper_eval/hf_calib1k.py`. It reuses `focus_hf.py`, `llama_hf.py`, `hf_gptq_focus.py` and
+  `hf_token_check.py`, and is CPU and network only (no GPU).
