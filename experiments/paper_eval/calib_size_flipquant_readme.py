@@ -77,10 +77,10 @@ def main():
         return [d(x.get("zeroshot")), d(x.get("gsm8k")), ", ".join(SHORT[m] for m in (x.get("gsm8k") or x.get(
             "zeroshot") or {}).get("models", []))]
 
-    L = ["# Calibration size: FlipQuant 16x64, FOCUS and GPTQ‡ at 256, 1,024 and 2,048 windows", "",
+    L = ["# Calibration size: FlipQuant, FOCUS and GPTQ‡ at 256, 1,024 and 2,048 windows", "",
          "**Source.**",
          f"- Every number here comes from NVFP4-RaZeR paper-eval {commit}: `{SRC}/calib_size.json`, rendered by "
-         f"`{GENERATOR}`. The protocol is `experiments/paper_eval/PROTOCOL.md` there (part AA, amendments 1–5).",
+         f"`{GENERATOR}`. The protocol is `experiments/paper_eval/PROTOCOL.md` there (part AA, amendments 1–6).",
          "- " + (", ".join(f"`{f}`" for f in copied) + " here are that commit's files, unchanged." if copied else
                  "No report file could be copied."),
          *([f"- Not copied, because they hold local paths or user names: "
@@ -108,6 +108,8 @@ def main():
          "2; init_q 6; FourOverSix per-token activations; seed 42), micro-batch 8.",
          "  - Qwen3.8-27B is trained locally on one RTX PRO 6000 with host-offloaded AdamW, micro 1.",
          "  - Its 256 baseline was trained on 2 x H200 (part Q); a local 256 run is the environment-matched control.",
+         "- **FlipQuant 8x64 and 256x64** (amendment 6): the release settings at 1,024 windows (640 steps) on the same "
+         "windows; the 256-window rows are the release maps. Only 1,024 was run for these two tiles.",
          "- **GPTQ‡** (amendment 5): the main table's GPTQ variant, recalibrated on the same 1,024 / 2,048 windows.",
          "  - NVFP4 codes on the RTN-fixed grid, FourOverSix per-token activations; BF16 propagation and Hessian input; "
          "block 128, damp 0.01; batch 8 (Qwen3.8-27B 1).",
@@ -160,6 +162,18 @@ def main():
             ("GPTQ‡ 2,048 vs 1,024", "GPTQ‡-2k vs GPTQ‡-1k", P),
             ("FlipQuant vs GPTQ‡, 256", "FQ16-256 vs GPTQ‡-256", P), ("FlipQuant vs GPTQ‡, 1,024", "FQ16-1k vs GPTQ‡-1k", P),
             ("FlipQuant vs GPTQ‡, 2,048", "FQ16-2k vs GPTQ‡-2k", P),
+            ("FlipQuant 8x64 1,024 vs its 256", "FQ8-1k vs FQ8-256", P),
+            ("FlipQuant 256x64 1,024 vs its 256", "FQ256-1k vs FQ256-256", P),
+            ("FlipQuant 8x64 vs 16x64, 1,024", "FQ8-1k vs FQ16-1k", P),
+            ("FlipQuant 256x64 vs 16x64, 1,024", "FQ256-1k vs FQ16-1k", P),
+            ("FlipQuant 8x64 vs FourOverSix, 1,024", "FQ8-1k vs FourOverSix", P),
+            ("FlipQuant 256x64 vs FourOverSix, 1,024", "FQ256-1k vs FourOverSix", P),
+            ("FlipQuant 8x64 vs FOCUS, 1,024", "FQ8-1k vs FOCUS-1k", P),
+            ("FlipQuant 8x64 vs FOCUS, 1,024, without Qwen27B", "FQ8-1k vs FOCUS-1k", P7),
+            ("FlipQuant 256x64 vs FOCUS, 1,024", "FQ256-1k vs FOCUS-1k", P),
+            ("FlipQuant 256x64 vs FOCUS, 1,024, without Qwen27B", "FQ256-1k vs FOCUS-1k", P7),
+            ("FlipQuant 8x64 vs GPTQ‡, 1,024", "FQ8-1k vs GPTQ‡-1k", P),
+            ("FlipQuant 256x64 vs GPTQ‡, 1,024", "FQ256-1k vs GPTQ‡-1k", P),
             ("FlipQuant 2,048 vs IF4† (GSM8K: 6 models)", "FQ16-2k vs IF4†", P),
             ("FlipQuant 2,048 vs MixFP4 (Zou)† (GSM8K: 6 models)", "FQ16-2k vs MixFP4 (Zou)†", P)]
     for label, key, src in rows:
@@ -172,7 +186,7 @@ def main():
         if not mm:
             continue
         val, pr = mm["values"], mm["paired"]
-        e0 = {c["windows"]: c.get("e0m3_share") for c in mm["cost"] if c["method"] == "FlipQuant 16x64"}
+        e0 = {(c["method"], c["windows"]): c.get("e0m3_share") for c in mm["cost"] if c["method"].startswith("FlipQuant")}
         L += [f"### {title}", "", "| method | windows | zero-shot Avg. | GSM8K strict | Wiki PPL | C4 PPL | E0M3 share |",
               "|---|---:|---:|---:|---:|---:|---:|"]
         lines = [("BF16", "—", "bf16", None), ("FourOverSix", "—", "fo6", None), ("GPTQ‡", "256", "gptq", None),
@@ -183,6 +197,8 @@ def main():
             at = next(i for i, ln in enumerate(lines) if ln[2] == "focus256") + 1
             lines.insert(at, ("FOCUS, local control", "256", "focus256_local", None))
         lines += [("FlipQuant 16x64", f"{n:,}", name, n) for n, name in ((256, "fq16_256"), (1024, "fq16_1024"), (2048, "fq16_2048"))]
+        lines += [(f"FlipQuant {u}", f"{n:,}", name, n) for u, t in (("8x64", "fq8"), ("256x64", "fq256"))
+                  for n, name in ((256, f"fq-{u}"), (1024, f"{t}_1024"))]
         checks = mm.get("baseline_check") or {}
         marks = set()
         for method, w, name, n in lines:
@@ -202,8 +218,9 @@ def main():
                         if gk.get(key):
                             cells[1] += mk
                             marks.add(key)
+            share = e0.get((method, n)) if n else None
             L.append(f"| {label} | {w} | " + " | ".join(cells) + f" | "
-                     f"{v(100 * e0[n], 1) + ' %' if n and e0.get(n) is not None else '—'} |")
+                     f"{v(100 * share, 1) + ' %' if share is not None else '—'} |")
         if "batch_mark" in marks:
             bk = checks["bf16"]["gsm8k"]
             L += ["", f"◊ BF16 GSM8K ran at batch {bk['batch']} (the GSM8K panel), every other row at {bk['batch_next']}; "
@@ -229,6 +246,9 @@ def main():
                   ("FlipQuant vs GPTQ‡, 256", "FQ16-256 vs GPTQ‡-256"), ("FlipQuant vs GPTQ‡, 1,024", "FQ16-1k vs GPTQ‡-1k"),
                   ("FlipQuant vs GPTQ‡, 2,048", "FQ16-2k vs GPTQ‡-2k"),
                   ("FlipQuant 2,048 vs FourOverSix", "FQ16-2k vs FourOverSix")]
+        comps += [(f"FlipQuant {u} 1,024 vs {lab}", f"{t}-1k vs {key}") for u, t in (("8x64", "FQ8"), ("256x64", "FQ256"))
+                  for lab, key in (("its 256", f"{t}-256"), ("FourOverSix", "FourOverSix"), ("16x64 1,024", "FQ16-1k"),
+                                   ("FOCUS 1,024", "FOCUS-1k"), ("GPTQ‡ 1,024", "GPTQ‡-1k"))]
         comps += [(f"FlipQuant {k} vs {lab}", f"FQ16-{kk} vs {key}") for k, kk in (("1,024", "1k"), ("2,048", "2k"))
                   for lab, key in (("IF4†", "IF4†"), ("MixFP4 (Zou)†", "MixFP4 (Zou)†"), ("GPTQ‡ (256)", "GPTQ‡-256"))]
         for label, key in comps:
@@ -264,8 +284,9 @@ def main():
           "memory fix (GPTQ's collected codes now stay on the host), so it is not comparable with its 1,024 / 2,048 "
           "peaks.", "",
           "| model | FlipQuant 256 / 1,024 / 2,048 (s) | FlipQuant peak (GiB) | E0M3 share 256 / 1,024 / 2,048 | FOCUS training 256 / "
-          "1,024 / 2,048 (s) | FOCUS peak (GiB) | GPTQ‡ 256 / 1,024 / 2,048 (s) | GPTQ‡ peak (GiB) |",
-          "|---|---|---|---|---|---|---|---|"]
+          "1,024 / 2,048 (s) | FOCUS peak (GiB) | GPTQ‡ 256 / 1,024 / 2,048 (s) | GPTQ‡ peak (GiB) | 8x64 / 256x64 at 256 "
+          "/ 1,024 (s) | 8x64 / 256x64 E0M3 share at 256 / 1,024 |",
+          "|---|---|---|---|---|---|---|---|---|---|"]
     for m, title in MODELS:
         mm = M.get(m)
         if not mm:
@@ -281,7 +302,12 @@ def main():
                  + " / ".join(v(x.get("gpu_peak_allocated_gib"), 1) for x in fo)
                  + (" (256: GPU 0 of 2 x H200)" if m == "qwen3.8-27b" else "") + " | "
                  + " / ".join(v(x.get("training_seconds"), 0) for x in gq) + " | "
-                 + " / ".join(v(x.get("gpu_peak_allocated_gib"), 1) for x in gq) + " |")
+                 + " / ".join(v(x.get("gpu_peak_allocated_gib"), 1) for x in gq) + " | "
+                 + "; ".join(" / ".join(v(c.get((f"FlipQuant {u}", n), {}).get("job_seconds"), 0) for n in (256, 1024))
+                             for u in ("8x64", "256x64")) + " | "
+                 + "; ".join(" / ".join(v(100 * c[(f"FlipQuant {u}", n)]["e0m3_share"], 1)
+                                        if c.get((f"FlipQuant {u}", n), {}).get("e0m3_share") is not None else "—"
+                                        for n in (256, 1024)) + " %" for u in ("8x64", "256x64")) + " |")
     gt = rec.get("gpu_time_seconds") or {}
     L += ["", "GPU time of the whole study: " + ", ".join(f"{k} {s / 3600:.1f} h" for k, s in gt.items())
           + f"; {sum(gt.values()) / 3600:.1f} h in all (one RTX PRO 6000).", ""]

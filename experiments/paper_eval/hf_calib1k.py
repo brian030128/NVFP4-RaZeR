@@ -34,6 +34,7 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import yaml
@@ -908,7 +909,6 @@ def upload(only=None):
     """Upload the staged repositories (or those named in `only`), in ORDER, each: create PRIVATE, check private
     (anonymous HTTP 401), upload exactly the staged files, verify every file's sha256 (download up to 1 GiB, else the
     Hub's LFS sha256 and size), the file list and the card metadata. A failure stops the run."""
-    from huggingface_hub import hf_hub_download
     os.environ.setdefault("HF_XET_CACHE", str(XET_CACHE))
     api = FH.account()
     st = json.loads((RECS / "stage.json").read_text())
@@ -943,47 +943,108 @@ def upload(only=None):
             sys.exit(f"{rid}: not private (private={info.private}, anonymous HTTP {anon}); stopping")
         api.upload_large_folder(repo_id=rid, folder_path=folder, repo_type="model", private=True,
                                 allow_patterns=names, print_report_every=300)
-        info = api.model_info(rid, files_metadata=True)
-        anon_after = FH.anonymous_status(rid)
-        hub = {s.rfilename: s for s in info.siblings}
-        problems = []
-        if info.private is not True or anon_after == 200:
-            problems.append(f"not private (private={info.private}, anonymous HTTP {anon_after})")
-        if set(hub) - {".gitattributes"} != set(names):
-            problems.append(f"file list {sorted(hub)}")
-        card_data = info.card_data.to_dict() if info.card_data else {}
-        want_front = dict(rec["license"], base_model=rec["base_model"])
-        if any(card_data.get(k) != x for k, x in want_front.items()):
-            problems.append(f"card metadata {card_data}")
-        files = {}
-        for n in names:
-            want, size = rec["files"][n]["sha256"], rec["files"][n]["bytes"]
-            ls = lfs_sha(hub.get(n))
-            if ls is not None and size > LFS_ONLY_ABOVE:
-                got, method = None, "hub LFS sha256"
-                ok = ls == want and getattr(hub.get(n), "size", None) == size
-            else:
-                with tempfile.TemporaryDirectory(dir="/dev/shm") as tmp:     # one file at a time, in RAM
-                    p = hf_hub_download(rid, n, revision=info.sha, cache_dir=tmp, force_download=True)
-                    got = FH.sha(p)
-                method = "download sha256"
-                ok = got == want and (ls is None or ls == want)
-            files[n] = dict(sha256=want, bytes=size, hub_size=getattr(hub.get(n), "size", None), hub_lfs_sha256=ls,
-                            download_sha256=got, method=method, equal=ok, lfs_equal=None if ls is None else ls == want)
-            if not ok:
-                problems.append(f"{n}: sha256 differs ({method}: download {got}, lfs {ls})")
-            print(f"  {rid} {n}: {method} {'==' if ok else '!='} staged", flush=True)
-        commits = api.list_repo_commits(rid)
-        out["repos"][rid].update(url=f"https://huggingface.co/{rid}", head=info.sha, private=info.private,
-                                 resumed=resumed, anonymous_http_before_upload=anon, anonymous_http=anon_after,
-                                 hub_files=sorted(hub), commits=[dict(id=c.commit_id, title=c.title) for c in commits],
-                                 card_metadata=card_data, files=files, problems=problems, verified=not problems,
-                                 uploaded_utc=now())
-        path.write_text(json.dumps(out, indent=1, default=str) + "\n")
-        print(f"{rid}: head {info.sha} private={info.private} anonymous={anon_after} problems={problems or 'none'}",
-              flush=True)
-        if problems:
-            sys.exit(f"{rid}: verification failed; stopping")
+        verify_upload(api, rid, rec, out, path, anon, resumed)
+
+
+def verify_upload(api, rid, rec, out, path, anon, resumed):
+    """After an upload: private (and anonymous HTTP 401), exactly the staged files, every file's sha256 (a download up to
+    1 GiB, else the Hub's LFS sha256 and size), the card metadata; recorded in hf_upload.json. A failure stops the run."""
+    from huggingface_hub import hf_hub_download
+    names = sorted(rec["files"])
+    info = api.model_info(rid, files_metadata=True)
+    anon_after = FH.anonymous_status(rid)
+    hub = {s.rfilename: s for s in info.siblings}
+    problems = []
+    if info.private is not True or anon_after == 200:
+        problems.append(f"not private (private={info.private}, anonymous HTTP {anon_after})")
+    if set(hub) - {".gitattributes"} != set(names):
+        problems.append(f"file list {sorted(hub)}")
+    card_data = info.card_data.to_dict() if info.card_data else {}
+    want_front = dict(rec["license"], base_model=rec["base_model"])
+    if any(card_data.get(k) != x for k, x in want_front.items()):
+        problems.append(f"card metadata {card_data}")
+    files = {}
+    for n in names:
+        want, size = rec["files"][n]["sha256"], rec["files"][n]["bytes"]
+        ls = lfs_sha(hub.get(n))
+        if ls is not None and size > LFS_ONLY_ABOVE:
+            got, method = None, "hub LFS sha256"
+            ok = ls == want and getattr(hub.get(n), "size", None) == size
+        else:
+            with tempfile.TemporaryDirectory(dir="/dev/shm") as tmp:     # one file at a time, in RAM
+                p = hf_hub_download(rid, n, revision=info.sha, cache_dir=tmp, force_download=True)
+                got = FH.sha(p)
+            method = "download sha256"
+            ok = got == want and (ls is None or ls == want)
+        files[n] = dict(sha256=want, bytes=size, hub_size=getattr(hub.get(n), "size", None), hub_lfs_sha256=ls,
+                        download_sha256=got, method=method, equal=ok, lfs_equal=None if ls is None else ls == want)
+        if not ok:
+            problems.append(f"{n}: sha256 differs ({method}: download {got}, lfs {ls})")
+        print(f"  {rid} {n}: {method} {'==' if ok else '!='} staged", flush=True)
+    commits = api.list_repo_commits(rid)
+    out["repos"][rid].update(url=f"https://huggingface.co/{rid}", head=info.sha, private=info.private,
+                             resumed=resumed, anonymous_http_before_upload=anon, anonymous_http=anon_after,
+                             hub_files=sorted(hub), commits=[dict(id=c.commit_id, title=c.title) for c in commits],
+                             card_metadata=card_data, files=files, problems=problems, verified=not problems,
+                             uploaded_utc=now())
+    path.write_text(json.dumps(out, indent=1, default=str) + "\n")
+    print(f"{rid}: head {info.sha} private={info.private} anonymous={anon_after} problems={problems or 'none'}",
+          flush=True)
+    if problems:
+        sys.exit(f"{rid}: verification failed; stopping")
+
+
+def upload_gentle(rid, start_after, attempts=6, interval=600):
+    """The coordinator's rule after the Hub's commit rate limit (2026-10-23): one commit per attempt
+    (HfApi.upload_folder, whose commit POST has no automatic retry), at most `attempts` attempts `interval` seconds apart,
+    the first not before `start_after` (epoch seconds). A 429 at the last attempt stops the run, to be reported; there is
+    no further loop. The repository must be the private one this upload created."""
+    from huggingface_hub.errors import HfHubHTTPError
+    os.environ.setdefault("HF_XET_CACHE", str(XET_CACHE))
+    api = FH.account()
+    st = json.loads((RECS / "stage.json").read_text())
+    rc = rule_check()
+    if rc[rid]["problems"]:
+        sys.exit(f"{rid}: gates fail: {rc[rid]['problems']}")
+    path = RECS / "hf_upload.json"
+    out = json.loads(path.read_text())
+    if out["repos"].get(rid, {}).get("verified"):
+        print(f"{rid}: already uploaded and verified")
+        return
+    rec = st["repos"][rid]
+    folder = Path(rec["folder"])
+    names = sorted(rec["files"])
+    if rid not in out["repos"] or not api.repo_exists(rid, repo_type="model"):
+        sys.exit(f"{rid}: not a repository this upload created; stopping")
+    info = api.model_info(rid)
+    anon = FH.anonymous_status(rid)
+    if info.private is not True or anon == 200:
+        sys.exit(f"{rid}: not private (private={info.private}, anonymous HTTP {anon}); stopping")
+    wait = start_after - time.time()
+    if wait > 0:
+        print(f"{rid}: first commit attempt at {datetime.datetime.fromtimestamp(start_after, datetime.timezone.utc):%H:%M} "
+              f"UTC ({wait / 60:.0f} min)", flush=True)
+        time.sleep(wait)
+    attempts_log = out["repos"][rid].setdefault("gentle_attempts", [])
+    for i in range(attempts):
+        try:
+            api.upload_folder(repo_id=rid, folder_path=folder, repo_type="model", allow_patterns=names,
+                              commit_message="Add files")
+            attempts_log.append(dict(utc=now(), result="committed"))
+            path.write_text(json.dumps(out, indent=1, default=str) + "\n")
+            print(f"{rid}: committed at attempt {i + 1}", flush=True)
+            break
+        except HfHubHTTPError as e:
+            code = getattr(getattr(e, "response", None), "status_code", None)
+            attempts_log.append(dict(utc=now(), result=f"HTTP {code}"))
+            path.write_text(json.dumps(out, indent=1, default=str) + "\n")
+            print(f"{rid}: attempt {i + 1}: HTTP {code}", flush=True)
+            if code != 429:
+                raise
+            if i == attempts - 1:
+                sys.exit(f"{rid}: still HTTP 429 after {attempts} attempts; stopping (to be reported)")
+            time.sleep(interval)
+    verify_upload(api, rid, rec, out, path, anon, True)
 
 
 def cards():
@@ -1035,5 +1096,7 @@ if __name__ == "__main__":
         stage(sel[0] if sel else None)
     elif what == "upload":
         upload(sys.argv[2:] or None)
+    elif what == "upload_gentle":
+        upload_gentle(sys.argv[2], float(sys.argv[3]))
     else:
         {"tokens": tokens, "check": check, "cards": cards, "status": status}.get(what, lambda: sys.exit(__doc__))()
