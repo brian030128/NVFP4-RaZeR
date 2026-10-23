@@ -2404,3 +2404,48 @@ touched, including the co-author's `<Base>-GPTQ-NVFP4` repositories.
   then FOCUS, then GPTQ‡.
 - **Code:** `experiments/paper_eval/hf_calib1k.py`. It reuses `focus_hf.py`, `llama_hf.py`, `hf_gptq_focus.py` and
   `hf_token_check.py`, and is CPU and network only (no GPU).
+
+### Part AA, amendment 6 (registered 2026-10-23, at its commit, before any run; the user's request and decisions, relayed): FlipQuant 8x64 and 256x64 at 1,024 windows
+
+- **Request:** FlipQuant 8x64 and 256x64 at 1,024 windows on the eight part AA models, evaluated as the FQ16-1k rows.
+- **Scope:**
+  - 16 calibrations and 16 rows: 8 models × {8x64, 256x64}, each with zero-shot, GSM8K and PPL.
+  - 4 GSM8K rows of the 256-window release maps: Qwen3-1.7B / Qwen3-8B × {8x64, 256x64}, with amendment 1's Qwen3
+    GSM8K protocol. With them, "vs its 256" exists for every model on every evaluation. The six other models have
+    part Y's rows; zero-shot (parts X / X2) and PPL (the final table) exist for all eight.
+- **Settings:** the release hyperparameters at 1,024 windows, as FQ16-1k:
+  - `calibration.train_map --unit <8x64 | 256x64> --epochs 5 --teacher-topk 1000 --fit-windows 1024`;
+  - 640 steps; Adam lr 0.02, initial logit −1, seed 0; batch 8 (Qwen3.8-27B and Nemotron 2 × 4); deterministic;
+  - the same 1,024 windows: each run's fit extension must equal `windows/<model>_1024.json`, record by record;
+  - Qwen3.8-27B with `--teacher-host`.
+- **Code:** flipquant calib-size 394e683, which is 9f19863's code; only results have changed since.
+- **Step 0, before the panel:** Llama-1B at the release 256 windows on calib-size.
+  - **Calibration:** each tile's map is recalibrated with part P's command. Its run_map_sha256 and tiles must equal
+    part P's (required).
+  - **Evaluation:** part P's 8x64 and 256x64 maps are evaluated on calib-size. Their zero-shot, GSM8K (date pinned)
+    and PPL must be identical to parts X / Y / P (required), as step 0 (c) checked for 16x64. Then the existing
+    records are the 256-window references.
+- **Evaluation:** as the FQ16-1k rows, native on build_V:
+  - part X's zero-shot;
+  - part Y's GSM8K, with Llama-1B's date pin and Qwen3's thinking off;
+  - PPL with the paper convention;
+  - the kernel families of part X's rows: mixed_wB_ko for 8x64, mixed256_ko for 256x64.
+- **Gates:** as before (a failed check; any OOM, with no setting changed; the /home floor). The exception is the E0M3
+  share: above 60 % it stops the run (the user's choice for these two tiles).
+- **Order:** per model in part AA's ORDER.
+  - For each Qwen3 model, its two GSM8K references come first.
+  - Then 8x64, then 256x64: each calibration followed by its zero-shot, GSM8K and PPL.
+  - After the first model (Llama-1B), the measured ETA goes to the coordinator, and the run continues.
+- **Parallel with part AB** (the user's decision, relayed):
+  - part AB stays CPU / network only;
+  - this amendment reads its windows and models from /home as before;
+  - both processes watch /home's 10 GB floor;
+  - if part AB's /vault reads slow the GPU jobs noticeably, the coordinator is told, and neither is changed silently.
+- **Report**, per model and pooled, as part AA:
+  - each tile at 1,024 against its own 256: FQ8-1k vs FQ8-256, FQ256-1k vs FQ256-256;
+  - against FourOverSix, FQ16-1k, FOCUS-1k and GPTQ‡-1k;
+  - the E0M3 share and the per-epoch churn (E0M3 tiles, flips) per tile and size;
+  - the calibration cost.
+
+  calib_size.json, REPORT.md and the flipquant README are updated, and paper-eval and flipquant calib-size are pushed.
+- **HF:** the new maps go into no HF repository without the coordinator's OK.
