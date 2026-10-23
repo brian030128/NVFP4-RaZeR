@@ -164,8 +164,10 @@ def windows():
 
 # ---------------------------------------------------------------------------------------------- jobs
 
-def train_map_cmd(model, n, out, host=False, probe=None):
-    cmd = [G.PY, "-m", "calibration.train_map", "--model", model, *TRAIN, "--fit-windows", n, "--data-root", DATA]
+def train_map_cmd(model, n, out, host=False, probe=None, unit="16x64"):
+    """TRAIN at `unit` (amendment 6: 8x64 / 256x64 with the same release settings)."""
+    cmd = [G.PY, "-m", "calibration.train_map", "--model", model, "--unit", unit, *TRAIN[2:], "--fit-windows", n,
+           "--data-root", DATA]
     if host:
         cmd.append("--teacher-host")
     if probe:
@@ -193,21 +195,31 @@ def write_meta(path, **kw):
     Path(path).write_text(json.dumps(kw, indent=1, default=str) + "\n")
 
 
-def calibrate_fq(model, n, out, host=False):
-    """FlipQuant 16x64 at n windows; out/job.json records the command, the sampler and the cost."""
+UNIT_TAG = {"16x64": "16", "8x64": "8", "256x64": "256"}
+
+
+def calibrate_fq(model, n, out, host=False, unit="16x64"):
+    """FlipQuant at `unit` (16x64 unless amendment 6) and n windows; out/job.json records the command, the sampler and
+    the cost."""
     meta = out.parent / f"{out.name}.job.json"
     if (out / "reproduction.json").exists() and meta.exists():
         return json.loads(meta.read_text())
     if out.exists():
         stop(f"{out} exists without a record; inspect it before rerunning")
     out.parent.mkdir(parents=True, exist_ok=True)
-    cmd = train_map_cmd(model, n, out, host=host)
-    rc, seconds, peak = measured(f"cs_fq16_{model}_{n}{'_host' if host else ''}", cmd, out / "reproduction.json")
-    must(rc, f"train_map {model} {n}")
+    cmd = train_map_cmd(model, n, out, host=host, unit=unit)
+    name = f"cs_fq{UNIT_TAG[unit]}_{model}_{n}{'_host' if host else ''}"
+    rc, seconds, peak = measured(name, cmd, out / "reproduction.json")
+    if rc != 0:
+        log = (G.RUN / "logs" / f"{name}.log").read_text(errors="replace") if (G.RUN / "logs" / f"{name}.log").exists() \
+            else ""
+        if "OutOfMemoryError" in log or "CUDA out of memory" in log:
+            stop(f"train_map {model} {unit} {n}: CUDA out of memory (stop; no setting is changed)")
+    must(rc, f"train_map {model} {unit} {n}")
     rep = json.loads((out / "reproduction.json").read_text())
     report = json.loads((out / "run" / "report.json").read_text())
     res = report["resources"]
-    rec = dict(model=model, windows=n, teacher_host=host, command=" ".join(map(str, cmd[1:])), checkout=checkout(),
+    rec = dict(model=model, unit=unit, windows=n, teacher_host=host, command=" ".join(map(str, cmd[1:])), checkout=checkout(),
                rc=rc, job_seconds=seconds, device_peak_mib=peak, run_map_sha256=rep["run_map_sha256"],
                map_file_sha256=rep["map_file_sha256"], e0m3_share=rep["e0m3_share"],
                train_map_wall_seconds=rep["wall_seconds"], settings=rep["settings"],
@@ -309,7 +321,7 @@ def quant_fo6(ppl=False):
 
 def quant_zs(kind, artifact):
     """Part X's row_args (run_zeroshot6.row_args) with this row's map or state."""
-    if kind == "fq":
+    if kind in FQ_KINDS:
         return Z.NATIVE + ["--weight", "mixfp4", "--act", "fourover6", "--map", artifact]
     if kind == "focus":
         return Z.NATIVE + ["--weight", "focus", "--focus", artifact, "--focus-deploy", "--act", "fourover6",
@@ -317,7 +329,8 @@ def quant_zs(kind, artifact):
     return Z.NATIVE + ["--weight", "fourover6", "--act", "fourover6"]
 
 
-ROW = {"fq": "fq-16x64", "focus": "focus", "fo6": "fo6", "gptq": "gptq"}
+ROW = {"fq": "fq-16x64", "focus": "focus", "fo6": "fo6", "gptq": "gptq", "fq8": "fq-8x64", "fq256": "fq-256x64"}
+FQ_KINDS = ("fq", "fq8", "fq256")          # amendment 6: the 8x64 / 256x64 maps (their kernel families via part X's rows)
 
 
 def artifact_checks(model, kind, path, artifact, codes=None):
@@ -333,8 +346,8 @@ def artifact_checks(model, kind, path, artifact, codes=None):
         if not codes or p.get("codes_sha256") != codes:
             bad.append(f"codes digest {str(p.get('codes_sha256'))[:12]} != the calibration's {str(codes)[:12]}")
         return bad
-    got = (pol.get("map") or {}).get("path") if kind == "fq" else (pol.get("focus") or {}).get("state") if kind == "focus" \
-        else None
+    got = (pol.get("map") or {}).get("path") if kind in FQ_KINDS else (pol.get("focus") or {}).get("state") \
+        if kind == "focus" else None
     return [f"artifact path {got} != {artifact}"] if kind != "fo6" and got != str(artifact) else []
 
 
@@ -416,7 +429,7 @@ def eval_row(model, name, kind, artifact, which=("zs", "gsm", "ppl"), expect_sha
             stop(f"zero-shot {model} {name}: {bad}")
     if "gsm" in which:
         out = d / "gsm8k" / f"{name}.json"
-        q = gptq_gsm_quant(model, *artifact) if kind == "gptq" else quant_fq(artifact) if kind == "fq" \
+        q = gptq_gsm_quant(model, *artifact) if kind == "gptq" else quant_fq(artifact) if kind in FQ_KINDS \
             else quant_focus(artifact) if kind == "focus" else quant_fo6()
         verify(out)
         if not G.done(out):
@@ -430,7 +443,7 @@ def eval_row(model, name, kind, artifact, which=("zs", "gsm", "ppl"), expect_sha
         stop(f"{model} {name}: GPTQ‡'s PPL is its calibration job (amendment 5), not an eval_row run")
     if "ppl" in which:
         out = d / "ppl" / f"{name}.json"
-        q = quant_fq(artifact, ppl=True) if kind == "fq" else quant_focus(artifact) if kind == "focus" \
+        q = quant_fq(artifact, ppl=True) if kind in FQ_KINDS else quant_focus(artifact) if kind == "focus" \
             else quant_fo6(ppl=True)
         verify(out)
         checkout()
@@ -1284,6 +1297,153 @@ def gptq_panel(models=ORDER):
         G.log(f"calib_size gptq panel {n} done")
     G.log("DONE calib_size gptq")
 
+
+# ---------------------------------------------------------------------------------------------- amendment 6: 8x64 / 256x64
+
+#: calib-size 394e683: 9f19863's code (9f19863..394e683 adds results/calib_size and one .gitignore line)
+A6_CODE = "394e683"
+A6_UNITS = {"8x64": "fq8", "256x64": "fq256"}          # unit: evaluation kind; rows fq8_<N> / fq256_<N>
+A6_E0M3_MAX = 0.60                                    # the user's gate for these two tiles
+A6_QWEN3_GSM = ["fq-8x64", "fq-256x64"]               # the 256-window GSM8K references the Qwen3 models lack
+
+
+def a6_step0():
+    """Amendment 6, step 0 (RUN/calib_size/step0/a6_step0.json), Llama-1B at the release 256 windows on calib-size:
+    - each tile's map recalibrated with part P's settings: run_map_sha256 and tiles equal to part P's (required);
+    - part P's map of each tile evaluated on calib-size: zero-shot, GSM8K (date pinned) and PPL identical to parts X / Y
+      / P (required), as step 0 (c) for 16x64; then the existing records are the 256-window references."""
+    model = LLAMA1B
+    out = ROOT / "step0" / "a6_step0.json"
+    res = json.loads(out.read_text()) if out.exists() else {}
+    G.log("calib_size a6 step 0")
+    d = ROOT / model / "eval"
+    for unit, kind in A6_UNITS.items():
+        ref = json.loads((G.RUN / "llama_instruct" / model / "records" / unit / "run.json").read_text())
+        o = ROOT / "step0" / f"{kind}_256"
+        rec = calibrate_fq(model, 256, o, unit=unit)
+        cal = dict(run_map_sha256=rec["run_map_sha256"], part_p_run_map_sha256=ref["run_map_sha256"],
+                   equal_sha=rec["run_map_sha256"] == ref["run_map_sha256"],
+                   tiles_equal=same_tiles(o / "map.pt", Z.map_path(model, unit)), e0m3_share=rec["e0m3_share"],
+                   job_seconds=rec["job_seconds"], device_peak_mib=rec["device_peak_mib"])
+        res[unit] = dict(calibration=cal)
+        out.write_text(json.dumps(res, indent=1) + "\n")
+        if not (cal["equal_sha"] and cal["tiles_equal"]):
+            stop(f"a6 step 0: Llama-1B {unit} at 256 differs from part P's map ({out})")
+        name = f"{kind}_256"
+        eval_row(model, name, kind, Z.map_path(model, unit))
+        ident = dict(zeroshot=zs_identity(d / "zs" / f"{name}.json", Z.ZS / "panel" / model / f"fq-{unit}.json"),
+                     gsm8k=gsm_identity(d / "gsm8k" / f"{name}.json", Y.ROOT / model / f"fq-{unit}.json"),
+                     ppl=ppl_identity(d / "ppl" / f"{name}.json", G.RUN / "llama_instruct" / model / "ppl" / f"fq-{unit}.json"))
+        ident["ok"] = all(v["ok"] for v in ident.values())
+        res[unit]["identity"] = ident
+        out.write_text(json.dumps(res, indent=1) + "\n")
+        if not ident["ok"]:
+            stop(f"a6 step 0: Llama-1B {unit}'s evaluations on calib-size differ from parts X / Y / P ({out})")
+    res["ok"] = all(res[u]["calibration"]["equal_sha"] and res[u]["calibration"]["tiles_equal"] and res[u]["identity"]["ok"]
+                    for u in A6_UNITS)
+    out.write_text(json.dumps(res, indent=1) + "\n")
+    G.log(f"calib_size a6 step 0 done: ok={res['ok']}")
+    if not res["ok"]:
+        stop(f"a6 step 0 failed ({out})")
+
+
+def a6_qwen3_gsm(model):
+    """The Qwen3 models' native GSM8K rows of the 256-window 8x64 / 256x64 maps: amendment 1's Qwen3 protocol (part Y's,
+    thinking off, batch 64) with part X2's input checks, into RUN/calib_size/<model>/eval/gsm8k/."""
+    import run_zs6_qwen3 as X2
+    d = ROOT / model / "eval" / "gsm8k"
+    for row in A6_QWEN3_GSM:
+        out = d / f"{row}.json"
+        if not G.done(out):
+            checkout()
+            bad = X2.verify_inputs(model, row)
+            if bad:
+                stop(f"a6 qwen3 gsm8k {model} {row}: {bad}")
+            out.parent.mkdir(parents=True, exist_ok=True)
+        q = Y.quant(model, row)
+        cmd = [G.py(model), "-u", "-m", "evaluation.downstream", "--model", model, "--revision", Z.REV[model], *q,
+               "--tasks", Y.TASK, "--apply-chat-template", *THINK[model], "--batch-size", 64, "--gen-lengths",
+               "--samples-out", out.with_suffix(""), "--out", out]
+        must(M.run_ts(f"cs_gsm8k_{model}_{row}", cmd, out, FQ3), f"a6 qwen3 gsm8k {model} {row}")
+        bad = y_checks(model, row, out, gsm_digest(model))
+        if bad:
+            stop(f"a6 qwen3 gsm8k {model} {row}: {bad}")
+    G.log(f"calib_size a6 qwen3 gsm8k {model}: {len(A6_QWEN3_GSM)} rows")
+
+
+def a6_size(model, unit, n=1024):
+    """One tile at n windows: the windows checks, the calibration (Qwen3.8-27B with the host teacher), the E0M3 gate
+    (60 %), the trainer's fit extension equal to the windows file, then zero-shot, GSM8K and PPL."""
+    kind = A6_UNITS[unit]
+    d = ROOT / model
+    out = d / f"{kind}_{n}"
+    if not (d / f"{kind}_{n}.job.json").exists():
+        bad = gptq_windows_ok(model, n)
+        if bad:
+            stop(f"a6 {model} {unit}: windows {bad}")
+        if shutil.disk_usage("/home").free < FLOOR + 2e9:
+            stop(f"PAUSE disk before a6 {model} {unit}: /home below its floor + 2 GB")
+    fq = calibrate_fq(model, n, out, host=model in HOST_TEACHER, unit=unit)
+    if fq["e0m3_share"] > A6_E0M3_MAX:
+        stop(f"a6 {model} {unit} {n}: E0M3 share {fq['e0m3_share']:.3f} above {A6_E0M3_MAX} (implausible)")
+    pre = json.loads(windows_file(model, n).read_text())
+    got = json.loads((out / "run" / "report.json").read_text())["fit_extension"]
+    if got["records"] != pre["fit_extension"]["records"] or got["skipped_documents"] != pre["fit_extension"][
+            "skipped_documents"]:
+        stop(f"a6 {model} {unit} {n}: the run's fit extension differs from windows/{model}_{n}.json")
+    eval_row(model, f"{kind}_{n}", kind, out / "map.pt")
+    G.log(f"calib_size a6 {model} {unit} {n}: E0M3 share {fq['e0m3_share']:.4f}; row done")
+    return fq
+
+
+def a6_eta():
+    """After the first model: its two tiles' calibration and evaluation seconds against its FQ16-1k's, the ratio applied
+    to every other model's FQ16-1k (part AA), plus the Qwen3 GSM8K rows at part Y's FQ row times (RUN/calib_size/a6_eta.json)."""
+    jobs = {}
+    for line in (G.RUN / "queue.log").read_text().splitlines():
+        q = line.split()
+        if len(q) >= 5 and q[1] == "END" and q[2].startswith("cs_") and q[4].endswith("s"):
+            jobs[q[2]] = float(q[4][:-1])
+
+    def row_seconds(model, cal, name):
+        return jobs.get(cal, 0) + sum(jobs.get(f"cs_{k}_{model}_{name}", 0) for k in ("zs", "gsm8k", "ppl"))
+    m0 = ORDER[0]
+    base0 = row_seconds(m0, f"cs_fq16_{m0}_1024", "fq16_1024")
+    ratio = {u: row_seconds(m0, f"cs_fq{UNIT_TAG[u]}_{m0}_1024", f"{k}_1024") / base0 for u, k in A6_UNITS.items()}
+    rows, total = {}, 0.0
+    for model in ORDER[1:]:
+        base = row_seconds(model, f"cs_fq16_{model}_1024" + ("_host" if model in HOST_TEACHER else ""), "fq16_1024")
+        for u in A6_UNITS:
+            rows[f"{model}_{u}"] = base * ratio[u]
+            total += base * ratio[u]
+        if model in QWEN3:
+            g = sum(jobs.get(f"cs_gsm8k_{model}_fq16_1024", 0) for _ in A6_QWEN3_GSM)
+            rows[f"{model}_qwen3_gsm8k"] = g
+            total += g
+    out = dict(first_model=m0, first_model_seconds={u: row_seconds(m0, f"cs_fq{UNIT_TAG[u]}_{m0}_1024", f"{k}_1024")
+                                                    for u, k in A6_UNITS.items()},
+               first_model_fq16_1024_seconds=base0, ratio=ratio, rows=rows, remaining_hours=total / 3600,
+               utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    (ROOT / "a6_eta.json").write_text(json.dumps(out, indent=1) + "\n")
+    G.log(f"calib_size a6 ETA after {m0}: ratio 8x64 {ratio['8x64']:.2f}, 256x64 {ratio['256x64']:.2f} of FQ16-1k; "
+          f"remaining {total / 3600:.1f} h")
+    return out
+
+
+def a6_panel(models=ORDER):
+    s0 = ROOT / "step0" / "a6_step0.json"
+    if not (s0.exists() and json.loads(s0.read_text()).get("ok")):
+        stop("a6 panel: amendment 6's step 0 has not passed")
+    for i, model in enumerate(models):
+        if model in QWEN3:
+            a6_qwen3_gsm(model)
+        for unit in A6_UNITS:
+            a6_size(model, unit)
+        G.log(f"calib_size a6 panel: {model} done")
+        if model == ORDER[0] and not (ROOT / "a6_eta.json").exists():
+            a6_eta()
+    G.log("DONE calib_size a6")
+
 if __name__ == "__main__":
     what = sys.argv[1]
     if what == "windows":
@@ -1296,6 +1456,9 @@ if __name__ == "__main__":
         pilot()
     elif what == "theta":
         theta_rerun()
+    elif what in ("a6_step0", "a6_panel"):
+        CODE = A6_CODE                              # amendment 6: calib-size 394e683
+        {"a6_step0": a6_step0, "a6_panel": a6_panel}[what]()
     elif what in ("gptq_step0", "gptq_measure", "gptq_panel"):
         CODE = GPTQ_CODE                            # amendment 5: calib-size 8dbe2e4
         {"gptq_step0": gptq_step0, "gptq_measure": gptq_measure, "gptq_panel": gptq_panel}[what]()
