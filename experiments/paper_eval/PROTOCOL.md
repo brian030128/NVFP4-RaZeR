@@ -2583,3 +2583,84 @@ touched, including the co-author's `<Base>-GPTQ-NVFP4` repositories.
 - **Record:** the addendum in `results/paper_eval/hf_calib1k/HF_UPLOAD.md`, with `stage_a1.json` (sanitized),
   `upload_a1.json`, `cards_a1.json`, `token_check_a1.json` and the updated cards. The record files were checked
   in-process: 0 exact-token, prefix or token-pattern hits.
+
+## Part AC (registered 2026-10-24, at its commit, before any run; the user's instruction, relayed): the paper's reruns at the 1,024-window calibration
+
+The paper switches FlipQuant, FOCUS and GPTQ‡ to part AA's 1,024-window calibration:
+- FlipQuant: the maps `fq8_1024` / `fq16_1024` / `fq256_1024` under `RUN/calib_size/<model>/`;
+- FOCUS-1k states and GPTQ‡-1k codes: on /vault.
+
+The paper models are Llama-3.2-1B-Instruct, Llama-3.1-8B-Instruct, Mistral-7B-Instruct-v0.3, Nemotron-Nano-9B-v2,
+Phi-4 and Qwen3.8-27B; the Qwen3-1.7B / 8B are not in this part.
+- **Order (the user's):** items 2–9, then 11–13, then item 1 (MMLU) last. Item 10 (GB200) is the co-author's.
+- **Rules:**
+  - Before an item runs, a sub-registration below gives its exact commands and checks.
+  - Each item starts with a step 0 that reproduces, or drift-checks, its existing 256-window record. A failed check
+    stops the item.
+  - Commits are local. After each item: push paper-eval, and push the flipquant feature branch `paper-1k-reruns`
+    (never main) with the item's report in `results/paper_1k/<item>/` and an index, scanned before every push for
+    tokens, local paths and host names.
+  - No HF upload; no edit to the paper project.
+  - /home keeps its 10 GB floor; large outputs go to /vault/flipquant_paper_eval/; nothing is deleted.
+  - One GPU, jobs sequential. Timing items run on an idle GPU, with no ncu and no clock locking; power, clocks and
+    driver are recorded.
+- **Harnesses not on this machine (checked at registration),** reported to the coordinator and not re-implemented;
+  the part continues with the next item:
+  - item 9's unified K-tile re-measurement (`~/d_ktile_unify_results` of the GPUtw pod);
+  - item 13's gradient-check code (flipquant aab768f / 3f7f4e3; in no local repository or remote branch).
+  - Item 1's MMLU is `evaluation.downstream` (MMLU 5-shot, lm-eval 0.4.11), present in paper-sm120-runs 4bbe0b1; its
+    step 0 must reproduce a published 256 cell exactly before any 1k run.
+- **Items:**
+  - **2, tab:latency SM120 rows and the memory paragraph.** Part A / W's protocol, unchanged:
+    - `evaluation.latency prefill`; shapes 1x128 … 1x8192 and 4x2048; 7 repetitions; eager and CUDA graph per
+      process; 5 rounds; one process per model / policy / round; order `random.Random(20260928 + r).shuffle`; build_V;
+      A's registered checks.
+    - 6 models × 7 policies (BF16, NVFP4, FO6, FO6 (wB), FQ 8x64 / 16x64 / 256x64 with the 1k maps), in one session.
+    - A drift anchor: Mistral FO6 and FQ16 with the release map, 5 rounds, against part A's records.
+    - Memory: part B's `mem_probe.py` per model × policy (installed bytes, allocated after the load, peak during a
+      1x2048 prefill).
+  - **3, tab:ablation at 1k:**
+    - Random (3 seeds), activation-weighted and one-shot-gradient maps for Nemotron and Qwen3.8-27B × 3 tiles, matched
+      per layer to the 1k maps' E0M3 counts, with statistics and gradients from the 1k windows.
+    - Native WikiText-2 / C4 PPL, ΔNLL vs FO6 ± 2 SE; the FlipQuant row is the 1k maps.
+    - Step 0: one 256-window ablation map rebuilt bitwise equal.
+  - **4, tab:ptq at 1k for Nemotron and Qwen3.8-27B:**
+    - Round-3 GPTQ (activation-quantized calibration) on the 1k windows: NVFP4 and FO6 codes.
+    - FlipQuant trained on the GPTQ candidates at 1k (release hyperparameters, 5 epochs; Qwen3.8-27B
+      `--teacher-host`).
+    - Hadamard block-16 with FlipQuant trained in the rotated basis at 1k.
+    - Native PPL and GSM8K (`gsm8k_llama`, the ptq_gsm8k_lmeval harness).
+    - The re-check: the 1k RTN FQ16 map on the 1k GPTQ candidates, PPL.
+    - Reused: RTN rows from the main 1k records; Hadamard NVFP4 / FO6 unchanged.
+    - Step 0: one 256 round-3 GPTQ code digest reproduced.
+  - **5, tab:app-gemm:**
+    - flipquant gemm-bench 505bcf8 `evaluation.gemm_time`, 6 models × 3 tiles × T = 1 … 8192.
+    - Tags from the 1k maps: per projection, its median-share and its max module; the same tile table and fallbacks;
+      `gemm_time_report`.
+    - Step 0: one model with the release maps against its published row.
+  - **6, tab:app-native at 1k:**
+    - Fake-quant PPL for Llama-1B, Llama-8B, Mistral, Nemotron and Phi-4 × 3 tiles with the 1k maps, on the native 1k
+      PPL windows; the native − simulated paired ΔNLL ± 2 SE and the agreement count.
+    - Routes: RUN/fakeppl, and D7-L for the Llamas.
+    - Step 0: one 256 cell reproduced.
+  - **7, D.6:** the readback (`--ownership-check`) of the 18 1k maps: element totals, mismatches, a negative control.
+  - **8, D.4:** the Mistral 1k maps' real tags vs random placement at their share (the C3v / amendment 19 method).
+    Step 0: amendment 19's release-map number drift-checked.
+  - **9, tab:app-ktile / tab:app-c2 PRO 6000 rows:** harness not here; reported, not run unless the coordinator
+    decides.
+  - **11, tables C.2 / C.3:** a clean re-measurement of the 1k calibration cost.
+    - 6 models × 3 tiles on an idle GPU; deterministic, no dev set, from launch to the written map, phases recorded;
+      Qwen3.8-27B `--teacher-host`, recorded.
+    - Every map must be bitwise equal to its part AA / amendment 6 map.
+  - **12, tab:app-robust at 1k, Mistral 16x64:**
+    - Seeds 1 and 2 (non-deterministic); FineWeb-Edu, UltraChat and WikiText-2 train with 1,024 sequences each,
+      13-gram-checked against the evaluation sets as in the paper; flipquant calib-robustness 932e01b.
+    - Reported: paired ΔNLL vs the 1k paper map, E0M3 share, Jaccard index.
+    - Step 0: one 256 row reproduced or drift-checked.
+  - **13, F.1 gradient check at 1k:** code not here; reported, not re-implemented unless the coordinator decides.
+  - **1 (last), MMLU 5-shot:**
+    - 30 runs: FQ × 3 tiles, FOCUS-1k and GPTQ‡-1k, × 6 models.
+    - The colleague's spec: lm-eval 0.4.11, mmlu 5-shot, no chat template, acc × 100.
+    - Step 0: a published 256 cell reproduced exactly (e.g. Llama-1B FQ16 = 41.40).
+- **Messages:** after each item a short summary with both hashes, read back after the commit; after item 2, the overall
+  ETA.
