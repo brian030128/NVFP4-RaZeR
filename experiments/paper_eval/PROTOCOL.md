@@ -2507,3 +2507,43 @@ touched, including the co-author's `<Base>-GPTQ-NVFP4` repositories.
   verified upload.
 - **Record:** results/paper_eval/hf_calib1k/ (HF_UPLOAD.md, the cards, and the records sanitized: no raw-byte match
   is quoted). The record files were checked in-process: 0 exact-token, prefix or token-pattern hits.
+
+### Part AB, amendment 1 (registered 2026-10-24, at its commit, before anything is staged or uploaded; the user's request, relayed): the amendment 6 maps on Hugging Face
+
+- **Request:** add part AA amendment 6's maps (FlipQuant 8x64 and 256x64 at 1,024 windows; 8 models, 16 files) to the
+  existing `edgeai-lab/<Base>-FlipQuant-Calib1k` repositories, which hold only `flipquant_16x64.pt` and are public, in
+  the layout of the 256-window `<Base>-FlipQuant` repositories.
+  - Every commit to these repositories is public immediately (the user's request).
+  - No other repository is touched, and no visibility is changed.
+  - If the permission system refuses a commit to a public repository, the part stops and is reported; nothing works
+    around it.
+- **Sources,** verified against their amendment 6 job records (a fresh sha256): `RUN/calib_size/<model>/fq8_1024/map.pt`
+  and `fq256_1024/map.pt`. The meta is cleaned as for the 16x64 map (paths relative, owner and reference
+  implementation's branch / commit removed), with the tiles and every tensor record bit-identical.
+- **Cards:** `README.md` and `ppl_summary.json` regenerated for the three tiles, with the numbers from part AA's record
+  at paper-eval 5dcb1ff:
+  - the three maps' sha256 and E0M3 shares;
+  - the settings of the two new tiles (640 steps, the same 1,024 windows);
+  - per tile: PPL, zero-shot and GSM8K against its 256-window version, against FourOverSix, and (8x64, 256x64)
+    against the 16x64 map;
+  - a note on 256x64: its high E0M3 share and its PPL against the 16x64 map, with significance as measured;
+  - the file table with every sha256.
+
+  The 16x64 map and the license files are unchanged.
+- **Gates, as for part AB:**
+  - each source's sha256 equals its job record; tiles and tensor records bit-identical;
+  - the scans of every staged file (the maps' metadata, names and raw bytes: no hit; text files: only the accepted
+    kinds);
+  - the exact-token check (0 hits).
+
+  Anything outside the rules stops the part.
+- **Upload:** one commit per repository (8 in all), adding the two maps and updating README.md and ppl_summary.json.
+  The retries on HTTP 429 are gentle: at most one commit attempt per 10 minutes, at most 6 per repository, and any
+  other error stops.
+- **Verification, without a token:**
+  - the file list;
+  - every file's sha256 by download (all files are under 1 GiB);
+  - README equal to staged;
+  - the head;
+  - the Hub card check.
+- **Record:** an addendum to `results/paper_eval/hf_calib1k/HF_UPLOAD.md` with its records; push paper-eval.
