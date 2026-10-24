@@ -361,6 +361,11 @@ def main():
           f"C4 {dn((l8.get('nll') or {}).get('c4'))}).",
           "- **The Qwen3.8-27B FOCUS deviation:** its 1,024 / 2,048 runs and the 256 control ran locally with offloaded "
           "AdamW on one GPU, not on 2 x H200 like its published 256 state; only the summation order differs.",
+          "- **FlipQuant 8x64 / 256x64 at 1,024 windows** (pooled): vs their 256, GSM8K "
+          f"{pv('FQ8-1k vs FQ8-256')[1]} / {pv('FQ256-1k vs FQ256-256')[1]}; vs FQ16-1k, GSM8K "
+          f"{pv('FQ8-1k vs FQ16-1k')[1]} / {pv('FQ256-1k vs FQ16-1k')[1]} and zero-shot {pv('FQ8-1k vs FQ16-1k')[0]} / "
+          f"{pv('FQ256-1k vs FQ16-1k')[0]}. 8x64 gains a little from more windows, 256x64 does not, and 16x64 stays the "
+          "best tile at 1,024. Their E0M3 shares at 1,024 are 2.3–11.3 % (8x64) and 7.0–39.7 % (256x64).",
           "- **Data draw:** FlipQuant is deterministic, but a different window draw was not tried.", ""]
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "README.md").write_text("\n".join(L) + "\n")

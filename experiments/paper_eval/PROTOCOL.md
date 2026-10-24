@@ -2449,3 +2449,32 @@ touched, including the co-author's `<Base>-GPTQ-NVFP4` repositories.
 
   calib_size.json, REPORT.md and the flipquant README are updated, and paper-eval and flipquant calib-size are pushed.
 - **HF:** the new maps go into no HF repository without the coordinator's OK.
+
+### Part AA, amendment 6: the run (2026-10-23 08:25 UTC – 2026-10-24 05:37 UTC); every gate passed
+
+- **Step 0 (08:25–08:45 UTC): passed.** Llama-1B 8x64 and 256x64 at 256 windows on calib-size 394e683:
+  - each map recalibrated with part P's command has the same trainer map sha256 as part P's, and identical tiles;
+  - part P's maps of both tiles, evaluated on calib-size, give zero-shot (six tasks), GSM8K (2,638 / 2,638 samples,
+    date pinned) and PPL identical to parts X / Y / P.
+- **Panel:** all 16 rows (8 models × 8x64 / 256x64 at 1,024) and the 4 Qwen3 GSM8K 256 references. Every check
+  passed: each run's fit extension equals the windows file, and parts X / Y's record checks with the kernel families
+  mixed_wB_ko / mixed256_ko.
+- **E0M3 share at 1,024** (the gate is 60 %):
+  - 8x64: 2.3–11.3 %;
+  - 256x64: 7.0–39.7 %, the highest Llama-1B's 39.7 %.
+  - Every tile's share grows 4–9× from its 256-window map.
+- **Memory:** Qwen3.8-27B with the host teacher peaked at 91.0 GiB allocated and 95,500 MiB on the device (8x64); no
+  OOM.
+- **ETA:** 21.5 h after Llama-1B; the panel took 20.5 h. Part AB's parallel staging and uploads did not slow the GPU
+  jobs: Llama-1B's 8x64 calibration took 223 s, the same as its FQ16-1k.
+- **GPU time:** 21.2 h (calibration 13.7 h, zero-shot 1.9 h, GSM8K 4.5 h, PPL 0.3 h, the Qwen3 references 0.8 h).
+- **Results, pooled over the eight models (8x64 / 256x64):**
+  - vs their 256: GSM8K +0.77* / −0.26, zero-shot −0.03 / +0.09;
+  - vs FQ16-1k: GSM8K −0.63 (p = 0.063) / −1.39*, zero-shot −0.06 / −0.24*;
+  - vs FourOverSix: GSM8K +1.54* / +0.79*, zero-shot +0.77* / +0.58*;
+  - vs GPTQ‡-1k: GSM8K +0.20 / −0.56, zero-shot +0.68* / +0.50*;
+  - vs FOCUS-1k: GSM8K +1.26* / +0.50 (without Qwen3.8-27B: +0.38 / −0.58), zero-shot −0.22* / −0.41*.
+
+  256x64-1k's NLL is above FQ16-1k's beyond 2 SE on seven of the eight models; 8x64-1k is level with FQ16-1k.
+- **Report:** results/paper_eval/calib_size/ (REPORT.md, STEP0.md, calib_size.json `a6`).
+- **HF:** the new maps are in no HF repository (the coordinator's condition).

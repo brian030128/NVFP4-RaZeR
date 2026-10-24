@@ -57,3 +57,23 @@ On flipquant calib-size 8dbe2e4.
 - PPL vs part P's record: per-window NLL equal on wiki (141 windows): True, c4 (256 windows): True.
 
 **Amendment 5's step 0: passed.**
+
+## Amendment 6, step 0: FlipQuant 8x64 / 256x64
+
+On flipquant calib-size 394e683; Llama-3.2-1B-Instruct at the release 256 windows.
+
+**8x64.** Recalibrated with part P's command: trainer map sha256 `614f0dc41fcc3356…`, part P's `614f0dc41fcc3356…`: **equal**; tiles equal: True (E0M3 share 2.03 %, job 98 s).
+
+Part P's 8x64 map evaluated on calib-size:
+- zero-shot vs part X's record, per task: piqa equal, hellaswag equal, winogrande equal, arc_easy equal, arc_challenge equal, lambada_openai equal;
+- GSM8K (date pinned) vs part Y's samples: 2,638 / 2,638 identical;
+- PPL vs part P's record: per-window NLL equal on wiki (141 windows): True, c4 (256 windows): True.
+
+**256x64.** Recalibrated with part P's command: trainer map sha256 `648d777cd0acce56…`, part P's `648d777cd0acce56…`: **equal**; tiles equal: True (E0M3 share 11.38 %, job 86 s).
+
+Part P's 256x64 map evaluated on calib-size:
+- zero-shot vs part X's record, per task: piqa equal, hellaswag equal, winogrande equal, arc_easy equal, arc_challenge equal, lambada_openai equal;
+- GSM8K (date pinned) vs part Y's samples: 2,638 / 2,638 identical;
+- PPL vs part P's record: per-window NLL equal on wiki (141 windows): True, c4 (256 windows): True.
+
+**Amendment 6's step 0: passed.**

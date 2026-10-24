@@ -1056,7 +1056,7 @@ def cards():
     st = json.loads((RECS / "stage.json").read_text())
     md = MarkdownIt("commonmark").enable("table")
     out = {}
-    for rid in up["repos"]:
+    for rid in [r for r, d in up["repos"].items() if d.get("verified")]:     # an unverified repository has no card yet
         card = ModelCard.load(rid, repo_type="model")
         staged = (Path(st["repos"][rid]["folder"]) / "README.md").read_text()
         try:
@@ -1089,6 +1089,171 @@ def status():
     return rec
 
 
+
+def nonhf_hits():
+    """The codes files' raw-byte hits of a pattern other than the hf_ token pattern (accepted under the earlier rule's
+    extension): repository, pattern class, length, tensor and field; the matched bytes are never quoted."""
+    st = json.loads((RECS / "stage.json").read_text())
+    out = []
+    for rid, d in st["repos"].items():
+        if d["kind"] != "gptq":
+            continue
+        raw = [h for h in d["scan"] if h["where"].startswith("raw bytes @")
+               and not re.fullmatch(r"hf_[A-Za-z0-9]{20,}", h["match"], re.I)]
+        if not raw:
+            continue
+        path = Path(d["folder"]) / CODES_NAME
+        mem, owner = HS.members(path), HS.storage_owner(path)
+        for h in raw:
+            off = int(h["where"].split("@")[1])
+            end = off + len(h["match"].encode())
+            m = next((x for x in mem if x[1] <= off and end <= x[2]), None)
+            k = m[0].rsplit("/", 1)[-1] if m and "/data/" in m[0] else None
+            mod, field, _ = owner.get(k, (None, None, None))
+            out.append(dict(repository=rid, pattern_class=H.pattern_class(h["match"]), length=len(h["match"]),
+                            tensor=mod, field=field))
+    return out
+
+
+def visibility_now():
+    """Read-only, without a token: each repository's anonymous API status; for a public one also its file list, README
+    and head against the verified upload."""
+    from huggingface_hub import HfApi, hf_hub_download
+    st = json.loads((RECS / "stage.json").read_text())
+    up = json.loads((RECS / "hf_upload.json").read_text())
+    anon = HfApi(token=False)
+    out = {}
+    for rid in [repo_id(m, k) for m in ORDER for k in KINDS]:
+        code = FH.anonymous_status(rid)
+        ur = up["repos"].get(rid, {})
+        row = dict(anonymous_http=code, visibility={401: "private", 200: "public"}.get(code, f"HTTP {code}"),
+                   upload_verified=ur.get("verified"), verified_head=ur.get("head"), checked_utc=now())
+        if code == 200:
+            info = anon.model_info(rid)
+            files = sorted(x.rfilename for x in info.siblings)
+            with tempfile.TemporaryDirectory(dir="/dev/shm") as tmp:
+                p = hf_hub_download(rid, "README.md", revision=info.sha, cache_dir=tmp, token=False, force_download=True)
+                readme = FH.sha(p)
+            row.update(head=info.sha, head_equal_verified=info.sha == ur.get("head"),
+                       file_list_equal_staged=set(files) - {".gitattributes"} == set(st["repos"][rid]["files"]),
+                       readme_equal_staged=readme == st["repos"][rid]["files"]["README.md"]["sha256"])
+        out[rid] = row
+        print(rid, {k: v for k, v in row.items() if k != "checked_utc"}, flush=True)
+    (RECS / "visibility.json").write_text(json.dumps(dict(checked_utc=now(), repos=out), indent=1) + "\n")
+    return out
+
+
+def record():
+    """results/paper_eval/hf_calib1k/: HF_UPLOAD.md, the records (stage.json and the hit records sanitized: raw-byte
+    matches by pattern class only) and each repository's card and summary."""
+    st = json.loads((RECS / "stage.json").read_text())
+    up = json.loads((RECS / "hf_upload.json").read_text())
+    cj = json.loads((RECS / "cards.json").read_text())
+    tok = json.loads((RECS / "token_check.json").read_text())
+    rc = rule_check()
+    (RECS / "rule_check.json").write_text(json.dumps(rc, indent=1) + "\n")
+    nh = nonhf_hits()
+    (RECS / "nonhf_hits.json").write_text(json.dumps(nh, indent=1) + "\n")
+    vis = visibility_now()
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "stage.json").write_text(json.dumps(H.sanitized(st), indent=1, ensure_ascii=False, default=str) + "\n")
+    for name in ("hf_upload.json", "cards.json", "rule_check.json", "token_check.json", "nonhf_hits.json", "visibility.json"):
+        shutil.copyfile(RECS / name, OUT / name)
+    for rid, d in st["repos"].items():
+        c = OUT / "cards" / rid.split("/", 1)[1]
+        c.mkdir(parents=True, exist_ok=True)
+        for f in ("README.md", "ppl_summary.json"):
+            shutil.copyfile(Path(d["folder"]) / f, c / f)
+    checked = json.loads((RECS / "visibility.json").read_text())["checked_utc"]
+    L = ["# Hugging Face upload: the part AA 1,024-window artifacts (part AB, 2026-10-23)", "",
+         "The user's decision (relayed by the coordinator, 2026-10-23): the eight part AA models' 1,024-window calibrations "
+         "as 24 new **private** repositories under `edgeai-lab`: `<Base>-FlipQuant-Calib1k` (the FQ16-1k map), "
+         "`<Base>-FOCUS-NVFP4-Calib1k` (the FOCUS-1k state) and `<Base>-GPTQ-BF16Calib-NVFP4-Calib1k` (the GPTQ‡-1k "
+         "codes). PROTOCOL.md part AB; script `experiments/paper_eval/hf_calib1k.py`.",
+         "- **Account:** checked first (`edgeai-lab`); no token was printed or changed. No existing repository was touched.",
+         "- **Order of operations:** each repository was created private and checked private (anonymous HTTP 401) before "
+         "any file went up, then uploaded and verified.",
+         "- **Verification:** every file's sha256 against the staged file's: a download into /dev/shm for files up to "
+         "1 GiB, the Hub's server-side LFS sha256 and size for larger ones.", "",
+         "## Uploaded", "", f"Visibility: at {checked}, without a token.", "",
+         "| repository | kind | files | sha256 = staged (method) | visibility now | anonymous at upload | head | card YAML "
+         "(Hub) | README = staged |", "|---|---|---:|---|---|---:|---|---|---|"]
+    for rid in [repo_id(m, k) for m in ORDER for k in KINDS]:
+        d = up["repos"].get(rid, {})
+        if not d.get("verified"):
+            L.append(f"| `{rid}` | {st['repos'][rid]['kind']} | — | not committed | {vis[rid]['visibility']} | "
+                     f"{d.get('anonymous_http_before_upload', '—')} | — | — | — |")
+            continue
+        n_dl = sum(f["method"] == "download sha256" for f in d["files"].values())
+        n_lfs = len(d["files"]) - n_dl
+        ok = all(f["equal"] for f in d["files"].values())
+        c = cj.get(rid, {})
+        L.append(f"| `{rid}` | {st['repos'][rid]['kind']} | {len(d['files'])} | {'equal' if ok else 'DIFFERS'} "
+                 f"({n_dl} downloaded" + (f", {n_lfs} by Hub LFS sha256" if n_lfs else "") + f") | {vis[rid]['visibility']} | "
+                 f"{d['anonymous_http']} | `{d['head'][:12]}` | {c.get('hub_yaml_valid')} | {c.get('readme_equal_to_staged')} |")
+    L += ["", "## Sources", "",
+          "Each source was verified against its part AA job record by a fresh sha256 of the whole file before staging.",
+          "- **Maps:** `fq16_1024/map.pt`, against `map_file_sha256`. The meta was cleaned as for the earlier FlipQuant "
+          "repositories: the run and calibration-record paths are relative, the GitHub owner is removed from the "
+          "extension reference, and the reference implementation's branch and commit are removed. The tiles and every "
+          "tensor record are bit-identical; both sha256 are in each card.",
+          "- **FOCUS states:** as is, against `state_sha256` (the pilot's two in RUN, the others on /vault).",
+          "- **GPTQ‡ codes:** as is, against `cache_sha256`. The code digest equals the calibration's, the key is the "
+          "main-table variant at 1,024 windows, and the card's PyTorch snippet reproduces FlipQuant's dequantization bit "
+          "for bit.",
+          "- **Staging:** the cards, summaries, license files and cleaned maps were written to /home/dev/calib1k_hf. The "
+          "FOCUS states and the codes files were symbolic links to their verified sources (/home's 10 GB floor), so "
+          "every scan, hash and upload read the source.", "",
+          "## Scans", "",
+          "The earlier uploads' patterns (local paths, the host, user names, private repository names, tokens, e-mail "
+          "addresses, pointers to a reference implementation) over every staged file: the maps' metadata strings, tile "
+          "names and raw bytes; the states' metadata, record names and raw bytes; the codes files' settings strings, "
+          "module names, record names and raw bytes; every line of the text files.",
+          "- **Maps and FOCUS states:** no hit.",
+          "- **Text files:** only the kinds accepted before (Meta's reporting address inside the official "
+          "`USE_POLICY.md`; the words “commit” / “branch” in the FlipQuant card's own sentences).",
+          "- **Codes files:** the GPTQ upload's binary rule (2026-10-15, with its extension). A raw-byte hit is accepted "
+          "only if it lies inside a tensor-storage member backing a codes tensor (`q` or `s`), the file's pickle, "
+          "metadata strings and record names have no hit, the file's sha256 equals its record, and the exact-token "
+          "check is clean.", "",
+          "| repository | raw-byte hits | inside `s` | inside `q` | metadata hits | within the rule |",
+          "|---|---:|---:|---:|---:|---|"]
+    for rid, d in st["repos"].items():
+        if d["kind"] != "gptq":
+            continue
+        bf = d["raw_hits"]["by_field"]
+        meta = len([h for h in d["scan"] if h["file"].endswith(".pt") and not h["where"].startswith("raw bytes")])
+        L.append(f"| `{rid.split('/')[1]}` | {d['raw_hits']['raw_hits']:,} | {bf.get('s', 0):,} | {bf.get('q', 0):,} | "
+                 f"{meta} | {'yes' if not rc[rid]['problems'] else 'NO'} |")
+    L += ["", "Hits of a pattern other than the token pattern (accepted under the extension; the matched bytes are not "
+          "quoted):", ""]
+    L += [f"- `{h['repository'].split('/')[1]}`: a {h['pattern_class']} ({h['length']} bytes) in `{h['tensor']}` "
+          f"`{h['field']}`" for h in nh]
+    L += ["", f"**Exact-token check:** every staged file's bytes were searched in-process for the {tok['tokens_checked']} "
+          "Hugging Face tokens in this machine's token files and their 15-character prefixes; the tokens were never "
+          f"printed, logged or written: {'0 hits' if tok['all_zero'] else 'HITS'} on all {len(tok['files'])} files.", "",
+          "## Events", "",
+          "- **Commit rate limit.** The 24th repository's commit was refused with HTTP 429 (\"repository commit creation, "
+          "128 per hour\") after 46 commits by this upload; the limit is treated as account-wide. upload_large_folder "
+          "retried about twice a second. The coordinator authorized stopping the uploader (12:02 UTC), then one commit "
+          "attempt at least 65 minutes later, at most one per 10 minutes and six in all.",
+          "- **Private storage limit.** The first attempt (13:08 UTC) was refused with HTTP 400: \"Private storage limit "
+          "reached for user edgeai-lab\" (the 23 verified repositories hold 86.7 GB). No further attempt was made; the "
+          "decision went to the user.", ""]
+    L += ["## Licenses", "",
+          "As in the earlier repositories of each model: the Llama 3.2 / 3.1 Community License files (`LICENSE`, "
+          "`USE_POLICY.md`, `NOTICE`; “Built with Llama”; every name starts with “Llama”), the NVIDIA Open Model License "
+          "and its `NOTICE` (Nemotron), Apache-2.0 (Qwen3; Mistral-7B-Instruct-v0.3 and Qwen3.8-27B with the apache.org "
+          "text, as their base repositories have no license file) and MIT (Phi-4).", "",
+          "## Visibility", "",
+          "This session made nothing public. The user changes visibility; the table above is this session's read-only "
+          "check without a token (`visibility.json`; for a public repository also its file list, README and head "
+          "against the verified upload).", "",
+          "Files here: `stage.json` (sanitized), `hf_upload.json`, `cards.json`, `rule_check.json`, `token_check.json`, "
+          "`nonhf_hits.json`, `visibility.json`, `cards/<repo>/{README.md, ppl_summary.json}`.", ""]
+    (OUT / "HF_UPLOAD.md").write_text("\n".join(L))
+    print("\n".join(L[:30]))
+
 if __name__ == "__main__":
     what = sys.argv[1] if len(sys.argv) > 1 else ""
     if what == "stage":
@@ -1099,4 +1264,5 @@ if __name__ == "__main__":
     elif what == "upload_gentle":
         upload_gentle(sys.argv[2], float(sys.argv[3]))
     else:
-        {"tokens": tokens, "check": check, "cards": cards, "status": status}.get(what, lambda: sys.exit(__doc__))()
+        {"tokens": tokens, "check": check, "cards": cards, "status": status, "record": record}.get(
+            what, lambda: sys.exit(__doc__))()

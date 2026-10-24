@@ -568,7 +568,9 @@ def findings_md(rec):
          f"{g('FQ16-2k vs GPTQ‡-2k', 'gsm8k')} at 2,048; zero-shot {g('FQ16-256 vs GPTQ‡-256', 'zeroshot')} / "
          f"{g('FQ16-1k vs GPTQ‡-1k', 'zeroshot')} / {g('FQ16-2k vs GPTQ‡-2k', 'zeroshot')}. ΔNLL is beyond 2 SE in "
          "FlipQuant's favour on both corpora for all eight models at all three sizes.",
-         f"- **FlipQuant 8x64 / 256x64 at 1,024 windows (amendment 6).** vs their 256: GSM8K "
+         f"- **FlipQuant 8x64 / 256x64 at 1,024 windows (amendment 6): 8x64 gains GSM8K from more windows, 256x64 "
+         f"does not, and 16x64 stays the best tile at 1,024.** 256x64-1k has a higher NLL than FQ16-1k on seven of the "
+         f"eight models (beyond 2 SE); 8x64-1k is level with it. vs their 256: GSM8K "
          f"{g('FQ8-1k vs FQ8-256', 'gsm8k')} / {g('FQ256-1k vs FQ256-256', 'gsm8k')}, zero-shot "
          f"{g('FQ8-1k vs FQ8-256', 'zeroshot')} / {g('FQ256-1k vs FQ256-256', 'zeroshot')}. vs FQ16-1k: GSM8K "
          f"{g('FQ8-1k vs FQ16-1k', 'gsm8k')} / {g('FQ256-1k vs FQ16-1k', 'gsm8k')}, zero-shot "
@@ -594,7 +596,9 @@ def findings_md(rec):
          "  - Qwen3-1.7B trades WikiText-2 / C4 NLL for GSM8K with more math / code windows, FlipQuant more than FOCUS.",
          "  - Nemotron's FQ16-2k strict-match loss is format only (flexible-extract unchanged). Its GPTQ‡-2k loss vs "
          "GPTQ‡-256 (strict −4.09*, flexible −2.65*) is partly format: strict no-answer 60 → 87.",
-         "  - E0M3 shares grow with the steps (2,048: 6.8–17.2 %, Llama-1B 27.0 %; amendment 4).",
+         "  - E0M3 shares grow with the steps (2,048: 6.8–17.2 %, Llama-1B 27.0 %; amendment 4). At 1,024 for the other "
+         "tiles (amendment 6): 8x64 2.3–11.3 %, 256x64 7.0–39.7 % (Llama-1B 39.7 %, under the 60 % gate).",
+         "  - Qwen3-1.7B's 8x64 NLL also rises with more windows (ΔNLL WikiText-2 +0.023* vs its 256), as its FQ16's.",
          "- **GPU time of the part:** " + ", ".join(f"{k} {v / 3600:.1f} h" for k, v in cost.items())
          + f"; {sum(cost.values()) / 3600:.1f} h in all."
          + (" Amendment 5 (GPTQ‡, step 0 included): " + ", ".join(f"{k} {v / 3600:.1f} h" for k, v in gc.items())
