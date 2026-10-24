@@ -1,0 +1,415 @@
+"""Part AC (PROTOCOL.md): the reports of the paper's 1,024-window reruns, results/paper_eval/paper1k/<item>/.
+
+    python report_paper1k.py item2       # LATENCY.md, MEMORY.md, item2.json (tab:latency SM120 rows, the memory paragraph)
+
+The reports hold no local paths or host names, so that the same files can be copied to flipquant paper-1k-reruns.
+"""
+import json
+import statistics
+import subprocess
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import run_paper1k as P  # noqa: E402
+
+G = P.G
+RUN = G.RUN / "paper1k"
+OUT = G.RZ / "results" / "paper_eval" / "paper1k"
+GIB = 2 ** 30
+MODELS = [("llama3.2-1b-instruct", "Llama-3.2-1B-Instruct"), ("llama3.1-8b-instruct", "Llama-3.1-8B-Instruct"),
+          ("mistral-7b", "Mistral-7B-Instruct-v0.3"), ("nemotron-nano-9b-v2", "Nemotron-Nano-9B-v2"),
+          ("phi4-14b", "Phi-4"), ("qwen3.8-27b", "Qwen3.8-27B")]
+TITLE = dict(MODELS)
+POLS = ["bf16", "nvfp4", "fo6", "fo6-wB", "fq-8x64", "fq-16x64", "fq-256x64"]
+FQS = ["fq-8x64", "fq-16x64", "fq-256x64"]
+NAMES = {"bf16": "BF16", "nvfp4": "NVFP4", "fo6": "FourOverSix", "fo6-wB": "FourOverSix (wB)", "fq-8x64": "FlipQuant 8x64",
+         "fq-16x64": "FlipQuant 16x64", "fq-256x64": "FlipQuant 256x64"}
+COMPARE = [("fq-16x64", "fo6"), ("fq-8x64", "fo6"), ("fq-256x64", "fo6"), ("fq-8x64", "fo6-wB"), ("nvfp4", "fo6"),
+           ("fo6-wB", "fo6"), ("bf16", "fo6")]
+SHAPES = G.SHAPES.split(",")
+SHAPE = "1x2048"
+TABLE_ROWS = ["bf16", "nvfp4", "fo6", "fo6-wB", "fq-16x64", "fq-8x64", "fq-256x64"]
+#: the published 256-window rows: part A (58fe644) for four models, part W (277f59d) for the two Llamas
+W_COMMIT = "277f59d"
+PUBLISHED = {"llama3.2-1b-instruct": "W", "llama3.1-8b-instruct": "W", "mistral-7b": "A", "nemotron-nano-9b-v2": "A",
+             "phi4-14b": "A", "qwen3.8-27b": "A"}
+
+
+def git_json(commit, path):
+    return json.loads(subprocess.run(["git", "-C", str(G.RZ), "show", f"{commit}:{path}"], capture_output=True, text=True,
+                                     check=True).stdout)
+
+
+def pct(a, b):
+    return 100 * (a / b - 1)
+
+
+# ---------------------------------------------------------------------------------------------- item 2: latency
+def load_latency(root, models):
+    data = {}
+    for m in models:
+        for p in POLS:
+            d = RUN / root / m / p
+            for f in sorted(d.glob("round*.json")) if d.exists() else []:
+                r = json.loads(f.read_text())
+                if r.get("status") == "complete":
+                    data.setdefault(m, {}).setdefault(p, {})[int(f.stem[5:])] = r
+    return data
+
+
+def latency_tables(data):
+    """A's numbers (report_latency.main): per (model, policy, shape) the median over rounds of each process's graph
+    median, the eager one, and the paired ratios (median [min, max] over rounds)."""
+    rec = dict(ms={}, eager_ms={}, ratios={}, rounds={}, capture={}, weights_gib={})
+    for m, rr_all in data.items():
+        for p, rr in rr_all.items():
+            mode = "graph" if all("ms" in r["graph"].get(s, {}) for r in rr.values() for s in SHAPES) else "eager"
+            rec["capture"].setdefault(m, {})[p] = mode
+            rec["ms"].setdefault(m, {})[p] = {s: statistics.median(r[mode][s]["ms"] for r in rr.values()) for s in SHAPES}
+            rec["eager_ms"].setdefault(m, {})[p] = {s: statistics.median(r["eager"][s]["ms"] for r in rr.values())
+                                                    for s in SHAPES}
+            rec["rounds"].setdefault(m, {})[p] = sorted(rr)
+            rec["weights_gib"].setdefault(m, {})[p] = statistics.median(r["weights_gib"] for r in rr.values())
+        for a, b in COMPARE:
+            if a in rr_all and b in rr_all:
+                common = sorted(set(rr_all[a]) & set(rr_all[b]))
+                mode = "graph" if rec["capture"][m][a] == rec["capture"][m][b] == "graph" else "eager"
+                rows = {}
+                for s in SHAPES:
+                    v = [pct(rr_all[a][r][mode][s]["ms"], rr_all[b][r][mode][s]["ms"]) for r in common]
+                    rows[s] = dict(median=statistics.median(v), min=min(v), max=max(v), rounds=len(v))
+                rec["ratios"].setdefault(m, {})[f"{a} vs {b}"] = dict(
+                    mode=mode, shapes=rows, median_over_shapes=statistics.median(x["median"] for x in rows.values()))
+    return rec
+
+
+def record_checks(data, libs):
+    """A's registered checks, re-applied to every record (the driver stops on the first failure)."""
+    out = dict(records=0, failures=[])
+    for m, rr_all in data.items():
+        for p, rr in rr_all.items():
+            for r in rr:
+                out["records"] += 1
+                bad = G.check_fq_record(RUN / "latency" / m / p / f"round{r}.json", p, libs)
+                if bad:
+                    out["failures"].append(dict(model=m, policy=p, round=r, bad=bad))
+    return out
+
+
+def gpu_summary():
+    rows = [json.loads(x) for x in (RUN / "gpu_state.jsonl").read_text().splitlines() if x.strip()]
+    rows = [r for r in rows if r["job"].startswith("p1k_latency") or r["job"].startswith("p1k_memory")]
+    num = lambda k: [float(r[k]) for r in rows if r.get(k) not in (None, "", "[N/A]")]  # noqa: E731
+    return dict(jobs=len(rows), names=sorted({r["name"] for r in rows}), drivers=sorted({r["driver_version"] for r in rows}),
+                power_limits_w=sorted({r["power.limit"] for r in rows}), max_sm_mhz=sorted({r["clocks.max.sm"] for r in rows}),
+                boots=len({r["boot_id"] for r in rows}), first_utc=rows[0]["utc"], last_utc=rows[-1]["utc"],
+                pre_job_power_w=[min(num("power.draw")), max(num("power.draw"))],
+                pre_job_temp_c=[min(num("temperature.gpu")), max(num("temperature.gpu"))],
+                pre_job_sm_mhz=[min(num("clocks.sm")), max(num("clocks.sm"))],
+                pre_job_pstates=sorted({r["pstate"] for r in rows}))
+
+
+def record_gpu(data):
+    """The prefill records' own start / end snapshots (evaluation.latency)."""
+    t0, t1, lim, drv = [], [], set(), set()
+    for rr_all in data.values():
+        for rr in rr_all.values():
+            for r in rr.values():
+                t0.append(float(r["gpu"]["temperature.gpu"]))
+                t1.append(float(r["gpu_end"]["temperature.gpu"]))
+                lim.add(r["gpu"]["power.limit"])
+                drv.add(r["gpu"]["driver_version"])
+    if not t0:
+        return dict(start_temp_c=[None, None], end_temp_c=[None, None], power_limits=[], drivers=[])
+    return dict(start_temp_c=[min(t0), max(t0)], end_temp_c=[min(t1), max(t1)], power_limits=sorted(lim),
+                drivers=sorted(drv))
+
+
+def model_section(rec, m):
+    L = [f"## {TITLE[m]}", "", "| shape | " + " | ".join(NAMES[p] for p in POLS if p in rec["ms"][m]) + " |",
+         "|---" + "|---:" * len([p for p in POLS if p in rec["ms"][m]]) + "|"]
+    for s in SHAPES:
+        L.append(f"| {s} | " + " | ".join(f"{rec['ms'][m][p][s]:.2f}" for p in POLS if p in rec["ms"][m]) + " |")
+    keys = [f"{a} vs {b}" for a, b in COMPARE if f"{a} vs {b}" in rec["ratios"].get(m, {})]
+    L += ["", "| shape | " + " | ".join(f"{NAMES[k.split(' vs ')[0]]} vs {NAMES[k.split(' vs ')[1]]}" for k in keys) + " |",
+          "|---" + "|---:" * len(keys) + "|"]
+    for s in SHAPES:
+        L.append(f"| {s} | " + " | ".join(
+            f"{rec['ratios'][m][k]['shapes'][s]['median']:+.1f} % [{rec['ratios'][m][k]['shapes'][s]['min']:+.1f}, "
+            f"{rec['ratios'][m][k]['shapes'][s]['max']:+.1f}]" for k in keys) + " |")
+    modes = [p for p, v in rec["capture"][m].items() if v != "graph"]
+    if modes:
+        L += ["", f"Eager timings (no CUDA graph) for: {', '.join(modes)}."]
+    return L + [""]
+
+
+def anchor_section(out):
+    c = json.loads((RUN / "anchor_check.json").read_text())
+    L = ["## Step 0: the session-drift anchor (Mistral-7B-Instruct-v0.3, the release 16x64 map, against part A 58fe644)", "",
+         "Median over 5 rounds of each process's graph median (ms), this session against A, before the panel. Registered "
+         f"pass: every cell within ±{c['cell_tol_pct']:.0f} % of A's, and the FlipQuant 16x64 / FourOverSix ratio's median "
+         f"over shapes within ±{c['ratio_tol_pp']:.1f} pp of A's.", "",
+         "| shape | FourOverSix, now | A | Δ | FlipQuant 16x64 (release map), now | A | Δ | FQ16 vs FO6, now |",
+         "|---|---:|---:|---:|---:|---:|---:|---:|"]
+    for s in SHAPES:
+        a, b = c["cells"][f"fo6 {s}"], c["cells"][f"fq-16x64 {s}"]
+        L.append(f"| {s} | {a['new']:.2f} | {a['a']:.2f} | {a['pct']:+.2f} % | {b['new']:.2f} | {b['a']:.2f} | "
+                 f"{b['pct']:+.2f} % | {c['ratio_per_shape'][s]:+.2f} % |")
+    allp = [x["pct"] for x in c["cells"].values()]
+    L += ["", f"Cells against A: median {statistics.median(allp):+.2f} %, range [{min(allp):+.2f}, {max(allp):+.2f}] % "
+          f"(worst |Δ| {c['worst_cell_pct']:.2f} %). FQ16 vs FO6, median over shapes: {c['ratio_median_over_shapes']:+.2f} % "
+          f"now, {c['a_ratio_median_over_shapes']:+.2f} % in A. **{'PASS' if c['passed'] else 'FAIL'}.**", ""]
+    out["anchor"] = c
+    return L
+
+
+def combined_section(rec, out):
+    raw = {m: {p: rec["ms"][m][p][SHAPE] for p in TABLE_ROWS} for m, _ in MODELS}
+    out["combined_1x2048"] = dict(models=[m for m, _ in MODELS], ms=raw)
+    L = [f"## The combined {SHAPE} table: the six paper models, one session, the 1k maps", "",
+         "Raw medians over rounds (graph ms):", "", "| policy | " + " | ".join(t for _, t in MODELS) + " |",
+         "|---" + "|---:" * len(MODELS) + "|"]
+    for p in TABLE_ROWS:
+        L.append(f"| {NAMES[p]} | " + " | ".join(f"{raw[m][p]:.4f}" for m, _ in MODELS) + " |")
+    L += ["", "LaTeX, each cell rounded once to one decimal from the raw value above:", "", "```latex"]
+    for p in TABLE_ROWS:
+        L.append(f"{NAMES[p]} & " + " & ".join(f"{raw[m][p]:.1f}" for m, _ in MODELS) + r" \\")
+    L += ["```", ""]
+    return L, raw
+
+
+def summaries_section(rec, raw, out):
+    summ, L = {}, ["## Six-model summaries (part W's)", ""]
+    for key in ("fq-16x64 vs fo6", "fq-8x64 vs fo6", "fq-256x64 vs fo6", "fq-8x64 vs fo6-wB"):
+        per = {m: [rec["ratios"][m][key]["shapes"][s]["median"] for s in SHAPES] for m, _ in MODELS}
+        allv = [v for vv in per.values() for v in vv]
+        med = {m: rec["ratios"][m][key]["median_over_shapes"] for m, _ in MODELS}
+        at = {m: rec["ratios"][m][key]["shapes"][SHAPE]["median"] for m, _ in MODELS}
+        a_p, b_p = key.split(" vs ")
+        rom = {m: pct(raw[m][a_p], raw[m][b_p]) for m, _ in MODELS}
+        summ[key] = dict(range_all=[min(allv), max(allv)], per_model_median=med, at_1x2048_paired=at,
+                         at_1x2048_ratio_of_medians=rom)
+        L += [f"**{NAMES[a_p]} vs {NAMES[b_p]}** (paired within rounds; the per-shape value is the median over rounds):",
+              f"- Over all 8 shapes and six models: [{min(allv):+.2f}, {max(allv):+.2f}] %.",
+              "- Per-model median over the 8 shapes: " + "; ".join(f"{t} {med[m]:+.2f} %" for m, t in MODELS) + ".",
+              f"- At {SHAPE}, the paired ratio: [{min(at.values()):+.2f}, {max(at.values()):+.2f}] % ("
+              + "; ".join(f"{t} {at[m]:+.2f}" for m, t in MODELS) + ").",
+              f"- At {SHAPE}, the ratio of the medians: [{min(rom.values()):+.2f}, {max(rom.values()):+.2f}] % ("
+              + "; ".join(f"{t} {rom[m]:+.2f}" for m, t in MODELS) + ").", ""]
+    sp = {m: raw[m]["bf16"] / raw[m]["fq-16x64"] for m, _ in MODELS}
+    summ["bf16_over_fq16_1x2048"] = sp
+    L += [f"**BF16 / FlipQuant 16x64 at {SHAPE}** (ratio of the medians): [{min(sp.values()):.2f}, {max(sp.values()):.2f}] x ("
+          + "; ".join(f"{t} {sp[m]:.2f}x" for m, t in MODELS) + ").", ""]
+    out["six_model"] = summ
+    return L
+
+
+def published_section(rec, out):
+    """This session's panel against the published 256-window rows (A, W). The BF16 / NVFP4 / FourOverSix rows do not
+    depend on a map, so their offsets are this session's drift on each model; the FlipQuant rows add the map change."""
+    pub = dict(A=git_json(P.A_COMMIT, "results/paper_eval/latency/latency.json"),
+               W=git_json(W_COMMIT, "results/paper_eval/latency_llama/latency.json"))
+    cmp = {}
+    L = ["## Against the published 256-window rows", "",
+         "Published: part A (58fe644) for Mistral, Nemotron, Phi-4 and Qwen3.8-27B; part W (277f59d) for the two Llamas. "
+         "BF16, NVFP4 and FourOverSix do not use a map, so their offsets measure this session against the published one "
+         "on each model. The FlipQuant rows change the map as well (1,024 instead of 256 calibration windows).", "",
+         f"**Raw {SHAPE} medians, now / published, and Δ:**", "",
+         "| model | " + " | ".join(NAMES[p] for p in TABLE_ROWS) + " |", "|---" + "|---:" * len(TABLE_ROWS) + "|"]
+    for m, t in MODELS:
+        src = pub[PUBLISHED[m]]
+        cells = []
+        for p in TABLE_ROWS:
+            if p not in src["ms"].get(m, {}):
+                cells.append("—")
+                continue
+            new, old = rec["ms"][m][p][SHAPE], src["ms"][m][p][SHAPE]
+            per_shape = [pct(rec["ms"][m][p][s], src["ms"][m][p][s]) for s in SHAPES]
+            cmp.setdefault(m, {})[p] = dict(now_1x2048=new, published_1x2048=old, pct_1x2048=pct(new, old),
+                                            median_pct_over_shapes=statistics.median(per_shape),
+                                            range_pct_over_shapes=[min(per_shape), max(per_shape)])
+            cells.append(f"{new:.2f} / {old:.2f} ({pct(new, old):+.2f} %)")
+        L.append(f"| {t} ({PUBLISHED[m]}) | " + " | ".join(cells) + " |")
+    L += ["", "**Median over the 8 shapes of Δ (now vs published), per policy:**", "",
+          "| model | " + " | ".join(NAMES[p] for p in TABLE_ROWS) + " |", "|---" + "|---:" * len(TABLE_ROWS) + "|"]
+    for m, t in MODELS:
+        L.append(f"| {t} | " + " | ".join(f"{cmp[m][p]['median_pct_over_shapes']:+.2f} %" if p in cmp[m] else "—"
+                                          for p in TABLE_ROWS) + " |")
+    fixed = [cmp[m][p]["median_pct_over_shapes"] for m, _ in MODELS for p in ("bf16", "nvfp4", "fo6") if p in cmp[m]]
+    L += ["", f"Map-free rows (BF16, NVFP4, FourOverSix; {len(fixed)} model-policy medians): "
+          f"[{min(fixed):+.2f}, {max(fixed):+.2f}] %, median {statistics.median(fixed):+.2f} %.", "",
+          "**The paired FlipQuant vs FourOverSix ratio, median over shapes, now (1k maps) and published (256 maps):**", "",
+          "| model | " + " | ".join(f"{NAMES[k.split(' vs ')[0]]} vs {NAMES[k.split(' vs ')[1]]}"
+                                   for k in ("fq-16x64 vs fo6", "fq-8x64 vs fo6", "fq-256x64 vs fo6")) + " |",
+          "|---|---:|---:|---:|"]
+    ratio = {}
+    for m, t in MODELS:
+        src, cells = pub[PUBLISHED[m]], []
+        for k in ("fq-16x64 vs fo6", "fq-8x64 vs fo6", "fq-256x64 vs fo6"):
+            now, old = rec["ratios"][m][k]["median_over_shapes"], src["ratios"][m][k]["median_over_shapes"]
+            ratio.setdefault(m, {})[k] = dict(now=now, published=old, diff_pp=now - old)
+            cells.append(f"{now:+.2f} % / {old:+.2f} % ({now - old:+.2f} pp)")
+        L.append(f"| {t} | " + " | ".join(cells) + " |")
+    out["vs_published"] = dict(sources=dict(A=P.A_COMMIT, W=W_COMMIT), cells=cmp, fq_vs_fo6=ratio,
+                               map_free_median_range=[min(fixed), max(fixed)], map_free_median=statistics.median(fixed))
+    return L + [""]
+
+
+def e0m3_shares():
+    out = {}
+    for m, _ in MODELS:
+        for u, tag in P.UNITS.items():
+            j = json.loads((G.RUN / "calib_size" / m / f"{tag}_1024.job.json").read_text())
+            out.setdefault(m, {})[u] = dict(e0m3_share=j["e0m3_share"], map_sha256=j["map_file_sha256"])
+    return out
+
+
+# ---------------------------------------------------------------------------------------------- item 2: memory
+def memory_section(out):
+    L = ["# Part AC item 2: memory on the RTX PRO 6000 at 1k (the paper's memory paragraph)", "",
+         "Part B's probe (mem_probe.py, flipquant's loader and install, build_V) on flipquant calib-size d940fbf, with "
+         "the 1k maps; fo6-wB added to B's six policies. PROTOCOL.md part AC item 2.", "",
+         "- **Weights:** every parameter and buffer on the GPU after the load and install.",
+         "- **After load:** torch.cuda.memory_allocated.",
+         "- **Peak:** torch.cuda.max_memory_allocated during one 1x2048 eager prefill.", ""]
+    a = json.loads((RUN / "memory_anchor_check.json").read_text())
+    L += ["## Step 0: the memory anchor (Mistral, FlipQuant 16x64 with the release map, against part B's record)", "",
+          f"- Installed quantized linears equal: {a['installed_equal']}; whole model equal: {a['model_equal']}.",
+          f"- After load Δ {a['after_load_diff_gib']:+.4f} GiB; 1x2048 peak Δ {a['peak_diff_gib']:+.4f} GiB "
+          f"(tolerance ±{a['tol_gib']} GiB). **{'PASS' if a['passed'] else 'FAIL'}.**", "",
+          "## The panel", "",
+          "| model | policy | weights | quantized linears / BF16 | whole model / BF16 | after load | 1x2048 peak |",
+          "|---|---|---:|---:|---:|---:|---:|"]
+    mem, claims = {}, {}
+    for m, t in MODELS:
+        for p in POLS:
+            f = RUN / "memory" / m / f"{p}.json"
+            if f.exists():
+                r = json.loads(f.read_text())
+                q = r["quantized_linears"]
+                mem.setdefault(m, {})[p] = dict(model_bytes=r["model_bytes"], installed_bytes=q["installed_bytes"],
+                                                bf16_bytes=q["bf16_bytes"], installed_over_bf16=q["installed_over_bf16"],
+                                                allocated_after_load=r["allocated_after_load"],
+                                                peak_prefill_1x2048=r["peak_prefill_1x2048"], modules=q["modules"])
+        mm = mem.get(m, {})
+        if "bf16" not in mm:
+            continue
+        for p in POLS:
+            if p in mm:
+                r = mm[p]
+                L.append(f"| {t} | {p} | {r['model_bytes'] / GIB:.2f} GiB | {r['installed_over_bf16']:.4f} | "
+                         f"{r['model_bytes'] / mm['bf16']['model_bytes']:.3f} | {r['allocated_after_load'] / GIB:.2f} GiB | "
+                         f"{r['peak_prefill_1x2048'] / GIB:.2f} GiB |")
+        if all(p in mm for p in ("nvfp4", "fo6", "fo6-wB", *FQS)):
+            c = dict(installed_equal={}, model_equal={}, after_load_max_diff_gib=0.0, peak_max_diff_gib=0.0)
+            for fq in FQS:
+                for ref in ("nvfp4", "fo6", "fo6-wB"):
+                    x, y = mm[fq], mm[ref]
+                    c["installed_equal"][f"{fq} vs {ref}"] = x["installed_bytes"] == y["installed_bytes"]
+                    c["model_equal"][f"{fq} vs {ref}"] = x["model_bytes"] == y["model_bytes"]
+                    c["after_load_max_diff_gib"] = max(c["after_load_max_diff_gib"],
+                                                      abs(x["allocated_after_load"] - y["allocated_after_load"]) / GIB)
+                    c["peak_max_diff_gib"] = max(c["peak_max_diff_gib"],
+                                                 abs(x["peak_prefill_1x2048"] - y["peak_prefill_1x2048"]) / GIB)
+            c["byte_equal"] = all(c["installed_equal"].values()) and all(c["model_equal"].values())
+            c["within_tolerance"] = c["after_load_max_diff_gib"] <= P.MEM_TOL_GIB and c["peak_max_diff_gib"] <= P.MEM_TOL_GIB
+            c["installed_bytes"] = mm["fq-16x64"]["installed_bytes"]
+            c["bf16_over_installed"] = mm["bf16"]["installed_bytes"] / mm["fq-16x64"]["installed_bytes"]
+            c["bf16_over_model"] = mm["bf16"]["model_bytes"] / mm["fq-16x64"]["model_bytes"]
+            # against the published 256-window record (part B; part Z for the Llamas)
+            old = {}
+            for p in POLS:
+                f = G.RUN / "memory" / m / f"{p}.json"
+                if f.exists() and p in mm:
+                    o = json.loads(f.read_text())
+                    old[p] = dict(installed_equal=o["quantized_linears"]["installed_bytes"] == mm[p]["installed_bytes"],
+                                  model_equal=o["model_bytes"] == mm[p]["model_bytes"],
+                                  after_load_diff_gib=(mm[p]["allocated_after_load"] - o["allocated_after_load"]) / GIB,
+                                  peak_diff_gib=(mm[p]["peak_prefill_1x2048"] - o["peak_prefill_1x2048"]) / GIB)
+            c["vs_published"] = old
+            claims[m] = c
+    L += ["", "## The paper's memory claims, per model", ""]
+    for m, t in MODELS:
+        c = claims.get(m)
+        if c is None:
+            L.append(f"- {t}: incomplete")
+            continue
+        vp = c["vs_published"]
+        L += [f"- **{t}:**",
+              f"  - FlipQuant 8x64 / 16x64 / 256x64 install byte-identical quantized linears and whole models to NVFP4, "
+              f"FourOverSix and FourOverSix (wB): **{'yes' if c['byte_equal'] else 'NO'}** "
+              f"({c['installed_bytes']:,} B of quantized linears; BF16 / FlipQuant = {c['bf16_over_installed']:.2f}x for "
+              f"the linears, {c['bf16_over_model']:.2f}x for the whole model).",
+              f"  - After load and at the 1x2048 peak, FlipQuant differs from them by at most "
+              f"{c['after_load_max_diff_gib']:.4f} / {c['peak_max_diff_gib']:.4f} GiB. Within 0.02 GiB: "
+              f"**{'yes' if c['within_tolerance'] else 'NO'}**.",
+              f"  - Against the published 256 record (B / Z; {len(vp)} policies): bytes equal on "
+              f"{sum(v['installed_equal'] and v['model_equal'] for v in vp.values())} of {len(vp)}; after load "
+              f"[{min(v['after_load_diff_gib'] for v in vp.values()):+.4f}, {max(v['after_load_diff_gib'] for v in vp.values()):+.4f}] GiB; "
+              f"peak [{min(v['peak_diff_gib'] for v in vp.values()):+.4f}, {max(v['peak_diff_gib'] for v in vp.values()):+.4f}] GiB."]
+    allc = list(claims.values())
+    if len(allc) == len(MODELS):
+        L += ["", f"**All six models:** byte-identical installs {'yes' if all(c['byte_equal'] for c in allc) else 'NO'}; "
+              f"max after-load difference {max(c['after_load_max_diff_gib'] for c in allc):.4f} GiB, max peak difference "
+              f"{max(c['peak_max_diff_gib'] for c in allc):.4f} GiB; BF16 / FlipQuant whole model "
+              f"{min(c['bf16_over_model'] for c in allc):.2f}–{max(c['bf16_over_model'] for c in allc):.2f}x."]
+    out["memory"], out["memory_claims"], out["memory_anchor"] = mem, claims, a
+    return L
+
+
+def item2():
+    out_dir = OUT / "item2"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    data = load_latency("latency", [m for m, _ in MODELS])
+    rec = latency_tables(data)
+    libs = G.manifests()
+    checks = record_checks(data, libs)
+    out = dict(item=2, code=dict(flipquant="calib-size d940fbf", kernels="build_V"), latency=rec, checks=checks,
+               gpu_state=gpu_summary(), record_gpu=record_gpu(data), maps=e0m3_shares())
+    n = sum(len(rr) for x in data.values() for rr in x.values())
+    gs = out["gpu_state"]
+    L = ["# Part AC item 2: tab:latency SM120 rows at 1k (CUDA-graph prefill on the RTX PRO 6000)", "",
+         "PROTOCOL.md part AC item 2: part A / W's protocol unchanged (flipquant `evaluation.latency prefill`; shapes "
+         "1x128 … 1x8192 and 4x2048; 7 repetitions; eager and CUDA graph per process; 5 rounds; one process per model / "
+         "policy / round, in the order `random.Random(20260928 + r).shuffle`; build_V). Code: flipquant calib-size d940fbf "
+         "(its timed path, tile table and install byte-identical to part W's 6f5ad27). The FlipQuant rows use the 1k maps "
+         "of part AA / amendment 6 (sha256-checked against their job records).", "",
+         f"- **Records:** {n} of {len(MODELS) * len(POLS) * 5}; A's checks re-applied: "
+         f"{checks['records'] - len(checks['failures'])} pass, {len(checks['failures'])} fail.",
+         f"- **Session:** {gs['jobs']} jobs from {gs['first_utc']} to {gs['last_utc']}, {gs['boots']} boot; driver "
+         f"{', '.join(gs['drivers'])}; power limit {', '.join(gs['power_limits_w'])} W; max SM clock "
+         f"{', '.join(gs['max_sm_mhz'])} MHz; nothing locked or profiled.",
+         f"- **GPU before each job** (read-only nvidia-smi): {gs['pre_job_power_w'][0]:.1f}–{gs['pre_job_power_w'][1]:.1f} W, "
+         f"{gs['pre_job_temp_c'][0]:.0f}–{gs['pre_job_temp_c'][1]:.0f} °C, SM {gs['pre_job_sm_mhz'][0]:.0f}–"
+         f"{gs['pre_job_sm_mhz'][1]:.0f} MHz, pstates {', '.join(gs['pre_job_pstates'])}. In the prefill records: start "
+         f"{out['record_gpu']['start_temp_c'][0]:.0f}–{out['record_gpu']['start_temp_c'][1]:.0f} °C, end "
+         f"{out['record_gpu']['end_temp_c'][0]:.0f}–{out['record_gpu']['end_temp_c'][1]:.0f} °C.",
+         "- **E0M3 tile shares of the 1k maps** (8x64 / 16x64 / 256x64): " + "; ".join(
+             f"{t} {100 * out['maps'][m]['8x64']['e0m3_share']:.1f} / {100 * out['maps'][m]['16x64']['e0m3_share']:.1f} / "
+             f"{100 * out['maps'][m]['256x64']['e0m3_share']:.1f} %" for m, t in MODELS) + ".", "",
+         "Medians over rounds of each process's median (ms); ratios paired within rounds, median [min, max] over rounds.", ""]
+    L += anchor_section(out)
+    if len(rec["ms"]) == len(MODELS) and all(len(rec["ms"][m]) == len(POLS) for m, _ in MODELS):
+        tab, raw = combined_section(rec, out)
+        L += tab + summaries_section(rec, raw, out) + published_section(rec, out)
+    for m, _ in MODELS:
+        if m in rec["ms"]:
+            L += model_section(rec, m)
+    L += ["## Summary: the median over the 8 shapes of the paired ratio", "",
+          "| model | " + " | ".join(f"{NAMES[a]} vs {NAMES[b]}" for a, b in COMPARE) + " |", "|---" + "|---:" * len(COMPARE) + "|"]
+    for m, t in MODELS:
+        if m in rec["ratios"]:
+            L.append(f"| {t} | " + " | ".join(
+                f"{rec['ratios'][m][f'{a} vs {b}']['median_over_shapes']:+.1f} %" if f"{a} vs {b}" in rec["ratios"][m]
+                else "—" for a, b in COMPARE) + " |")
+    (out_dir / "LATENCY.md").write_text("\n".join(L) + "\n")
+    if (RUN / "memory_anchor_check.json").exists():
+        (out_dir / "MEMORY.md").write_text("\n".join(memory_section(out)) + "\n")
+    (out_dir / "item2.json").write_text(json.dumps(out, indent=1) + "\n")
+    print("\n".join(L[:12]))
+
+
+if __name__ == "__main__":
+    {"item2": item2}[sys.argv[1]]()

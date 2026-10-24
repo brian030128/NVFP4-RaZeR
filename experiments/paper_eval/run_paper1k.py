@@ -32,6 +32,10 @@ A_COMMIT = "58fe644"                           # part A's latency.json
 ANCHOR_CELL_PCT = 3.0                          # every (policy, shape) cell within +-3 % of A's
 ANCHOR_RATIO_PP = 1.0                          # the fq-16x64 / fo6 ratio's median over shapes within +-1.0 pp of A's
 MEM_TOL_GIB = 0.02
+#: item 2 amendment 1 (the coordinator's decision, 2026-10-24): the anchor's cell failure is accepted as a deviation (the
+#: paired ratio passed), and an unrecorded ~10 min prefill warm-up runs right before the panel
+ANCHOR_ACCEPTED = "the coordinator, 2026-10-24: option 1 (accept; the ratio check passed; -3 % session offset recorded)"
+WARMUP = ["--shapes", "4x2048", "--reps", "2400", "--no-graph"]     # Mistral fo6, eager: about 2400 x 0.25 s = 10 min
 GPU_QUERY = "name,driver_version,power.draw,power.limit,clocks.sm,clocks.mem,clocks.max.sm,temperature.gpu,pstate"
 
 
@@ -133,11 +137,26 @@ def anchor_check():
     res = dict(model=m, a_commit=A_COMMIT, cells=cells, ratio_per_shape=ratio, ratio_median_over_shapes=new_r,
                a_ratio_median_over_shapes=a_r, worst_cell_pct=worst, cell_tol_pct=ANCHOR_CELL_PCT,
                ratio_tol_pp=ANCHOR_RATIO_PP, passed=ok)
+    if not ok:
+        res["accepted"] = ANCHOR_ACCEPTED
     (ROOT / "anchor_check.json").write_text(json.dumps(res, indent=1) + "\n")
     G.log(f"paper1k item2 anchor check: worst cell {worst:+.2f} %, ratio {new_r:+.2f} vs A {a_r:+.2f} pp -> "
-          f"{'PASS' if ok else 'FAIL'}")
-    if not ok:
-        stop(f"item2 anchor check failed (worst cell {worst:.2f} %, ratio {new_r:+.2f} vs {a_r:+.2f})")
+          f"{'PASS' if ok else 'FAIL, accepted: ' + ANCHOR_ACCEPTED}")
+
+
+def warmup():
+    """Amendment 1: about 10 min of unrecorded prefill (Mistral fo6, 4x2048, eager) right before the panel, so that it
+    starts at a steady temperature; its output is not used by any report."""
+    out = ROOT / "warmup" / "mistral-7b_fo6_4x2048.json"
+    if G.done(out):
+        return
+    checkout()
+    gpu_state("p1k_warmup")
+    cmd = [G.py(ANCHOR), "-m", "evaluation.latency", "prefill", "--model", ANCHOR, *policy_args(ANCHOR, "fo6"), *WARMUP,
+           "--label", "warmup", "--round", "0", "--out", out]
+    rc = G.run("p1k_warmup_mistral-7b_fo6", cmd, out, FQ)
+    if rc not in (None, 0):
+        stop(f"warm-up: rc={rc}")
 
 
 def item2_latency():
@@ -151,6 +170,7 @@ def item2_latency():
         for pol in order:
             latency_job(ANCHOR, pol, r, "latency_anchor", libs, release=True)
     anchor_check()
+    warmup()
     for model in MODELS:
         for r in range(1, 6):
             order = list(G.POLICIES)

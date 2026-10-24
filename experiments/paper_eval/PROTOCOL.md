@@ -2737,3 +2737,18 @@ Phi-4 and Qwen3.8-27B; the Qwen3-1.7B / 8B are not in this part.
     is the likely cause; nothing was set or locked.
   - Driver 595.71.05 and the 500 W power limit are unchanged.
 - **Status.** Nothing else ran. The records are kept and the coordinator decides.
+
+### Part AC, item 2, amendment 1 (registered 2026-10-24, at its commit, before the panel; the coordinator's decision): the anchor accepted, a warm-up before the panel
+
+- **The anchor is accepted as a deviation.** The registered ratio check passed (+0.75 vs A's +0.82 %). The cell offset
+  (this session −0.3 … −3.7 % against A, with fo6 and fq-16x64 alike) and the temperature evidence above are recorded,
+  and the report states it beside every comparison with the published 256 rows. The anchor is not re-run or re-gated.
+  `anchor_check.json` keeps its FAIL verdict and gains an `accepted` field naming this decision.
+- **Warm-up (unrecorded), right before the panel.**
+  - One process: `evaluation.latency prefill --model mistral-7b` fo6 (A's policy flags, build_V), `--shapes 4x2048
+    --reps 2400 --no-graph`. That is about 10 min of back-to-back eager prefill at about 250 ms each.
+  - Output `RUN/paper1k/warmup/mistral-7b_fo6_4x2048.json`; no report or table uses it.
+  - The panel's first job follows at once (run_gpu's idle check only).
+- **Temperatures.** Per panel job, the record's own start and end GPU snapshots (temperature, power limit, driver), with
+  `gpu_state.jsonl`'s pre-job row. The report gives each model's start and end temperature ranges next to A's.
+- Nothing else changes.
