@@ -2752,3 +2752,52 @@ Phi-4 and Qwen3.8-27B; the Qwen3-1.7B / 8B are not in this part.
 - **Temperatures.** Per panel job, the record's own start and end GPU snapshots (temperature, power limit, driver), with
   `gpu_state.jsonl`'s pre-job row. The report gives each model's start and end temperature ranges next to A's.
 - Nothing else changes.
+
+### Part AC, item 3 (registered 2026-10-24, at its commit, before any job): tab:ablation at 1k
+
+- **Code: flipquant paper-1k-reruns 2739458** (worktree paper1k/wt): calib-size d940fbf plus tmopt_ext's opt-in
+  `--fit-windows N` (default 256) and `--teacher-host` (default off), with CPU tests (the coordinator's OK, 2026-10-24).
+  - Before every job: HEAD descends from 2739458; `calibration/ evaluation/ flipquant/ models/ kernels/ scripts/`
+    equal 2739458's; no tracked change. The branch's later commits are reports only.
+  - Default-command check (CPU; `check_tmopt_ext_default.py`, `RUN/paper1k/tmopt_ext_check/default_command.json`):
+    with both options at their defaults, the trainer command equals d940fbf's for oneshot, train, train --rotate and
+    train --candidates on five models (20 of 20).
+  - Environments: G's (run_gpu.py; n16k64-fast for both models).
+- **Step 0, in this order; any failure stops the item:**
+  - (a) **Smoke at 1k** (the coordinator's tests (b) and (c)).
+    - `tmopt_ext oneshot --tiny-layers 3 --fit-windows 1024 --oneshot-steps 2` on Nemotron (GPU teacher) and on
+      Qwen3.8-27B (`--teacher-host`).
+    - Setup: a scratch data root (`RUN/paper1k/tmopt_ext_smoke/`) with the release root's development records linked
+      read-only; `tmopt_ext record --tiny-layers 3`; the 1k 16x64 map remapped to the tiny model (`models.tiny
+      remap`).
+    - Pass: complete; 2 steps; the trainer ran with 1,024 windows; its fit extension has 896 windows whose token
+      sha256 list equals part AA's 1k set's; the teacher is on the host exactly for Qwen3.8-27B.
+    - Before it, the three 1k trainer reports of each model must hold the same extension.
+  - (b) **One 256-window ablation map rebuilt on this code:** G's Nemotron 16x64 one-shot map (`tmopt_ext oneshot
+    --match` the release map, `--data-root` the release root, the default 256 windows).
+    - Pass: tiles equal to `RUN/ablation/nemotron-nano-9b-v2/16x64/oneshot.pt`, bit for bit. The summed-gradient
+      file's equality is reported.
+- **The panel** (`python run_paper1k.py item3`; records `RUN/paper1k/ablation/<model>/<unit>/`). Per model (Nemotron,
+  then Qwen3.8-27B) and unit (8x64, 16x64, 256x64), G's commands with the 1k map as `--match`:
+  - `baseline_maps --method random --seed 0/1/2`.
+  - `baseline_maps --method act --calib-record <the release record> --calib-extension <part AA's 1k trainer report of
+    that unit>`: the record's 128 windows then the 896 extension windows; batch 8 (Qwen3.8-27B 1).
+  - `tmopt_ext oneshot --fit-windows 1024` with the release root (Qwen3.8-27B: `--teacher-host`, as in part AA).
+  - Then G's native PPL (`evaluation.ppl --mode native … --kernel-set auto --weight mixfp4 --act fourover6 --map
+    <map> --paper-convention`) of the five maps.
+- **Checks per (model, unit), before its PPL jobs:**
+  - every baseline has the 1k map's modules, tile shapes and per-layer E0M3 counts;
+  - the act map's report lists 1,024 windows whose extension token hashes are part AA's;
+  - the one-shot trainer's fit extension is part AA's.
+- **Rows:**
+  - FourOverSix: part F's records (part AA's re-measurement on calib-size is equal per window; checked at
+    registration).
+  - FlipQuant: the 1k maps' records (`RUN/calib_size/<model>/eval/ppl/fq{8,16,256}_1024.json`).
+- **Report:** `results/paper_eval/paper1k/item3/` (ABLATION.md, item3.json, table_ablation_{wiki,c4}.tex;
+  report_paper1k.py item3), G's format.
+  - Paired ΔNLL vs FourOverSix ×1e-3 ± 2 SE, with every cell's PPL.
+  - FlipQuant vs each baseline.
+  - Each cell against G's published 256 value.
+  - The step 0 results.
+- **Estimate:** G's 256 jobs took 31–70 s (act) and 172–469 s (one-shot); at 1k about 4× that, plus 30 PPL jobs.
+  About 4 h in all.

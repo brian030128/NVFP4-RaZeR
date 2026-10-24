@@ -18,6 +18,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import run_calib_size as CS  # noqa: E402
 import run_gpu as G  # noqa: E402
+import run_sm120 as S  # noqa: E402
 import run_zeroshot6 as Z  # noqa: E402
 
 FQ = CS.FQ3                                    # flipquant calib-size
@@ -219,11 +220,196 @@ def item2_memory():
     G.log("paper1k item2 memory done")
 
 
+# ---------------------------------------------------------------------------------------------- items 3 on: paper-1k-reruns
+FQN = Path("/home/dev/n16k64_campaign/paper1k/wt")      # flipquant paper-1k-reruns
+CODE_N = "2739458"                                      # calib-size d940fbf + tmopt_ext --fit-windows / --teacher-host
+CODE_DIRS = ("calibration", "evaluation", "flipquant", "models", "kernels", "scripts")
+DATA = CS.DATA                                          # fqrel/tmopt_data: the release runs' calibration records
+ABL_MODELS = ["nemotron-nano-9b-v2", "qwen3.8-27b"]
+ABL = ROOT / "ablation"
+TINY = 3                                                # the smoke's random-init model: every layer type kept
+
+
+def checkout_n():
+    """paper-1k-reruns: HEAD descends from CODE_N, the code directories are CODE_N's, no tracked change (the
+    branch's later commits are reports only)."""
+    def git(*a):
+        return subprocess.run(["git", "-C", str(FQN), *a], capture_output=True, text=True)
+    head = git("rev-parse", "HEAD").stdout.strip()
+    anc = git("merge-base", "--is-ancestor", CODE_N, "HEAD").returncode == 0
+    diff = git("diff", "--name-only", CODE_N, "HEAD", "--", *CODE_DIRS).stdout.strip()
+    dirty = git("status", "--porcelain", "--untracked-files=no").stdout.strip()
+    if not anc or diff or dirty:
+        stop(f"flipquant {FQN} at {head[:7]}: descends from {CODE_N}: {anc}; code changed: {bool(diff)}; "
+             f"dirty: {bool(dirty)}")
+    return head
+
+
+def run_n(name, cmd, out, extra_env=None):
+    """run_gpu.run on paper-1k-reruns, with its code check and the GPU state row."""
+    if not G.done(out):
+        checkout_n()
+        gpu_state(name)
+    return G.run(name, cmd, out, FQN, extra_env)
+
+
+def must(rc, what):
+    if rc not in (None, 0):
+        stop(f"{what}: rc={rc}")
+
+
+def maps_module():
+    if str(FQN) not in sys.path:
+        sys.path.insert(0, str(FQN))
+    from flipquant import maps as M
+    return M
+
+
+def ext_hashes(report):
+    return [x["token_sha256"] for x in json.loads(Path(report).read_text())["fit_extension"]["records"]]
+
+
+def aa_report(model, unit="16x64"):
+    """Part AA's (amendment 6's) 1k trainer report of a unit: its fit_extension is the 1k set's 896 windows."""
+    return CS.ROOT / model / f"{UNITS[unit]}_1024" / "run" / "report.json"
+
+
+def tiles_equal(a, b):
+    M = maps_module()
+    ta, ua, _ = M.load(a)
+    tb, ub, _ = M.load(b)
+    import torch
+    same = ua == ub and set(ta) == set(tb) and all(torch.equal(ta[n], tb[n]) for n in ta)
+    return same, dict(modules=len(ta), e0m3_a=sum(int(m.sum()) for m in ta.values()),
+                      e0m3_b=sum(int(m.sum()) for m in tb.values()))
+
+
+# ---------------------------------------------------------------------------------------------- item 3: tab:ablation
+def item3_step0():
+    """(a) tmopt_ext at --fit-windows 1024 on random-init 3-layer models (Nemotron with the GPU teacher, Qwen3.8-27B with
+    --teacher-host), 2 optimizer steps: complete, and the fit extension's token hashes equal part AA's 1k set's;
+    (b) one 256-window ablation map rebuilt on this code: G's Nemotron 16x64 one-shot map, tiles bit for bit."""
+    sm = ROOT / "tmopt_ext_smoke"
+    res = dict(smoke={}, rebuild={})
+    aa = {m: [ext_hashes(aa_report(m, u)) for u in UNITS] for m in ABL_MODELS}
+    for m in ABL_MODELS:
+        if any(h != aa[m][0] for h in aa[m]):
+            stop(f"item3 step 0: part AA's three 1k trainer reports of {m} hold different fit extensions")
+    for model, host in (("nemotron-nano-9b-v2", False), ("qwen3.8-27b", True)):
+        key = S.MKEY[model]
+        root = sm / "data_root"
+        kdir = root / f"tiny{TINY}" / key
+        kdir.mkdir(parents=True, exist_ok=True)
+        for d in sorted((DATA / key).iterdir()):           # the release root's development records, linked (read only)
+            if d.is_dir() and d.name != "calibration" and not (kdir / d.name).exists():
+                (kdir / d.name).symlink_to(d)
+        must(run_n(f"p1k_item3_smoke_record_{model}", [G.py(model), "-m", "calibration.tmopt_ext", "record", "--model", model,
+                   "--tiny-layers", TINY, "--data-root", root], kdir / "calibration" / "report.json"), "smoke record")
+        tiny_map = sm / f"{model}_tiny{TINY}_16x64.pt"
+        must(run_n(f"p1k_item3_smoke_remap_{model}", [G.py(model), "-m", "models.tiny", "remap", "--model", model,
+                   "--tiny-layers", TINY, "--map", map1k(model, "16x64"), "--out", tiny_map], tiny_map), "smoke remap")
+        out = sm / f"{model}_oneshot_1024.pt"
+        must(run_n(f"p1k_item3_smoke_oneshot_{model}", [G.py(model), "-m", "calibration.tmopt_ext", "oneshot", "--model",
+                   model, "--unit", "16x64", "--tiny-layers", TINY, "--fit-windows", 1024, "--oneshot-steps", 2,
+                   "--match", tiny_map, "--data-root", root, "--out", out, *(["--teacher-host"] if host else [])],
+                   out.with_suffix(".json")), "smoke oneshot")
+        rep = json.loads(out.with_suffix(".json").read_text())
+        trainer = json.loads((out.with_suffix(".run") / "run" / "report.json").read_text())
+        got = ext_hashes(out.with_suffix(".run") / "run" / "report.json")
+        r = dict(status=rep["status"], steps=rep["meta"]["oneshot"]["steps"], fit_windows=rep["meta"].get("fit_windows"),
+                 non_release=rep["meta"].get("non_release"), teacher=trainer.get("teacher_storage"),
+                 extension_windows=len(got), extension_equal_part_aa=got == aa[model][0],
+                 trainer_fit_windows=trainer["args"].get("fit_windows"))
+        r["passed"] = (r["status"] == "complete" and r["steps"] == 2 and r["fit_windows"] == 1024 and len(got) == 896
+                       and r["extension_equal_part_aa"] and r["trainer_fit_windows"] == 1024
+                       and (r["teacher"]["devices"] == ["cpu"]) == host)
+        res["smoke"][model] = r
+        G.log(f"paper1k item3 step 0 smoke {model}: {'PASS' if r['passed'] else 'FAIL'} ({r})")
+        if not r["passed"]:
+            (ROOT / "item3_step0.json").write_text(json.dumps(res, indent=1) + "\n")
+            stop(f"item3 step 0 smoke {model} failed: {r}")
+    model = "nemotron-nano-9b-v2"
+    out = ROOT / "ablation_step0" / f"{model}_16x64_oneshot_256.pt"
+    must(run_n(f"p1k_item3_step0_rebuild_{model}_16x64_oneshot", [G.py(model), "-m", "calibration.tmopt_ext", "oneshot",
+               "--model", model, "--unit", "16x64", "--match", G.REL / model / "flipquant_16x64.pt", "--data-root", DATA,
+               "--out", out], out.with_suffix(".json")), "step 0 rebuild")
+    ref = G.RUN / "ablation" / model / "16x64" / "oneshot.pt"
+    same, info = tiles_equal(out, ref)
+    grads_same = CS.file_sha256(out.with_suffix(".run") / "oneshot_grads.pt") == \
+        CS.file_sha256(ref.with_suffix(".run") / "oneshot_grads.pt")
+    res["rebuild"] = dict(model=model, unit="16x64", map="oneshot", tiles_equal=same, grads_file_equal=grads_same, **info)
+    (ROOT / "item3_step0.json").write_text(json.dumps(res, indent=1) + "\n")
+    G.log(f"paper1k item3 step 0 rebuild: tiles equal {same}, gradient file equal {grads_same}")
+    if not same:
+        stop("item3 step 0: the rebuilt 256 one-shot map differs from G's")
+
+
+def native_ppl(model, map_path, out):
+    """run_sm120.native_ppl (G's PPL command)."""
+    return [G.py(model), "-m", "evaluation.ppl", "--model", model, *G.NATIVE, "--kernel-set", "auto", "--weight", "mixfp4",
+            "--act", "fourover6", "--map", map_path, "--paper-convention", "--out", out]
+
+
+def item3_panel():
+    """G's maps and PPL at 1k: per model and unit the k_l-matched baselines of the 1k map (random 0 / 1 / 2;
+    activation-weighted on the 1k windows; the one-shot gradient over the 1k windows), then each map's native PPL."""
+    for model in ABL_MODELS:
+        for u in UNITS:
+            match, d = map1k(model, u), ABL / model / u
+            for s in (0, 1, 2):
+                out = d / f"random{s}.pt"
+                must(run_n(f"p1k_abl_map_{model}_{u}_random{s}", [G.py(model), "-m", "calibration.baseline_maps", "--method",
+                           "random", "--seed", s, "--model", model, "--match", match, "--out", out],
+                           out.with_suffix(".json")), f"ablation map {model} {u} random{s}")
+            out = d / "act.pt"
+            must(run_n(f"p1k_abl_map_{model}_{u}_act", [G.py(model), "-m", "calibration.baseline_maps", "--method", "act",
+                       "--model", model, "--match", match, "--calib-record", S.record(model), "--calib-extension",
+                       aa_report(model, u), "--batch", 1 if model == "qwen3.8-27b" else 8, "--out", out],
+                       out.with_suffix(".json")), f"ablation map {model} {u} act")
+            out = d / "oneshot.pt"
+            must(run_n(f"p1k_abl_map_{model}_{u}_oneshot", [G.py(model), "-m", "calibration.tmopt_ext", "oneshot", "--model",
+                       model, "--unit", u, "--match", match, "--data-root", DATA, "--fit-windows", 1024,
+                       *(["--teacher-host"] if model == "qwen3.8-27b" else []), "--out", out], out.with_suffix(".json")),
+                 f"ablation map {model} {u} oneshot")
+            bad = item3_map_checks(model, u)
+            if bad:
+                stop(f"item3 {model} {u}: {bad}")
+            for m in S.ABLATION_MAPS:
+                out = d / f"ppl_{m}.json"
+                must(run_n(f"p1k_abl_ppl_{model}_{u}_{m}", native_ppl(model, d / f"{m}.pt", out), out),
+                     f"ablation ppl {model} {u} {m}")
+    G.log("paper1k item3 panel done")
+
+
+def item3_map_checks(model, u):
+    """Every baseline map has the 1k map's per-layer E0M3 counts; the act map saw the 1k windows (128 + part AA's 896);
+    the one-shot run's fit extension is part AA's."""
+    M = maps_module()
+    d = ABL / model / u
+    ref, _, _ = M.load(map1k(model, u))
+    bad = []
+    for m in S.ABLATION_MAPS:
+        t, _, _ = M.load(d / f"{m}.pt")
+        if set(t) != set(ref) or any(int(t[n].sum()) != int(ref[n].sum()) or t[n].shape != ref[n].shape for n in ref):
+            bad.append(f"{m}: per-layer E0M3 counts or shapes differ from the 1k map")
+    act = json.loads((d / "act.json").read_text())
+    want = ext_hashes(aa_report(model, u))
+    if act["data"]["fit_windows"] != 1024 or act["data_release"]["token_sha256"][128:] != want:
+        bad.append("act: not the 1k windows")
+    if ext_hashes(d / "oneshot.run" / "run" / "report.json") != want:
+        bad.append("oneshot: the fit extension is not part AA's")
+    return bad
+
+
 if __name__ == "__main__":
     what = sys.argv[1]
     if what == "item2":
         item2_latency()
         item2_memory()
         G.log("DONE paper1k item2")
+    elif what == "item3":
+        item3_step0()
+        item3_panel()
+        G.log("DONE paper1k item3")
     else:
         raise SystemExit(f"unknown item {what}")

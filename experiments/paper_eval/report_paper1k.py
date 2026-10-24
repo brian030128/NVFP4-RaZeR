@@ -411,5 +411,182 @@ def item2():
     print("\n".join(L[:12]))
 
 
+# ---------------------------------------------------------------------------------------------- item 3: tab:ablation
+G_COMMIT = "7c06fb3"                                    # G's published 256-window tab:ablation
+ABL_ROWS = [("random", "Random"), ("act", "Activation-weighted"), ("oneshot", "One-shot gradient"), ("flipquant", "FlipQuant")]
+CORPORA = (("wiki", "WikiText-2"), ("c4", "C4"))
+ABL_MODELS = [("nemotron-nano-9b-v2", "Nemotron-Nano-9B-v2"), ("qwen3.8-27b", "Qwen3.8-27B")]
+UNIT_LIST = ("8x64", "16x64", "256x64")
+
+
+def load_done(path):
+    try:
+        r = json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return None
+    return r if "resources" in r else None
+
+
+def nll1k(model, unit, row):
+    """{corpus: [per-window NLL]} at 1k (Random: the per-window mean of the three seeds); FlipQuant = part AA's / amendment
+    6's 1k map record."""
+    if row == "flipquant":
+        recs = [load_done(G.RUN / "calib_size" / model / "eval" / "ppl" / f"{P.UNITS[unit]}_1024.json")]
+    elif row == "random":
+        recs = [load_done(RUN / "ablation" / model / unit / f"ppl_random{s}.json") for s in (0, 1, 2)]
+    else:
+        recs = [load_done(RUN / "ablation" / model / unit / f"ppl_{row}.json")]
+    if any(r is None for r in recs):
+        return None
+    out = {}
+    for c, _ in CORPORA:
+        lists = [r["results"][c]["nll"] for r in recs]
+        assert len({len(v) for v in lists}) == 1
+        out[c] = [sum(x) / len(x) for x in zip(*lists)]
+    return out
+
+
+def paired(x, ref):
+    import math
+    assert len(x) == len(ref)
+    d = [a - b for a, b in zip(x, ref)]
+    n, m = len(d), sum(d) / len(d)
+    se = math.sqrt(sum((v - m) ** 2 for v in d) / (n - 1) / n)
+    return dict(delta_milli=1e3 * m, two_se_milli=2e3 * se, n=n, significant=abs(m) > 2 * se)
+
+
+def cell(p):
+    return f"{p['delta_milli']:+.2f} ± {p['two_se_milli']:.2f}{'*' if p['significant'] else ''}"
+
+
+def item3():
+    import math
+    out_dir = OUT / "item3"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pub = git_json(G_COMMIT, "results/paper_eval/ablation/ablation.json")
+    rec = dict(cells={}, ppl={}, maps={}, fq_vs={}, published_256=dict(commit=G_COMMIT), vs_256={})
+    step0 = json.loads((RUN / "item3_step0.json").read_text()) if (RUN / "item3_step0.json").exists() else None
+    rec["step0"] = step0
+    md = ["# Part AC item 3: tab:ablation at the 1k calibration (Nemotron-Nano-9B-v2, Qwen3.8-27B)", "",
+          "G's protocol (PROTOCOL.md G; part AC item 3) on flipquant paper-1k-reruns 2739458 (calib-size d940fbf + "
+          "tmopt_ext's opt-in --fit-windows / --teacher-host). Native (build_V, --kernel-set auto, paper convention, "
+          "n16k64-fast). Every baseline flips exactly the 1k map's k_l tiles per layer. The activation-weighted and "
+          "one-shot statistics use the 1k windows (the record's 128 + part AA's 896); Qwen3.8-27B's one-shot keeps the "
+          "top-1000 teacher on the host. Cells: paired ΔNLL vs FourOverSix, x 1e-3 nats/token, ± 2 SE (* = beyond 2 "
+          "SE); Random = the per-window mean of seeds 0 / 1 / 2. FourOverSix: part F's record (part AA's re-measurement "
+          "is equal per window); FlipQuant: the 1k maps' records (part AA / amendment 6).", ""]
+    if step0:
+        sm, rb = step0.get("smoke", {}), step0.get("rebuild", {})
+        md += ["## Step 0", "",
+               "- **Smoke at 1k** (random-init 3-layer models, 2 optimizer steps, `--fit-windows 1024`): " + "; ".join(
+                   f"{m}: {'pass' if r['passed'] else 'FAIL'} (extension {r['extension_windows']} windows, token hashes "
+                   f"equal part AA's: {r['extension_equal_part_aa']}; teacher on {', '.join(r['teacher']['devices'])})"
+                   for m, r in sm.items()) + ".",
+               f"- **The 256 rebuild** (G's Nemotron 16x64 one-shot map on this code): tiles bit for bit "
+               f"{'equal' if rb.get('tiles_equal') else 'DIFFERENT'} ({rb.get('modules')} modules, "
+               f"{rb.get('e0m3_a')} E0M3 tiles); the summed-gradient file {'equal' if rb.get('grads_file_equal') else 'differs'}.",
+               "- **Default command** (CPU): with the new options at their defaults, the trainer command equals calib-size "
+               "d940fbf's for oneshot / train / train --rotate / train --candidates on five models (20 of 20).", ""]
+    tex = {}
+    for c, cname in CORPORA:
+        md += [f"## {cname}", "", "| model | map | 8x64 | 16x64 | 256x64 |", "|---|---|---:|---:|---:|"]
+        lines = [f"% tab:ablation at 1k ({cname}): paired dNLL vs FourOverSix, x1e-3 nats/token, +-2SE; native sm120 "
+                 "(build_V, kernel-set auto), per-token FourOverSix activations; 1,024 calibration windows"]
+        for model, title in ABL_MODELS:
+            fo6 = load_done(G.RUN / "pplfast" / model / "fo6.json")
+            lines.append(f"\\multicolumn{{4}}{{l}}{{\\textit{{{title}}}}} \\\\")
+            for row, label in ABL_ROWS:
+                cells, tcells = [], []
+                for u in UNIT_LIST:
+                    x = nll1k(model, u, row)
+                    if x is None or fo6 is None:
+                        cells.append("TBD")
+                        tcells.append("TBD")
+                        continue
+                    p = paired(x[c], fo6["results"][c]["nll"])
+                    rec["cells"].setdefault(model, {}).setdefault(row, {}).setdefault(u, {})[c] = p
+                    rec["ppl"].setdefault(model, {}).setdefault(row, {}).setdefault(u, {})[c] = math.exp(sum(x[c]) / len(x[c]))
+                    old = pub["cells"].get(model, {}).get(row, {}).get(u, {}).get(c)
+                    if old:
+                        rec["vs_256"].setdefault(model, {}).setdefault(row, {}).setdefault(u, {})[c] = dict(
+                            now=p["delta_milli"], published=old["delta_milli"], diff=p["delta_milli"] - old["delta_milli"])
+                    cells.append(cell(p))
+                    tcells.append(f"${p['delta_milli']:.1f}$\\,{{\\scriptsize$\\pm${p['two_se_milli']:.1f}}}")
+                md.append(f"| {title} | {label} | " + " | ".join(cells) + " |")
+                lines.append(f"{label} & " + " & ".join(tcells) + " \\\\")
+        md.append("")
+        tex[c] = "\n".join(lines) + "\n"
+        (out_dir / f"table_ablation_{c}.tex").write_text(tex[c])
+    md += ["## Against the published 256-window table (G, 7c06fb3)", "",
+           "Each cell's ΔNLL vs FourOverSix (x 1e-3) at 1k, then at 256, WikiText-2 / C4. The FourOverSix reference is the "
+           "same record in both.", "", "| model | map | 8x64 | 16x64 | 256x64 |", "|---|---|---:|---:|---:|"]
+    for model, title in ABL_MODELS:
+        for row, label in ABL_ROWS:
+            v = rec["vs_256"].get(model, {}).get(row, {})
+            md.append(f"| {title} | {label} | " + " | ".join(
+                " / ".join(f"{v[u][c]['now']:+.1f} ({v[u][c]['published']:+.1f})" for c, _ in CORPORA) if u in v else "TBD"
+                for u in UNIT_LIST) + " |")
+    md += ["", "## PPL per cell (WikiText-2 / C4)", "", "| model | map | 8x64 | 16x64 | 256x64 |", "|---|---|---:|---:|---:|"]
+    for model, title in ABL_MODELS:
+        fo6 = load_done(G.RUN / "pplfast" / model / "fo6.json")
+        if fo6:
+            md.append(f"| {title} | FourOverSix | " + " | ".join(
+                " / ".join(f"{math.exp(sum(fo6['results'][c]['nll']) / len(fo6['results'][c]['nll'])):.4f}"
+                           for c, _ in CORPORA) for _ in UNIT_LIST) + " |")
+        for row, label in ABL_ROWS:
+            pp = rec["ppl"].get(model, {}).get(row, {})
+            md.append(f"| {title} | {label} | " + " | ".join(
+                " / ".join(f"{pp[u][c]:.4f}" for c, _ in CORPORA) if u in pp else "TBD" for u in UNIT_LIST) + " |")
+    md += ["", "## FlipQuant vs each baseline (paired ΔNLL FlipQuant − baseline, x 1e-3, ± 2 SE; negative = FlipQuant "
+           "better; WikiText-2; C4)", "", "| model | unit | vs Random | vs Activation-weighted | vs One-shot |",
+           "|---|---|---:|---:|---:|"]
+    for model, title in ABL_MODELS:
+        for u in UNIT_LIST:
+            fq = nll1k(model, u, "flipquant")
+            if fq is None:
+                continue
+            cells = []
+            for row in ("random", "act", "oneshot"):
+                b = nll1k(model, u, row)
+                if b is None:
+                    cells.append("TBD")
+                    continue
+                ps = [paired(fq[c], b[c]) for c, _ in CORPORA]
+                rec["fq_vs"].setdefault(model, {}).setdefault(u, {})[row] = dict(zip(("wiki", "c4"), ps))
+                cells.append("; ".join(cell(q) for q in ps))
+            md.append(f"| {title} | {u} | " + " | ".join(cells) + " |")
+    for model, _ in ABL_MODELS:
+        for u in UNIT_LIST:
+            d = RUN / "ablation" / model / u
+            for m in ("act", "oneshot"):
+                f = d / f"{m}.json"
+                if not f.exists():
+                    continue
+                r = json.loads(f.read_text())
+                info = dict(status=r.get("status"))
+                if m == "act":
+                    info.update(windows=(r.get("data") or {}).get("fit_windows"),
+                                layers_short_of_positive=r.get("layers_short_of_positive"))
+                else:
+                    meta = r.get("meta", {})
+                    info.update(steps=(meta.get("oneshot") or {}).get("steps"), fit_windows=meta.get("fit_windows"),
+                                layers_short_of_negative=r.get("layers_short_of_negative"),
+                                non_release=meta.get("non_release"),
+                                settings={k: (meta.get("settings") or {}).get(k) for k in ("fit_windows", "teacher_topk",
+                                                                                          "epochs", "lr", "init_logit")})
+                rec["maps"].setdefault(model, {}).setdefault(u, {})[m] = info
+    md += ["", "## The maps' records", "", "| model | unit | act windows | act layers short of positives | one-shot steps | "
+           "one-shot fit windows | one-shot layers short of negatives |", "|---|---|---:|---:|---:|---:|---:|"]
+    for model, title in ABL_MODELS:
+        for u in UNIT_LIST:
+            mm = rec["maps"].get(model, {}).get(u, {})
+            a, o = mm.get("act", {}), mm.get("oneshot", {})
+            md.append(f"| {title} | {u} | {a.get('windows')} | {a.get('layers_short_of_positive')} | {o.get('steps')} | "
+                      f"{o.get('fit_windows')} | {o.get('layers_short_of_negative')} |")
+    (out_dir / "item3.json").write_text(json.dumps(rec, indent=1) + "\n")
+    (out_dir / "ABLATION.md").write_text("\n".join(md) + "\n")
+    print("\n".join(md[:30]))
+
+
 if __name__ == "__main__":
-    {"item2": item2}[sys.argv[1]]()
+    {"item2": item2, "item3": item3}[sys.argv[1]]()
