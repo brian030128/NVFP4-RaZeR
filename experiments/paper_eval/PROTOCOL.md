@@ -2664,3 +2664,58 @@ Phi-4 and Qwen3.8-27B; the Qwen3-1.7B / 8B are not in this part.
     - Step 0: a published 256 cell reproduced exactly (e.g. Llama-1B FQ16 = 41.40).
 - **Messages:** after each item a short summary with both hashes, read back after the commit; after item 2, the overall
   ETA.
+
+### Part AC, item 2 (registered 2026-10-24, at its commit, before any job): tab:latency SM120 rows and the memory paragraph at 1k
+
+- **Driver:** `python run_paper1k.py item2` (run_gpu's job runner, idle check, env and checks). Records under
+  `RUN/paper1k/`; START / END lines in RUN/queue.log. A finished record is not run again.
+- **Code: flipquant calib-size d940fbf** (worktree calib_size/wt, checked clean before every job), not part A's
+  120173a or part W's 6f5ad27.
+  - Its `evaluation/`, `flipquant/`, `models/`, `kernels/` and `scripts/` are byte-identical to 6f5ad27, part W's code
+    (checked: an empty `git diff 6f5ad27 d940fbf` over these paths). That covers the timed path, the kernel tile table and
+    the install.
+  - It is the code that wrote the 1k maps, and its registry pins all six models. Environments: run_gpu.py's (n16k64-fast
+    for Nemotron and Qwen3.8-27B, n16k64 otherwise); kernels build_V.
+- **Maps:** `RUN/calib_size/<model>/fq{8,16,256}_1024/map.pt`. Before the first job, each file's sha256 must equal its
+  job record's `map_file_sha256` (part AA / amendment 6), or the item stops. The check is written to `RUN/paper1k/maps_1k.json`.
+- **GPU state:** before every job, a read-only nvidia-smi row is appended to `RUN/paper1k/gpu_state.jsonl` (name,
+  driver, power draw and limit, SM / memory clocks, max SM clock, temperature, pstate, boot id). Each prefill record
+  also carries its own start and end GPU snapshots. Nothing is set, locked or profiled.
+- **Step 0, the latency drift anchor (first).**
+  - Mistral-7B-Instruct-v0.3 with the release map (`flipquant_release/mistral-7b/flipquant_16x64.pt`), policies fo6
+    and fq-16x64, all 8 shapes, 5 rounds. Each round's order is part W's rule.
+  - Records `RUN/paper1k/latency_anchor/mistral-7b/<policy>/round<r>.json`, with A's checks.
+  - Compared with part A (58fe644): each (policy, shape) cell's median over rounds, and the fq-16x64 / fo6 paired
+    ratio's median over shapes.
+  - **Pass:** every one of the 16 cells within ±3 % of A's, and the ratio's median over shapes within ±1.0
+    percentage point of A's. Part W's check was −1.14 … −0.04 % with the ratio at +0.88 vs A's +0.82 %.
+  - If it fails, the item stops before the panel and the coordinator decides. The result is written to
+    `RUN/paper1k/anchor_check.json`.
+- **The panel (one session).**
+  - 6 paper models × 7 policies (bf16, nvfp4, fo6, fo6-wB, fq-8x64, fq-16x64, fq-256x64; the FQ rows with the 1k maps)
+    × 5 rounds, model by model in the paper's order: Llama-3.2-1B-Instruct, Llama-3.1-8B-Instruct, Mistral,
+    Nemotron, Phi-4, Qwen3.8-27B.
+  - Round r's order is `random.Random(20260928 + r).shuffle` of the policy list, as in A. One process per job;
+    `evaluation.latency prefill --shapes 1x128,…,1x8192,4x2048 --reps 7`; eager and CUDA graph.
+  - A's checks stop the item: rc 0 and a complete record; graph logits equal to eager's; the policy's kernel family;
+    every library from build_V.
+  - Records `RUN/paper1k/latency/<model>/<policy>/round<r>.json`.
+- **Memory (after the panel).**
+  - Anchor first: Mistral fq-16x64 with the release map against part B's record (`RUN/memory/mistral-7b/fq-16x64.json`).
+    **Pass:** equal installed and whole-model bytes, and after-load and 1x2048-peak allocations within 0.02 GiB.
+    Otherwise the memory stage stops.
+  - Then `mem_probe.py` (`MEM_PROBE_FLIPQUANT` = the calib-size worktree) per model × the 7 policies. fo6-wB is added
+    to B's six.
+  - Records `RUN/paper1k/memory/<model>/<policy>.json` and `RUN/paper1k/memory_anchor/mistral-7b/fq-16x64.json`.
+- **Report:** `results/paper_eval/paper1k/item2/` (LATENCY.md, MEMORY.md, item2.json; report_paper1k.py item2), in A's
+  and W's formats:
+  - per model: the ms tables and A's paired ratios, median [min, max] over rounds;
+  - the combined 1x2048 table of the six models (raw ms, and LaTeX rounded once to one decimal);
+  - the six-model summaries of part W;
+  - the 1k panel against the published 256 rows (A for Mistral, Nemotron, Phi-4 and Qwen3.8-27B; W for the Llamas),
+    with the drift anchor's session offset stated beside it;
+  - the memory table in B's columns, and the paper's memory claims (FlipQuant's installed bytes equal NVFP4's /
+    FourOverSix's; after load and at the peak within 0.02 GiB);
+  - the GPU-state summary (driver, power limit, clock ranges, the same boot for every job).
+  - Path-free copies go to flipquant `paper-1k-reruns` under `results/paper_1k/item2/`.
+- **Estimate:** about 3.5 h of latency (A's and W's job times) plus about 0.3 h of memory.
