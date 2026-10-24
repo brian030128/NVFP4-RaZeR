@@ -2547,3 +2547,20 @@ touched, including the co-author's `<Base>-GPTQ-NVFP4` repositories.
   - the head;
   - the Hub card check.
 - **Record:** an addendum to `results/paper_eval/hf_calib1k/HF_UPLOAD.md` with its records; push paper-eval.
+
+### Part AB, amendment 1: stopped at the first upload (2026-10-24 ~09:55 UTC); the permission system refused committing to a public repository
+
+- **Staging and gates passed** for all eight `<Base>-FlipQuant-Calib1k` repositories:
+  - every map's sha256 equals its amendment 6 job record;
+  - meta cleaned, tiles and tensor records bit-identical;
+  - the uploaded 16x64 map reproduced byte for byte;
+  - scans only the accepted kinds;
+  - exact-token check 0 hits on 53 files;
+  - each repository is this part's, verified and public.
+- **The first commit** (Llama-3.2-1B-Instruct-FlipQuant-Calib1k) was refused by this session's permission system ("Create
+  Public Surface") before the command ran.
+  - As registered and as the coordinator asked, the part stopped there. Nothing was worked around, and no other session
+    was asked to run it.
+  - A token-free check afterwards: all eight repositories' heads unchanged, and none holds an 8x64 or 256x64 map.
+- **The decision is the user's.** The staged files (`/home/dev/calib1k_hf/<repo>/`, records `stage_a1.json`,
+  `token_check_a1.json`) are kept for it.
