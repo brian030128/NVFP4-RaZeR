@@ -2564,3 +2564,22 @@ touched, including the co-author's `<Base>-GPTQ-NVFP4` repositories.
   - A token-free check afterwards: all eight repositories' heads unchanged, and none holds an 8x64 or 256x64 map.
 - **The decision is the user's.** The staged files (`/home/dev/calib1k_hf/<repo>/`, records `stage_a1.json`,
   `token_check_a1.json`) are kept for it.
+
+### Part AB, amendment 1: the run after the user's authorization (2026-10-24 14:16–14:18 UTC); all eight repositories updated and verified
+
+- **Authorization:** the user authorized it directly in this session after the stop. The scope was only the eight
+  `<Base>-FlipQuant-Calib1k` repositories; per repository the two maps added and README.md / ppl_summary.json updated,
+  exactly as staged; no other repository, file or visibility change.
+- **Run:** the prepared command re-checked every gate (staged files unchanged, exact-token record clean, each
+  repository this part's and public). Then it made one commit per repository (`Add the 8x64 and 256x64 maps (1,024
+  windows); update the card`), each committed at its first attempt, with no HTTP 429.
+- **Verification, without a token, all eight pass:**
+  - the file list equals the staged list;
+  - every file downloaded has sha256 equal to staged;
+  - the card metadata is correct;
+  - the new head's commit is this commit.
+- **Card check:** all eight pass the Hub's YAML validation, README equals the staged one, and a local render succeeds.
+  All eight repositories are public, as before.
+- **Record:** the addendum in `results/paper_eval/hf_calib1k/HF_UPLOAD.md`, with `stage_a1.json` (sanitized),
+  `upload_a1.json`, `cards_a1.json`, `token_check_a1.json` and the updated cards. The record files were checked
+  in-process: 0 exact-token, prefix or token-pattern hits.

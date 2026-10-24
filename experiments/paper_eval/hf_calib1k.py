@@ -1719,6 +1719,10 @@ def a1_record():
          "256x64 at 1,024 windows) added to the eight public `<Base>-FlipQuant-Calib1k` repositories, in the layout of the "
          "256-window `<Base>-FlipQuant` repositories. The repositories were public before and after; every commit is "
          "public. No visibility was changed and no other repository was touched.",
+         "- **Authorization:** this session's permission system refused the first commit (\"Create Public Surface\"); "
+         "the part stopped and nothing was uploaded. The user then authorized it directly in this session (2026-10-24): "
+         "only these eight repositories; per repository the two maps added and README.md and ppl_summary.json updated, "
+         "exactly as staged; no other repository, file or visibility change. The uploads ran after that authorization.",
          "- **Sources:** each map's sha256 equals its amendment 6 job record. The meta is cleaned as for the 16x64 map; "
          "tiles and every tensor record are bit-identical. The 16x64 map, re-staged the same way, reproduces the uploaded "
          "file byte for byte.",

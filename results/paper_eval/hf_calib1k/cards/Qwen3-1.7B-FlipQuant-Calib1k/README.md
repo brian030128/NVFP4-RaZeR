@@ -9,34 +9,42 @@ tags:
 - flipquant
 ---
 
-# Qwen3-1.7B FlipQuant MixFP4 map, 1,024 calibration windows
+# Qwen3-1.7B FlipQuant MixFP4 maps, 1,024 calibration windows
 
 ## What this is
 
-A format map for [Qwen/Qwen3-1.7B](https://huggingface.co/Qwen/Qwen3-1.7B) at revision `70d244cc86ccca08cf5af4e1e306ecf908b1ad5e`, calibrated with FlipQuant (TM-OPT+TC) on **1,024 calibration windows**, four times the release's 256 (`edgeai-lab/Qwen3-1.7B-FlipQuant`). A map holds one bit per weight tile of every quantized linear layer (all text-model linears except the LM head): `True` stores the tile's 4-bit elements as E0M3 (uniform levels 0..7), `False` as E2M1 (FourOverSix). Everything else is NVFP4: 16-element blocks with an E4M3 scale and a per-tensor FP32 scale. The map holds no weights: it is applied to the base model's BF16 checkpoint when it is loaded.
+Format maps for [Qwen/Qwen3-1.7B](https://huggingface.co/Qwen/Qwen3-1.7B) at revision `70d244cc86ccca08cf5af4e1e306ecf908b1ad5e`, calibrated with FlipQuant (TM-OPT+TC) on **1,024 calibration windows**, four times the release's 256 (`edgeai-lab/Qwen3-1.7B-FlipQuant`). A map holds one bit per weight tile of every quantized linear layer (all text-model linears except the LM head): `True` stores the tile's 4-bit elements as E0M3 (uniform levels 0..7), `False` as E2M1 (FourOverSix). Everything else is NVFP4: 16-element blocks with an E4M3 scale and a per-tensor FP32 scale. The maps hold no weights: they are applied to the base model's BF16 checkpoint when it is loaded.
 
 | file | tile (output rows × input columns) | E0M3 tiles | sha256 |
 |---|---|---:|---|
+| `flipquant_8x64.pt` | 8 × 64 | 183,313 of 2,752,512 (6.66 %) | `7d0e2218a36d90fdb4e9ccd0dbf0fab09b8c8679134a9126c9299e537314f49e` |
 | `flipquant_16x64.pt` | 16 × 64 | 112,189 of 1,376,256 (8.15 %) | `d72eb4d71274646b74fc320eeaa8e948a562c25ea567a0286d26b496c5deea4f` |
+| `flipquant_256x64.pt` | 256 × 64 | 18,668 of 86,016 (21.70 %) | `de69f6c867bc510537d47e8c287123a02443a10fe428a99608bdb017505754fa` |
 
-The E0M3 share is 8.15 % (the 256-window map: 1.19 %). Only the 16x64 map is released here.
+8x64 is the smallest tile one MMA operand covers on sm_100 (and with weights as the B operand on sm_120); 16x64 and 256x64 are coarser.
+
+With more windows every map elects more E0M3 tiles. The E0M3 shares of the release's 256-window maps are 8x64 0.90 %, 16x64 1.19 %, 256x64 3.88 %.
+
+**The 256x64 map** has the highest E0M3 share of the three (21.70 %; 16x64: 8.15 %). Against the 16x64 map its PPL is higher, beyond 2 SE on both corpora (ΔNLL WikiText-2 +0.0053 ± 0.0037*, C4 +0.0041 ± 0.0018*); GSM8K -5.61* (111/185, p=2e-05), zero-shot -0.85* (1065/1251, p=0.00012). Pooled over the study's eight models, 256x64 at 1,024 windows is the weakest of the three tiles (GSM8K −1.39*, zero-shot −0.24* against 16x64), and more windows did not improve it over its 256-window version (GSM8K −0.26 (n.s.)).
 
 The FlipQuant code will be released with the paper.
 
 ## Calibration
 
-`python -m calibration.train_map --model qwen3-1.7b --unit 16x64 --epochs 5 --teacher-topk 1000 --fit-windows 1024` (FlipQuant commit `898d00e102cb5eb0f9ce7614d8d0db8a7cf1a6f7`):
+`python -m calibration.train_map --model qwen3-1.7b --unit <unit> --epochs 5 --teacher-topk 1000 --fit-windows 1024`, the same settings and the same 1,024 windows for the three tiles (FlipQuant revisions: 8x64 `394e6838825c23f234fe0a3ef4c252b0b6866be1`, 16x64 `898d00e102cb5eb0f9ce7614d8d0db8a7cf1a6f7`, 256x64 `394e6838825c23f234fe0a3ef4c252b0b6866be1`):
 
 - TM-OPT+TC: one logit per tile, a straight-through hard map, KL to the BF16 model's top-1000 tokens per position plus one tail bucket, per-token FourOverSix activations.
-- Adam, learning rate 0.02, initial logit −1 (every tile starts as E2M1), seed 0, 8 sequences per step, 5 epochs: **640 steps** (the release: 160). Deterministic.
+- Adam, learning rate 0.02, initial logit −1 (every tile starts as E2M1), seed 0, 8 sequences per step, 5 epochs: **640 steps** for each tile (the release: 160). Deterministic.
 - Fit set: 1,024 windows of 512 tokens (524,288 tokens). The first 128 are the calibration record's: the FlipQuant paper's math/code windows (OpenWebMath @ fde8ef8, CodeParrot-clean @ 35a59fb), built by the paper's rule with this model's tokenizer. The other 896 come from the release extension rule (seed 20260930; one window per document, half from each source). It skips the record's fit documents, the development records and the published C4 evaluation documents (128 / 192 / 0 skipped). The set contains the release's 256 windows, window for window, so the 256-window version's fit set is a subset of this one. Every window is recorded by document sha256, offset and token sha256 (sha256 of the token-hash list: `bd5ef53d52cfa59badd26c93f4c70ed02fb6a3668ab17c568219195f0e6eff77`). A word 13-gram audit of the study's 2,048-window set, which contains these windows, against every evaluation text found no shared 13-gram. The evaluation texts are WikiText-2 test, the C4 evaluation documents, the six zero-shot tasks, GSM8K test and its few-shot exemplars. The audit's positive control detects evaluation items spliced into windows, 30 of 30 for each item.
-- **These are not the paper's settings** (20 epochs, 128 windows, the full-vocabulary teacher). The map's `meta` records them as `non_default_settings`.
+- **These are not the paper's settings** (20 epochs, 128 windows, the full-vocabulary teacher). The maps' `meta` records them as `non_default_settings`.
 
-Cost on one NVIDIA RTX PRO 6000 Blackwell (sm_120):
+Cost on one NVIDIA RTX PRO 6000 Blackwell (sm_120), per unit:
 
-| setup | training | train_map end to end | GPU peak allocated | GPU peak reserved | trainer peak RSS | teacher (top-1000) | device memory peak (nvidia-smi, 2 s) |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 78.1 s | 4.1 min | 5.6 min | 23.2 GiB | 23.5 GiB | 4.7 GiB | 2.93 GiB (cuda:0) | 24.3 GiB |
+| unit | setup | training | train_map end to end | GPU peak allocated | GPU peak reserved | trainer peak RSS | teacher (top-1000) | device memory peak (nvidia-smi, 2 s) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 8x64 | 77.4 s | 4.0 min | 5.5 min | 23.2 GiB | 23.6 GiB | 4.7 GiB | 2.93 GiB (cuda:0) | 24.3 GiB |
+| 16x64 | 78.1 s | 4.1 min | 5.6 min | 23.2 GiB | 23.5 GiB | 4.7 GiB | 2.93 GiB (cuda:0) | 24.3 GiB |
+| 256x64 | 77.7 s | 4.0 min | 5.5 min | 23.2 GiB | 23.5 GiB | 4.7 GiB | 2.93 GiB (cuda:0) | 24.3 GiB |
 
 ## Results
 
@@ -52,8 +60,12 @@ Native sm_120 kernels on one NVIDIA RTX PRO 6000 Blackwell. Every quantized row 
 |---|---:|---:|---:|---:|
 | BF16 | 59.46 | 74.53 ± 2.40 | 16.716 | 19.246 |
 | FourOverSix (reference) | 56.13 | 61.87 ± 2.67 | 19.475 | 20.907 |
+| FlipQuant 8x64, 256 windows (`Qwen3-1.7B-FlipQuant`) | 58.47 | 63.76 ± 2.65 | 15.404 | 19.449 |
+| FlipQuant 8x64, 1,024 windows (**this repository**) | 58.33 | 66.19 ± 2.61 | 15.769 | 19.621 |
 | FlipQuant 16x64, 256 windows (`Qwen3-1.7B-FlipQuant`) | 58.08 | 61.33 ± 2.68 | 15.398 | 19.410 |
 | FlipQuant 16x64, 1,024 windows (**this repository**) | 58.15 | 67.25 ± 2.58 | 15.762 | 19.571 |
+| FlipQuant 256x64, 256 windows (`Qwen3-1.7B-FlipQuant`) | 57.13 | 63.31 ± 2.65 | 15.968 | 19.762 |
+| FlipQuant 256x64, 1,024 windows (**this repository**) | 57.39 | 61.64 ± 2.68 | 15.846 | 19.652 |
 
 Zero-shot accuracy (%) per task:
 
@@ -61,25 +73,35 @@ Zero-shot accuracy (%) per task:
 |---|---:|---:|---:|---:|---:|---:|
 | BF16 | 72.25 | 60.40 | 61.01 | 69.70 | 42.92 | 50.48 |
 | FourOverSix (reference) | 70.57 | 58.03 | 58.48 | 65.49 | 40.36 | 43.86 |
+| FlipQuant 8x64, 256 windows (`Qwen3-1.7B-FlipQuant`) | 71.11 | 59.37 | 59.51 | 69.61 | 42.58 | 48.65 |
+| FlipQuant 8x64, 1,024 windows (**this repository**) | 71.82 | 58.88 | 59.51 | 68.31 | 42.92 | 48.55 |
 | FlipQuant 16x64, 256 windows (`Qwen3-1.7B-FlipQuant`) | 70.95 | 59.13 | 58.33 | 69.57 | 41.21 | 49.27 |
 | FlipQuant 16x64, 1,024 windows (**this repository**) | 71.33 | 59.03 | 58.25 | 69.57 | 41.38 | 49.33 |
+| FlipQuant 256x64, 256 windows (`Qwen3-1.7B-FlipQuant`) | 70.95 | 58.63 | 59.43 | 65.03 | 41.98 | 46.77 |
+| FlipQuant 256x64, 1,024 windows (**this repository**) | 70.29 | 58.99 | 58.25 | 67.72 | 42.24 | 46.83 |
 
-**This repository against its references, paired.**
+**The maps against their references, paired.**
 
 - Zero-shot: pooled over all 21,848 questions of the six tasks.
 - GSM8K: strict-match over its 1,319 problems.
-- Format: difference in points (questions only this row gets right / only the reference gets right, exact McNemar p).
+- Format: difference in points (questions only this map gets right / only the reference gets right, exact McNemar p).
 - ΔNLL: the mean paired per-window difference in nats per token, ± 2 SE; negative is lower NLL.
 - `*`: p < 0.05, or |Δ| > 2 SE.
 
 | comparison | zero-shot | GSM8K | ΔNLL WikiText-2 | ΔNLL C4 |
 |---|---|---|---|---|
-| vs FourOverSix | +2.30* (1553/1050, p=5.6e-23) | +5.38* (171/100, p=1.9e-05) | -0.2115 ± 0.0129* | -0.0660 ± 0.0038* |
-| vs its 256-window version (Qwen3-1.7B-FlipQuant) | +0.00 (1082/1081, p=1) | +5.91* (171/93, p=1.8e-06) | +0.0234 ± 0.0030* | +0.0083 ± 0.0018* |
+| 8x64 vs FourOverSix | +2.11* (1508/1047, p=7.2e-20) | +4.32* (179/122, p=0.0012) | -0.2111 ± 0.0130* | -0.0635 ± 0.0036* |
+| 8x64 vs its 256-window version | -0.31 (985/1053, p=0.14) | +2.43 (150/118, p=0.058) | +0.0234 ± 0.0029* | +0.0088 ± 0.0020* |
+| 8x64 vs the 16x64 map (this repository) | -0.19 (1007/1049, p=0.37) | -1.06 (118/132, p=0.41) | +0.0004 ± 0.0026 | +0.0025 ± 0.0017* |
+| 16x64 vs FourOverSix | +2.30* (1553/1050, p=5.6e-23) | +5.38* (171/100, p=1.9e-05) | -0.2115 ± 0.0129* | -0.0660 ± 0.0038* |
+| 16x64 vs its 256-window version | +0.00 (1082/1081, p=1) | +5.91* (171/93, p=1.8e-06) | +0.0234 ± 0.0030* | +0.0083 ± 0.0018* |
+| 256x64 vs FourOverSix | +1.45* (1519/1202, p=1.3e-09) | -0.23 (145/148, p=0.91) | -0.2062 ± 0.0125* | -0.0619 ± 0.0037* |
+| 256x64 vs its 256-window version | +0.36 (1234/1155, p=0.11) | -1.67 (133/155, p=0.22) | -0.0077 ± 0.0033* | -0.0056 ± 0.0020* |
+| 256x64 vs the 16x64 map (this repository) | -0.85* (1065/1251, p=0.00012) | -5.61* (111/185, p=2e-05) | +0.0053 ± 0.0037* | +0.0041 ± 0.0018* |
 
 ## How to use
 
-The FlipQuant code will be released with the paper. With it, on an sm_120 GPU (RTX PRO 6000 / RTX 50-series class), build the kernels once, then evaluate with the native kernels:
+The FlipQuant code will be released with the paper. With it, on an sm_120 GPU (RTX PRO 6000 / RTX 50-series class), build the kernels once, then evaluate with the native kernels (any of the three maps):
 
 ```bash
 bash kernels/sm120/build_deploy.sh
@@ -96,7 +118,7 @@ The native command produced the PPL above.
 
 ## License
 
-This map is released under the same license as the base model, the Apache License 2.0.
+These maps are released under the same license as the base model, the Apache License 2.0.
 
 `LICENSE` is a copy of the base model's license file (Qwen/Qwen3-1.7B).
 
@@ -106,10 +128,16 @@ This map is released under the same license as the base model, the Apache Licens
 |---|---:|---|
 | `LICENSE` | 11,343 | `832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e` |
 | `flipquant_16x64.pt` | 1,442,311 | `d72eb4d71274646b74fc320eeaa8e948a562c25ea567a0286d26b496c5deea4f` |
-| `ppl_summary.json` | 7,646 | `2809b2de04b315c6c7a1aa1396e1ab116931f2b15e982f1b80bbefc2f750a854` |
+| `flipquant_256x64.pt` | 152,145 | `de69f6c867bc510537d47e8c287123a02443a10fe428a99608bdb017505754fa` |
+| `flipquant_8x64.pt` | 2,818,429 | `7d0e2218a36d90fdb4e9ccd0dbf0fab09b8c8679134a9126c9299e537314f49e` |
+| `ppl_summary.json` | 16,879 | `5f019e9e257ef103bc3fd3d305bbed965ef057331595f1bbd823a58c94da6675` |
 
-- `flipquant_16x64.pt`: the map (`flipquant-map/1`: `{format, unit, tiles, meta}`; `flipquant.maps.load` reads it).
+- `flipquant_<unit>.pt`: the maps (`flipquant-map/1`: `{format, unit, tiles, meta}`; `flipquant.maps.load` reads them).
 - `ppl_summary.json`: the numbers above, the evaluation settings, the calibration settings and cost.
 - `LICENSE`: see License.
 
-**Provenance of the map file.** It is the calibration output with only its `meta` changed: the run directory and calibration-record paths are relative instead of local absolute paths, the data-extension code reference names the file without its repository owner, and the internal branch and commit of the reference implementation are removed (the FlipQuant commit is kept). The tiles are bit-identical. sha256 of the calibration output → this repository's file: `38e5bc5ded32ee15ad1933a846414baf79ae5c0d9a3cdc60d14c4266bbf54f0a` → `d72eb4d71274646b74fc320eeaa8e948a562c25ea567a0286d26b496c5deea4f`.
+**Provenance of the map files.** They are the calibration outputs with only their `meta` changed: the run directory and calibration-record paths are relative instead of local absolute paths, the data-extension code reference names the file without its repository owner, and the internal branch and commit of the reference implementation are removed (the FlipQuant commit is kept). The tiles are bit-identical. sha256 of the calibration output → this repository's file:
+
+- `flipquant_8x64.pt`: `aedc07eac6c5511702311b81c5f9a662d55e4674941d95040b9c5e102c03c601` → `7d0e2218a36d90fdb4e9ccd0dbf0fab09b8c8679134a9126c9299e537314f49e`
+- `flipquant_16x64.pt`: `38e5bc5ded32ee15ad1933a846414baf79ae5c0d9a3cdc60d14c4266bbf54f0a` → `d72eb4d71274646b74fc320eeaa8e948a562c25ea567a0286d26b496c5deea4f`
+- `flipquant_256x64.pt`: `e83b27b023c6dd8997dd860559c37a1e60319b21dc5570fd889c5b570c68e576` → `de69f6c867bc510537d47e8c287123a02443a10fe428a99608bdb017505754fa`
