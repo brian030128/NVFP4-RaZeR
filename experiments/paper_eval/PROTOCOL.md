@@ -2719,3 +2719,21 @@ Phi-4 and Qwen3.8-27B; the Qwen3-1.7B / 8B are not in this part.
   - the GPU-state summary (driver, power limit, clock ranges, the same boot for every job).
   - Path-free copies go to flipquant `paper-1k-reruns` under `results/paper_1k/item2/`.
 - **Estimate:** about 3.5 h of latency (A's and W's job times) plus about 0.3 h of memory.
+
+### Part AC, item 2: stopped at step 0 (2026-10-24 15:14:57 UTC); the drift anchor failed its cell tolerance
+
+- **Run.** The 10 anchor jobs (Mistral fo6 and fq-16x64 with the release map, 5 rounds, 15:08:32–15:14:57 UTC). All rc 0;
+  every record passes A's checks (complete, graph == eager, kernel family, build_V). The 1k maps' sha256 all equal
+  their job records (`RUN/paper1k/maps_1k.json`). The driver stopped before the panel, as registered.
+- **The check** (`RUN/paper1k/anchor_check.json`):
+  - The FQ16 / FO6 paired ratio's median over shapes is +0.75 % against A's +0.82 % (within ±1.0 pp: passes).
+  - The cells fail: every cell is faster than A's, by 0.3–0.7 % at 1x128 / 1x256 and 2.7–3.7 % from 1x512 up. Six
+    cells exceed 3 %, the worst fq-16x64 1x1024 at −3.66 %.
+  - The offset is the same for both policies, so it does not come from FlipQuant.
+- **GPU temperature** (the records' own start / end snapshots):
+  - This session: 35–65 °C at a job's start, 63–79 °C at its end. The first job started from an idle GPU at 35 °C, P8.
+  - A: 71–74 °C at start, 85–86 °C at end. W: 42–73 °C at start, 70–86 °C at end.
+  - The per-round times rise with the temperature (fo6 1x1024: 25.68, 26.40, 26.84, 26.90, 26.95 ms). The cooler GPU
+    is the likely cause; nothing was set or locked.
+  - Driver 595.71.05 and the 500 W power limit are unchanged.
+- **Status.** Nothing else ran. The records are kept and the coordinator decides.
