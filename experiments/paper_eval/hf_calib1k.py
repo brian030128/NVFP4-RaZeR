@@ -1239,16 +1239,25 @@ def record():
           "attempt at least 65 minutes later, at most one per 10 minutes and six in all.",
           "- **Private storage limit.** The first attempt (13:08 UTC) was refused with HTTP 400: \"Private storage limit "
           "reached for user edgeai-lab\" (the 23 verified repositories hold 86.7 GB). No further attempt was made; the "
-          "decision went to the user.", ""]
+          "decision went to the user. After the 23 were made public (below), the 24th was uploaded privately with the "
+          "same throttled single-commit retry.",
+          "- **Commit attempts of the 24th** (hf_upload.json `gentle_attempts`): "
+          + "; ".join(f"{a['utc']}: {a['result']}" for a in up["repos"].get(repo_id("qwen3-8b", "gptq"), {})
+                      .get("gentle_attempts", [])) + ".", ""]
     L += ["## Licenses", "",
           "As in the earlier repositories of each model: the Llama 3.2 / 3.1 Community License files (`LICENSE`, "
           "`USE_POLICY.md`, `NOTICE`; “Built with Llama”; every name starts with “Llama”), the NVIDIA Open Model License "
           "and its `NOTICE` (Nemotron), Apache-2.0 (Qwen3; Mistral-7B-Instruct-v0.3 and Qwen3.8-27B with the apache.org "
           "text, as their base repositories have no license file) and MIT (Phi-4).", "",
           "## Visibility", "",
-          "This session made nothing public. The user changes visibility; the table above is this session's read-only "
-          "check without a token (`visibility.json`; for a public repository also its file list, README and head "
-          "against the verified upload).", "",
+          "**The user's request:** make the uploaded repositories public. **Who made the change:** the coordinator, in "
+          "its own session, at the user's direct request (`update_repo_settings(private=False)`), first for the 23 "
+          "verified repositories and later for the 24th once its upload was verified. This session made nothing "
+          "public and changed no visibility.",
+          f"- **Visibility now:** this session's read-only check without a token at {checked} (`visibility.json`); the "
+          "table above lists each repository's state.",
+          "- **For a public repository** the check also compares, without a token, its file list with the staged list, "
+          "its README with the staged one and its head with the verified upload's.", "",
           "Files here: `stage.json` (sanitized), `hf_upload.json`, `cards.json`, `rule_check.json`, `token_check.json`, "
           "`nonhf_hits.json`, `visibility.json`, `cards/<repo>/{README.md, ppl_summary.json}`.", ""]
     (OUT / "HF_UPLOAD.md").write_text("\n".join(L))

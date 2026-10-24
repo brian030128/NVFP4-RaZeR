@@ -1,0 +1,317 @@
+{
+ "model": "Qwen/Qwen3.8-27B",
+ "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+ "model_key": "qwen3.8-27b",
+ "method": "FOCUS (arXiv:2608.01847), our reproduction; not an official release by the FOCUS authors; 1,024 calibration windows",
+ "state": {
+  "focus.pt": {
+   "sha256": "6272403d4f74f5c595651571802275047612753163111a32f465ca5db9b9f039",
+   "modules": 496,
+   "block_factors_m": 1521909760,
+   "subblock_logits_q": 3043819520,
+   "tensor_scales_s2": 496,
+   "dtype": "float32"
+  }
+ },
+ "evaluation": {
+  "mode": "native sm_120 kernels",
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "quantized_modules": 496,
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "corpora": {
+   "wiki": {
+    "dataset": "Salesforce/wikitext, wikitext-2-raw-v1, test split",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "total_tokens": 297193,
+    "used_tokens": 296960,
+    "windows": 145,
+    "window_tokens": 2048
+   },
+   "c4": {
+    "dataset": "allenai/c4, validation shard en/c4-validation.00000-of-00008.json.gz",
+    "revision": "1588ec454efa1a09f29cd18ddd04fe05fc8653a2",
+    "path": "en/c4-validation.00000-of-00008.json.gz",
+    "seed": 0,
+    "windows": 256,
+    "window_tokens": 2048
+   }
+  },
+  "zeroshot": "PIQA, HellaSwag, WinoGrande, ARC-Easy, ARC-Challenge, LAMBADA; lm-eval 0.4.11; full splits; acc_norm for PIQA, HellaSwag, ARC; acc for WinoGrande, LAMBADA",
+  "gsm8k": "gsm8k_llama, 8-shot CoT, chat template, greedy, 1,024 new tokens"
+ },
+ "results": {
+  "rows": {
+   "bf16": {
+    "label": "BF16",
+    "zeroshot": {
+     "piqa": 81.50163220892274,
+     "hellaswag": 82.86197968532164,
+     "winogrande": 75.92738752959747,
+     "arc_easy": 73.10606060606061,
+     "arc_challenge": 58.3617747440273,
+     "lambada_openai": 72.01630118377643,
+     "avg": 73.9625226596177
+    },
+    "gsm8k_strict": {
+     "accuracy": 95.67854435178165,
+     "two_se": 1.1197727835998812
+    },
+    "gsm8k_flexible": {
+     "accuracy": 95.83017437452615,
+     "two_se": 1.10082347948303
+    },
+    "ppl": {
+     "wiki": 7.052307918575775,
+     "c4": 9.893087466780564
+    }
+   },
+   "fo6": {
+    "label": "FourOverSix (reference)",
+    "zeroshot": {
+     "piqa": 81.06637649619151,
+     "hellaswag": 82.3541127265485,
+     "winogrande": 75.13812154696133,
+     "arc_easy": 74.11616161616162,
+     "arc_challenge": 58.95904436860068,
+     "lambada_openai": 70.56083834659422,
+     "avg": 73.69910918350963
+    },
+    "gsm8k_strict": {
+     "accuracy": 94.61713419257013,
+     "two_se": 1.242794347659842
+    },
+    "gsm8k_flexible": {
+     "accuracy": 95.1478392721759,
+     "two_se": 1.183244929939171
+    },
+    "ppl": {
+     "wiki": 7.302328442591353,
+     "c4": 10.190296777381636
+    }
+   },
+   "focus256": {
+    "label": "FOCUS, 256 windows, 2 x H200 (`Qwen3.8-27B-FOCUS-NVFP4`)",
+    "zeroshot": {
+     "piqa": 81.55603917301414,
+     "hellaswag": 82.194781915953,
+     "winogrande": 75.37490134175216,
+     "arc_easy": 76.68350168350169,
+     "arc_challenge": 59.55631399317406,
+     "lambada_openai": 70.42499514845721,
+     "avg": 74.2984222093087
+    },
+    "gsm8k_strict": {
+     "accuracy": 93.5557240333586,
+     "two_se": 1.3521654818514495
+    },
+    "gsm8k_flexible": {
+     "accuracy": 94.31387414708112,
+     "two_se": 1.2752743486685383
+    },
+    "ppl": {
+     "wiki": 7.274646006308447,
+     "c4": 10.15724783595878
+    }
+   },
+   "focus256_local": {
+    "label": "FOCUS, 256 windows, retrained locally as this one (control; not released)",
+    "zeroshot": {
+     "piqa": 81.61044613710555,
+     "hellaswag": 82.56323441545509,
+     "winogrande": 75.45382794001578,
+     "arc_easy": 76.93602693602693,
+     "arc_challenge": 59.215017064846414,
+     "lambada_openai": 70.56083834659422,
+     "avg": 74.38989847334066
+    },
+    "gsm8k_strict": {
+     "accuracy": 95.6027293404094,
+     "two_se": 1.1291050307426727
+    },
+    "gsm8k_flexible": {
+     "accuracy": 95.90598938589841,
+     "two_se": 1.0912014766433404
+    },
+    "ppl": {
+     "wiki": 7.232926746866775,
+     "c4": 10.149819832622573
+    }
+   },
+   "focus_1024": {
+    "label": "FOCUS, 1,024 windows (**this repository**)",
+    "zeroshot": {
+     "piqa": 81.28400435255713,
+     "hellaswag": 82.45369448317068,
+     "winogrande": 76.24309392265194,
+     "arc_easy": 77.14646464646465,
+     "arc_challenge": 60.153583617747444,
+     "lambada_openai": 71.06539879681739,
+     "avg": 74.72437330323487
+    },
+    "gsm8k_strict": {
+     "accuracy": 88.40030326004549,
+     "two_se": 1.7634282462840352
+    },
+    "gsm8k_flexible": {
+     "accuracy": 90.9021986353298,
+     "two_se": 1.5836638997502996
+    },
+    "ppl": {
+     "wiki": 7.189823915396118,
+     "c4": 10.136026841769858
+    }
+   }
+  },
+  "paired": {
+   "vs FourOverSix": {
+    "zeroshot": {
+     "diff": 0.640790919077261,
+     "row_only": 651,
+     "ref_only": 511,
+     "p": 4.459976130401896e-05,
+     "n": 21848
+    },
+    "gsm8k_strict": {
+     "diff": -6.21683093252464,
+     "row_only": 31,
+     "ref_only": 113,
+     "p": 3.7063418408867016e-12,
+     "n": 1319
+    },
+    "gsm8k_flexible": {
+     "diff": -4.245640636846096,
+     "row_only": 25,
+     "ref_only": 81,
+     "p": 4.479374517568117e-08,
+     "n": 1319
+    },
+    "nll": {
+     "wiki": {
+      "delta_nll": -0.015526580810546874,
+      "two_se": 0.00573740719821422,
+      "n": 145,
+      "significant": true
+     },
+     "c4": {
+      "delta_nll": -0.005339880008250475,
+      "two_se": 0.0011618268927952463,
+      "n": 256,
+      "significant": true
+     }
+    }
+   },
+   "vs the 256-window state (2 x H200 cluster run; a different environment)": {
+    "zeroshot": {
+     "diff": 0.37989747345294766,
+     "row_only": 527,
+     "ref_only": 444,
+     "p": 0.008467258036427523,
+     "n": 21848
+    },
+    "gsm8k_strict": {
+     "diff": -5.155420773313116,
+     "row_only": 38,
+     "ref_only": 106,
+     "p": 1.2746973691978973e-08,
+     "n": 1319
+    },
+    "gsm8k_flexible": {
+     "diff": -3.411675511751327,
+     "row_only": 30,
+     "ref_only": 75,
+     "p": 1.315367314619223e-05,
+     "n": 1319
+    },
+    "nll": {
+     "wiki": {
+      "delta_nll": -0.011728471723096124,
+      "two_se": 0.004410403726486059,
+      "n": 145,
+      "significant": true
+     },
+     "c4": {
+      "delta_nll": -0.0020914319902658463,
+      "two_se": 0.0009527666870159831,
+      "n": 256,
+      "significant": true
+     }
+    }
+   },
+   "vs a 256-window state retrained locally as this one (the environment-matched control)": {
+    "zeroshot": {
+     "diff": 0.16019772976931526,
+     "row_only": 524,
+     "ref_only": 489,
+     "p": 0.28540077555665727,
+     "n": 21848
+    },
+    "gsm8k_strict": {
+     "diff": -7.202426080363912,
+     "row_only": 22,
+     "ref_only": 117,
+     "p": 7.580954667483499e-17,
+     "n": 1319
+    },
+    "gsm8k_flexible": {
+     "diff": -5.003790750568613,
+     "row_only": 18,
+     "ref_only": 84,
+     "p": 2.2569999817318945e-11,
+     "n": 1319
+    },
+    "nll": {
+     "wiki": {
+      "delta_nll": -0.005977078963970316,
+      "two_se": 0.003672211740970236,
+      "n": 145,
+      "significant": true
+     },
+     "c4": {
+      "delta_nll": -0.0013598636724054813,
+      "two_se": 0.0009361170588244644,
+      "n": 256,
+      "significant": true
+     }
+    }
+   }
+  },
+  "source": "the FlipQuant paper's calibration-size study"
+ },
+ "calibration": {
+  "model": "qwen3.8-27b",
+  "num_sub": 2,
+  "init_q": 6.0,
+  "act": "fourover6",
+  "act_scope": "row",
+  "data": "release",
+  "seqlen": 512,
+  "windows": {
+   "token_list_sha256": "4892a27ce5e95286212a4970ea5e390c5818c7bdb331ecad84bb7d00bf63e2c6",
+   "skipped": {
+    "fit": 128,
+    "development": 192,
+    "c4_evaluation": 233
+   },
+   "extension_windows": 896,
+   "audit_hits": 0
+  },
+  "epochs": 1,
+  "batch": 32,
+  "lr_scale": 0.005,
+  "lr_sub": 0.001,
+  "topk": 1000,
+  "seed": 42,
+  "offload": true,
+  "steps": 32,
+  "micro_batch": 1,
+  "data_tokens": 524288,
+  "optimizer": "AdamW (0.9, 0.999), weight decay 0, constant LR; offloaded to the host (one GPU)",
+  "teacher": "the unquantized BF16 model",
+  "training_seconds": 17809.9334795475,
+  "end_to_end_seconds": 17948.915668725967,
+  "gpu_peak_allocated_gib": 91.79302978515625,
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+ }
+}

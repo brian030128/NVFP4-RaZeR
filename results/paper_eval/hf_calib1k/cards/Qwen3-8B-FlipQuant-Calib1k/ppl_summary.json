@@ -1,0 +1,287 @@
+{
+ "model": "Qwen/Qwen3-8B",
+ "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+ "flipquant_model_key": "qwen3-8b",
+ "method": "FlipQuant (TM-OPT+TC), 16x64 tiles, 1,024 calibration windows",
+ "map": {
+  "flipquant_16x64.pt": {
+   "sha256": "c1a7fbf7fe27678a09fc6c5b62e161504e71a133cbee460febe3570ef2406903",
+   "calibration_output_sha256": "dc8681ff793dd6b1494719f93d4a4b7808f543effcaff1ad11255f40699918a3",
+   "e0m3_tiles": 300918,
+   "tiles": 6782976,
+   "e0m3_share": 0.04436371291893116,
+   "modules": 252
+  }
+ },
+ "evaluation": {
+  "mode": "native sm_120 kernels",
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "quantized_modules": 252,
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "corpora": {
+   "wiki": {
+    "dataset": "Salesforce/wikitext, wikitext-2-raw-v1, test split",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "total_tokens": 299078,
+    "used_tokens": 299008,
+    "windows": 146,
+    "window_tokens": 2048
+   },
+   "c4": {
+    "dataset": "allenai/c4, validation shard en/c4-validation.00000-of-00008.json.gz",
+    "revision": "1588ec454efa1a09f29cd18ddd04fe05fc8653a2",
+    "path": "en/c4-validation.00000-of-00008.json.gz",
+    "seed": 0,
+    "windows": 256,
+    "window_tokens": 2048
+   }
+  },
+  "zeroshot": "PIQA, HellaSwag, WinoGrande, ARC-Easy, ARC-Challenge, LAMBADA; lm-eval 0.4.11; full splits; acc_norm for PIQA, HellaSwag, ARC; acc for WinoGrande, LAMBADA",
+  "gsm8k": "gsm8k_llama, 8-shot CoT, chat template, greedy, 1,024 new tokens, Qwen3 thinking off"
+ },
+ "results": {
+  "rows": {
+   "bf16": {
+    "label": "BF16",
+    "zeroshot": {
+     "piqa": 77.80195865070729,
+     "hellaswag": 74.92531368253336,
+     "winogrande": 68.03472770323599,
+     "arc_easy": 80.85016835016835,
+     "arc_challenge": 56.91126279863481,
+     "lambada_openai": 64.25383271880457,
+     "avg": 70.4628773173474
+    },
+    "gsm8k_strict": {
+     "accuracy": 91.3570887035633,
+     "two_se": 1.5474219446063409
+    },
+    "gsm8k_flexible": {
+     "accuracy": 91.28127369219105,
+     "two_se": 1.5535490365930065
+    },
+    "ppl": {
+     "wiki": 9.725121920178488,
+     "c4": 13.300391920375732
+    }
+   },
+   "fo6": {
+    "label": "FourOverSix (reference)",
+    "zeroshot": {
+     "piqa": 75.95212187159956,
+     "hellaswag": 73.1826329416451,
+     "winogrande": 67.16653512233623,
+     "arc_easy": 79.71380471380472,
+     "arc_challenge": 54.863481228668945,
+     "lambada_openai": 62.720745196972636,
+     "avg": 68.9332201791712
+    },
+    "gsm8k_strict": {
+     "accuracy": 88.24867323730099,
+     "two_se": 1.7733936195197542
+    },
+    "gsm8k_flexible": {
+     "accuracy": 88.32448824867323,
+     "two_se": 1.7684228809607172
+    },
+    "ppl": {
+     "wiki": 10.007051200773041,
+     "c4": 13.75748502886575
+    }
+   },
+   "fq16_256": {
+    "label": "FlipQuant 16x64, 256 windows (`Qwen3-8B-FlipQuant`)",
+    "zeroshot": {
+     "piqa": 76.71381936887921,
+     "hellaswag": 74.26807408882692,
+     "winogrande": 68.58721389108129,
+     "arc_easy": 79.96632996632997,
+     "arc_challenge": 55.460750853242324,
+     "lambada_openai": 63.399961187657674,
+     "avg": 69.73269155933623
+    },
+    "gsm8k_strict": {
+     "accuracy": 89.31008339651251,
+     "two_se": 1.701551130516695
+    },
+    "gsm8k_flexible": {
+     "accuracy": 89.46171341925702,
+     "two_se": 1.6908738440168687
+    },
+    "ppl": {
+     "wiki": 9.590197365025974,
+     "c4": 13.555423282643472
+    }
+   },
+   "fq16_1024": {
+    "label": "FlipQuant 16x64, 1,024 windows (**this repository**)",
+    "zeroshot": {
+     "piqa": 78.18280739934711,
+     "hellaswag": 74.22824138617806,
+     "winogrande": 68.11365430149961,
+     "arc_easy": 81.3973063973064,
+     "arc_challenge": 56.31399317406143,
+     "lambada_openai": 62.83718222394722,
+     "avg": 70.17886414705663
+    },
+    "gsm8k_strict": {
+     "accuracy": 90.21986353297953,
+     "two_se": 1.6358035192425613
+    },
+    "gsm8k_flexible": {
+     "accuracy": 90.14404852160727,
+     "two_se": 1.6414414866331533
+    },
+    "ppl": {
+     "wiki": 9.584176789358084,
+     "c4": 13.487191010910346
+    }
+   }
+  },
+  "paired": {
+   "vs FourOverSix": {
+    "zeroshot": {
+     "diff": 1.0115342365433908,
+     "row_only": 841,
+     "ref_only": 620,
+     "p": 8.101769956824873e-09,
+     "n": 21848
+    },
+    "gsm8k_strict": {
+     "diff": 1.9711902956785443,
+     "row_only": 64,
+     "ref_only": 38,
+     "p": 0.012920451911125926,
+     "n": 1319
+    },
+    "gsm8k_flexible": {
+     "diff": 1.819560272934041,
+     "row_only": 62,
+     "ref_only": 38,
+     "p": 0.020978735677851117,
+     "n": 1319
+    },
+    "nll": {
+     "wiki": {
+      "delta_nll": -0.043176477086054134,
+      "two_se": 0.0031617105711637503,
+      "n": 146,
+      "significant": true
+     },
+     "c4": {
+      "delta_nll": -0.0198426207061857,
+      "two_se": 0.0018348839114002574,
+      "n": 256,
+      "significant": true
+     }
+    }
+   },
+   "vs its 256-window version (Qwen3-8B-FlipQuant)": {
+    "zeroshot": {
+     "diff": 0.14646649578908824,
+     "row_only": 675,
+     "ref_only": 643,
+     "p": 0.3931718305795751,
+     "n": 21848
+    },
+    "gsm8k_strict": {
+     "diff": 0.9097801364670205,
+     "row_only": 50,
+     "ref_only": 38,
+     "p": 0.24079312453901,
+     "n": 1319
+    },
+    "gsm8k_flexible": {
+     "diff": 0.6823351023502654,
+     "row_only": 47,
+     "ref_only": 38,
+     "p": 0.38566942011927124,
+     "n": 1319
+    },
+    "nll": {
+     "wiki": {
+      "delta_nll": -0.000627981473321784,
+      "two_se": 0.0020215394520384814,
+      "n": 146,
+      "significant": false
+     },
+     "c4": {
+      "delta_nll": -0.0050462884828448296,
+      "two_se": 0.001145152720000976,
+      "n": 256,
+      "significant": true
+     }
+    }
+   }
+  },
+  "source": "the FlipQuant paper's calibration-size study"
+ },
+ "calibration": {
+  "settings": {
+   "param": "ste",
+   "optimizer": "adam",
+   "lr": 0.02,
+   "eps": 1e-12,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "schedule": "constant",
+   "init_logit": -1.0,
+   "epochs": 5,
+   "batch": 8,
+   "accum": 1,
+   "seed": 0,
+   "tm_opt": true,
+   "tile_grad_tc": true,
+   "no_dev": true,
+   "no_eval": true,
+   "unit": "16x64",
+   "teacher_topk": 1000,
+   "fit_windows": 1024,
+   "memory_mode": "lean",
+   "fused_act_quant": true,
+   "tile_grad_kernel": false,
+   "chunked_loss": true,
+   "deterministic": true,
+   "dev_backend": "native",
+   "eval_backend": "native",
+   "single_pass_epilogue": true,
+   "pytorch_cuda_alloc_conf": "expandable_segments:True",
+   "cublas_workspace_config": ":4096:8",
+   "fit_set": "128 windows x 512 tokens: 64 open-web-math @ fde8ef8 + 64 codeparrot-clean @ 35a59fb, then 896 by the extension rule",
+   "activations": "per-token FourOverSix fake quant (STE)",
+   "loss": "KL to the BF16 teacher",
+   "output": "last-epoch map (theta > 0 -> E0M3)"
+  },
+  "steps": 640,
+  "teacher_host": false,
+  "windows": {
+   "token_list_sha256": "bd5ef53d52cfa59badd26c93f4c70ed02fb6a3668ab17c568219195f0e6eff77",
+   "skipped": {
+    "fit": 128,
+    "development": 192,
+    "c4_evaluation": 0
+   },
+   "extension_windows": 896,
+   "audit_hits": 0
+  },
+  "flipquant_commit": "898d00e102cb5eb0f9ce7614d8d0db8a7cf1a6f7",
+  "cost": {
+   "steps": 640,
+   "job_seconds": 970.4812204837799,
+   "training_seconds": 835.5846388339996,
+   "setup_seconds": 123.59236812591553,
+   "gpu_peak_allocated_gib": 49.0349817276001,
+   "gpu_peak_reserved_gib": 49.65625,
+   "cpu_peak_rss_gib": 16.209312438964844,
+   "device_peak_mib": 51602,
+   "teacher_bytes": 3141677056,
+   "teacher_devices": [
+    "cuda:0"
+   ]
+  }
+ }
+}

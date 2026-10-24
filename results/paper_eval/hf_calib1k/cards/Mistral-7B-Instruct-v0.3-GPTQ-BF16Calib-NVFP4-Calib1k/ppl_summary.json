@@ -1,0 +1,267 @@
+{
+ "model": "mistralai/Mistral-7B-Instruct-v0.3",
+ "revision": "c170c708c41dac9275d15a8fff4eca08d52bab71",
+ "flipquant_model_key": "mistral-7b",
+ "method": "GPTQ on NVFP4's fixed round-to-nearest grid, BF16-activation calibration (the FlipQuant paper's GPTQ-double-dagger baseline), 1,024 calibration windows",
+ "codes": {
+  "codes_nvfp4_act-fo6.pt": {
+   "sha256": "66427f757543862cb3be55b10f7abf097aa4afbfb3d152b937e3ec87be15e037",
+   "bytes": 3926070201,
+   "format": "flipquant-gptq/1",
+   "modules": 224,
+   "codes_sha256": "93cce7be20e364bd633805a5c818e41eaee3ad3957aaeab07c49722a242ed8d7",
+   "key": {
+    "model": "mistral-7b",
+    "weight": "nvfp4",
+    "act": "none",
+    "unit": null,
+    "mode": "fake",
+    "map_sha256": null,
+    "rotate": "none",
+    "damp": 0.01,
+    "block": 128,
+    "windows": 1024,
+    "calib": "release",
+    "rules": "modelopt-0.47",
+    "hessian_input": "bf16",
+    "data_sha256": "00ddf1580c94d54f7c106bceacd93fefa5b52911c75a1eed139474630ed597e2",
+    "propagate": "bf16"
+   }
+  }
+ },
+ "evaluation": {
+  "mode": "native sm_120 kernels",
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "quantized_modules": 224,
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "corpora": {
+   "wiki": {
+    "dataset": "Salesforce/wikitext, wikitext-2-raw-v1, test split",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "total_tokens": 334661,
+    "used_tokens": 333824,
+    "windows": 163,
+    "window_tokens": 2048
+   },
+   "c4": {
+    "dataset": "allenai/c4, validation shard en/c4-validation.00000-of-00008.json.gz",
+    "revision": "1588ec454efa1a09f29cd18ddd04fe05fc8653a2",
+    "path": "en/c4-validation.00000-of-00008.json.gz",
+    "seed": 0,
+    "windows": 256,
+    "window_tokens": 2048
+   }
+  },
+  "zeroshot": "PIQA, HellaSwag, WinoGrande, ARC-Easy, ARC-Challenge, LAMBADA; lm-eval 0.4.11; full splits; acc_norm for PIQA, HellaSwag, ARC; acc for WinoGrande, LAMBADA",
+  "gsm8k": "gsm8k_llama, 8-shot CoT, chat template, greedy, 1,024 new tokens"
+ },
+ "results": {
+  "rows": {
+   "bf16": {
+    "label": "BF16",
+    "zeroshot": {
+     "piqa": 83.51468988030467,
+     "hellaswag": 83.3200557657837,
+     "winogrande": 74.58563535911603,
+     "arc_easy": 81.73400673400674,
+     "arc_challenge": 59.89761092150171,
+     "lambada_openai": 73.52998253444595,
+     "avg": 76.0969968658598
+    },
+    "gsm8k_strict": {
+     "accuracy": 47.005307050796056,
+     "two_se": 2.748509452904712
+    },
+    "gsm8k_flexible": {
+     "accuracy": 53.60121304018196,
+     "two_se": 2.7463015392470527
+    },
+    "ppl": {
+     "wiki": 5.496113314784826,
+     "c4": 8.135140348359002
+    }
+   },
+   "fo6": {
+    "label": "FourOverSix (reference)",
+    "zeroshot": {
+     "piqa": 82.75299238302503,
+     "hellaswag": 82.86197968532164,
+     "winogrande": 74.82241515390686,
+     "arc_easy": 80.63973063973064,
+     "arc_challenge": 58.3617747440273,
+     "lambada_openai": 73.12245294003493,
+     "avg": 75.42689092434107
+    },
+    "gsm8k_strict": {
+     "accuracy": 44.50341167551175,
+     "two_se": 2.7367642841323585
+    },
+    "gsm8k_flexible": {
+     "accuracy": 48.824867323730096,
+     "two_se": 2.752692011038754
+    },
+    "ppl": {
+     "wiki": 5.708273815402617,
+     "c4": 8.398695949874403
+    }
+   },
+   "gptq": {
+    "label": "GPTQ‡, 256 windows (`Mistral-7B-Instruct-v0.3-GPTQ-BF16Calib-NVFP4`)",
+    "zeroshot": {
+     "piqa": 83.46028291621327,
+     "hellaswag": 82.4039036048596,
+     "winogrande": 75.13812154696133,
+     "arc_easy": 81.86026936026936,
+     "arc_challenge": 59.215017064846414,
+     "lambada_openai": 72.9089850572482,
+     "avg": 75.83109659173302
+    },
+    "gsm8k_strict": {
+     "accuracy": 45.41319181197877,
+     "two_se": 2.7418422336831854
+    },
+    "gsm8k_flexible": {
+     "accuracy": 50.34116755117514,
+     "two_se": 2.753388486354874
+    },
+    "ppl": {
+     "wiki": 5.735063789729629,
+     "c4": 8.4150052916211
+    }
+   },
+   "gptq_1024": {
+    "label": "GPTQ‡, 1,024 windows (**this repository**)",
+    "zeroshot": {
+     "piqa": 83.46028291621327,
+     "hellaswag": 82.81218880701056,
+     "winogrande": 74.03314917127072,
+     "arc_easy": 81.43939393939394,
+     "arc_challenge": 59.044368600682596,
+     "lambada_openai": 72.88957888608577,
+     "avg": 75.61316038677614
+    },
+    "gsm8k_strict": {
+     "accuracy": 43.97270659590599,
+     "two_se": 2.7333737435444685
+    },
+    "gsm8k_flexible": {
+     "accuracy": 48.52160727824109,
+     "two_se": 2.752248707708553
+    },
+    "ppl": {
+     "wiki": 5.7343618600248565,
+     "c4": 8.399933064405127
+    }
+   }
+  },
+  "paired": {
+   "vs FourOverSix": {
+    "zeroshot": {
+     "diff": 0.0595020139143171,
+     "row_only": 642,
+     "ref_only": 629,
+     "p": 0.7364365249673183,
+     "n": 21848
+    },
+    "gsm8k_strict": {
+     "diff": -0.530705079605762,
+     "row_only": 153,
+     "ref_only": 160,
+     "p": 0.7345647367553347,
+     "n": 1319
+    },
+    "gsm8k_flexible": {
+     "diff": -0.3032600454890068,
+     "row_only": 149,
+     "ref_only": 153,
+     "p": 0.8629783035155645,
+     "n": 1319
+    },
+    "nll": {
+     "wiki": {
+      "delta_nll": 0.004559804325454805,
+      "two_se": 0.0014902314701399552,
+      "n": 163,
+      "significant": true
+     },
+     "c4": {
+      "delta_nll": 0.00014728755922988057,
+      "two_se": 0.0014775338967868653,
+      "n": 256,
+      "significant": false
+     }
+    }
+   },
+   "vs its 256-window version (Mistral-7B-Instruct-v0.3-GPTQ-BF16Calib-NVFP4)": {
+    "zeroshot": {
+     "diff": 0.06407909190772611,
+     "row_only": 538,
+     "ref_only": 524,
+     "p": 0.6899747707472654,
+     "n": 21848
+    },
+    "gsm8k_strict": {
+     "diff": -1.4404852160727823,
+     "row_only": 142,
+     "ref_only": 161,
+     "p": 0.3010933886094047,
+     "n": 1319
+    },
+    "gsm8k_flexible": {
+     "diff": -1.819560272934041,
+     "row_only": 136,
+     "ref_only": 160,
+     "p": 0.18117589417791166,
+     "n": 1319
+    },
+    "nll": {
+     "wiki": {
+      "delta_nll": -0.000122400149245935,
+      "two_se": 0.0012839759224560262,
+      "n": 163,
+      "significant": false
+     },
+     "c4": {
+      "delta_nll": -0.0017927191802300513,
+      "two_se": 0.0012164039940718255,
+      "n": 256,
+      "significant": true
+     }
+    }
+   }
+  },
+  "source": "the FlipQuant paper's calibration-size study"
+ },
+ "gptq": {
+  "model": "mistral-7b",
+  "weight": "nvfp4",
+  "act": "none",
+  "unit": null,
+  "mode": "fake",
+  "map_sha256": null,
+  "rotate": "none",
+  "damp": 0.01,
+  "block": 128,
+  "windows": 1024,
+  "calib": "release",
+  "rules": "modelopt-0.47",
+  "hessian_input": "bf16",
+  "data_sha256": "00ddf1580c94d54f7c106bceacd93fefa5b52911c75a1eed139474630ed597e2",
+  "propagate": "bf16",
+  "flipquant_revision": "8dbe2e429fd656814868d1a4833c56aeac6d3732",
+  "seconds": 792.4049618244171,
+  "gpu_peak_allocated_gib": 23.952508449554443,
+  "windows_detail": {
+   "token_list_sha256": "15803812b91f9d8cea000d889bd6dfb8adc4fc10f3c5788d1fd367a90f1bdbe9",
+   "skipped": {
+    "fit": 128,
+    "development": 192,
+    "c4_evaluation": 0
+   },
+   "extension_windows": 896,
+   "audit_hits": 0
+  }
+ }
+}

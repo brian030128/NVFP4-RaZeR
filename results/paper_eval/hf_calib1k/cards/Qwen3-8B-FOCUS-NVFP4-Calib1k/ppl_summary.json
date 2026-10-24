@@ -1,0 +1,255 @@
+{
+ "model": "Qwen/Qwen3-8B",
+ "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+ "model_key": "qwen3-8b",
+ "method": "FOCUS (arXiv:2608.01847), our reproduction; not an official release by the FOCUS authors; 1,024 calibration windows",
+ "state": {
+  "focus.pt": {
+   "sha256": "3cabcbb16b786cd945d53173fd71c4068560f2b43e5501f85d1e23e6e8726074",
+   "modules": 252,
+   "block_factors_m": 434110464,
+   "subblock_logits_q": 868220928,
+   "tensor_scales_s2": 252,
+   "dtype": "float32"
+  }
+ },
+ "evaluation": {
+  "mode": "native sm_120 kernels",
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "quantized_modules": 252,
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "corpora": {
+   "wiki": {
+    "dataset": "Salesforce/wikitext, wikitext-2-raw-v1, test split",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "total_tokens": 299078,
+    "used_tokens": 299008,
+    "windows": 146,
+    "window_tokens": 2048
+   },
+   "c4": {
+    "dataset": "allenai/c4, validation shard en/c4-validation.00000-of-00008.json.gz",
+    "revision": "1588ec454efa1a09f29cd18ddd04fe05fc8653a2",
+    "path": "en/c4-validation.00000-of-00008.json.gz",
+    "seed": 0,
+    "windows": 256,
+    "window_tokens": 2048
+   }
+  },
+  "zeroshot": "PIQA, HellaSwag, WinoGrande, ARC-Easy, ARC-Challenge, LAMBADA; lm-eval 0.4.11; full splits; acc_norm for PIQA, HellaSwag, ARC; acc for WinoGrande, LAMBADA",
+  "gsm8k": "gsm8k_llama, 8-shot CoT, chat template, greedy, 1,024 new tokens, Qwen3 thinking off"
+ },
+ "results": {
+  "rows": {
+   "bf16": {
+    "label": "BF16",
+    "zeroshot": {
+     "piqa": 77.80195865070729,
+     "hellaswag": 74.92531368253336,
+     "winogrande": 68.03472770323599,
+     "arc_easy": 80.85016835016835,
+     "arc_challenge": 56.91126279863481,
+     "lambada_openai": 64.25383271880457,
+     "avg": 70.4628773173474
+    },
+    "gsm8k_strict": {
+     "accuracy": 91.3570887035633,
+     "two_se": 1.5474219446063409
+    },
+    "gsm8k_flexible": {
+     "accuracy": 91.28127369219105,
+     "two_se": 1.5535490365930065
+    },
+    "ppl": {
+     "wiki": 9.725121920178488,
+     "c4": 13.300391920375732
+    }
+   },
+   "fo6": {
+    "label": "FourOverSix (reference)",
+    "zeroshot": {
+     "piqa": 75.95212187159956,
+     "hellaswag": 73.1826329416451,
+     "winogrande": 67.16653512233623,
+     "arc_easy": 79.71380471380472,
+     "arc_challenge": 54.863481228668945,
+     "lambada_openai": 62.720745196972636,
+     "avg": 68.9332201791712
+    },
+    "gsm8k_strict": {
+     "accuracy": 88.24867323730099,
+     "two_se": 1.7733936195197542
+    },
+    "gsm8k_flexible": {
+     "accuracy": 88.32448824867323,
+     "two_se": 1.7684228809607172
+    },
+    "ppl": {
+     "wiki": 10.007051200773041,
+     "c4": 13.75748502886575
+    }
+   },
+   "focus256": {
+    "label": "FOCUS, 256 windows (`Qwen3-8B-FOCUS-NVFP4`)",
+    "zeroshot": {
+     "piqa": 77.9107725788901,
+     "hellaswag": 73.82991435968931,
+     "winogrande": 69.29755327545382,
+     "arc_easy": 81.35521885521885,
+     "arc_challenge": 55.972696245733786,
+     "lambada_openai": 63.82689695323113,
+     "avg": 70.36550871136951
+    },
+    "gsm8k_strict": {
+     "accuracy": 86.42911296436695,
+     "two_se": 1.886000239287108
+    },
+    "gsm8k_flexible": {
+     "accuracy": 88.32448824867323,
+     "two_se": 1.7684228809607172
+    },
+    "ppl": {
+     "wiki": 9.568721788679085,
+     "c4": 13.571466589822089
+    }
+   },
+   "focus_1024": {
+    "label": "FOCUS, 1,024 windows (**this repository**)",
+    "zeroshot": {
+     "piqa": 78.18280739934711,
+     "hellaswag": 74.14857598088031,
+     "winogrande": 69.92896606156275,
+     "arc_easy": 81.22895622895624,
+     "arc_challenge": 58.3617747440273,
+     "lambada_openai": 63.458179701144964,
+     "avg": 70.88487668598644
+    },
+    "gsm8k_strict": {
+     "accuracy": 87.71796815769522,
+     "two_se": 1.8075361388552917
+    },
+    "gsm8k_flexible": {
+     "accuracy": 88.40030326004549,
+     "two_se": 1.7634282462840352
+    },
+    "ppl": {
+     "wiki": 9.523037145316797,
+     "c4": 13.500895170982064
+    }
+   }
+  },
+  "paired": {
+   "vs FourOverSix": {
+    "zeroshot": {
+     "diff": 1.3181984621017941,
+     "row_only": 1009,
+     "ref_only": 721,
+     "p": 4.652183271183274e-12,
+     "n": 21848
+    },
+    "gsm8k_strict": {
+     "diff": -0.530705079605762,
+     "row_only": 62,
+     "ref_only": 69,
+     "p": 0.6002946177102888,
+     "n": 1319
+    },
+    "gsm8k_flexible": {
+     "diff": 0.0758150113722517,
+     "row_only": 62,
+     "ref_only": 61,
+     "p": 0.9999999999999756,
+     "n": 1319
+    },
+    "nll": {
+     "wiki": {
+      "delta_nll": -0.04957613879687166,
+      "two_se": 0.0036735149223184596,
+      "n": 146,
+      "significant": true
+     },
+     "c4": {
+      "delta_nll": -0.018827049527317286,
+      "two_se": 0.0028060540625882164,
+      "n": 256,
+      "significant": true
+     }
+    }
+   },
+   "vs its 256-window version (Qwen3-8B-FOCUS-NVFP4)": {
+    "zeroshot": {
+     "diff": 0.2334309776638594,
+     "row_only": 738,
+     "ref_only": 687,
+     "p": 0.18530692538286653,
+     "n": 21848
+    },
+    "gsm8k_strict": {
+     "diff": 1.288855193328279,
+     "row_only": 68,
+     "ref_only": 51,
+     "p": 0.1421320280750668,
+     "n": 1319
+    },
+    "gsm8k_flexible": {
+     "diff": 0.0758150113722517,
+     "row_only": 48,
+     "ref_only": 47,
+     "p": 0.9999999999999595,
+     "n": 1319
+    },
+    "nll": {
+     "wiki": {
+      "delta_nll": -0.004785806348879044,
+      "two_se": 0.0020961894712494293,
+      "n": 146,
+      "significant": true
+     },
+     "c4": {
+      "delta_nll": -0.005213551688939333,
+      "two_se": 0.0012566427204292762,
+      "n": 256,
+      "significant": true
+     }
+    }
+   }
+  },
+  "source": "the FlipQuant paper's calibration-size study"
+ },
+ "calibration": {
+  "model": "qwen3-8b",
+  "num_sub": 2,
+  "init_q": 6.0,
+  "act": "fourover6",
+  "act_scope": "row",
+  "data": "release",
+  "seqlen": 512,
+  "windows": {
+   "token_list_sha256": "bd5ef53d52cfa59badd26c93f4c70ed02fb6a3668ab17c568219195f0e6eff77",
+   "skipped": {
+    "fit": 128,
+    "development": 192,
+    "c4_evaluation": 0
+   },
+   "extension_windows": 896,
+   "audit_hits": 0
+  },
+  "epochs": 1,
+  "batch": 32,
+  "lr_scale": 0.005,
+  "lr_sub": 0.001,
+  "topk": 1000,
+  "seed": 42,
+  "steps": 32,
+  "micro_batch": 8,
+  "data_tokens": 524288,
+  "optimizer": "AdamW (0.9, 0.999), weight decay 0, constant LR",
+  "teacher": "the unquantized BF16 model",
+  "training_seconds": 940.9086034297943,
+  "end_to_end_seconds": 987.0185685157776,
+  "gpu_peak_allocated_gib": 52.61808967590332,
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+ }
+}

@@ -1,0 +1,267 @@
+{
+ "model": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+ "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+ "flipquant_model_key": "nemotron-nano-9b-v2",
+ "method": "GPTQ on NVFP4's fixed round-to-nearest grid, BF16-activation calibration (the FlipQuant paper's GPTQ-double-dagger baseline), 1,024 calibration windows",
+ "codes": {
+  "codes_nvfp4_act-fo6.pt": {
+   "sha256": "1f07143f30f6a9fd16cbe0ef796f10ff1936392173c954e4c6fd8013d50d422b",
+   "bytes": 4337895473,
+   "format": "flipquant-gptq/1",
+   "modules": 120,
+   "codes_sha256": "81da7e818ed474cb96ad7dbe09f66d258657f68dcb4d2a43f8babf5a88b5399d",
+   "key": {
+    "model": "nemotron-nano-9b-v2",
+    "weight": "nvfp4",
+    "act": "none",
+    "unit": null,
+    "mode": "fake",
+    "map_sha256": null,
+    "rotate": "none",
+    "damp": 0.01,
+    "block": 128,
+    "windows": 1024,
+    "calib": "release",
+    "rules": "modelopt-0.47",
+    "hessian_input": "bf16",
+    "data_sha256": "eac51a94069272978887d3e0300c280ec121675511d53721869ac5e6ef8bc5f7",
+    "propagate": "bf16"
+   }
+  }
+ },
+ "evaluation": {
+  "mode": "native sm_120 kernels",
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "quantized_modules": 120,
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "corpora": {
+   "wiki": {
+    "dataset": "Salesforce/wikitext, wikitext-2-raw-v1, test split",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "total_tokens": 301617,
+    "used_tokens": 301056,
+    "windows": 147,
+    "window_tokens": 2048
+   },
+   "c4": {
+    "dataset": "allenai/c4, validation shard en/c4-validation.00000-of-00008.json.gz",
+    "revision": "1588ec454efa1a09f29cd18ddd04fe05fc8653a2",
+    "path": "en/c4-validation.00000-of-00008.json.gz",
+    "seed": 0,
+    "windows": 256,
+    "window_tokens": 2048
+   }
+  },
+  "zeroshot": "PIQA, HellaSwag, WinoGrande, ARC-Easy, ARC-Challenge, LAMBADA; lm-eval 0.4.11; full splits; acc_norm for PIQA, HellaSwag, ARC; acc for WinoGrande, LAMBADA",
+  "gsm8k": "gsm8k_llama, 8-shot CoT, chat template, greedy, 1,024 new tokens"
+ },
+ "results": {
+  "rows": {
+   "bf16": {
+    "label": "BF16",
+    "zeroshot": {
+     "piqa": 80.8487486398259,
+     "hellaswag": 77.49452300338578,
+     "winogrande": 73.00710339384372,
+     "arc_easy": 79.84006734006734,
+     "arc_challenge": 56.14334470989761,
+     "lambada_openai": 66.77663496992044,
+     "avg": 72.35173700949014
+    },
+    "gsm8k_strict": {
+     "accuracy": 87.41470811220621,
+     "two_se": 1.8265497262839718
+    },
+    "gsm8k_flexible": {
+     "accuracy": 90.52312357846853,
+     "two_se": 1.6129465363177609
+    },
+    "ppl": {
+     "wiki": 8.086256731263783,
+     "c4": 11.152774595866308
+    }
+   },
+   "fo6": {
+    "label": "FourOverSix (reference)",
+    "zeroshot": {
+     "piqa": 79.97823721436343,
+     "hellaswag": 76.548496315475,
+     "winogrande": 71.50749802683504,
+     "arc_easy": 79.04040404040404,
+     "arc_challenge": 53.924914675767916,
+     "lambada_openai": 64.31205123229186,
+     "avg": 70.88526691752288
+    },
+    "gsm8k_strict": {
+     "accuracy": 88.93100833965126,
+     "two_se": 1.7277791796349438
+    },
+    "gsm8k_flexible": {
+     "accuracy": 90.67475360121304,
+     "two_se": 1.6013303978741376
+    },
+    "ppl": {
+     "wiki": 8.425979560250349,
+     "c4": 11.50341028180243
+    }
+   },
+   "gptq": {
+    "label": "GPTQ‡, 256 windows (`NVIDIA-Nemotron-Nano-9B-v2-GPTQ-BF16Calib-NVFP4`)",
+    "zeroshot": {
+     "piqa": 79.16213275299238,
+     "hellaswag": 76.15016928898626,
+     "winogrande": 72.29676400947119,
+     "arc_easy": 78.9983164983165,
+     "arc_challenge": 53.15699658703072,
+     "lambada_openai": 65.41820298855036,
+     "avg": 70.8637636875579
+    },
+    "gsm8k_strict": {
+     "accuracy": 87.18726307808946,
+     "two_se": 1.840581594441059
+    },
+    "gsm8k_flexible": {
+     "accuracy": 90.37149355572403,
+     "two_se": 1.6244366918482835
+    },
+    "ppl": {
+     "wiki": 8.429362656162935,
+     "c4": 11.500488341322313
+    }
+   },
+   "gptq_1024": {
+    "label": "GPTQ‡, 1,024 windows (**this repository**)",
+    "zeroshot": {
+     "piqa": 80.7943416757345,
+     "hellaswag": 76.55845449113723,
+     "winogrande": 71.66535122336228,
+     "arc_easy": 78.66161616161617,
+     "arc_challenge": 53.24232081911263,
+     "lambada_openai": 66.00038812342325,
+     "avg": 71.15374541573101
+    },
+    "gsm8k_strict": {
+     "accuracy": 87.03563305534496,
+     "two_se": 1.8498299282027852
+    },
+    "gsm8k_flexible": {
+     "accuracy": 88.62774829416225,
+     "two_se": 1.7482989126185102
+    },
+    "ppl": {
+     "wiki": 8.403995486396171,
+     "c4": 11.487424552225713
+    }
+   }
+  },
+  "paired": {
+   "vs FourOverSix": {
+    "zeroshot": {
+     "diff": 0.4027828634199927,
+     "row_only": 637,
+     "ref_only": 549,
+     "p": 0.01149725817209583,
+     "n": 21848
+    },
+    "gsm8k_strict": {
+     "diff": -1.8953752843062925,
+     "row_only": 42,
+     "ref_only": 67,
+     "p": 0.021086405713136754,
+     "n": 1319
+    },
+    "gsm8k_flexible": {
+     "diff": -2.047005307050796,
+     "row_only": 31,
+     "ref_only": 58,
+     "p": 0.005544959035344677,
+     "n": 1319
+    },
+    "nll": {
+     "wiki": {
+      "delta_nll": -0.0026124918541940703,
+      "two_se": 0.0015588431441116808,
+      "n": 147,
+      "significant": true
+     },
+     "c4": {
+      "delta_nll": -0.0013906178064644337,
+      "two_se": 0.0010606635094498806,
+      "n": 256,
+      "significant": true
+     }
+    }
+   },
+   "vs its 256-window version (NVIDIA-Nemotron-Nano-9B-v2-GPTQ-BF16Calib-NVFP4)": {
+    "zeroshot": {
+     "diff": 0.3936287074331747,
+     "row_only": 611,
+     "ref_only": 525,
+     "p": 0.011638999875167132,
+     "n": 21848
+    },
+    "gsm8k_strict": {
+     "diff": -0.1516300227445034,
+     "row_only": 69,
+     "ref_only": 71,
+     "p": 0.9326867554513454,
+     "n": 1319
+    },
+    "gsm8k_flexible": {
+     "diff": -1.7437452615617892,
+     "row_only": 36,
+     "ref_only": 59,
+     "p": 0.02348800283692001,
+     "n": 1319
+    },
+    "nll": {
+     "wiki": {
+      "delta_nll": -0.0030139189999119765,
+      "two_se": 0.0013522077842416118,
+      "n": 147,
+      "significant": true
+     },
+     "c4": {
+      "delta_nll": -0.0011365790851414204,
+      "two_se": 0.0009054530129681358,
+      "n": 256,
+      "significant": true
+     }
+    }
+   }
+  },
+  "source": "the FlipQuant paper's calibration-size study"
+ },
+ "gptq": {
+  "model": "nemotron-nano-9b-v2",
+  "weight": "nvfp4",
+  "act": "none",
+  "unit": null,
+  "mode": "fake",
+  "map_sha256": null,
+  "rotate": "none",
+  "damp": 0.01,
+  "block": 128,
+  "windows": 1024,
+  "calib": "release",
+  "rules": "modelopt-0.47",
+  "hessian_input": "bf16",
+  "data_sha256": "eac51a94069272978887d3e0300c280ec121675511d53721869ac5e6ef8bc5f7",
+  "propagate": "bf16",
+  "flipquant_revision": "8dbe2e429fd656814868d1a4833c56aeac6d3732",
+  "seconds": 751.898820400238,
+  "gpu_peak_allocated_gib": 28.61465549468994,
+  "windows_detail": {
+   "token_list_sha256": "12038dae8cce1844a2633f5061ae1d0f93811aec43845bb941ca7023c8d39d76",
+   "skipped": {
+    "fit": 128,
+    "development": 192,
+    "c4_evaluation": 0
+   },
+   "extension_windows": 896,
+   "audit_hits": 0
+  }
+ }
+}

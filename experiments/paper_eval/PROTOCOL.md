@@ -2478,3 +2478,32 @@ touched, including the co-author's `<Base>-GPTQ-NVFP4` repositories.
   256x64-1k's NLL is above FQ16-1k's beyond 2 SE on seven of the eight models; 8x64-1k is level with FQ16-1k.
 - **Report:** results/paper_eval/calib_size/ (REPORT.md, STEP0.md, calib_size.json `a6`).
 - **HF:** the new maps are in no HF repository (the coordinator's condition).
+
+### Part AB: the run (2026-10-23 07:45 UTC – 2026-10-24 08:52 UTC); all 24 repositories uploaded, verified and public
+
+- **Staging:** all 24 sources equal their job records (fresh sha256). Maps: the meta cleaned, tiles and tensor records
+  bit-identical. FOCUS states and codes files: symbolic links to the verified sources.
+- **Gates:**
+  - Scans: maps and FOCUS states have no hit; text files only the kinds accepted before.
+  - Codes files: every raw-byte hit inside `q` / `s` storage, no metadata hit. Four coincidental byte runs of a
+    non-token pattern (three project-name, one user-name; recorded by class and location) are accepted under the
+    earlier rule's extension.
+  - Exact-token check: 0 hits on all 111 staged files.
+  - Account `edgeai-lab`; none of the 24 names existed.
+- **Uploads:** each repository was created private and checked private before upload. Every file's sha256 equals the
+  staged file's (a download up to 1 GiB, else the Hub's LFS sha256 and size), and all 24 cards pass the Hub's YAML
+  validation with README = staged.
+- **Events:**
+  - The 24th repository's commit hit the Hub's commit rate limit (HTTP 429), with upload_large_folder retrying about
+    twice a second. The coordinator authorized stopping the uploader (12:02 UTC) and one throttled attempt per
+    10 minutes (at most 6).
+  - The first attempt (13:08 UTC) was refused with HTTP 400, the account's private storage limit (86.7 GB in the 23
+    verified repositories); the decision went to the user.
+  - After the 23 were made public, the 24th committed at its first attempt (08:49 UTC on 2026-10-24) and was verified
+    private.
+- **Visibility:** the user asked for the repositories to be public. The coordinator made the change in its own
+  session at the user's direct request (the 23 first, the 24th at 08:51 UTC); this session changed no visibility.
+  This session's token-free check at 08:52 UTC: all 24 public, each with its file list, README and head equal to the
+  verified upload.
+- **Record:** results/paper_eval/hf_calib1k/ (HF_UPLOAD.md, the cards, and the records sanitized: no raw-byte match
+  is quoted). The record files were checked in-process: 0 exact-token, prefix or token-pattern hits.

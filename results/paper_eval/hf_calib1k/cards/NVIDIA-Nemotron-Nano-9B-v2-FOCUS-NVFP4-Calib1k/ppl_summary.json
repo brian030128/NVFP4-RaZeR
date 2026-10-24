@@ -1,0 +1,255 @@
+{
+ "model": "nvidia/NVIDIA-Nemotron-Nano-9B-v2",
+ "revision": "6533e8de2c68e4536bf7c411d7a3ce5734111476",
+ "model_key": "nemotron-nano-9b-v2",
+ "method": "FOCUS (arXiv:2608.01847), our reproduction; not an official release by the FOCUS authors; 1,024 calibration windows",
+ "state": {
+  "focus.pt": {
+   "sha256": "a4eeaedd5b05285870ed5974d0d5922a5aa073a611f51ac1e7aae4df745dab5b",
+   "modules": 120,
+   "block_factors_m": 481976320,
+   "subblock_logits_q": 963952640,
+   "tensor_scales_s2": 120,
+   "dtype": "float32"
+  }
+ },
+ "evaluation": {
+  "mode": "native sm_120 kernels",
+  "convention": "FlipQuant paper: per-token (row) FourOverSix activations",
+  "quantized_modules": 120,
+  "transformers": "5.16.1",
+  "torch": "2.9.0+cu128",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "corpora": {
+   "wiki": {
+    "dataset": "Salesforce/wikitext, wikitext-2-raw-v1, test split",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "total_tokens": 301617,
+    "used_tokens": 301056,
+    "windows": 147,
+    "window_tokens": 2048
+   },
+   "c4": {
+    "dataset": "allenai/c4, validation shard en/c4-validation.00000-of-00008.json.gz",
+    "revision": "1588ec454efa1a09f29cd18ddd04fe05fc8653a2",
+    "path": "en/c4-validation.00000-of-00008.json.gz",
+    "seed": 0,
+    "windows": 256,
+    "window_tokens": 2048
+   }
+  },
+  "zeroshot": "PIQA, HellaSwag, WinoGrande, ARC-Easy, ARC-Challenge, LAMBADA; lm-eval 0.4.11; full splits; acc_norm for PIQA, HellaSwag, ARC; acc for WinoGrande, LAMBADA",
+  "gsm8k": "gsm8k_llama, 8-shot CoT, chat template, greedy, 1,024 new tokens"
+ },
+ "results": {
+  "rows": {
+   "bf16": {
+    "label": "BF16",
+    "zeroshot": {
+     "piqa": 80.8487486398259,
+     "hellaswag": 77.49452300338578,
+     "winogrande": 73.00710339384372,
+     "arc_easy": 79.84006734006734,
+     "arc_challenge": 56.14334470989761,
+     "lambada_openai": 66.77663496992044,
+     "avg": 72.35173700949014
+    },
+    "gsm8k_strict": {
+     "accuracy": 87.41470811220621,
+     "two_se": 1.8265497262839718
+    },
+    "gsm8k_flexible": {
+     "accuracy": 90.52312357846853,
+     "two_se": 1.6129465363177609
+    },
+    "ppl": {
+     "wiki": 8.086256731263783,
+     "c4": 11.152774595866308
+    }
+   },
+   "fo6": {
+    "label": "FourOverSix (reference)",
+    "zeroshot": {
+     "piqa": 79.97823721436343,
+     "hellaswag": 76.548496315475,
+     "winogrande": 71.50749802683504,
+     "arc_easy": 79.04040404040404,
+     "arc_challenge": 53.924914675767916,
+     "lambada_openai": 64.31205123229186,
+     "avg": 70.88526691752288
+    },
+    "gsm8k_strict": {
+     "accuracy": 88.93100833965126,
+     "two_se": 1.7277791796349438
+    },
+    "gsm8k_flexible": {
+     "accuracy": 90.67475360121304,
+     "two_se": 1.6013303978741376
+    },
+    "ppl": {
+     "wiki": 8.425979560250349,
+     "c4": 11.50341028180243
+    }
+   },
+   "focus256": {
+    "label": "FOCUS, 256 windows (`NVIDIA-Nemotron-Nano-9B-v2-FOCUS-NVFP4`)",
+    "zeroshot": {
+     "piqa": 80.8487486398259,
+     "hellaswag": 76.8173670583549,
+     "winogrande": 73.8752959747435,
+     "arc_easy": 79.54545454545455,
+     "arc_challenge": 54.01023890784983,
+     "lambada_openai": 64.54492528624102,
+     "avg": 71.60700506874495
+    },
+    "gsm8k_strict": {
+     "accuracy": 89.15845337376801,
+     "two_se": 1.7121211096428668
+    },
+    "gsm8k_flexible": {
+     "accuracy": 89.91660348749052,
+     "two_se": 1.65817730712747
+    },
+    "ppl": {
+     "wiki": 8.368471027621329,
+     "c4": 11.473397026378935
+    }
+   },
+   "focus_1024": {
+    "label": "FOCUS, 1,024 windows (**this repository**)",
+    "zeroshot": {
+     "piqa": 79.97823721436343,
+     "hellaswag": 76.7576180043816,
+     "winogrande": 72.92817679558011,
+     "arc_easy": 79.58754208754209,
+     "arc_challenge": 54.863481228668945,
+     "lambada_openai": 65.82573258296138,
+     "avg": 71.65679798558293
+    },
+    "gsm8k_strict": {
+     "accuracy": 88.855193328279,
+     "two_se": 1.7329469800165074
+    },
+    "gsm8k_flexible": {
+     "accuracy": 90.21986353297953,
+     "two_se": 1.6358035192425613
+    },
+    "ppl": {
+     "wiki": 8.344150012554774,
+     "c4": 11.458265948083408
+    }
+   }
+  },
+  "paired": {
+   "vs FourOverSix": {
+    "zeroshot": {
+     "diff": 0.64536799707067,
+     "row_only": 679,
+     "ref_only": 538,
+     "p": 5.886967344496762e-05,
+     "n": 21848
+    },
+    "gsm8k_strict": {
+     "diff": -0.0758150113722517,
+     "row_only": 59,
+     "ref_only": 60,
+     "p": 1.0,
+     "n": 1319
+    },
+    "gsm8k_flexible": {
+     "diff": -0.45489006823351025,
+     "row_only": 41,
+     "ref_only": 47,
+     "p": 0.5942882951469687,
+     "n": 1319
+    },
+    "nll": {
+     "wiki": {
+      "delta_nll": -0.009759041727805624,
+      "two_se": 0.0017966473440479882,
+      "n": 147,
+      "significant": true
+     },
+     "c4": {
+      "delta_nll": -0.003932151244953275,
+      "two_se": 0.0010938307882987677,
+      "n": 256,
+      "significant": true
+     }
+    }
+   },
+   "vs its 256-window version (NVIDIA-Nemotron-Nano-9B-v2-FOCUS-NVFP4)": {
+    "zeroshot": {
+     "diff": 0.19681435371658734,
+     "row_only": 541,
+     "ref_only": 498,
+     "p": 0.19255286293881765,
+     "n": 21848
+    },
+    "gsm8k_strict": {
+     "diff": -0.3032600454890068,
+     "row_only": 46,
+     "ref_only": 50,
+     "p": 0.7596492883236453,
+     "n": 1319
+    },
+    "gsm8k_flexible": {
+     "diff": 0.3032600454890068,
+     "row_only": 42,
+     "ref_only": 38,
+     "p": 0.7375543089843084,
+     "n": 1319
+    },
+    "nll": {
+     "wiki": {
+      "delta_nll": -0.0029104988591200642,
+      "two_se": 0.0014654398418043777,
+      "n": 147,
+      "significant": true
+     },
+     "c4": {
+      "delta_nll": -0.0013196670915931463,
+      "two_se": 0.0009000182850004921,
+      "n": 256,
+      "significant": true
+     }
+    }
+   }
+  },
+  "source": "the FlipQuant paper's calibration-size study"
+ },
+ "calibration": {
+  "model": "nemotron-nano-9b-v2",
+  "num_sub": 2,
+  "init_q": 6.0,
+  "act": "fourover6",
+  "act_scope": "row",
+  "data": "release",
+  "seqlen": 512,
+  "windows": {
+   "token_list_sha256": "12038dae8cce1844a2633f5061ae1d0f93811aec43845bb941ca7023c8d39d76",
+   "skipped": {
+    "fit": 128,
+    "development": 192,
+    "c4_evaluation": 0
+   },
+   "extension_windows": 896,
+   "audit_hits": 0
+  },
+  "epochs": 1,
+  "batch": 32,
+  "lr_scale": 0.005,
+  "lr_sub": 0.001,
+  "topk": 1000,
+  "seed": 42,
+  "steps": 32,
+  "micro_batch": 8,
+  "data_tokens": 524288,
+  "optimizer": "AdamW (0.9, 0.999), weight decay 0, constant LR",
+  "teacher": "the unquantized BF16 model",
+  "training_seconds": 1034.0956797599792,
+  "end_to_end_seconds": 1092.7123334407806,
+  "gpu_peak_allocated_gib": 53.94291877746582,
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+ }
+}
