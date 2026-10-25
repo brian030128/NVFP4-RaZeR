@@ -2801,3 +2801,39 @@ Phi-4 and Qwen3.8-27B; the Qwen3-1.7B / 8B are not in this part.
   - The step 0 results.
 - **Estimate:** G's 256 jobs took 31–70 s (act) and 172–469 s (one-shot); at 1k about 4× that, plus 30 PPL jobs.
   About 4 h in all.
+
+### Part AC, item 2: incident, the GPU stopped responding during the memory stage (2026-10-24 18:53 UTC)
+
+- **What happened.**
+  - 18:53:15 UTC: `START p1k_memory_llama3.2-1b-instruct_nvfp4`. The job failed at model load with
+    `torch.AcceleratorError: CUDA error: CUDA-capable device(s) is/are busy or unavailable`, in `cudaMemGetInfo`
+    (transformers' `caching_allocator_warmup`); its log is `logs/p1k_memory_llama3.2-1b-instruct_nvfp4.log`.
+  - The process did not exit: it is a zombie leader (`Zl`) whose other threads are still in the driver. The driver
+    (`run_paper1k.py item2`) is waiting on it, and there is no END line.
+  - The coordinator's read-only check: nvidia-smi takes minutes and reports utilization, power and clocks as [N/A]
+    (4 MiB used, 61 °C). Nothing has run on the GPU since.
+- **Actions (the coordinator's instruction):** none on the GPU. No reset, no reboot, no kill. Recovery is the user's.
+  Every record and log is kept; nothing is deleted.
+- **What finished before it (checked from the records alone):**
+  - **The latency panel is complete:**
+    - 210 jobs, 15:30:00–18:52:48 UTC, every one rc 0.
+    - 6 models × 7 policies, each with rounds 1–5.
+    - Every record passes A's checks: complete, graph == eager, the policy's kernel family, build_V's libraries.
+  - **`gpu_state.jsonl` (224 rows):**
+    - One boot, driver 595.71.05, the 500 W limit, max SM clock 3090 MHz throughout, no [N/A] value.
+    - No gap beyond a job's own duration; the largest is the registered warm-up (629 s).
+    - The last rows look normal: 18:50:03 2820 MHz 127 W 72 °C; 18:52:48 2617 MHz 112 W 73 °C; 18:53:15 2610 MHz
+      107 W 64 °C P0.
+  - **No timing anomaly at the end:** per cell, every round is within 0.65 % of the cell's median on Qwen3.8-27B (the
+    last model); round 5's median deviation is 0.2 %. The largest deviations of the panel are round 1 of
+    Llama-3.2-1B-Instruct (+4.4 %, fq-16x64 1x4096), right after the warm-up. The Qwen3.8-27B round-5 records end at
+    78–84 °C with the 500 W limit.
+  - **Memory:**
+    - The anchor passed: installed and whole-model bytes equal part B's; after load and the 1x2048 peak, 0.0000 GiB
+      apart.
+    - Llama-3.2-1B-Instruct bf16 finished (rc 0, 8 s).
+- **Resume (after the user restores the GPU):**
+  1. A health check first: a tiny CUDA matmul in the n16k64 env.
+  2. The failed job's log is renamed with a `.hang-20261024` suffix (kept, not overwritten).
+  3. `run_paper1k.py item2` again. Every finished record is skipped (the anchor and latency records are complete).
+     The memory probe resumes at Llama-3.2-1B-Instruct nvfp4. The remaining items follow in order.
