@@ -104,7 +104,7 @@ def main():
         (out / base).write_bytes(body)
         written.append(out / base)
         files.append(base)
-    readme = [f"# Part AC {a.item}: {a.title}", "",
+    readme = [f"# Part AC item {a.item[4:]}: {a.title}", "",
               f"Status: **{a.status}**. Rendered from NVFP4-RaZeR paper-eval `{commit}` "
               f"(`{SRC}/{a.item}/`); the files here are that commit's, unchanged.", ""]
     if summary:
