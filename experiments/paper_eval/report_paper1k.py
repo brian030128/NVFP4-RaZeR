@@ -127,6 +127,38 @@ def record_gpu(data):
                 drivers=sorted(drv))
 
 
+def temperature_section(data, out):
+    """Per model, the prefill records' own start / end GPU temperatures (degC): this session against the published
+    session's records (part A's for four models, part W's for the Llamas)."""
+    def ranges(rr_all):
+        t0 = [float(r["gpu"]["temperature.gpu"]) for rr in rr_all.values() for r in rr.values()]
+        t1 = [float(r["gpu_end"]["temperature.gpu"]) for rr in rr_all.values() for r in rr.values()]
+        return dict(start=[min(t0), max(t0)], end=[min(t1), max(t1)], start_median=statistics.median(t0),
+                    end_median=statistics.median(t1), jobs=len(t0))
+    rows, L = {}, ["## GPU temperature per job (the prefill records' start / end snapshots)", "",
+                   "| model | jobs | start °C, now (median) | end °C, now (median) | published session | start °C (median) | "
+                   "end °C (median) |", "|---|---:|---|---|---|---|---|"]
+    for m, t in MODELS:
+        if m not in data:
+            continue
+        root = "latency" if PUBLISHED[m] == "A" else "latency_llama"
+        old = {}
+        for p in POLS:
+            d = G.RUN / root / m / p
+            for f in sorted(d.glob("round*.json")) if d.exists() else []:
+                r = json.loads(f.read_text())
+                if r.get("status") == "complete":
+                    old.setdefault(p, {})[f.stem] = r
+        now, pub = ranges(data[m]), ranges(old) if old else None
+        rows[m] = dict(now=now, published=pub, published_session=PUBLISHED[m])
+        L.append(f"| {t} | {now['jobs']} | {now['start'][0]:.0f}–{now['start'][1]:.0f} ({now['start_median']:.0f}) | "
+                 f"{now['end'][0]:.0f}–{now['end'][1]:.0f} ({now['end_median']:.0f}) | {PUBLISHED[m]} | "
+                 + (f"{pub['start'][0]:.0f}–{pub['start'][1]:.0f} ({pub['start_median']:.0f}) | "
+                    f"{pub['end'][0]:.0f}–{pub['end'][1]:.0f} ({pub['end_median']:.0f}) |" if pub else "— | — |"))
+    out["temperatures"] = rows
+    return L + [""]
+
+
 def model_section(rec, m):
     L = [f"## {TITLE[m]}", "", "| shape | " + " | ".join(NAMES[p] for p in POLS if p in rec["ms"][m]) + " |",
          "|---" + "|---:" * len([p for p in POLS if p in rec["ms"][m]]) + "|"]
@@ -391,6 +423,16 @@ def item2():
              f"{100 * out['maps'][m]['256x64']['e0m3_share']:.1f} %" for m, t in MODELS) + ".", "",
          "Medians over rounds of each process's median (ms); ratios paired within rounds, median [min, max] over rounds.", ""]
     L += anchor_section(out)
+    wf = RUN / "warmup" / "mistral-7b_fo6_4x2048.json"
+    if wf.exists():
+        w = json.loads(wf.read_text())
+        out["warmup"] = dict(reps=w.get("reps"),
+                             start_temp_c=float(w["gpu"]["temperature.gpu"]), end_temp_c=float(w["gpu_end"]["temperature.gpu"]),
+                             eager_4x2048_median_ms=w["eager"]["4x2048"]["ms"])
+        L += [f"**Warm-up (amendment 1, unrecorded):** one Mistral fo6 4x2048 eager prefill process right before the panel "
+              f"({w.get('reps')} repetitions, median {w['eager']['4x2048']['ms']:.2f} ms); the GPU went from "
+              f"{out['warmup']['start_temp_c']:.0f} to {out['warmup']['end_temp_c']:.0f} °C. Its timings are not used.", ""]
+    L += temperature_section(data, out)
     if len(rec["ms"]) == len(MODELS) and all(len(rec["ms"][m]) == len(POLS) for m, _ in MODELS):
         tab, raw = combined_section(rec, out)
         L += tab + summaries_section(rec, raw, out) + published_section(rec, out)
@@ -588,5 +630,189 @@ def item3():
     print("\n".join(md[:30]))
 
 
+# ---------------------------------------------------------------------------------------------- item 4: tab:ptq
+PTQ_MODELS = ABL_MODELS
+
+
+def ptq_rows():
+    """(key, method label, format label, PPL record, GSM8K record, the 256 counterpart (PPL, GSM8K)) per model."""
+    R, GRUN = RUN / "ptq", G.RUN
+    NL = GRUN / "ptq_gsm8k_lmeval"
+    out = {}
+    for m, _ in PTQ_MODELS:
+        out[m] = [
+            ("bf16", "BF16", "--", GRUN / "pplfast" / m / "bf16.json", GRUN / "ptq_round3" / "bf16" / m / "bf16.json", None),
+            ("rtn_nvfp4", "RTN", "NVFP4", GRUN / "pplfast" / m / "nvfp4.json", NL / m / "rtn_nvfp4.json", None),
+            ("rtn_fo6", "RTN", "FourOverSix", GRUN / "pplfast" / m / "fo6.json", NL / m / "rtn_fo6.json", None),
+            ("rtn_fq-16x64", "RTN", "FlipQuant (16x64)", GRUN / "calib_size" / m / "eval" / "ppl" / "fq16_1024.json",
+             GRUN / "calib_size" / m / "eval" / "gsm8k" / "fq16_1024.json",
+             (GRUN / "pplfast" / m / "fq-16x64.json", NL / m / "rtn_fq-16x64.json")),
+            ("gptq_nvfp4", "GPTQ (act.)", "NVFP4", R / m / "gptq_nvfp4.json", R / "gsm8k" / m / "gptq_nvfp4.json",
+             (GRUN / "ptq_round3" / m / "gptq_nvfp4.json", GRUN / "ptq_round3" / "gsm8k" / m / "gptq_nvfp4.json")),
+            ("gptq_fo6", "GPTQ (act.)", "FourOverSix", R / m / "gptq_fo6.json", R / "gsm8k" / m / "gptq_fo6.json",
+             (GRUN / "ptq_round3" / m / "gptq_fo6.json", GRUN / "ptq_round3" / "gsm8k" / m / "gptq_fo6.json")),
+            ("gptq_fq-16x64", "GPTQ (act.)", "FlipQuant (16x64)", R / m / "gptq_fq-16x64.json",
+             R / "gsm8k" / m / "gptq_fq-16x64.json",
+             (GRUN / "ptq_round3" / m / "gptq_fq-16x64.json", GRUN / "ptq_round3" / "gsm8k" / m / "gptq_fq-16x64.json")),
+            ("gptqcand_fq-16x64", "GPTQ cand. + map", "FlipQuant (16x64)", R / m / "gptqcand_fq-16x64.json",
+             R / "gsm8k" / m / "gptqcand_fq-16x64.json",
+             (GRUN / "ptq_round3" / m / "gptqcand_fq-16x64.json",
+              GRUN / "ptq_round3" / "gsm8k" / m / "gptqcand_fq-16x64.json")),
+            ("hadamard_nvfp4", "Hadamard", "NVFP4", GRUN / "ptq" / m / "hadamard_nvfp4.json", NL / m / "hadamard_nvfp4.json",
+             None),
+            ("hadamard_fo6", "Hadamard", "FourOverSix", GRUN / "ptq" / m / "hadamard_fo6.json", NL / m / "hadamard_fo6.json",
+             None),
+            ("hadamard_fq-16x64", "Hadamard", "FlipQuant (16x64)", R / m / "hadamard_fq-16x64.json",
+             R / "gsm8k" / m / "hadamard_fq-16x64.json",
+             (GRUN / "ptq" / m / "hadamard_fq-16x64.json", NL / m / "hadamard_fq-16x64.json")),
+        ]
+    return out
+
+
+def item4():
+    import math
+    import report_gsm8k as RM
+    import report_gsm8k_lmeval as RN
+    out_dir = OUT / "item4"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rec = dict(rows={}, paired={}, gsm8k_paired={}, recheck={}, checks={}, step0=None)
+    s0 = RUN / "ptq" / "step0" / "step0.json"
+    rec["step0"] = json.loads(s0.read_text()) if s0.exists() else None
+
+    def ppl_rec(path):
+        r = load_done(path)
+        return r
+
+    def ppl_of(r, c):
+        v = r["results"][c]["nll"]
+        return math.exp(sum(v) / len(v))
+
+    def gsm(path):
+        rep = RN.load(path) if path else None
+        return (rep, rep["tasks"][RN.TASK]["examples"]) if rep else (None, None)
+
+    def pair_gsm(a, b):
+        return {f: RM.paired({d: dict(correct=v) for d, v in RN.per_filter(a, f).items()},
+                             {d: dict(correct=v) for d, v in RN.per_filter(b, f).items()}) for f in RN.FILTERS}
+
+    def fmt_pp(p):
+        return (f"{100 * p['delta']:+.2f} ± {100 * p['two_se']:.2f}{'*' if p['significant'] else ''} "
+                f"({p['a_only']} / {p['b_only']}, p {p['mcnemar_p']:.3g})")
+
+    md = ["# Part AC item 4: tab:ptq at the 1k calibration (Nemotron-Nano-9B-v2, Qwen3.8-27B; 16x64)", "",
+          "Round 3's protocol (PROTOCOL.md part O) and part H's Hadamard rows with the 1k windows (part AC item 4): native "
+          "sm120 (build_V, --kernel-set auto, paper convention), n16k64-fast; GPTQ with activation quantization on during "
+          "calibration on the 1,024 windows (the release record's 128 + part AA's 896); the GPTQ-candidate map and the "
+          "Hadamard map trained at 1k (Qwen3.8-27B with the teacher on the host). flipquant paper-1k-reruns 2739458. "
+          "ΔNLL: paired per window vs RTN FourOverSix, x 1e-3 ± 2 SE (* beyond 2 SE). GSM8K: part N's protocol (lm-eval "
+          "0.4.11 gsm8k_llama, chat template, greedy, 1,024 tokens, thinking off, 1,319 problems) at batch 64; strict-match "
+          "± 2 SE; paired per problem, A − B in pp ± 2 SE (A-only / B-only, McNemar exact p). Reused rows: BF16 (part F, "
+          "round 3's O0), RTN NVFP4 / FourOverSix (part F, part N), RTN FlipQuant at 1k (part AA), Hadamard NVFP4 / "
+          "FourOverSix (part H, part N).", ""]
+    if rec["step0"]:
+        s = rec["step0"]
+        md += ["## Step 0", "", f"Round 3's Nemotron GPTQ NVFP4 job (256 windows) on this code: codes_sha256 "
+               f"{'equal to' if s['codes_equal'] else 'DIFFERENT from'} round 3's (`{s['codes_sha256'][:16]}`); data hash "
+               f"equal: {s['data_equal']}; per-window NLL equal: {s['nll_equal']}.", ""]
+    md += ["## The table", "", "| model | method | format | WikiText-2 | C4 | ΔNLL wiki vs RTN FO6 | ΔNLL C4 vs RTN FO6 | "
+           "GSM8K strict (%) | 256: WikiText-2 / C4 / GSM8K |", "|---|---|---|---:|---:|---:|---:|---:|---|"]
+    tex = ["% tab:ptq at the 1k calibration (part AC item 4): WikiText-2 / C4 PPL (native sm120, 16x64) and GSM8K "
+           "strict-match (%), lm-eval gsm8k_llama, thinking off; GPTQ with activation quantization on during calibration; "
+           "1,024 calibration windows"]
+    ex_all = {}
+    for m, title in PTQ_MODELS:
+        ref = ppl_rec(G.RUN / "pplfast" / m / "fo6.json")
+        tex.append(f"\\multicolumn{{5}}{{l}}{{\\textit{{{title}}}}} \\\\")
+        for key, method, fmt, pf, gf, old in ptq_rows()[m]:
+            r = ppl_rec(pf)
+            rep, ex = gsm(gf)
+            if ex is not None:
+                ex_all[(m, key)] = ex
+            row = dict(method=method, format=fmt)
+            cells = []
+            if r is not None:
+                row["ppl"] = {c: ppl_of(r, c) for c, _ in CORPORA}
+                row["vs_rtn_fo6"] = {c: paired(r["results"][c]["nll"], ref["results"][c]["nll"]) for c, _ in CORPORA} \
+                    if ref and key != "rtn_fo6" else None
+                pt = r.get("ptq") or {}
+                row["ptq"] = {k: pt.get(k) for k in ("method", "weight", "act", "windows", "hessian_input", "propagate",
+                                                     "calib", "data_sha256", "codes_sha256", "map_sha256", "rotate")}
+            if rep is not None:
+                sm = RN.summary(rep)
+                row["gsm8k"] = sm
+                pol = (rep.get("policy") or {}).get("ptq") or {}
+                row["gsm8k_codes_sha256"] = pol.get("codes_sha256")
+            if old:
+                o_ppl, o_gsm = ppl_rec(old[0]), gsm(old[1])[0]
+                row["published_256"] = dict(ppl={c: ppl_of(o_ppl, c) for c, _ in CORPORA} if o_ppl else None,
+                                            gsm8k=RN.summary(o_gsm)["strict_match"]["accuracy"] if o_gsm else None)
+            rec["rows"].setdefault(m, {})[key] = row
+            pp = row.get("ppl")
+            vs = row.get("vs_rtn_fo6") or {}
+            g = row.get("gsm8k")
+            o = row.get("published_256") or {}
+            md.append(f"| {title} | {method} | {fmt} | " + (f"{pp['wiki']:.4f} | {pp['c4']:.4f}" if pp else "TBD | TBD")
+                      + " | " + (" | ".join(cell(vs[c]) for c, _ in CORPORA) if vs else "— | —")
+                      + " | " + (f"{100 * g['strict_match']['accuracy']:.2f} ± {100 * g['strict_match']['two_se']:.2f}"
+                                 if g else ("—" if key == "recheck" else "TBD"))
+                      + " | " + ((" / ".join(f"{o['ppl'][c]:.4f}" for c, _ in CORPORA) if o.get("ppl") else "—")
+                                 + (f" / {100 * o['gsm8k']:.2f}" if o.get("gsm8k") is not None else "") if old else "unchanged")
+                      + " |")
+            fmt_tex = fmt.replace("16x64", "16$\\times$64")
+            tex.append(f"{method} & {fmt_tex} & "
+                       + (f"{pp['wiki']:.2f} & {pp['c4']:.2f}" if pp else "TBD & TBD") + " & "
+                       + (f"{100 * g['strict_match']['accuracy']:.1f}" if g else "TBD") + " \\\\")
+        # the re-check: the 1k RTN map composed with the 1k GPTQ candidates, against the retrained map
+        rc = ppl_rec(RUN / "ptq" / m / "recheck_rtnmap_gptqcand.json")
+        rt = ppl_rec(RUN / "ptq" / m / "gptqcand_fq-16x64.json")
+        if rc is not None:
+            rec["recheck"][m] = dict(ppl={c: ppl_of(rc, c) for c, _ in CORPORA},
+                                     vs_rtn_fo6={c: paired(rc["results"][c]["nll"], ref["results"][c]["nll"])
+                                                 for c, _ in CORPORA} if ref else None,
+                                     retrained_minus_recheck={c: paired(rt["results"][c]["nll"], rc["results"][c]["nll"])
+                                                              for c, _ in CORPORA} if rt else None)
+    md += ["", "## The re-check: the 1k RTN map on the 1k GPTQ candidates (no retraining)", "",
+           "| model | WikiText-2 | C4 | ΔNLL vs RTN FO6 (wiki; C4) | retrained map − re-check (wiki; C4) |",
+           "|---|---:|---:|---:|---:|"]
+    for m, title in PTQ_MODELS:
+        x = rec["recheck"].get(m)
+        if not x:
+            md.append(f"| {title} | TBD | TBD | | |")
+            continue
+        md.append(f"| {title} | {x['ppl']['wiki']:.4f} | {x['ppl']['c4']:.4f} | "
+                  + ("; ".join(cell(x['vs_rtn_fo6'][c]) for c, _ in CORPORA) if x["vs_rtn_fo6"] else "—") + " | "
+                  + ("; ".join(cell(x['retrained_minus_recheck'][c]) for c, _ in CORPORA) if x["retrained_minus_recheck"]
+                     else "—") + " |")
+    md += ["", "## GSM8K, paired per problem", "", "| model | A vs B | strict-match Δ (pp) | flexible-extract Δ (pp) |",
+           "|---|---|---:|---:|"]
+    pairs = [("gptq_nvfp4", "gptq_fo6"), ("gptq_fq-16x64", "gptq_fo6"), ("gptqcand_fq-16x64", "gptq_fo6"),
+             ("gptqcand_fq-16x64", "gptq_fq-16x64"), ("gptq_fq-16x64", "rtn_fq-16x64"), ("gptqcand_fq-16x64", "rtn_fq-16x64"),
+             ("hadamard_fq-16x64", "hadamard_fo6"), ("hadamard_fq-16x64", "rtn_fq-16x64"), ("rtn_fq-16x64", "rtn_fo6")]
+    for m, title in PTQ_MODELS:
+        for a, b in pairs:
+            if (m, a) in ex_all and (m, b) in ex_all:
+                pg = pair_gsm(ex_all[(m, a)], ex_all[(m, b)])
+                rec["gsm8k_paired"].setdefault(m, {})[f"{a} vs {b}"] = pg
+                md.append(f"| {title} | {a} vs {b} | {fmt_pp(pg['strict_match'])} | {fmt_pp(pg['flexible_extract'])} |")
+    # checks
+    for m, _ in PTQ_MODELS:
+        rows = rec["rows"].get(m, {})
+        g = [rows[k]["ptq"] for k in ("gptq_nvfp4", "gptq_fo6", "gptq_fq-16x64") if rows.get(k, {}).get("ptq")]
+        if g:
+            rec["checks"][f"{m}: GPTQ quantized Hessian and propagation, 1,024 windows, one data hash"] = (
+                all(x["hessian_input"] == "quantized" and x["windows"] == 1024 and x["calib"] == "release" for x in g)
+                and len({x["data_sha256"] for x in g}) == 1)
+        for k in ("gptq_nvfp4", "gptq_fo6", "gptq_fq-16x64"):
+            row = rows.get(k, {})
+            if row.get("gsm8k") and row.get("ptq"):
+                rec["checks"][f"{m}: {k} GSM8K codes = PPL codes"] = row["gsm8k_codes_sha256"] == row["ptq"]["codes_sha256"]
+    md += ["", "## Checks", "", "| check | passed |", "|---|---|"]
+    md += [f"| {k} | {v} |" for k, v in rec["checks"].items()]
+    (out_dir / "item4.json").write_text(json.dumps(rec, indent=1, default=str) + "\n")
+    (out_dir / "REPORT.md").write_text("\n".join(md) + "\n")
+    (out_dir / "table_ptq.tex").write_text("\n".join(tex) + "\n")
+    print("\n".join(md[:30]))
+
+
 if __name__ == "__main__":
-    {"item2": item2, "item3": item3}[sys.argv[1]]()
+    {"item2": item2, "item3": item3, "item4": item4}[sys.argv[1]]()

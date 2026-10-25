@@ -238,7 +238,8 @@ def checkout_n():
     head = git("rev-parse", "HEAD").stdout.strip()
     anc = git("merge-base", "--is-ancestor", CODE_N, "HEAD").returncode == 0
     diff = git("diff", "--name-only", CODE_N, "HEAD", "--", *CODE_DIRS).stdout.strip()
-    dirty = git("status", "--porcelain", "--untracked-files=no").stdout.strip()
+    # the code directories only: the branch's report commits (results/paper_1k/) may be in progress
+    dirty = git("status", "--porcelain", "--untracked-files=no", "--", *CODE_DIRS).stdout.strip()
     if not anc or diff or dirty:
         stop(f"flipquant {FQN} at {head[:7]}: descends from {CODE_N}: {anc}; code changed: {bool(diff)}; "
              f"dirty: {bool(dirty)}")
@@ -401,6 +402,138 @@ def item3_map_checks(model, u):
     return bad
 
 
+# ---------------------------------------------------------------------------------------------- item 4: tab:ptq
+PTQ = ROOT / "ptq"
+PTQ_CODES = Path("/vault/flipquant_paper_eval/paper1k/ptq")      # the GPTQ code files (part O amendment 1's rule)
+NATIVE_A = [*G.NATIVE, "--kernel-set", "auto"]
+#: round 3's rows (run_ptq_round3.ROWS / PPL_CONV); the FlipQuant row's fixed map is the 1k 16x64 map
+PTQ_ROWS = {"nvfp4": (["--weight", "nvfp4", "--act", "nvfp4"], ["--act-scope", "row"]),
+            "fo6": (["--weight", "fourover6", "--act", "fourover6"], ["--paper-convention"]),
+            "fq-16x64": (["--weight", "mixfp4", "--act", "fourover6", "--map", "@1k"], ["--paper-convention"])}
+
+
+def r3():
+    import run_ptq_round3 as R3
+    return R3
+
+
+def host(model):
+    return ["--teacher-host"] if model == "qwen3.8-27b" else []
+
+
+def gptq_flags_1k(model, cache=None, candidates=None):
+    """Round 3's GPTQ (run_ptq_round3.gptq_flags: activation quantization on during calibration) on the 1k windows: the
+    release record's 128, then part AA's 896 (its 16x64 trainer report as the extension)."""
+    f = r3().gptq_flags(model, cache, candidates)
+    f[f.index("--gptq-calib-extension") + 1] = aa_report(model, "16x64")
+    return f
+
+
+def ptq_fmt(model, row):
+    fmt, conv = PTQ_ROWS[row]
+    return [str(map1k(model, "16x64")) if a == "@1k" else a for a in fmt], conv
+
+
+def codes(model, row):
+    return PTQ_CODES / model / f"codes_{row}.pt"
+
+
+def item4_step0():
+    """One 256 round-3 code digest reproduced on paper-1k-reruns: Nemotron GPTQ NVFP4 (round 3's command, a new cache)."""
+    R3 = r3()
+    model = "nemotron-nano-9b-v2"
+    out = PTQ / "step0" / f"{model}_gptq_nvfp4_256.json"
+    cache = PTQ_CODES / "step0" / model / "codes_nvfp4_256.pt"
+    if not G.done(out):
+        R3.disk_ok(PTQ_CODES, model)
+    q = [*NATIVE_A, *R3.row_flags(model, "nvfp4"), *R3.PPL_CONV["nvfp4"], *R3.gptq_flags(model, cache)]
+    must(run_n(f"p1k_ptq_step0_{model}_gptq_nvfp4_256", S.ppl_cmd(model, q, out), out), "item4 step 0")
+    new, old = (json.loads(Path(f).read_text()) for f in (out, R3.ROOT / model / "gptq_nvfp4.json"))
+    res = dict(model=model, row="gptq_nvfp4", windows=new["ptq"]["windows"], codes_sha256=new["ptq"]["codes_sha256"],
+               round3_codes_sha256=old["ptq"]["codes_sha256"],
+               codes_equal=new["ptq"]["codes_sha256"] == old["ptq"]["codes_sha256"],
+               data_equal=new["ptq"]["data_sha256"] == old["ptq"]["data_sha256"],
+               nll_equal={c: new["results"][c]["nll"] == old["results"][c]["nll"] for c in ("wiki", "c4")},
+               file_sha256=CS.file_sha256(cache))
+    (PTQ / "step0" / "step0.json").write_text(json.dumps(res, indent=1) + "\n")
+    G.log(f"paper1k item4 step 0: codes equal {res['codes_equal']}, NLL equal {res['nll_equal']}")
+    if not res["codes_equal"]:
+        stop(f"item4 step 0: GPTQ NVFP4 codes differ from round 3's ({res['codes_sha256'][:12]} vs "
+             f"{res['round3_codes_sha256'][:12]})")
+
+
+def all_e0m3(model):
+    """Round 3's all-E0M3 16x64 map (every tile of the release map's modules E0M3): the 1k map's modules and shapes."""
+    amap = r3().ROOT / model / "all_e0m3_16x64.pt"
+    M = maps_module()
+    a, ua, _ = M.load(amap)
+    b, ub, _ = M.load(map1k(model, "16x64"))
+    if ua != ub or set(a) != set(b) or any(a[n].shape != b[n].shape or not bool(a[n].all()) for n in b):
+        stop(f"item4: round 3's all-E0M3 map of {model} does not cover the 1k map's modules")
+    return amap
+
+
+def item4_model(model):
+    R3 = r3()
+    d = PTQ / model
+    # GPTQ (act.) rows at 1k: NVFP4, FourOverSix, FlipQuant 16x64 with the 1k map fixed; then the E0M3 candidate
+    for row in PTQ_ROWS:
+        out = d / f"gptq_{row}.json"
+        if not G.done(out):
+            R3.disk_ok(PTQ_CODES, model)
+        fmt, conv = ptq_fmt(model, row)
+        q = [*NATIVE_A, *fmt, *conv, *gptq_flags_1k(model, codes(model, row))]
+        must(run_n(f"p1k_ptq_gptq_{model}_{row}", S.ppl_cmd(model, q, out), out), f"item4 gptq {model} {row}")
+    out = d / "gptq_e0m3.json"
+    if not G.done(out):
+        R3.disk_ok(PTQ_CODES, model)
+    cmd = [G.py(model), "-m", "calibration.gptq_codes", "--model", model, "--revision", S.REV[model], "--weight", "mixfp4",
+           "--act", "fourover6", "--act-scope", "row", "--map", all_e0m3(model), *gptq_flags_1k(model, codes(model, "e0m3")),
+           "--out", out]
+    must(run_n(f"p1k_ptq_e0m3_{model}", cmd, out), f"item4 e0m3 codes {model}")
+    # the maps at 1k: on the GPTQ candidates (round 3's O3, n16k64) and in the Hadamard basis (H, n16k64-fast)
+    cand = [codes(model, "fo6"), codes(model, "e0m3")]
+    gmap = d / "fq-16x64_gptqcand.pt"
+    must(run_n(f"p1k_ptq_train_{model}_gptqcand", [G.PY, "-m", "calibration.tmopt_ext", "train", "--model", model, "--unit",
+               "16x64", "--data-root", DATA, "--fit-windows", 1024, *host(model), "--candidates-e2m1", cand[0],
+               "--candidates-e0m3", cand[1], "--out", gmap], gmap.with_suffix(".json")), f"item4 train {model} gptqcand")
+    rmap = d / "fq-16x64_hadamard.pt"
+    must(run_n(f"p1k_ptq_train_{model}_hadamard", [G.py(model), "-m", "calibration.tmopt_ext", "train", "--model", model,
+               "--unit", "16x64", *S.ROT, "--data-root", DATA, "--fit-windows", 1024, *host(model), "--out", rmap],
+               rmap.with_suffix(".json")), f"item4 train {model} hadamard")
+    want = ext_hashes(aa_report(model, "16x64"))
+    for m in (gmap, rmap):
+        if ext_hashes(m.with_suffix(".run") / "run" / "report.json") != want:
+            stop(f"item4 {model}: {m.name}'s fit extension is not part AA's")
+    # PPL: the retrained map on the GPTQ candidates, the re-check (the 1k RTN map on them), the Hadamard map
+    rows = {"gptqcand_fq-16x64": [*NATIVE_A, "--weight", "mixfp4", "--act", "fourover6", "--map", gmap, "--paper-convention",
+                                  *gptq_flags_1k(model, candidates=cand)],
+            "recheck_rtnmap_gptqcand": [*NATIVE_A, "--weight", "mixfp4", "--act", "fourover6", "--map",
+                                        map1k(model, "16x64"), "--paper-convention",
+                                        *gptq_flags_1k(model, candidates=cand)],
+            "hadamard_fq-16x64": [*NATIVE_A, "--weight", "mixfp4", "--act", "fourover6", "--map", rmap,
+                                  "--paper-convention", *S.ROT]}
+    for name, q in rows.items():
+        out = d / f"{name}.json"
+        must(run_n(f"p1k_ptq_ppl_{model}_{name}", S.ppl_cmd(model, q, out), out), f"item4 ppl {model} {name}")
+    # GSM8K, part N's protocol at batch 64 (round 3's O4 command)
+    gsm = {f"gptq_{r}": [*NATIVE_A, *ptq_fmt(model, r)[0], "--act-scope", "row", *gptq_flags_1k(model, codes(model, r))]
+           for r in PTQ_ROWS}
+    gsm["gptqcand_fq-16x64"] = [*NATIVE_A, "--weight", "mixfp4", "--act", "fourover6", "--map", gmap, "--act-scope", "row",
+                                *gptq_flags_1k(model, candidates=cand)]
+    gsm["hadamard_fq-16x64"] = [*NATIVE_A, "--weight", "mixfp4", "--act", "fourover6", "--map", rmap, "--act-scope", "row",
+                                *S.ROT]
+    import run_gsm8k as GM
+    for name, q in gsm.items():
+        out = PTQ / "gsm8k" / model / f"{name}.json"
+        if not G.done(out):
+            checkout_n()
+            gpu_state(f"p1k_ptq_gsm8k_{model}_{name}")
+        must(GM.run_ts(f"p1k_ptq_gsm8k_{model}_{name}", R3.gsm8k_cmd(model, q, 64, out), out, cwd=FQN),
+             f"item4 gsm8k {model} {name}")
+    G.log(f"paper1k item4 {model} done")
+
+
 if __name__ == "__main__":
     what = sys.argv[1]
     if what == "item2":
@@ -411,5 +544,10 @@ if __name__ == "__main__":
         item3_step0()
         item3_panel()
         G.log("DONE paper1k item3")
+    elif what == "item4":
+        item4_step0()
+        for m in ABL_MODELS:
+            item4_model(m)
+        G.log("DONE paper1k item4")
     else:
         raise SystemExit(f"unknown item {what}")
