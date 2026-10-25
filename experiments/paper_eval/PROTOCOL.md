@@ -2849,3 +2849,29 @@ Phi-4 and Qwen3.8-27B; the Qwen3-1.7B / 8B are not in this part.
     resume after the GPU is restored. The report is regenerated then.
 - **publish_paper1k.py:** now runs `git add -f` (flipquant's .gitignore has `results/*`). When it regenerates the index
   `results/paper_1k/README.md`, it keeps the PLAN.md link and the index's columns.
+
+### Part AC: the remaining items move to flipquant alone (the coordinator's plan change, 2026-10-25)
+
+- No more GPU runs on this machine. Another author runs the remaining items (item 2's memory probe, 3–9, 11–13, 1) on
+  their own RTX PRO 6000, from a fresh clone of flipquant `paper-1k-reruns` (`experiments/paper_1k/`,
+  `results/paper_1k/RUNBOOK.md`), with the public HF artifacts and public datasets only.
+- Each item's commands are this part's registered ones, checked token for token against the executed job logs
+  (`experiments/paper_1k/reference/commands_<item>.json`, CPU tests), with the changes named in each item's section of
+  the RUNBOOK. Gates that compare GPU numerics across boards are two-tier (exact / equivalent within 2 SE); digests of
+  maps, codes and readback rows stay exact; a failed gate is a question for the runner's user (`PAPER1K_ACCEPT=<gate>`).
+
+### Part AC, item 8: registered deviation (2026-10-25, confirmed by the coordinator): the real-vs-random method
+
+- **The plan** (part AC's item list) named "the C3v / amendment 19 method" for D.4's sentence.
+- **The change:** item 8 uses the method of the paper's current source note for that sentence (2026-10-13): "real tags
+  vs random at the same share, 3 units x o/gate/down x 6 T; bitwise 216/216", which replaced the C3v comparison
+  (Llama-3.1-8B pre-release maps, -1.9..+1.3). That is `evaluation.gemm_time` with the three maps of
+  Mistral-7B-Instruct-v0.3 and, in the same process, one map per unit with the same E0M3 count per module at random
+  tiles (flipquant `experiments/paper_1k/random_maps.py`; gemm_time's opt-in `<unit>_random` policies, its defaults
+  unchanged); o_proj / gate_proj / down_proj; gemm_time's per-cell bitwise check.
+- **Why:** C3v needs kernel-opt's research builds (previous / ceiling / paper kernels), which flipquant does not carry;
+  and the paper's sentence no longer rests on it.
+- **T:** the source's six T values are not recorded; the item runs the D.5 set (gemm_time's default, 1 … 8192, twelve
+  values), which contains the usual six (1, 16, 128, 512, 2048, 8192).
+- **Step 0:** the release maps; every typical cell within 1 point of random placement (the paper's statement); the
+  published ranges (8x64 -0.53..+0.43, 16x64 -0.37..+0.94, 256x64 -0.28..+0.43 points) reported beside.
