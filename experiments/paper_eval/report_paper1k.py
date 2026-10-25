@@ -307,6 +307,15 @@ def memory_section(out):
          "- **After load:** torch.cuda.memory_allocated.",
          "- **Peak:** torch.cuda.max_memory_allocated during one 1x2048 eager prefill.", ""]
     a = json.loads((RUN / "memory_anchor_check.json").read_text())
+    done = sorted((m, p) for m, _ in MODELS for p in POLS if (RUN / "memory" / m / f"{p}.json").exists())
+    total = len(MODELS) * len(POLS)
+    out["memory_status"] = dict(done=len(done), of=total, complete=len(done) == total,
+                                finished=[f"{m}/{p}" for m, p in done])
+    if len(done) < total:
+        L += [f"**PENDING.** The memory probe stopped when the GPU stopped responding (2026-10-24 18:53 UTC; PROTOCOL.md "
+              f"part AC item 2, incident). Done: the anchor (below) and {len(done)} of the {total} panel jobs ("
+              + ", ".join(f"{TITLE[m]} {NAMES[p]}" for m, p in done) + "). The rest resumes at Llama-3.2-1B-Instruct "
+              "NVFP4 after the GPU is restored; the paper's memory claims below are not evaluated until then.", ""]
     L += ["## Step 0: the memory anchor (Mistral, FlipQuant 16x64 with the release map, against part B's record)", "",
           f"- Installed quantized linears equal: {a['installed_equal']}; whole model equal: {a['model_equal']}.",
           f"- After load Δ {a['after_load_diff_gib']:+.4f} GiB; 1x2048 peak Δ {a['peak_diff_gib']:+.4f} GiB "

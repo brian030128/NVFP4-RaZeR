@@ -2837,3 +2837,15 @@ Phi-4 and Qwen3.8-27B; the Qwen3-1.7B / 8B are not in this part.
   2. The failed job's log is renamed with a `.hang-20261024` suffix (kept, not overwritten).
   3. `run_paper1k.py item2` again. Every finished record is skipped (the anchor and latency records are complete).
      The memory probe resumes at Llama-3.2-1B-Instruct nvfp4. The remaining items follow in order.
+
+### Part AC, item 2: partial report (the coordinator's request, 2026-10-25; CPU only, no GPU)
+
+- **The report:** `results/paper_eval/paper1k/item2/` (LATENCY.md, MEMORY.md, item2.json, SUMMARY.md; `report_paper1k.py
+  item2`).
+  - It is generated from the 210 latency records, the anchor, the warm-up record, `gpu_state.jsonl` and the memory
+    records so far.
+  - The latency tables are final.
+  - MEMORY.md is marked PENDING: the anchor and Llama-3.2-1B-Instruct BF16 are done, and the other 41 memory jobs
+    resume after the GPU is restored. The report is regenerated then.
+- **publish_paper1k.py:** now runs `git add -f` (flipquant's .gitignore has `results/*`). When it regenerates the index
+  `results/paper_1k/README.md`, it keeps the PLAN.md link and the index's columns.

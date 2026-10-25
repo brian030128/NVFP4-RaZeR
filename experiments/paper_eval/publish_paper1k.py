@@ -29,6 +29,22 @@ FQN = Path("/home/dev/n16k64_campaign/paper1k/wt")
 SRC = "results/paper_eval/paper1k"
 DST = FQN / "results" / "paper_1k"
 ORDER = ["item2", "item3", "item4", "item5", "item6", "item7", "item8", "item9", "item11", "item12", "item13", "item1"]
+#: the index's rows before an item is published (results/paper_1k/README.md, 9a7b544): paper item, status
+PAPER_ITEM = {
+    "item2": ("Table 4 (`tab:latency`) SM120 rows; the memory paragraph",
+              "latency done; memory probe interrupted by a GPU hang, resumes after the restart"),
+    "item3": ("Table 5 (`tab:ablation`)", "registered"),
+    "item4": ("Table F.3 (`tab:ptq`)", "pending"),
+    "item5": ("Table D.5 (`tab:app-gemm`)", "pending"),
+    "item6": ("Table A.2 (`tab:app-native`)", "pending"),
+    "item7": ("Appendix D.6 (reading the weights back)", "pending"),
+    "item8": ("Appendix D.4 (real tags vs random placement)", "pending"),
+    "item9": ("Tables D.2 / D.3 (`tab:app-ktile`, `tab:app-c2`), RTX PRO 6000 rows", "pending"),
+    "item11": ("Tables C.2 / C.3 (calibration cost)", "pending"),
+    "item12": ("Table C.5 (`tab:app-robust`)", "pending"),
+    "item13": ("Appendix F.1 (the tile-gradient check)", "pending; draft re-implementation, not yet run"),
+    "item1": ("MMLU column (Table 3, Tables E.1–E.3)", "pending"),
+}
 TRAILER = ("Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>\n"
            "Claude-Session: https://claude.ai/code/session_01S2tbNfhvNWyyJXJHwusL3U")
 RULES = [("local path", re.compile(rb"/(?:home|vault|tmp|root|mnt|scratch|data|work|opt)/")),
@@ -107,17 +123,19 @@ def main():
     idx_path.write_text(json.dumps(idx, indent=1) + "\n")
     written.append(idx_path)
     rows = ["# The paper's reruns at the 1,024-window calibration (NVFP4-RaZeR paper-eval part AC)", "",
-            "One directory per item: its README (summary and source), its report and tables. Each report is a copy of the "
-            "NVFP4-RaZeR paper-eval commit it cites. Items 2–9 and 11–13 run in this order, then item 1 (MMLU); item 10 "
-            "(GB200) is not run here.", "",
-            "| item | title | status | paper-eval | flipquant |", "|---|---|---|---|---|"]
+            "The plan, with every item's scale, estimate and status: [PLAN.md](PLAN.md).", "",
+            "One directory per finished item, `results/paper_1k/<item>/`: its README (summary and source), its report and "
+            "tables. Each report is a copy of the NVFP4-RaZeR paper-eval commit it cites. The items run in the order 2 → 3 "
+            "→ 4 → 5 → 6 → 7 → 8 → 9 → 11 → 12 → 13 → 1; item 10 (GB200 / SM100) is run by the co-author, not here.", "",
+            "| item | paper item | status | report (paper-eval) | report (flipquant) |", "|---|---|---|---|---|"]
     for k in ORDER:
+        paper_item, status = PAPER_ITEM[k]
         if k in idx:
             v = idx[k]
-            rows.append(f"| [{k}]({k}/README.md) | {v['title']} | {v['status']} | `{v['paper_eval']}` | "
-                        f"{'`' + v['flipquant'] + '`' if v.get('flipquant') else 'this commit' if k == a.item else '—'} |")
+            fq = ("`" + v["flipquant"] + "`") if v.get("flipquant") else ("this commit" if k == a.item else "")
+            rows.append(f"| [{k[4:]}]({k}/README.md) | {paper_item} | {v['status']} | `{v['paper_eval']}` | {fq} |")
         else:
-            rows.append(f"| {k} | — | not yet | — | — |")
+            rows.append(f"| {k[4:]} | {paper_item} | {status} | | |")
     (DST / "README.md").write_text("\n".join(rows) + "\n")
     written.append(DST / "README.md")
     hits = scan(written)
@@ -126,7 +144,7 @@ def main():
     if a.dry_run is not None:
         print(f"dry run: {len(written)} files written under {a.dry_run}, scan clean")
         return
-    git(FQN, "add", *[str(p.relative_to(FQN)) for p in written])
+    git(FQN, "add", "-f", *[str(p.relative_to(FQN)) for p in written])     # flipquant's .gitignore has results/*
     msg = (f"results/paper_1k/{a.item}: {a.title} ({a.status}); rendered from NVFP4-RaZeR paper-eval {commit}\n\n"
            f"{TRAILER}\n")
     git(FQN, "commit", "-q", "-m", msg)
